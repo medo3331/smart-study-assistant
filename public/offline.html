@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>إنت أوفلاين · ماجيكلي</title>
+    <meta name="robots" content="noindex" />
+    <!-- بيمنع ومضة الثيم الغلط: بيقرا اختيار المستخدم من localStorage قبل الرسم،
+         نفس منطق app/layout.tsx. لو مفيش، بيتبع إعداد النظام. -->
+    <script>
+      (function () {
+        try {
+          var s = localStorage.getItem("theme");
+          var t =
+            s ||
+            (window.matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark");
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <style>
+      /* توكنز الثيم — نسخة مختصرة من globals.css عشان الصفحة تفضل قايمة بنفسها
+         من غير أي طلب شبكة وهي أوفلاين. */
+      :root,
+      :root[data-theme="light"] {
+        --paper: #e4eaf4;
+        --paper-2: #f6f8fc;
+        --rule: #c9d4e6;
+        --ink: #232d49;
+        --ink-soft: #565f7d;
+        --marker: #f5de72;
+        --redpen: #ce5a6c;
+        --shade: rgba(35, 45, 73, 0.1);
+      }
+      :root[data-theme="dark"] {
+        --paper: #101524;
+        --paper-2: #171e30;
+        --rule: rgba(203, 216, 236, 0.15);
+        --ink: #e9edf8;
+        --ink-soft: #929dba;
+        --marker: #f0d24a;
+        --redpen: #e8697f;
+        --shade: rgba(0, 0, 0, 0.45);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+      }
+      body {
+        font-family: "IBM Plex Sans Arabic", "Segoe UI", system-ui, -apple-system,
+          sans-serif;
+        color: var(--ink);
+        background-color: var(--paper);
+        /* خطوط الدفتر */
+        background-image: repeating-linear-gradient(
+          to bottom,
+          transparent 0,
+          transparent 37px,
+          var(--rule) 37px,
+          var(--rule) 38px
+        );
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        min-height: 100vh;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .sheet {
+        position: relative;
+        width: 100%;
+        max-width: 460px;
+        background: var(--paper-2);
+        border: 1px solid var(--rule);
+        border-radius: 24px;
+        padding: 44px 40px 40px;
+        box-shadow: 0 18px 50px -20px var(--shade);
+        text-align: center;
+        overflow: hidden;
+      }
+      /* هامش الملزمة الأحمر — على اليمين في RTL */
+      .sheet::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: 26px;
+        width: 2px;
+        background: var(--redpen);
+        opacity: 0.55;
+      }
+
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 28px;
+        font-weight: 700;
+        font-size: 1.15rem;
+        letter-spacing: -0.01em;
+      }
+      .logo svg {
+        width: 30px;
+        height: 24px;
+        flex: none;
+      }
+
+      .badge {
+        display: inline-block;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        color: var(--ink-soft);
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 5px 14px;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        font-size: 1.6rem;
+        line-height: 1.35;
+        margin: 0 0 14px;
+        font-weight: 700;
+      }
+      /* ضربة القلم الفسفوري تحت كلمة مفتاحية */
+      .mark {
+        background: linear-gradient(
+          to top,
+          var(--marker) 0,
+          var(--marker) 42%,
+          transparent 42%
+        );
+        padding: 0 4px;
+        border-radius: 2px;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+      }
+
+      p {
+        margin: 0 auto 12px;
+        color: var(--ink-soft);
+        font-size: 1rem;
+        max-width: 36ch;
+      }
+
+      .btn {
+        display: inline-block;
+        margin-top: 22px;
+        background: var(--marker);
+        color: #232d49;
+        border: none;
+        border-radius: 14px;
+        padding: 13px 30px;
+        font-size: 1rem;
+        font-weight: 700;
+        font-family: inherit;
+        cursor: pointer;
+        transition: transform 0.12s ease, filter 0.12s ease;
+      }
+      .btn:hover {
+        filter: brightness(0.97);
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+      .btn:focus-visible {
+        outline: 3px solid var(--redpen);
+        outline-offset: 3px;
+      }
+
+      .hint {
+        margin-top: 26px;
+        font-size: 0.82rem;
+        color: var(--ink-soft);
+        opacity: 0.9;
+      }
+      .status {
+        margin-top: 10px;
+        font-size: 0.8rem;
+        min-height: 1.2em;
+        color: var(--ink-soft);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .btn {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <div class="logo">
+        <svg viewBox="0 0 56.87 45.0" aria-hidden="true">
+          <path
+            d="M4.15 40.8L4.15 5.8L23.67 22.55L39.47 5.6"
+            fill="none"
+            stroke="#FFB13B"
+            stroke-width="8.3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M48.17 0Q48.17 8.65 56.87 8.65Q48.17 8.65 48.17 17.3Q48.17 8.65 39.47 8.65Q48.17 8.65 48.17 0Z"
+            fill="#FFB13B"
+          />
+        </svg>
+        <span>ماجيكلي</span>
+      </div>
+
+      <div class="badge">لا يوجد اتصال</div>
+
+      <h1>إنت <span class="mark">أوفلاين</span> دلوقتي</h1>
+
+      <p>
+        مش لاقيين إنترنت. الصفحات اللي فتحتها قبل كده لسه تقدر تراجعها، لكن
+        توليد دروس جديدة والدخول محتاجين اتصال.
+      </p>
+
+      <button class="btn" type="button" id="retry">حاول تاني</button>
+
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+
+      <p class="hint">
+        بمجرد ما النت يرجع، الصفحة هتتحدّث لوحدها.
+      </p>
+    </main>
+
+    <script>
+      var btn = document.getElementById("retry");
+      var status = document.getElementById("status");
+
+      function retry() {
+        if (navigator.onLine === false) {
+          status.textContent = "لسه مفيش اتصال… استنى شوية وجرّب تاني.";
+          return;
+        }
+        status.textContent = "بنحاول نعيد التحميل…";
+        location.reload();
+      }
+
+      btn.addEventListener("click", retry);
+
+      // أول ما النت يرجع، أعد التحميل تلقائياً.
+      window.addEventListener("online", function () {
+        status.textContent = "النت رجع! بنعيد التحميل…";
+        location.reload();
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,5493 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   ماجيكلي — نظام التصميم
+   الاتجاه: "الملزمة" — ورق دفتر بخطوط، هامش أحمر، وقلم فسفوري.
+   اللون الصاخب الوحيد هو الأصفر الفسفوري، وهو نفسه لون الإجراء الأساسي.
+   ملاحظة: الداشبورد مستقل بـ Tailwind وخلفيته الخاصة، فمش متأثر بالتوكنز دي.
+   ========================================================================== */
+
+:root {
+  /* ---- الخطوط (بتتحمّل من next/font في layout.tsx) ---- */
+  --font-display: var(--font-display-src), "Segoe UI", sans-serif;
+  --font-body: var(--font-body-src), system-ui, sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, monospace;
+
+  /* ---- سلم الخطوط ---- */
+  --t-label: 0.78rem;                        /* لافتات ومونوسبيس */
+  --t-sm: 0.9rem;                            /* نص مساعد */
+  --t-body: 1rem;                            /* المتن */
+  --t-lede: clamp(1.05rem, 1.6vw, 1.2rem);   /* متن بارز */
+  --t-h3: 1.2rem;
+  --t-h2: clamp(1.5rem, 3.2vw, 2.1rem);
+  --t-h1: clamp(2rem, 5.4vw, 3.4rem);
+
+  /* ---- الإيقاع الرأسي والمسافات ---- */
+  --band: clamp(56px, 9vw, 104px);   /* المسافة بين الأقسام */
+  --gutter: clamp(20px, 5vw, 40px);  /* هامش الصفحة الخارجي */
+  --margin-w: clamp(14px, 3vw, 28px);/* عرض هامش الملزمة */
+  --page: 1080px;
+
+  /* ---- الزوايا: تلات قيم بس، بدل ست قيم مشتتة ---- */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 24px;
+
+  /* النص اللي بيقع فوق الأصفر الفسفوري. مش بيتغير مع الثيم عن قصد:
+     الفسفوري أصفر في الحالتين، فلازم يفضل عليه حبر كحلي. */
+  --on-marker: #232D49;
+}
+
+/* ---- الباليت: نهار، ورقة دفتر ----
+   ⚠️ اتهدّت في يوليو 2026 بعد ملاحظة من المستخدم إن الألوان "حادة ومؤذية للعين".
+   النسخة الأولى كانت الحبر الكحلي #141C33 على كارت أبيض نقي = تباين ١٦٫٩ : ١،
+   والمدى المريح للقراءة الطويلة حوالي ١٠–١٣. تلات تعديلات نزّلوه لـ ١٢٫٨ :
+   ١) الكارت بقى أوف-وايت مش أبيض نقي — المساحات البيضا النقية هي أكبر مصدر
+      للإجهاد لأنها بتعكس أقصى سطوع الشاشة.
+   ٢) الحبر فتح درجة (#232D49) والحبر الهادي كمان (٥٫٩ بدل ٧٫٠).
+   ٣) الفسفوري اتنزل تشبّعه ٢٠٪ (#F5DE72 بدل #FFE24D) — اللون المشبّع بالكامل
+      على سطوع ٧٦٪ بيقرا "صريح" مهما كان التباين حواليه منخفض.
+   ⚠️ اللي **متغيّرش**: الفرق بين الكارت والصفحة (ΔL* = ٥٫٠، كان ٤٫٦) وقوة خط
+   الحدّ (ΔL* = ١٢٫٩، كان ١٣٫٨). التهدئة كانت في سطوع النص والألوان بس، لأن لو
+   هدّينا الحدود كمان كانت الصفحة هترجع "ملخبطة" — وهي المشكلة اللي التصميم ده
+   اتعمل أصلاً لحلها. */
+:root,
+:root[data-theme="light"] {
+  --paper: #E4EAF4;
+  --paper-2: #F6F8FC;
+  --paper-3: #DCE4F0;
+  --rule: #C9D4E6;
+  --rule-strong: #AEBACF;
+  --ink: #232D49;
+  --ink-soft: #565F7D;
+  --marker: #F5DE72;
+  --marker-deep: #E2C95C;
+  --redpen: #CE5A6C;
+  --redpen-soft: rgba(206, 90, 108, 0.34);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+
+  /* النص اللي بيقع فوق الأحمر الصريح. بيتغير مع الثيم لأن الأحمر نفسه
+     بيفتح في الليل: أبيض على أحمر النهار = ٤.٤، وكحلي على أحمر الليل = ٥.٢.
+     لو ثبّتنا الأبيض في الحالتين كان هيسقط لـ ٣.٢ في الليل. */
+  --on-danger: #FFFFFF;
+
+  /* ---- أقلام الفسفوري: لكل لون نسختين ----
+     fill  = الحبر الصريح، بيتحط خلفية وتحته نص --on-marker
+     ink   = نسخة غامقة مقروءة كنص فوق الورق الفاتح
+     tint  = ظل خفيف جداً للخلفيات الهادية
+     السبب: الأصفر الفسفوري كنص على ورق أبيض مش بيتقرا خالص، فلازم
+     الخلفية والنص يبقوا قيمتين مختلفتين مش قيمة واحدة. */
+  --hl-yellow-fill: #F5DE72;
+  --hl-yellow-deep: #E2C95C;
+  --hl-yellow-ink: #7A5A00;
+  --hl-green-fill: #35C285;
+  --hl-green-ink: #0F6B4E;
+  /* ⚠️ الأحمر ده فضل صريح على عكس --redpen اللي هدّيناه: --redpen خط هامش
+     مفيهوش نص، لكن --hl-red-fill بيتحط تحته `text-ondanger` أبيض. لو هدّيناه
+     الأبيض بيسقط لـ ٣٫٩ — فلكل واحد قيمته حسب دوره. */
+  --hl-red-fill: #D8455E;
+  --hl-red-ink: #B3283F;
+  --hl-orange-ink: #9A4B10;
+  --hl-blue-fill: #3BA8D4;
+  --hl-blue-ink: #0E6389;
+  --hl-purple-fill: #9B6BD6;
+  --hl-purple-ink: #6B3FA8;
+  --hl-indigo-fill: #4F5BD5;
+  --hl-indigo-ink: #3A44B0;
+
+  /* أسماء قديمة، متسيبة كشبكة أمان لأي مكان لسه بيستخدمها */
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --text: var(--ink);
+  --text-muted: var(--ink-soft);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* ---- الباليت: ليل، مكتب بلمبة ---- */
+:root[data-theme="dark"] {
+  --paper: #101524;
+  --paper-2: #171E30;
+  --paper-3: #1E2740;
+  --rule: rgba(203, 216, 236, 0.15);
+  --rule-strong: rgba(203, 216, 236, 0.3);
+  --ink: #E9EDF8;
+  --ink-soft: #929DBA;
+  --marker: #F0D24A;
+  --marker-deep: #D8B932;
+  --redpen: #E8697F;
+  --redpen-soft: rgba(232, 105, 127, 0.36);
+  --shade: rgba(0, 0, 0, 0.4);
+  --shade-lift: rgba(0, 0, 0, 0.55);
+  --on-danger: #141C33;
+
+  /* في الليل الحبر الصريح نفسه بيتقرا كنص، فـ ink بتقرب من fill */
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
+  --hl-green-fill: #35C285;
+  --hl-green-ink: #5FD3A0;
+  --hl-red-fill: #E8697F;
+  --hl-red-ink: #E8697F;
+  --hl-orange-ink: #F0A868;
+  --hl-blue-fill: #4FBEE8;
+  --hl-blue-ink: #6FD0F0;
+  --hl-purple-fill: #B08BE8;
+  --hl-purple-ink: #C0A0F0;
+  --hl-indigo-fill: #6E79E8;
+  --hl-indigo-ink: #8F98F0;
+}
+
+/* ==========================================================================
+   ربط سلالم Tailwind بتوكنز الملزمة
+   الداشبورد وصفحات الدرس/التقييم/المجتمع مكتوبة كلها بـ Tailwind، فبدل
+   إعادة كتابة ٥٥٠٠ سطر بالإيد بنعيد تعريف الألوان نفسها من مكان واحد.
+
+   المبدأ: السلم كان مبني لتصميم غامق (رقم صغير = نص فاتح، رقم كبير =
+   خلفية غامقة)، فبنقلبه: 950 يبقى أفتح ورقة و 50 يبقى أغمق حبر. وبكده
+   الشاشات دي بتمشي مع الفاتح والغامق لوحدها لأن التوكنز نفسها بتتبدّل.
+
+   inline مهمة هنا: بتخلي Tailwind يحط var(--paper) جوه الـ utility نفسها
+   بدل طبقة var() زيادة، فتبديل data-theme بيوصل فوراً.
+   ========================================================================== */
+
+/* ⇩⇩ PACKS:BEGIN — مولّد آلياً، متعدّلوش بالإيد ⇩⇩ */
+/* ══════════════════════════════════════════════════════════════
+   باليتات المتجر — مولّدة من scripts/palettes.py
+   ⚠️ متتكتبش بالإيد. عدّل السكربت وشغّل:
+      python scripts/palettes.py --check   (لازم يعدّي)
+      python scripts/palettes.py --css
+   كل باليت بتعيد تعريف الطقم كامل — التوكنز الدلالية
+   والفسفوري مش بيتورّثوا من :root عشان مايبقاش فيه نص
+   غامق على خلفية غامقة.
+   ══════════════════════════════════════════════════════════ */
+
+/* المكتبة الغامقة — أغلفة جلدية وكحلي هادي — مكتب بالليل */
+:root[data-pack="dark-library"] {
+  color-scheme: dark;
+  --paper: #212B3D;
+  --paper-2: #29344B;
+  --paper-3: #2E3B56;
+  --rule: color-mix(in srgb, var(--paper) 85%, var(--ink) 15%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #EDF1FA;
+  --ink-soft: #95A1BB;
+  --marker: #E4C158;
+  --marker-deep: #DDB12C;
+  --on-marker: #1B2233;
+  --redpen: #DD5F74;
+  --redpen-soft: color-mix(in srgb, #DD5F74 34%, transparent);
+  --shade: rgba(0, 0, 0, 0.28);
+  --shade-lift: rgba(0, 0, 0, 0.42);
+  --on-danger: #0E1322;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #E4C158;
+  --hl-yellow-deep: #DDB12C;
+  --hl-yellow-ink: #C29C2D;
+  --hl-green-fill: #67D5A6;
+  --hl-green-ink: #24B777;
+  --hl-red-fill: #DD5F74;
+  --hl-red-ink: #E98394;
+  --hl-orange-ink: #DD903D;
+  --hl-blue-fill: #60B8DC;
+  --hl-blue-ink: #37ADDC;
+  --hl-purple-fill: #9867D5;
+  --hl-purple-ink: #B78FE8;
+  --hl-indigo-fill: #636DDA;
+  --hl-indigo-ink: #929BEC;
+}
+
+/* منتصف الليل — كحلي غامق بارد — سهرة خفيفة */
+:root[data-pack="midnight"] {
+  color-scheme: dark;
+  --paper: #252844;
+  --paper-2: #2E3156;
+  --paper-3: #353962;
+  --rule: color-mix(in srgb, var(--paper) 85%, var(--ink) 15%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #EDF1FA;
+  --ink-soft: #9C9FBF;
+  --marker: #618DE5;
+  --marker-deep: #356DDE;
+  --on-marker: #1B2233;
+  --redpen: #DD5F74;
+  --redpen-soft: color-mix(in srgb, #DD5F74 34%, transparent);
+  --shade: rgba(0, 0, 0, 0.28);
+  --shade-lift: rgba(0, 0, 0, 0.42);
+  --on-danger: #0E1322;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #618DE5;
+  --hl-yellow-deep: #356DDE;
+  --hl-yellow-ink: #80A1E1;
+  --hl-green-fill: #67D5A6;
+  --hl-green-ink: #24B777;
+  --hl-red-fill: #DD5F74;
+  --hl-red-ink: #E98394;
+  --hl-orange-ink: #DD903D;
+  --hl-blue-fill: #60B8DC;
+  --hl-blue-ink: #37ADDC;
+  --hl-purple-fill: #9867D5;
+  --hl-purple-ink: #B78FE9;
+  --hl-indigo-fill: #636DDA;
+  --hl-indigo-ink: #929BEC;
+}
+
+/* ريترو — وردي رجعي — CRT وشريط كاسيت */
+:root[data-pack="retro"] {
+  color-scheme: dark;
+  --paper: #3E212B;
+  --paper-2: #4D2935;
+  --paper-3: #582F3D;
+  --rule: color-mix(in srgb, var(--paper) 85%, var(--ink) 15%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #EDF1FA;
+  --ink-soft: #BC96A3;
+  --marker: #E4AA58;
+  --marker-deep: #DD932C;
+  --on-marker: #1B2233;
+  --redpen: #DD5F74;
+  --redpen-soft: color-mix(in srgb, #DD5F74 34%, transparent);
+  --shade: rgba(0, 0, 0, 0.28);
+  --shade-lift: rgba(0, 0, 0, 0.42);
+  --on-danger: #0E1322;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #E4AA58;
+  --hl-yellow-deep: #DD932C;
+  --hl-yellow-ink: #D2953F;
+  --hl-green-fill: #67D5A6;
+  --hl-green-ink: #24B777;
+  --hl-red-fill: #DD5F74;
+  --hl-red-ink: #E98293;
+  --hl-orange-ink: #DD903D;
+  --hl-blue-fill: #60B8DC;
+  --hl-blue-ink: #36ACDC;
+  --hl-purple-fill: #9867D5;
+  --hl-purple-ink: #B78FE8;
+  --hl-indigo-fill: #636DDA;
+  --hl-indigo-ink: #929BEC;
+}
+
+/* سايبربانك — نيون وردي على ليل — سايبر */
+:root[data-pack="cyberpunk"] {
+  color-scheme: dark;
+  --paper: #3E212F;
+  --paper-2: #4C293A;
+  --paper-3: #572F43;
+  --rule: color-mix(in srgb, var(--paper) 85%, var(--ink) 15%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #EDF1FA;
+  --ink-soft: #BC96A9;
+  --marker: #58E4D8;
+  --marker-deep: #2CDDCE;
+  --on-marker: #1B2233;
+  --redpen: #DD5F74;
+  --redpen-soft: color-mix(in srgb, #DD5F74 34%, transparent);
+  --shade: rgba(0, 0, 0, 0.28);
+  --shade-lift: rgba(0, 0, 0, 0.42);
+  --on-danger: #0E1322;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #58E4D8;
+  --hl-yellow-deep: #2CDDCE;
+  --hl-yellow-ink: #2AB2A7;
+  --hl-green-fill: #67D5A6;
+  --hl-green-ink: #24B777;
+  --hl-red-fill: #DD5F74;
+  --hl-red-ink: #E98394;
+  --hl-orange-ink: #DD903D;
+  --hl-blue-fill: #60B8DC;
+  --hl-blue-ink: #36ACDC;
+  --hl-purple-fill: #9867D5;
+  --hl-purple-ink: #B78FE8;
+  --hl-indigo-fill: #636DDA;
+  --hl-indigo-ink: #929BEC;
+}
+
+/* ماتريكس — شاشة خضرا — وضع التركيز */
+:root[data-pack="matrix"] {
+  color-scheme: dark;
+  --paper: #192F19;
+  --paper-2: #1F3A1F;
+  --paper-3: #244224;
+  --rule: color-mix(in srgb, var(--paper) 85%, var(--ink) 15%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #EDF1FA;
+  --ink-soft: #7DAC7D;
+  --marker: #64E458;
+  --marker-deep: #3BDD2C;
+  --on-marker: #1B2233;
+  --redpen: #DD5F74;
+  --redpen-soft: color-mix(in srgb, #DD5F74 34%, transparent);
+  --shade: rgba(0, 0, 0, 0.28);
+  --shade-lift: rgba(0, 0, 0, 0.42);
+  --on-danger: #0E1322;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #64E458;
+  --hl-yellow-deep: #3BDD2C;
+  --hl-yellow-ink: #37B92B;
+  --hl-green-fill: #67D5A6;
+  --hl-green-ink: #24B777;
+  --hl-red-fill: #DD5F74;
+  --hl-red-ink: #E98293;
+  --hl-orange-ink: #DD903D;
+  --hl-blue-fill: #60B8DC;
+  --hl-blue-ink: #36ACDB;
+  --hl-purple-fill: #9867D5;
+  --hl-purple-ink: #B78FE8;
+  --hl-indigo-fill: #636DDA;
+  --hl-indigo-ink: #929BEC;
+}
+
+/* المجرّة — سديم بنفسجي — الفضاء */
+:root[data-pack="galaxy"] {
+  color-scheme: dark;
+  --paper: #322444;
+  --paper-2: #3C2D53;
+  --paper-3: #45335F;
+  --rule: color-mix(in srgb, var(--paper) 85%, var(--ink) 15%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #EDF1FA;
+  --ink-soft: #AA9BBF;
+  --marker: #C665E6;
+  --marker-deep: #B539DF;
+  --on-marker: #1B2233;
+  --redpen: #DD5F74;
+  --redpen-soft: color-mix(in srgb, #DD5F74 34%, transparent);
+  --shade: rgba(0, 0, 0, 0.28);
+  --shade-lift: rgba(0, 0, 0, 0.42);
+  --on-danger: #0E1322;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #C665E6;
+  --hl-yellow-deep: #B539DF;
+  --hl-yellow-ink: #CC87E3;
+  --hl-green-fill: #67D5A6;
+  --hl-green-ink: #24B778;
+  --hl-red-fill: #DD5F74;
+  --hl-red-ink: #E98394;
+  --hl-orange-ink: #DD903D;
+  --hl-blue-fill: #60B8DC;
+  --hl-blue-ink: #37ADDC;
+  --hl-purple-fill: #9867D5;
+  --hl-purple-ink: #B78FE9;
+  --hl-indigo-fill: #636DDA;
+  --hl-indigo-ink: #939BEC;
+}
+
+/* أزرق المحيط — مياه صافية — شطّ هادي */
+:root[data-pack="ocean-blue"] {
+  color-scheme: light;
+  --paper: #E6EBEF;
+  --paper-2: #F7F8F9;
+  --paper-3: #EAEEF2;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #203B4E;
+  --ink-soft: #4A738F;
+  --marker: #58C1E4;
+  --marker-deep: #2CB1DD;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #58C1E4;
+  --hl-yellow-deep: #2CB1DD;
+  --hl-yellow-ink: #227693;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D22543;
+  --hl-orange-ink: #9F5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B4ADB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* الغابة — أوراق صباح — نسمة هواء */
+:root[data-pack="forest"] {
+  color-scheme: light;
+  --paper: #E4EDE9;
+  --paper-2: #F7F9F8;
+  --paper-3: #E8F0EC;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #1A402D;
+  --ink-soft: #3F795C;
+  --marker: #92E458;
+  --marker-deep: #76DD2C;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #92E458;
+  --hl-yellow-deep: #76DD2C;
+  --hl-yellow-ink: #447B1D;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D32543;
+  --hl-orange-ink: #9F601C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8C4BDB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #5460E1;
+}
+
+/* القهوة — بنّي دافئ — مقهى الصباح */
+:root[data-pack="coffee-shop"] {
+  color-scheme: light;
+  --paper: #EFEAE6;
+  --paper-2: #F9F8F7;
+  --paper-3: #F1EEEA;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #49341E;
+  --ink-soft: #896746;
+  --marker: #E4B558;
+  --marker-deep: #DDA22C;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #E4B558;
+  --hl-yellow-deep: #DDA22C;
+  --hl-yellow-ink: #8C6821;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D32543;
+  --hl-orange-ink: #9F5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B4ADB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* الغروب — أشعة الشفق — دفا آخر اليوم */
+:root[data-pack="sunset"] {
+  color-scheme: light;
+  --paper: #EFEAE7;
+  --paper-2: #F9F8F7;
+  --paper-3: #F2EEEA;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #4D321F;
+  --ink-soft: #8E6649;
+  --marker: #E47B58;
+  --marker-deep: #DD582C;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #E47B58;
+  --hl-yellow-deep: #DD582C;
+  --hl-yellow-ink: #B74E2B;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D32543;
+  --hl-orange-ink: #9F5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B4ADB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* الذهبي — ذهبي — ندرة عالية */
+:root[data-pack="golden"] {
+  color-scheme: light;
+  --paper: #EDEBE4;
+  --paper-2: #F9F8F7;
+  --paper-3: #F1EFE8;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #41371B;
+  --ink-soft: #7C6D40;
+  --marker: #E4C858;
+  --marker-deep: #DDB92C;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #E4C858;
+  --hl-yellow-deep: #DDB92C;
+  --hl-yellow-ink: #806D1E;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D32543;
+  --hl-orange-ink: #9F5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B4ADB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* الحد الأدنى — ورق أبيض نضيف — مفيش تشويش */
+:root[data-pack="minimal"] {
+  color-scheme: light;
+  --paper: #E7EBF0;
+  --paper-2: #F7F8F9;
+  --paper-3: #EBEEF2;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #223A52;
+  --ink-soft: #4D7196;
+  --marker: #589EE4;
+  --marker-deep: #2C84DD;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #589EE4;
+  --hl-yellow-deep: #2C84DD;
+  --hl-yellow-ink: #2B70B6;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D22543;
+  --hl-orange-ink: #9F5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B4ADB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* النيون البنفسجي — قلم بنفسجي — مذاكرة تركيز */
+:root[data-pack="purple-neon"] {
+  color-scheme: light;
+  --paper: #EFE8F1;
+  --paper-2: #F8F7F9;
+  --paper-3: #F2ECF3;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #50275E;
+  --ink-soft: #9255A6;
+  --marker: #E458E4;
+  --marker-deep: #DD2CDD;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #E458E4;
+  --hl-yellow-deep: #DD2CDD;
+  --hl-yellow-ink: #B92BB9;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D22543;
+  --hl-orange-ink: #9D5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B759A;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B49DB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* العالم الجليدي — جليد صباح — نضارة */
+:root[data-pack="ice-world"] {
+  color-scheme: light;
+  --paper: #E5ECEE;
+  --paper-2: #F7F8F9;
+  --paper-3: #EAEFF1;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #1D3C47;
+  --ink-soft: #447485;
+  --marker: #58D8E4;
+  --marker-deep: #2CCEDD;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #58D8E4;
+  --hl-yellow-deep: #2CCEDD;
+  --hl-yellow-ink: #1E7A82;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D22543;
+  --hl-orange-ink: #9F5F1C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8B4ADB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #535FE1;
+}
+
+/* الأورورا — تركواز — شفق قطبي */
+:root[data-pack="aurora"] {
+  color-scheme: light;
+  --paper: #E5EDEE;
+  --paper-2: #F7F9F9;
+  --paper-3: #E9F1F1;
+  --rule: color-mix(in srgb, var(--paper-2) 75%, var(--ink) 25%);
+  --rule-strong: color-mix(in srgb, var(--paper-2) 60%, var(--ink) 40%);
+  --ink: #1A3E41;
+  --ink-soft: #40767B;
+  --marker: #58E4AA;
+  --marker-deep: #2CDD93;
+  --on-marker: #1B2233;
+  --redpen: #BE2841;
+  --redpen-soft: color-mix(in srgb, #BE2841 34%, transparent);
+  --shade: rgba(35, 45, 73, 0.08);
+  --shade-lift: rgba(35, 45, 73, 0.12);
+  --on-danger: #FFFFFF;
+  /* الطقم الدلالي — الدرجة ثابتة والسطوع محلول على كارت الباليت */
+  --hl-yellow-fill: #58E4AA;
+  --hl-yellow-deep: #2CDD93;
+  --hl-yellow-ink: #1D7D55;
+  --hl-green-fill: #31B47C;
+  --hl-green-ink: #197D52;
+  --hl-red-fill: #BE2841;
+  --hl-red-ink: #D32543;
+  --hl-orange-ink: #9F601C;
+  --hl-blue-fill: #2992BC;
+  --hl-blue-ink: #1B769B;
+  --hl-purple-fill: #6C32B4;
+  --hl-purple-ink: #8C4BDB;
+  --hl-indigo-fill: #2C39B9;
+  --hl-indigo-ink: #5460E1;
+}
+
+/* ⇧⇧ PACKS:END ⇧⇧ */
+
+@theme inline {
+  /* الخطوط — بنشير للمصدر مباشرة مش لـ var(--font-mono) لأن الاسم
+     هنا هو نفس الاسم في :root، فكانت هتبقى دايرة بترجع لنفسها */
+  --font-sans: var(--font-body-src), system-ui, sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, monospace;
+  --font-display: var(--font-display-src), "Segoe UI", sans-serif;
+
+  /* ---- الرمادي: مقلوب من غامق لورق ---- */
+  --color-slate-50: var(--ink);
+  --color-slate-100: var(--ink);
+  --color-slate-200: var(--ink);
+  --color-slate-300: var(--ink);
+  --color-slate-400: var(--ink-soft);
+  --color-slate-500: var(--ink-soft);
+  --color-slate-600: var(--rule-strong);
+  --color-slate-700: var(--rule-strong);
+  --color-slate-800: var(--rule);
+  --color-slate-900: var(--paper-2);
+  --color-slate-950: var(--paper);
+
+  /* نفس القلب للرماديات التانية عشان لو استُخدمت بالغلط ما تكسرش الصفحة */
+  --color-gray-50: var(--ink);
+  --color-gray-300: var(--ink);
+  --color-gray-400: var(--ink-soft);
+  --color-gray-500: var(--ink-soft);
+  --color-gray-700: var(--rule-strong);
+  --color-gray-800: var(--rule);
+  --color-gray-900: var(--paper-2);
+  --color-gray-950: var(--paper);
+
+  /* ---- أصفر الفسفوري: الأكسنت الأساسي ----
+     300/400 نص، 500/600 خلفية، 900/950 ظل خفيف */
+  --color-amber-100: var(--hl-yellow-ink);
+  --color-amber-300: var(--hl-yellow-ink);
+  --color-amber-400: var(--hl-yellow-ink);
+  --color-amber-500: var(--hl-yellow-fill);
+  --color-amber-600: var(--hl-yellow-deep);
+  --color-amber-900: color-mix(in srgb, var(--hl-yellow-fill) 26%, transparent);
+  --color-amber-950: color-mix(in srgb, var(--hl-yellow-fill) 14%, var(--paper-2));
+  --color-yellow-300: var(--hl-yellow-ink);
+  --color-yellow-400: var(--hl-yellow-ink);
+  --color-yellow-500: var(--hl-yellow-fill);
+
+  /* ---- أخضر: الإنجاز والاكتمال ---- */
+  --color-emerald-300: var(--hl-green-ink);
+  --color-emerald-400: var(--hl-green-ink);
+  --color-emerald-500: var(--hl-green-fill);
+  --color-emerald-600: color-mix(in srgb, var(--hl-green-fill) 82%, black);
+  --color-emerald-700: color-mix(in srgb, var(--hl-green-fill) 60%, var(--paper-2));
+  --color-emerald-800: color-mix(in srgb, var(--hl-green-fill) 42%, var(--paper-2));
+  --color-emerald-900: color-mix(in srgb, var(--hl-green-fill) 26%, var(--paper-2));
+  --color-emerald-950: color-mix(in srgb, var(--hl-green-fill) 14%, var(--paper-2));
+  --color-green-400: var(--hl-green-ink);
+  --color-green-500: var(--hl-green-fill);
+
+  /* ---- أحمر: القلم الأحمر، الخطأ والتحذير ---- */
+  --color-red-300: var(--hl-red-ink);
+  --color-red-400: var(--hl-red-ink);
+  --color-red-500: var(--hl-red-fill);
+  --color-red-600: color-mix(in srgb, var(--hl-red-fill) 84%, black);
+  --color-red-900: color-mix(in srgb, var(--hl-red-fill) 24%, transparent);
+  --color-red-950: color-mix(in srgb, var(--hl-red-fill) 13%, var(--paper-2));
+  --color-rose-400: var(--hl-red-ink);
+  --color-rose-500: var(--hl-red-fill);
+
+  /* ---- برتقالي: تحذير أخف ---- */
+  --color-orange-300: var(--hl-orange-ink);
+  --color-orange-400: var(--hl-orange-ink);
+  --color-orange-500: var(--hl-yellow-deep);
+
+  /* ---- أزرق: أحد ألوان الأقلام المتاحة ---- */
+  --color-cyan-300: var(--hl-blue-ink);
+  --color-cyan-400: var(--hl-blue-ink);
+  --color-cyan-500: var(--hl-blue-fill);
+  --color-cyan-950: color-mix(in srgb, var(--hl-blue-fill) 14%, var(--paper-2));
+  --color-sky-400: var(--hl-blue-ink);
+  --color-sky-500: var(--hl-blue-fill);
+  --color-blue-400: var(--hl-blue-ink);
+  --color-blue-500: var(--hl-blue-fill);
+
+  /* ---- بنفسجي ---- */
+  --color-purple-300: var(--hl-purple-ink);
+  --color-purple-400: var(--hl-purple-ink);
+  --color-purple-500: var(--hl-purple-fill);
+  --color-purple-950: color-mix(in srgb, var(--hl-purple-fill) 14%, var(--paper-2));
+  --color-violet-400: var(--hl-purple-ink);
+  --color-violet-500: var(--hl-purple-fill);
+
+  /* ---- نيلي: زرار المساعد الذكي ---- */
+  --color-indigo-300: var(--hl-indigo-ink);
+  --color-indigo-400: var(--hl-indigo-ink);
+  --color-indigo-500: var(--hl-indigo-fill);
+  --color-indigo-600: color-mix(in srgb, var(--hl-indigo-fill) 86%, black);
+  --color-indigo-900: color-mix(in srgb, var(--hl-indigo-fill) 26%, transparent);
+  --color-indigo-950: color-mix(in srgb, var(--hl-indigo-fill) 14%, var(--paper-2));
+
+  /* ---- أسماء صريحة بديلة للحالات اللي كانت بتتعارض ----
+     text-white و text-slate-950 كانوا بيقروا نفس التوكن بتاع خلفية
+     الصفحة، والاتنين عايزين نتيجة معاكسة، فبقى لكل واحد اسمه. */
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-onmarker: var(--on-marker);
+  --color-ondanger: var(--on-danger);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-marker: var(--marker);
+  --color-marker-deep: var(--marker-deep);
+  --color-redpen: var(--redpen);
+  --color-paper-3: var(--paper-3);
+}
+
+/* ==========================================================================
+   الأساسيات
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+/* أرقام لاتينية بعرض ثابت — الجداول والإحصائيات ما تهتزّش */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* تركيز واضح بلون الفسفوري — شرط أساسي مش رفاهية */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--marker);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* احترام تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* الهيدر الثابت بيغطّي أول ~72px من الشاشة، فأي مرساة (#how، #features،
+   #faq…) لازم تقف تحته مش وراه. القيمة أكبر شوية من ارتفاع الهيدر عشان
+   يفضل فيه نفَس بين الشريط وعنوان القسم اللي المستخدم نطّ ليه. */
+html {
+  scroll-padding-top: 84px;
+}
+
+/* ==========================================================================
+   كل الكلاسات اللي بعد كده جوه @layer components عن قصد.
+
+   السبب: Tailwind بيحط الـ utilities بتاعته في @layer utilities، وأي CSS
+   مكتوب بره أي طبقة بيغلب أي CSS جوه طبقة — مهما كانت الـ specificity.
+   يعني لو الكلاسات دي فضلت بره الطبقات، `class="tag text-red-400"` كان
+   هيطلع بلون .tag مش الأحمر، وكل محاولة تعديل بـ utility في الداشبورد
+   كانت هتفضل تفشل بشكل محيّر.
+
+   ترتيب Tailwind v4 هو: theme, base, components, utilities — فحطّهم في
+   components معناه إن الـ utility دايماً بيغلب، وهو المتوقع.
+
+   اللي فضل بره الطبقات عن قصد: :root و @theme والـ reset و body و
+   :focus-visible و prefers-reduced-motion — دول لازم يغلبوا preflight.
+   ========================================================================== */
+
+@layer components {
+
+/* ==========================================================================
+   الهيكل
+   ========================================================================== */
+
+.page {
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* القسم: خط الهامش الأحمر ماشي على حرفه الداخلي، زي هامش الملزمة.
+   مسافة سفلية بس — كده الأقسام المتتالية ما بتجمّعش مسافتين، ومفيش
+   قاعدة تجاور تتغلب على .band-tight. المسافة العلوية مسؤولية .band-top. */
+.band {
+  padding-block-end: var(--band);
+  padding-inline-start: var(--margin-w);
+  border-inline-start: 1px solid var(--redpen-soft);
+}
+
+.band-top {
+  padding-block-start: var(--band);
+}
+
+.band-tight {
+  padding-block-end: calc(var(--band) * 0.55);
+}
+
+/* ==========================================================================
+   الطباعة
+   ========================================================================== */
+
+/* اللافتة: بنية مش لون — مونوسبيس صغير متباعد مع شرطة قبله */
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 22px;
+  height: 2px;
+  flex: none;
+  background: var(--redpen);
+}
+
+/* لافتة جوه كارت: نفس الشكل من غير المسافة السفلية */
+.eyebrow-flush {
+  margin-bottom: 0;
+}
+
+.h1,
+.h2,
+.h3 {
+  font-family: var(--font-display);
+  color: var(--ink);
+  text-wrap: balance;
+  margin: 0;
+}
+
+.h1 {
+  font-size: var(--t-h1);
+  font-weight: 800;
+  line-height: 1.16;
+  letter-spacing: -0.015em;
+}
+
+.h2 {
+  font-size: var(--t-h2);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.h3 {
+  font-size: var(--t-h3);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.lede {
+  font-size: var(--t-lede);
+  line-height: 1.75;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 54ch;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.small {
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.02em;
+}
+
+/* ==========================================================================
+   العنصر المميز: ضربة القلم الفسفوري
+   تدرّج على الصندوق السطري — يلتف مع النص ويشتغل في الاتجاهين.
+   الضربة بتغطي طول الحرف بالكامل (مش تسطير) عشان النص يفضل كحلي مقروء
+   فوق الأصفر في الثيمين — الحبر الفاتح فوق الأصفر تضاده ضعيف.
+   ========================================================================== */
+
+.mark {
+  color: var(--on-marker);
+  background-image: linear-gradient(
+    to top,
+    var(--marker) 0.02em,
+    var(--marker) 1.04em,
+    transparent 1.04em
+  );
+  background-repeat: no-repeat;
+  padding-inline: 0.14em;
+  border-radius: 3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* نسخة لكلمة واحدة: ميل بسيط يحسّس إن الإيد هي اللي علّمت */
+.mark-tilt {
+  display: inline-block;
+  transform: rotate(-0.8deg);
+}
+
+/* ==========================================================================
+   الأزرار — الفسفوري هو الإجراء الأساسي
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 26px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-marker {
+  background: var(--marker);
+  color: var(--on-marker);
+  box-shadow: 0 2px 0 var(--marker-deep);
+}
+
+.btn-marker:hover:not(:disabled) {
+  background: var(--marker-deep);
+  transform: translateY(-1px);
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: var(--paper-3);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ==========================================================================
+   الأسطح
+   ========================================================================== */
+
+.card {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px var(--shade);
+}
+
+.card-lift {
+  box-shadow: 0 18px 44px -18px var(--shade-lift);
+}
+
+/* ورق بخطوط — الخطوط المطبوعة بتاعة الدفتر */
+.ruled {
+  background-color: var(--paper-2);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    var(--rule) 31px,
+    var(--rule) 32px
+  );
+}
+
+/* ==========================================================================
+   الحقول
+   ========================================================================== */
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.field {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  line-height: 1.4;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.field::placeholder {
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
+.field:hover {
+  border-color: var(--ink-soft);
+}
+
+/* ==========================================================================
+   الرسائل
+   ========================================================================== */
+
+.notice {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  border-inline-start: 3px solid;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+
+.notice-error {
+  background: color-mix(in srgb, var(--redpen) 12%, transparent);
+  border-color: var(--redpen);
+  color: var(--ink);
+}
+
+.notice-ok {
+  background: color-mix(in srgb, var(--marker) 22%, transparent);
+  border-color: var(--marker-deep);
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   مساعدات
+   ========================================================================== */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-soft);
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* رابط التخطّي: مخفي بصرياً لحد ما ياخد تركيز، وساعتها بينزل فوق كل حاجة.
+   مش .sr-only لأن ده لازم يبان لما يتفوكس — والـ clip في .sr-only
+   بيفضل شغال حتى مع :focus. */
+.skip-link {
+  position: fixed;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  z-index: 100;
+  padding: 10px 18px;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--marker);
+  color: var(--on-marker);
+  font-weight: 700;
+  text-decoration: none;
+  /* بيطلع بره الشاشة بدل display:none عشان يفضل في ترتيب التنقل */
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* عرض السطر للعناوين. كان مكتوب inline بأربع قيم (22/24/26/28ch) —
+   القيمة الافتراضية هنا والمشدودة للعناوين القصيرة، وبكده أي عنوان
+   جديد بيبقى محدود تلقائياً بدل ما يمتد على عرض الصفحة كله. */
+.measure {
+  max-width: 26ch;
+}
+
+.measure-tight {
+  max-width: 22ch;
+}
+
+.measure-wide {
+  max-width: 28ch;
+}
+
+/* صورة اللقطة: كانت objectFit inline على next/image */
+.shot-img {
+  object-fit: cover;
+}
+
+.no-margin {
+  margin: 0;
+}
+
+/* ليبل تحت رقم إحصائية — أقرب من .hint لأن الرقم كبير والمسافة
+   الكبيرة كانت بتفصل الليبل عن رقمه */
+.stat-label {
+  margin: 2px 0 0;
+}
+
+/* حقل الكتابة الحر في مختار الشخصية */
+.picker-input-wrap {
+  margin-top: 14px;
+  max-width: 420px;
+}
+
+/* أزرار اللغة والثيم في النav. كانت object استايل inline بيتعاد
+   بناؤه كل رندر ومنسوخ على الزرارين. */
+.ctl-row {
+  gap: 8px;
+}
+
+.ctl-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.ctl-pill:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+
+.ctl-pill-text {
+  padding-inline: 13px;
+}
+
+.ctl-pill-icon {
+  width: 34px;
+}
+/* غلاف تمرير أفقي لأي جدول. من غيره الجدول بيوسّع الصفحة كلها على
+   الموبايل. tabIndex عليه في الـ JSX عشان اللي بيستخدم كيبورد يقدر
+   يمرّره — منطقة بتتمرّر من غير تركيز مخالفة صريحة. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.col-center {
+  text-align: center;
+}
+
+/* مسافة التنقل العلوي: كانت inline بـ 14px */
+.nav-actions {
+  gap: 14px;
+}
+
+/* زرار أصغر للنav — كان padding مكتوب inline */
+.btn-compact {
+  padding: 9px 18px;
+}
+
+/* ==========================================================================
+   أدوات الداشبورد
+   الداشبورد مكتوب بـ Tailwind، فبنسيب التخطيط والمسافات لـ Tailwind،
+   وبنحط هنا بس الأشكال اللي فيها تفاصيل CSS مش ممكنة كـ utility:
+   الهامش الأحمر، ختم المستوى، ورق الخطوط، ومسطرة التقدم.
+   ========================================================================== */
+
+/* ورقة: نفس .card بس بهامش أحمر على الحرف الداخلي (يمين في RTL).
+   الهامش أغمق من --redpen-soft عن قصد — في أول تجربة كان باهت لدرجة
+   إن الكروت البيضا على ورق فاتح بقت بلا أي حدّ يفصلها. */
+.sheet-card {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-inline-start: 3px solid color-mix(in srgb, var(--redpen) 55%, transparent);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px var(--shade);
+}
+
+/* ورقة اليوم الحالي — نفس الورقة بس الهامش أحمر صريح وظل مرفوع */
+.sheet-card-live {
+  border-inline-start-color: var(--redpen);
+  box-shadow: 0 18px 44px -20px var(--shade-lift);
+}
+
+/* ورقة يوم لسه مقفول: باهتة ومسطّحة */
+.sheet-card-idle {
+  background: var(--paper);
+  border-inline-start-color: var(--rule);
+}
+
+/* ختم المستوى: مربّع مايل شوية، زي ختم مضروب بالإيد.
+   استبدل تدرّج لوني كان بيقرا كأي كارت gamification تاني.
+   اللون نفسه بييجي من Tailwind (لون قلم الثيم) — الكلاس دي شكل بس. */
+.stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: var(--r-sm);
+  box-shadow: 0 2px 0 var(--shade-lift);
+  transform: rotate(-2.5deg);
+}
+
+/* مسطرة التقدم: قناة ورق + تعبئة بلون القلم + علامات تقسيم كل ١٠٪.
+   العلامات هي المعلومة — بتخلي المستخدم يقرا نسبته من غير ما يقرا رقم. */
+.meter {
+  position: relative;
+  height: 14px;
+  background: var(--paper-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.meter-sm {
+  height: 9px;
+}
+
+.meter-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.meter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(10% - 1px),
+    var(--rule) calc(10% - 1px),
+    var(--rule) 10%
+  );
+}
+
+/* لافتة صغيرة جوه الكروت — نسخة سطرية من .eyebrow من غير مسافة سفلية */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* نسخة معلّمة: الحشو والزوايا بس، واللون من Tailwind */
+.tag-box {
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+}
+
+.tag-quiet {
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  background: var(--paper-3);
+  color: var(--ink-soft);
+}
+
+/* بند مخلّص: مشطوب بالقلم الأحمر، زي ما بتشطب حاجة من ليستة */
+.struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--redpen);
+  text-decoration-thickness: 2px;
+  text-decoration-skip-ink: none;
+  color: var(--ink-soft);
+}
+
+/* أي تعبير فيه رموز زي "8 / 14" أو "72%" لازم يتعزل عن اتجاه الصفحة.
+   جوه RTL المتصفح بيرتّب "0 / 14" فيطلع "14 / 0" — قلب المعنى بالكامل.
+   isolate بتخلي الشظية دي تتحسب لوحدها من غير ما تكسر اتجاه الجملة. */
+.ltr-num {
+  direction: ltr;
+  unicode-bidi: isolate;
+  display: inline-block;
+}
+
+/* --------------------------------------------------------------------------
+   الهيكل الجديد للداشبورد: ورقة الترحيب، كروت الأرقام، الرسم، الشارات،
+   وكارت التحفيز. نفس قاعدة القسم اللي فوق بالحرف: الشكل بس هنا، والألوان
+   والمسافات من Tailwind، عشان كل حاجة تفضل تمشي مع قلم الثيم ومع
+   data-theme لوحدها من غير ما نكتب لون مرتين.
+   -------------------------------------------------------------------------- */
+
+/* كارت رقم: قصاصة ورق زي كارت الفهرس. مفيش تدرّجات ومفيش خلفية ملوّنة —
+   الرقم الكبير هو اللي بيشيل الانتباه، واللون الوحيد المسموح جوّاه
+   أيقونة صغيرة وسهم الفرق. */
+.kpi-card {
+  position: relative;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px var(--shade);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--rule-strong);
+  box-shadow: 0 16px 34px -20px var(--shade-lift);
+}
+
+/* الكارت اللي بيقول "إنت هنا" — الهامش الأحمر بيبان صريح زي ورقة اليوم */
+.kpi-card-live {
+  border-inline-start: 3px solid var(--redpen);
+}
+
+/* أيقونة الكارت: ختم صغير (٣٦px) مقابل ختم المستوى (٥٦px).
+   نفس الميلة بالإيد عشان ما يقراش كأيقونة SaaS. */
+.kpi-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--r-sm);
+  box-shadow: 0 1px 0 var(--shade-lift);
+  transform: rotate(-2deg);
+}
+/* سهم الفرق (+٢ الشهر ده): كبسولة صغيرة، اللون من Tailwind.
+   محطوطة هنا عشان الحشو والحجم يفضلوا ثابتين في كل الكروت الأربعة. */
+.kpi-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* خطوط الرسم: سطور الكشكول نفسها بتشتغل خطوط قياس.
+   كل ٢٥٪ سطر — يعني القارئ يقدر يقرأ ٠ و٥٠٪ و١٠٠٪ من غير أرقام على المحور. */
+.chart-grid {
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to top,
+    var(--rule) 0 1px,
+    transparent 1px 25%
+  );
+}
+
+/* عمود الرسم: زوايا مدوّرة من فوق بس، وبيكبر من تحت زي ما العمود بيطلع */
+.chart-bar {
+  width: 100%;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  transform-origin: bottom;
+}
+
+/* شارة سداسية — الشكل من clip-path واللون من Tailwind زي الختم */
+.badge-hex {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+/* 🗓️ ١١ أغسطس: `.motiv-card` (ورقة مقصوصة من ركنها) اتشال من هنا لما
+   كارت «كمّل» اتشال من آخر القايمة — كان المستعمل الوحيد ليه. */
+
+/* فقاعة كلام ماجيك. الديل مرسوم بحدود منطقية (border-inline-end)
+   عشان يلف مع اتجاه الصفحة لوحده: في RTL بيبقى على الشمال وسنّه
+   على اليمين ناحية الروبوت، وفي LTR بينعكس من غير أي كود زيادة. */
+.bubble {
+  position: relative;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+}
+
+/* الخط الخارجي للديل — أكبر ١px من الحشوة اللي بعديه فبيعمل حدّ الشعرة */
+.bubble::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 17px;
+  inset-inline-start: -9px;
+  width: 0;
+  height: 0;
+  border-block-start: 9px solid transparent;
+  border-block-end: 9px solid transparent;
+  border-inline-end: 9px solid var(--rule);
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 18px;
+  inset-inline-start: -8px;
+  width: 0;
+  height: 0;
+  border-block-start: 8px solid transparent;
+  border-block-end: 8px solid transparent;
+  border-inline-end: 8px solid var(--paper);
+}
+
+/* سطر تلميح تحت عنوان مباشرة. كان مكتوب inline بأربع قيم مختلفة
+   (6px و 8px و 2px و 0) لنفس الدور البصري — القيمة الواحدة هنا هي
+   اللي بتخلي كل العناوين في الصفحة على نفس الإيقاع. */
+.hint {
+  margin: 6px 0 0;
+}
+
+/* كبسولة السلسلة و XP في الهيرو. زواياها var(--r-sm) مش دايرة بالكامل —
+   الكبسولة الدايرة كانت بتقرا كشريط لعبة، وده اللي شيلناه قبل كده. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  white-space: nowrap;
+}
+
+/* هزّة إيد ماجيك. مدّتها ٢.٦ث ومابتتكررش بسرعة عن قصد — الحركة اللي
+   بتلف على طول جنب النص بتسحب العين من القراية.
+   مش محتاجة media query: بلوك prefers-reduced-motion فوق بيصفّرها. */
+.magic-wave {
+  animation: magic-wave 2.6s ease-in-out infinite;
+}
+
+@keyframes magic-wave {
+  0%,
+  62%,
+  100% {
+    transform: rotate(0deg);
+  }
+  72% {
+    transform: rotate(-13deg);
+  }
+  86% {
+    transform: rotate(4deg);
+  }
+}
+
+/* ==========================================================================
+   الشريط العلوي والعلامة
+   ========================================================================== */
+
+/* ── الهيدر الثابت ───────────────────────────────────────────────────────
+   الشريط بيفضل فوق وإنت بتنزل عشان زر «ابدأ» والروابط يفضلوا في المتناول
+   من غير ما ترجع لفوق. متحطّ برّه .page عن قصد فبياخد عرض الشاشة كامل
+   (الخلفية والبوردر بيمتدوا من غير ثقب على الجوانب)، وجوّاه .page تانية
+   بترصّ محتواه على نفس عرض باقي الصفحة.
+   ⚠️ z-index أقل من .skip-link (100): رابط التخطّي لازم يفضل فوق الهيدر
+   لما ياخد تركيز، مش يتغطّى بيه. */
+.site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-block-end: 1px solid var(--rule);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 13px;
+}
+
+/* ── روابط التنقل (سطح المكتب) ─────────────────────────────────────────
+   في النص بين اللوجو (بداية السطر) وزراير الإجراء (نهايته). بتتخفي على
+   الموبايل وتنزل جوّه قائمة الهامبرجر تحت. */
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 13px;
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.18s ease;
+}
+
+.nav-link:hover {
+  background: var(--paper-3);
+}
+
+/* ── زر الهامبرجر ──────────────────────────────────────────────────────
+   مخفي على سطح المكتب (الروابط ظاهرة أصلاً)، وبيظهر على الموبايل. */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ثلاث شرطات: الوسطانية عنصر، والفوقانية والتحتانية pseudo-elements
+   محطوطين بالـabsolute فوق وتحت. بيتحوّلوا X في الحالة المفتوحة. */
+.nav-toggle-icon {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: background 0.2s ease;
+}
+
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform 0.2s ease;
+}
+
+.nav-toggle-icon::before {
+  inset-block-start: -6px;
+}
+
+.nav-toggle-icon::after {
+  inset-block-start: 6px;
+}
+
+.nav-toggle[aria-expanded='true'] .nav-toggle-icon {
+  background: transparent;
+}
+
+.nav-toggle[aria-expanded='true'] .nav-toggle-icon::before {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.nav-toggle[aria-expanded='true'] .nav-toggle-icon::after {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+/* ── قائمة الموبايل ─────────────────────────────────────────────────────
+   بتنزل تحت الشريط لما الهامبرجر يتفتح. `hidden` بيشيلها من الشجرة خالص
+   وهي مقفولة (مش display:none وبس) فقارئ الشاشة مايعديش عليها من غير داعي. */
+.nav-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 16px;
+  border-block-start: 1px solid var(--rule);
+}
+
+.nav-mobile[hidden] {
+  display: none;
+}
+
+.nav-mobile-link {
+  display: block;
+  padding: 12px 10px;
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nav-mobile-link:hover {
+  background: var(--paper-3);
+}
+
+.nav-mobile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-block-start: 12px;
+}
+
+.nav-mobile-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* على الموبايل: الروابط وزراير الدخول/البداية بتتخفي من الشريط وتنزل جوّه
+   قائمة الهامبرجر، والهامبرجر بيظهر. */
+@media (max-width: 860px) {
+  .nav-links,
+  .nav-signin,
+  .nav-start {
+    display: none;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+}
+
+/* على سطح المكتب: قائمة الموبايل ماتبانش حتى لو الحالة فضلت مفتوحة بعد
+   تكبير الشاشة (الهامبرجر مخفي فمفيش طريقة تفتحها من هنا أصلاً). */
+@media (min-width: 861px) {
+  .nav-mobile {
+    display: none !important;
+  }
+}
+
+/* ── لوكاب البراند ─────────────────────────────────────────────────────
+   العلامة على جنب، والاسم وتحته السطر الوصفي على الجنب التاني. مركّبين
+   عمودي مش سطر واحد عشان اللوكاب يفضل ضيّق أفقياً — النافبار فيه لينكات
+   وزرار إجراء، والعرض هو المورد النادر فيه مش الطول.
+
+   ⚠️⚠️ اللون: العلامة والسطر الوصفي بـ `--hl-yellow-ink` **مش** `--marker`.
+   الفرق ده مش تفصيلة:
+     `--marker`         = لون القلم الفسفوري، متعمّل عشان يبقى **خلفية**
+                          وتحته حبر `--on-marker`. في الثيم الفاتح هو
+                          #F5DE72 — أصفر باهت. نص أو خط بالرقم ده على ورق
+                          أوف-وايت نسبته ١٫٣:١، يعني اللوجو عملياً مش موجود.
+     `--hl-yellow-ink`  = نفس الأكسنت بس معمول ليتقرا **كمقدّمة**:
+                          ٥٫٣:١ في الفاتح و ١٢٫٣:١ في الغامق.
+   وكل باليتة متجر بتعيد تعريف `--hl-yellow-ink` بنسختها المقروءة (السماوي
+   بيبقى #227693، والبنفسجي #B92BB9...) — فاللوجو بيتلوّن مع الثيم الملبوس
+   لوحده من غير أي كود. ده السبب الحقيقي لاختيار التوكن ده تحديداً.
+   ──────────────────────────────────────────────────────────────────── */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.brand-glyph {
+  flex: none;
+  height: 1.72rem;
+  /* `aspect-ratio` بنسبة الـ viewBox بيخلي العرض محسوب مش متروك لـ `auto`
+     — عشان مايبقاش فيه لحظة الشعار فيها بعرض صفر والنافبار بينط. */
+  aspect-ratio: 56.87 / 45;
+  width: auto;
+  color: var(--hl-yellow-ink);
+  transition: transform 0.3s ease;
+}
+
+.brand:hover .brand-glyph {
+  transform: scale(1.07);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1;
+}
+
+.brand-name {
+  font-size: 1.14rem;
+  font-weight: 800;
+}
+
+.brand-tagline {
+  font-size: 0.68rem;
+  font-weight: 600;
+  /* التتبّع السالب بتاع `.brand` متعمّل لاسم بحجم كبير؛ على ٠٫٦٨rem
+     بيخلي الحروف تتلزق، فبيترجع للصفر هنا. */
+  letter-spacing: 0;
+  color: var(--hl-yellow-ink);
+}
+
+/* ==========================================================================
+   البطل
+   عمودين: كلام على جنب، وماكيت الداشبورد على الجنب التاني. الماكيت واخد
+   مساحة أكبر من العمود التاني عن قصد — هو الحجة الأساسية للصفحة.
+   ========================================================================== */
+
+.hero {
+  display: grid;
+  /* الماكيت أوسع من الكلام: عمود الكلام محدود بـ 21ch للعنوان فمش
+     محتاج أكتر من كده، والماكيت كل بكسل زيادة بيخليه مقروء أكتر */
+  grid-template-columns: 0.92fr 1.08fr;
+  gap: clamp(36px, 4.5vw, 68px);
+  align-items: center;
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+/* ---- كبسولة اللافتة ---- */
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 8px 16px 8px 13px;
+  border: 1px solid color-mix(in srgb, var(--marker) 42%, var(--rule));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--marker) 15%, var(--paper-2));
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* الكبسولة متماثلة في الاتجاهين: الحشو الأصغر ناحية الأيقونة */
+[dir="rtl"] .hero-badge {
+  padding: 8px 13px 8px 16px;
+}
+
+.hero-badge-spark {
+  display: inline-flex;
+  flex: none;
+  color: var(--hl-yellow-ink);
+}
+
+/* ---- العنوان ---- */
+/* أكبر من --t-h1 وأضيق تتبيعاً: ده أكبر نص في الموقع، والسلم العام
+   محسوب لعناوين الأقسام اللي جواها نص أكتر. */
+.hero-title {
+  font-family: var(--font-display);
+  color: var(--ink);
+  margin: 0;
+  font-size: clamp(2.2rem, 5.2vw, 3.9rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+  max-width: 20ch;
+}
+
+.hero-lede {
+  max-width: 46ch;
+}
+
+/* ==========================================================================
+   الجملة المعلّمة — طبقتين عشان النص يفضل مقروء في كل لحظة من الحركة
+   الأساس حبر عادي وهو المقروء لقارئ الشاشة، والغطاء نسخة فسفورية
+   بتتكشف بـ clip-path. الغطاء aria-hidden، فالنص بيتقرا مرة واحدة.
+   ========================================================================== */
+
+.hero-mark {
+  position: relative;
+  display: inline-block;
+}
+
+/* الطبقتين لازم يكون لهم نفس الهندسة بالظبط، وإلا الحروف الفسفورية تطلع
+   مزحلقة شعرة عن اللي تحتها. .mark بيضيف padding-inline: 0.14em عشان
+   الأصفر يزيد شعرة برّا الحروف — فالأساس بياخد نفس الـ padding، والغطاء
+   بـ inset: 0 مع border-box بيطلع نفس عرض الأساس بالظبط. */
+.hero-mark-base,
+.hero-mark-top {
+  padding-inline: 0.14em;
+}
+
+.hero-mark-top {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---- الأزرار ---- */
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-cta {
+  padding: 15px 28px;
+}
+
+.hero-cta-arrow {
+  transition: transform 0.18s ease;
+}
+
+/* السهم بيلف مع الاتجاه، فالحركة لازم تبقى ناحية نهاية السطر في الحالتين */
+.hero-cta:hover .hero-cta-arrow {
+  transform: translateX(3px);
+}
+
+[dir="rtl"] .hero-cta:hover .hero-cta-arrow {
+  transform: translateX(-3px);
+}
+
+/* ---- كبسولات الثقة ---- */
+.hero-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 18px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-trust-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.hero-trust-tick {
+  display: inline-flex;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--hl-green-ink);
+}
+
+.hero-trust-tick svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+   مسرح الماكيت
+   ========================================================================== */
+
+.hero-stage {
+  position: relative;
+}
+
+/* الهيرو خرج من الشاشة → وقّف أنيميشن الماكيت اللانهائي.
+   لوب المراحل في LandingHero بيوقف تايمره لوحده، بس المرحلة بتتجمّد على
+   آخر قيمة — ولو دي مرحلة ١ يبقى `hm-spin` (infinite) فاضل لافّ والزائر
+   في آخر الصفحة. paused مش none عشان الحركة تكمّل من مكانها لما يرجع. */
+.hero-stage.is-paused *,
+.hero-stage.is-paused *::before,
+.hero-stage.is-paused *::after {
+  animation-play-state: paused;
+}
+
+/* هالة فسفورية باهتة ورا الماكيت. مقصود إنها خفيفة — دورها تفصل الماكيت
+   عن الورق، مش تبان كتدرّج. المدّ رأسي بس: لو مدّينا العرض بالسالب،
+   الهالة + الـ blur بيخرجوا برّا الشاشة ويطلّعوا سكرول أفقي. */
+.hero-glow {
+  position: absolute;
+  inset: -12% 0 -16%;
+  z-index: 0;
+  background:
+    radial-gradient(56% 46% at 60% 28%, color-mix(in srgb, var(--marker) 26%, transparent), transparent 72%),
+    radial-gradient(44% 40% at 24% 76%, color-mix(in srgb, var(--redpen) 13%, transparent), transparent 70%);
+  filter: blur(16px);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* الميل على عنصر لوحده: Framer بيكتب transform inline على العنصر
+   المتحرّك، فلو الميل على نفس العنصر بيتمسح مع أول فريم */
+.hero-mockup-tilt {
+  position: relative;
+  z-index: 1;
+  transform: rotate(-1deg);
+}
+
+/* ==========================================================================
+   ماكيت الداشبورد
+   كل المقاسات بالـ em والجذر font-size على .hm — يعني الماكيت كله
+   بيتكبّر ويصغّر من رقم واحد. لو المقاسات كانت px كان كل بريك بوينت
+   محتاج يعيد كتابة تلاتين قيمة.
+   ========================================================================== */
+
+.hm {
+  /* الجذر: بيكبر مع العمود. الـ clamp هو اللي بيمنع النص من إنه يبقى
+     أصغر من المقروء على التابلت. */
+  font-size: clamp(0.5rem, 0.92vw, 0.72rem);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-2);
+  box-shadow:
+    0 1px 2px var(--shade),
+    0 28px 60px -28px var(--shade-lift);
+  overflow: hidden;
+  /* الماكيت `role="img"` — النص جواه للعين بس، فمنع التحديد بيمنع
+     المستخدم إنه يحاول ينسخ منه */
+  user-select: none;
+}
+
+/* ---- شريط المتصفح ---- */
+.hm-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.9em 1.15em;
+  background: var(--paper-3);
+  border-block-end: 1px solid var(--rule);
+}
+
+.hm-dot {
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 50%;
+  background: var(--rule-strong);
+  flex: none;
+}
+
+.hm-urlbar {
+  flex: 1;
+  margin-inline-start: 0.7em;
+  padding: 0.4em 1em;
+  border-radius: 999px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- الجسم: سايدبار + المحتوى ---- */
+.hm-body {
+  display: grid;
+  grid-template-columns: 12.5em 1fr;
+}
+
+.hm-side {
+  padding: 1.3em 1em;
+  background: var(--paper);
+  border-inline-end: 1px solid var(--rule);
+}
+
+.hm-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 1.5em;
+  padding-inline-start: 0.35em;
+}
+
+.hm-brand-mark {
+  font-size: 1.3em;
+  line-height: 1;
+}
+
+.hm-brand-name {
+  font-family: var(--font-display);
+  font-size: 1.15em;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.hm-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hm-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.62em;
+  padding: 0.62em 0.7em;
+  border-radius: var(--r-sm);
+  font-size: 1.05em;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+/* العنصر الشغال بلون القلم — نفس منطق الداشبورد الحقيقي */
+.hm-nav-item.is-active {
+  background: var(--marker);
+  color: var(--on-marker);
+  font-weight: 700;
+}
+
+.hm-nav-icon {
+  font-size: 1.05em;
+  line-height: 1;
+  flex: none;
+}
+
+.hm-nav-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---- المحتوى ---- */
+.hm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  padding: 1.3em;
+  background: var(--paper-2);
+}
+
+.hm-card {
+  padding: 1em 1.15em;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper);
+}
+
+.hm-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8em;
+}
+
+/* ---- كارت الملف ---- */
+.hm-file,
+.hm-quiz {
+  display: flex;
+  align-items: center;
+  gap: 0.85em;
+}
+
+.hm-file-badge {
+  flex: none;
+  padding: 0.45em 0.6em;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--hl-red-fill) 16%, var(--paper-2));
+  color: var(--hl-red-ink);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  font-weight: 700;
+}
+
+.hm-file-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.hm-file-name {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1em;
+  color: var(--ink);
+  direction: ltr;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hm-file-sub,
+.hm-card-sub {
+  margin: 0.25em 0 0;
+  font-size: 0.95em;
+  color: var(--ink-soft);
+}
+
+/* ⚠️ الصح على دايرة خضرا: الورق الفاتح فوق --hl-green-fill بيدّي ٢٫١٥ : ١
+   وهو تحت حد الـ ٣ : ١ المطلوب لأي شكل غير نصي. نفس الفخ المكتوب فوق في
+   الباليتة: لكل قلم fill و ink منفصلين لأن اللون الواحد مش بيصلح للاتنين.
+   الحل: الدايرة تينت هادي والعلامة نفسها بالحبر الأخضر الغامق = ٦٫١١ : ١
+   في النهار، والليل بياخد --hl-green-ink الفاتح لوحده. */
+.hm-check {
+  display: inline-flex;
+  flex: none;
+  width: 1.5em;
+  height: 1.5em;
+  padding: 0.32em;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hl-green-fill) 20%, var(--paper-2));
+  color: var(--hl-green-ink);
+}
+
+.hm-check svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- كارت التركيز الحالي ----
+   الكارت الوحيد اللي بياخد ضربة القلم، بالظبط زي الداشبورد الحقيقي:
+   الضربة معناها "دي المهمة اللي قدامك"، فلو اتحطت على كل كارت
+   بتفقد معناها. */
+.hm-focus {
+  background: var(--paper-2);
+  border-color: color-mix(in srgb, var(--marker) 40%, var(--rule));
+}
+
+.hm-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.hm-count {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.hm-count b {
+  color: var(--ink);
+}
+
+.hm-topic {
+  margin: 0.75em 0 0.95em;
+  font-family: var(--font-display);
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+/* ⚠️ الفسفوري على الورق الفاتح = ١٫٠٥ : ١. مافيش أي نسخة من الأصفر
+   بتوصل ٣ : ١ فوق الورق — ده حد اللون نفسه مش مشكلة اختيار درجة.
+   فبناخد نفس حل .meter الموجود فوق: الحدّ وعلامات الـ ١٠٪ هما اللي
+   بيرسموا الشكل، والتضاد مابين التعبئة والقناة مش هو اللي شايل
+   المعلومة. زي ما مكتوب هناك: «العلامات هي المعلومة». */
+.hm-meter {
+  position: relative;
+  height: 0.62em;
+  border-radius: var(--r-sm);
+  background: var(--paper-3);
+  border: 1px solid var(--rule-strong);
+  overflow: hidden;
+}
+
+.hm-meter-fill {
+  display: block;
+  /* ٧ من ١٢ — نفس أرقام الكارت فوقه */
+  width: 58%;
+  height: 100%;
+  background: var(--marker);
+  /* حرف التعبئة: بيفصلها عن باقي القناة بخط أغمق من الأصفر نفسه */
+  border-inline-end: 1px solid var(--marker-deep);
+}
+
+.hm-meter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(10% - 1px),
+    var(--rule) calc(10% - 1px),
+    var(--rule) 10%
+  );
+}
+
+/* ---- الملخص والبطاقات ---- */
+.hm-grid {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 0.85em;
+}
+
+.hm-card-title {
+  margin: 0;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.hm-summary {
+  background: color-mix(in srgb, var(--hl-green-fill) 7%, var(--paper));
+  border-color: color-mix(in srgb, var(--hl-green-fill) 24%, var(--rule));
+}
+
+.hm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin: 0.8em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hm-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.98em;
+  color: var(--ink-soft);
+}
+
+.hm-tick {
+  display: inline-flex;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  color: var(--hl-green-ink);
+}
+
+.hm-tick svg {
+  width: 100%;
+  height: 100%;
+}
+
+.hm-flash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.15em;
+}
+
+.hm-flash-icon {
+  font-size: 1.7em;
+  line-height: 1;
+  margin-bottom: 0.15em;
+}
+
+/* ---- كارت الأسئلة ---- */
+.hm-quiz-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.1em;
+  height: 2.1em;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--hl-purple-fill) 18%, var(--paper-2));
+  color: var(--hl-purple-ink);
+  font-family: var(--font-display);
+  font-size: 1em;
+  font-weight: 800;
+}
+
+.hm-chevron {
+  display: inline-flex;
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  color: var(--ink-soft);
+}
+
+.hm-chevron svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+   الإحصائيات
+   ========================================================================== */
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(28px, 6vw, 64px);
+}
+
+.stat-num {
+  font-family: var(--font-mono);
+  font-size: clamp(1.6rem, 3.4vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   الخطوات — الترقيم هنا مبرَّر: ده تتابع حقيقي، الترتيب فيه معلومة
+   ========================================================================== */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(20px, 3.5vw, 40px);
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  padding-top: 16px;
+  border-top: 2px solid var(--rule-strong);
+}
+
+.step-num {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--redpen);
+}
+
+/* أول خطوة بتاخد حرف فسفوري: هي نقطة الدخول للتتابع */
+.step:first-child {
+  border-top-color: var(--marker);
+}
+
+/* ===========================================================================
+   نتائج أول ملف — بديل معرض الشاشات: بيبيع النتيجة العملية، مش الواجهة.
+   =========================================================================== */
+
+.outcomes-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(24px, 5vw, 64px);
+  padding: clamp(24px, 4vw, 48px);
+  border: 1px solid var(--rule);
+  border-inline-start: 4px solid var(--redpen);
+  border-radius: var(--r-md);
+  background: var(--paper-2);
+  box-shadow: 0 1px 2px var(--shade);
+}
+
+.outcomes-lede {
+  margin: 14px 0 24px;
+  max-width: 40ch;
+}
+
+.outcome-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--rule);
+}
+
+.outcome-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: clamp(18px, 2.4vw, 24px);
+  background: var(--paper);
+}
+
+.outcome-index {
+  padding-top: 2px;
+  color: var(--redpen);
+  font-size: var(--t-label);
+  letter-spacing: 0.08em;
+}
+
+/* ==========================================================================
+   جدول المقارنة — جدول حقيقي، فالدلالة صح من غير ARIA يدوي
+   ========================================================================== */
+
+.compare {
+  width: 100%;
+  margin-top: 24px;
+  border-collapse: collapse;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--paper-2);
+  text-align: start;
+}
+
+.compare th,
+.compare td {
+  padding: 14px clamp(12px, 2.2vw, 22px);
+  border-bottom: 1px solid var(--rule);
+  font-weight: 400;
+  text-align: start;
+  vertical-align: middle;
+}
+
+.compare tbody tr:last-child th,
+.compare tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.compare thead th {
+  background: var(--paper-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.compare tbody th {
+  font-weight: 400;
+  color: var(--ink);
+}
+
+/* العمودان الأخيران ضيقان وفي المنتصف */
+.compare .col-mark {
+  width: 96px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.compare-no {
+  color: var(--redpen);
+}
+
+/* العمود بتاعنا ياخد تمييزه من عنوانه المعلَّم بالفسفوري، مش من تعليم كل خلية —
+   ميزانية اللون الصاخب مصروفة في البطل */
+.compare-yes {
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   الميزات — لاتناشر ورقة صغيرة من الملزمة
+
+   الهوية: كل كارت ورقة بهامش أحمر على حرفه الداخلي (نفس لغة .sheet-card
+   في الداشبورد)، وتدرّج طولي خفيف جداً بيخلي الورقة تحس إنها ورق مضاء
+   من فوق مش مستطيل مصمت.
+
+   ⚠️ ميزانية اللون: الفسفوري هنا **بيظهر مع المؤشر بس**. القاعدة في
+   المشروع إن الأصفر معناه «إنت هنا / ده اللي بعده»، فلو اتحط ساكن على
+   اتناشر كارت الصفحة بترجع حايط أصفر والعين مش لاقية تركز فين. الهوفر
+   استثناء مقبول لأنه بيتبع تركيز المستخدم لحظة بلحظة، وكارت واحد بس
+   بيبقى ملوّن في أي وقت.
+   ========================================================================== */
+
+/* سطر تحت العنوان — بيفصل العنوان عن الشبكة ويشيل عن الكروت عبء الشرح */
+.features-lede {
+  margin-top: 14px;
+  max-width: 58ch;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(14px, 1.8vw, 20px);
+  margin: clamp(30px, 4vw, 44px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* الغلاف بيشيل حركة الدخول (Framer بيكتب transform عليه)، والكارت
+   جوّه بيشيل حركة الهوفر. الفصل ده ضروري: الاتنين transform على نفس
+   العنصر معناه إن اللي بيوصل الأخير بيمسح اللي قبله. */
+.f-card-wrap {
+  display: flex;
+}
+
+.f-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: clamp(18px, 2vw, 24px);
+
+  /* التدرّج: فرق درجة واحدة بين أعلى الورقة وأسفلها. أي فرق أكبر من كده
+     بيبان كـ "كارت SaaS بتدرّج" وبيكسر إحساس الورق. */
+  background-image: linear-gradient(
+    to bottom,
+    var(--paper-2) 0%,
+    color-mix(in srgb, var(--paper-3) 45%, var(--paper-2)) 100%
+  );
+  border: 1px solid var(--rule);
+  /* الهامش الأحمر — أهم حتة في هوية الملزمة */
+  border-inline-start: 3px solid color-mix(in srgb, var(--redpen) 42%, transparent);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px var(--shade);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* الحدّ والظل بيتغيّروا بالـ CSS مش بـ Framer: دول مش transforms،
+   فالمتصفح بيعملهم على نفس الـ compositor من غير رندر جديد. */
+.f-card:hover {
+  border-color: var(--rule-strong);
+  border-inline-start-color: var(--redpen);
+  box-shadow: 0 18px 44px -20px var(--shade-lift);
+}
+
+/* الهالة: تدرّج شعاعي بلون القلم طالع من ناحية الأيقونة. z-index سالب
+   عشان يفضل تحت النص، و isolation على الكارت بيحبسه جوّه. */
+.f-card-glow {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -40%;
+  inset-inline-start: -30%;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--marker) 34%, transparent) 0%,
+    transparent 68%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.f-card:hover .f-card-glow {
+  opacity: 1;
+}
+
+/* لوحة الأيقونة: ختم صغير. الميل بييجي من Framer مش من هنا — لو اتكتب
+   rotate في السطور دي كان Framer هيمسحه أول ما يحرّك الـ scale. */
+.f-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  margin-bottom: 16px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-sm);
+  box-shadow: 0 2px 0 var(--shade);
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* هنا بس بيتصرف الفسفوري — على الكارت اللي المؤشر عليه، واحد في المرة */
+.f-card:hover .f-card-icon {
+  background: var(--marker);
+  border-color: var(--marker-deep);
+  color: var(--on-marker);
+}
+
+.f-card-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.f-card-desc {
+  margin: 8px 0 0;
+  font-size: var(--t-sm);
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+/* ==========================================================================
+   آراء الطلاب
+   الكارت هنا "ورقة رأي" — نفس ورق الميزات وهامشه الأحمر، بس مقلوب
+   رأسياً: الاقتباس فوق وصاحبه تحت، فالعين تقرا الرأي قبل ما تحكم على
+   مين قايله.
+
+   ⚠️ ميزانية اللون: النجوم بالحبر الهادي وهي ساكنة، مش صفرا. خمس نجوم
+   × ست كروت = تلاتين بقعة صفرا لو اتلوّنوا، والقاعدة في المشروع إن
+   الأصفر معناه «إنت هنا» مش «ده تقييم عالي». الفسفوري بيظهر على كارت
+   واحد بس — اللي المؤشر عليه.
+   ========================================================================== */
+
+.testimonials {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(14px, 1.8vw, 20px);
+  margin: clamp(30px, 4vw, 44px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* الغلاف بيشيل حركة الدخول والكارت جوّه بيشيل الهوفر — الاتنين
+   transform على نفس العنصر معناه إن اللي بيوصل الأخير بيمسح اللي قبله. */
+.t-card-wrap {
+  display: flex;
+}
+
+.t-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin: 0; /* figure بييجي بهامش من المتصفح */
+  padding: clamp(20px, 2.2vw, 26px);
+
+  background-image: linear-gradient(
+    to bottom,
+    var(--paper-2) 0%,
+    color-mix(in srgb, var(--paper-3) 45%, var(--paper-2)) 100%
+  );
+  border: 1px solid var(--rule);
+  border-inline-start: 3px solid color-mix(in srgb, var(--redpen) 42%, transparent);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px var(--shade);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.t-card:hover {
+  border-color: var(--rule-strong);
+  border-inline-start-color: var(--redpen);
+  box-shadow: 0 18px 44px -20px var(--shade-lift);
+}
+
+.t-card-glow {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -40%;
+  inset-inline-end: -30%;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--marker) 34%, transparent) 0%,
+    transparent 68%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.t-card:hover .t-card-glow {
+  opacity: 1;
+}
+
+/* علامة الاقتباس: خفيفة جداً وهي ساكنة عشان تفضل زخرفة، وبتوضح شوية
+   مع الهوفر. في الاتجاه العربي بتتقلب أفقياً — علامة الاقتباس بتفتح
+   ناحية النص، فلازم تتبع اتجاه القراية. */
+.t-quote-mark {
+  position: absolute;
+  inset-block-start: clamp(16px, 1.8vw, 22px);
+  inset-inline-end: clamp(16px, 1.8vw, 22px);
+  color: var(--rule-strong);
+  opacity: 0.5;
+  transition: opacity 0.25s ease, color 0.25s ease;
+  pointer-events: none;
+}
+
+[dir="rtl"] .t-quote-mark {
+  transform: scaleX(-1);
+}
+
+.t-card:hover .t-quote-mark {
+  color: var(--marker-deep);
+  opacity: 0.85;
+}
+
+/* النجوم: حبر هادي وهي ساكنة. `fill: currentColor` بيخلي النجمة
+   مليانة مش مفرّغة — تقييم كامل مقروء من بعيد من غير لون صاخب. */
+.t-stars {
+  display: flex;
+  gap: 3px;
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  transition: color 0.25s ease;
+}
+
+.t-stars svg {
+  fill: currentColor;
+}
+
+/* الفسفوري بيتصرف هنا بس — على الكارت اللي المؤشر عليه، واحد في المرة.
+   ⚠️ ودي مش المعلومة الوحيدة اللي بتقول التقييم: النص المخفي في
+   `.sr-only` بيقول «تقييم ٥ من ٥»، فاللون زيادة مش أساس. */
+.t-card:hover .t-stars {
+  color: var(--marker-deep);
+}
+
+/* الاقتباس: أكبر شوية من نص الميزات وبحبر المتن مش الهادي — ده كلام
+   حد، فلازم يقرا كصوت مش كشرح. الشرطة اللي بييجي بيها المتصفح
+   مقطوعة لأن علامة الاقتباس الرسومية فوق بتقوم بالدور. */
+.t-quote {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  quotes: none;
+  font-size: 0.97rem;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+/* الشخص: بيتدفع لتحت الكارت بـ auto عشان كل الكروت في الصف يبقى
+   الأفاتار بتاعها على نفس الخط الأفقي مهما كان طول الاقتباس مختلف. */
+.t-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding-block-start: 16px;
+  margin-block-start: auto;
+  border-block-start: 1px solid var(--rule);
+}
+
+/* الأفاتار: نفس ختم أيقونة الميزات بس دايرة. الميل بييجي من Framer مش
+   من هنا — لو اتكتب rotate في السطور دي كان Framer هيمسحه أول ما
+   يحرّك الـ scale. */
+.t-avatar {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 2px 0 var(--shade);
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+.t-card:hover .t-avatar {
+  border-color: var(--marker-deep);
+}
+
+/* المونوجرام: البديل الافتراضي لحد ما ييجي صور حقيقية. حرف واحد بخط
+   العناوين — بيقرا كأفاتار مقصود مش كصورة ناقصة. */
+.t-avatar-initial {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-soft);
+  transition: color 0.25s ease;
+}
+
+.t-card:hover .t-avatar-initial {
+  color: var(--ink);
+}
+
+/* الصورة الحقيقية لما تتحط: بتملا الدايرة بالكامل. object-fit ضروري
+   لأن الصور الجاهزة نادراً بتيجي مربعة. */
+.t-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.t-person-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0; /* عشان الاسم الطويل يقطع بدل ما يوسّع الكارت */
+}
+
+.t-name {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.t-school {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+/* الإفصاح إن المحتوى تجريبي: مونوسبيس صغير وهادي — موجود لمن يدوّر
+   عليه، مش بيسحب العين من الآراء نفسها. */
+.t-disclaimer {
+  margin: clamp(18px, 2.2vw, 26px) 0 0;
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
+/* ==========================================================================
+   نداء الختام
+   ========================================================================== */
+
+.final {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 22px;
+  padding: clamp(28px, 5vw, 48px);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--rule);
+}
+
+/* ==========================================================================
+   العرض التفاعلي للمنتج
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 22px;
+}
+
+.tab {
+  padding: 9px 16px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.tab:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+
+.tab[aria-selected="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.showcase {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: clamp(22px, 3.5vw, 40px);
+  align-items: center;
+}
+
+.shot {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  box-shadow: 0 20px 50px -22px var(--shade-lift);
+}
+
+/* ==========================================================================
+   صفحة الدخول
+   ========================================================================== */
+
+.auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.auth-aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  padding: clamp(28px, 4vw, 56px);
+  border-inline-end: 1px solid var(--rule);
+  /* background-color مش background: الاختصار كان بيصفّر background-image
+     الجاي من .ruled وبيلغي خطوط الورق */
+  background-color: var(--paper-2);
+}
+
+.auth-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 4vw, 48px);
+}
+
+.auth-form {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* ==========================================================================
+   مختار الشخصية — «إنت مين وبتتعلم إيه» قبل التسجيل
+   ⚠️ ميزانية اللون: الاختيار هنا بيتعلّم بالحبر (--ink) مش بالفسفوري.
+   الفسفوري معناه «إنت هنا / ده اللي بعده»، والزرار في آخر السكشن هو
+   الوحيد اللي بياخده. لو كل كارت مختار بقى أصفر، الصفحة تبقى حايط أصفر
+   والعين متلاقيش نقطة تركيز.
+   ========================================================================== */
+
+.picker {
+  display: grid;
+  gap: clamp(24px, 3.4vw, 36px);
+  margin-top: 28px;
+}
+
+/* رقم الخطوة بالأحمر زي .step-num — نفس لغة الترقيم في الصفحة */
+.picker-step-num {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--redpen);
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(12px, 1.8vw, 18px);
+  margin-top: 14px;
+}
+
+/* كارت الشخصية: زرار حقيقي عشان الكيبورد والـ aria-pressed يشتغلوا لوحدهم */
+.choice {
+  display: block;
+  padding: 18px;
+  text-align: start;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.choice:hover {
+  border-color: var(--ink-soft);
+  transform: translateY(-1px);
+}
+
+.choice[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper-2);
+}
+
+.choice-emoji {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.choice-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--t-h3);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.choice-desc {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* اللون الهادي مبيتقراش فوق الحبر، فبيرث لون الكارت المختار */
+.choice[aria-pressed="true"] .choice-desc {
+  color: inherit;
+  opacity: 0.82;
+}
+
+/* صف الأزرار الصغيرة: المستوى والتراكات */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.chip {
+  padding: 9px 16px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.chip:hover {
+  border-color: var(--ink-soft);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper-2);
+}
+
+.picker-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding-top: 22px;
+  border-top: 2px solid var(--rule-strong);
+}
+
+/* ==========================================================================
+   الهياكل العظمية (skeleton) — شكل الصفحة وهي بتحمّل
+   ========================================================================== */
+
+/* بلوك رمادي بيتنفّس. ماشي في اتجاه الصفحة عشان الـ RTL،
+   ومحتاجش media query لـ prefers-reduced-motion: البلوك العام فوق
+   بيصفّر أي animation-duration على * أصلاً. */
+.skel {
+  background: var(--paper-3);
+  background-image: linear-gradient(
+    to left,
+    transparent 0%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  border-radius: var(--r-sm);
+  animation: skel-sweep 1.4s ease-in-out infinite;
+}
+
+.skel-line {
+  height: 14px;
+  border-radius: 999px;
+}
+
+.skel-title {
+  height: clamp(30px, 5vw, 46px);
+  border-radius: var(--r-sm);
+}
+
+.skel-block {
+  border-radius: var(--r-md);
+}
+
+@keyframes skel-sweep {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+/* ==========================================================================
+   ❓ الأسئلة الشائعة — أكورديون
+
+   الشكل: سطور متراصة على ورقة واحدة، مش عشر كروت منفصلة. السبب إن
+   الأسئلة قايمة بتتقرا بالتسلسل، والكروت المنفصلة بتقول «كل واحد فيهم
+   حاجة قايمة بذاتها» وده مش صحيح هنا. فالفواصل خطوط رفيعة بين السطور
+   زي سطور الدفتر، والورقة كلها ليها هامش أحمر واحد على الشمال.
+
+   ⚠️ ميزانية اللون: الفسفوري على السؤال المفتوح **بس** — خط الهامش
+   الشمال + العلامة. عشرة أسئلة كلهم بأكسنت = حيطة صفرا، ونفس الغلطة
+   اللي اتصلحت في كروت الأيام.
+   ========================================================================== */
+
+.faq-list {
+  margin: clamp(30px, 4vw, 44px) 0 0;
+  padding: 0;
+  list-style: none;
+
+  background-image: linear-gradient(
+    to bottom,
+    var(--paper-2) 0%,
+    color-mix(in srgb, var(--paper-3) 45%, var(--paper-2)) 100%
+  );
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px var(--shade);
+  /* overflow مهم: السطر الأول والأخير ليهم زوايا، والهامش الأحمر
+     بتاع السطر المفتوح بيتقص معاهم بدل ما يخرج بره الورقة. */
+  overflow: hidden;
+}
+
+/* الفاصل بين السطور. آخر سطر من غير فاصل عشان ما يعملش خط مزدوج
+   مع حدّ الورقة. */
+.faq-item {
+  border-block-end: 1px solid var(--rule);
+}
+
+.faq-item:last-child {
+  border-block-end: 0;
+}
+
+/* الهامش الأحمر: شفاف وهو ساكن، وبيظهر لما السؤال يتفتح. بيتحط
+   بـ box-shadow جوّاني مش border عشان ما يزحلقش المحتوى ٣px لما
+   يظهر — نفس النتيجة البصرية من غير قفزة تخطيط. */
+.faq-item.is-open {
+  background: color-mix(in srgb, var(--marker) 7%, transparent);
+  box-shadow: inset 3px 0 0 0 var(--marker);
+}
+
+/* في الاتجاه اللاتيني الظل الجوّاني بيتقلب على الشمال:
+   box-shadow مابيعرفش الاتجاه المنطقي، فبنقلبه بالإيد. */
+[dir="ltr"] .faq-item.is-open {
+  box-shadow: inset 3px 0 0 0 var(--marker);
+}
+
+[dir="rtl"] .faq-item.is-open {
+  box-shadow: inset -3px 0 0 0 var(--marker);
+}
+
+/* الـ h3 غلاف دلالي بس — الشكل كله على الزرار اللي جوّه */
+.faq-q-heading {
+  margin: 0;
+  font: inherit;
+}
+
+.faq-q {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(10px, 1.4vw, 16px);
+  width: 100%;
+  /* الحشو على الزرار نفسه مش على السطر: كده منطقة الضغط هي السطر
+     كله فعلاً — هدف لمس بعرض الورقة وارتفاع مريح على الموبايل. */
+  padding: clamp(16px, 1.9vw, 21px) clamp(16px, 2vw, 24px);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: start;
+  cursor: pointer;
+  font-family: var(--font-body);
+  color: var(--ink);
+  transition: background 0.2s ease;
+}
+
+.faq-q:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+/* الرقم: مونوسبيس هادي، بيدّي القايمة إيقاع وبيقول للزائر هو فين في
+   العشرة. بيتلوّن مع السؤال المفتوح. */
+.faq-num {
+  flex: none;
+  padding-block-start: 0.15em;
+  color: var(--ink-soft);
+  opacity: 0.75;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.faq-item.is-open .faq-num {
+  color: var(--hl-yellow-ink);
+  opacity: 1;
+}
+
+.faq-q-text {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: clamp(0.98rem, 1.5vw, 1.08rem);
+  font-weight: 600;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* العلامة: دايرة صغيرة فيها + بتلف ٤٥ درجة فتبقى ×.
+   ⚠️ اللف نفسه في Framer مش هنا — لو اتكتب rotate في السطور دي كان
+   Framer هيمسحه أول فريم (بيكتب transform inline). */
+.faq-sign {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  color: var(--ink-soft);
+  background: var(--paper-2);
+  transition: color 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+}
+
+.faq-q:hover .faq-sign {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+
+.faq-item.is-open .faq-sign {
+  background: var(--marker);
+  border-color: var(--marker-deep);
+  color: var(--on-marker);
+}
+
+/* ⚠️ الغلاف المتحرّك: Framer بيكتب `height` inline عليه، فلازم يفضل
+   من غير حشو ولا حدود خالص. أي padding هنا بيتحسب فوق الارتفاع
+   المتحرّك وبيعمل قفزة في آخر فريم. الحشو كله على .faq-answer. */
+.faq-answer-wrap {
+  overflow: hidden;
+}
+
+.faq-answer {
+  padding: 0 clamp(16px, 2vw, 24px) clamp(17px, 2vw, 22px);
+  /* بيحاذي مع نص السؤال مش مع الرقم: الرقم عرضه ثابت (٢ خانة مونوسبيس)
+     زائد الـ gap. الإجابة بتبدأ من تحت السؤال بالظبط فبتتقرا كامتداد
+     ليه مش كسطر جديد. */
+  padding-inline-start: calc(clamp(16px, 2vw, 24px) + 2.2ch + clamp(10px, 1.4vw, 16px));
+}
+
+.faq-answer-text {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--t-body);
+  line-height: 1.85;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/* الذيل: «لسه عندك سؤال؟» */
+.faq-more {
+  margin: clamp(18px, 2.2vw, 24px) 0 0;
+  font-size: var(--t-sm);
+}
+
+.faq-more-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  /* تسطير بيكبر من الفسفوري: التسطير موجود من الأول عشان يبان إنه
+     لينك، وبيتحوّل لضربة قلم مع الهوفر. */
+  box-shadow: inset 0 -1px 0 0 var(--rule-strong);
+  transition: box-shadow 0.22s ease, color 0.22s ease;
+}
+
+.faq-more-link:hover {
+  color: var(--on-marker);
+  box-shadow: inset 0 -0.85em 0 0 var(--marker);
+}
+
+/* لينك «شوف الكل» تحت ملخّصات اللاندينج (الميزات/الآراء/الأسئلة).
+   بيتوسّط تحت الشبكة عشان يقرا كدعوة مقصودة للذراع مش كذيل تايه في
+   جنب الصفحة، ومسافته أكبر من .faq-more لأنه بيجي بعد شبكة كروت
+   محتاجة تنفّس قبل ما اللينك يبان. اللينك نفسه بياخد .faq-more-link
+   (نفس التسطير اللي بيتحوّل ضربة فسفوري مع الهوفر). */
+.section-more {
+  margin: clamp(24px, 3vw, 36px) 0 0;
+  font-size: var(--t-sm);
+  text-align: center;
+}
+
+/* ==========================================================================
+   🦶 الفوتر — كعب الملزمة
+
+   الهوية: الأقسام كلها فوق ليها خط أحمر على الجنب، والفوتر بيقلبها —
+   خط أحمر **فوق** بعرض الصفحة، زي خط النهاية في الكشكول. والخلفية
+   أغمق درجة من الصفحة عشان يحس إنه طبقة تحتية مش قسم زيادة.
+   ========================================================================== */
+
+.site-footer {
+  margin-block-start: clamp(40px, 6vw, 72px);
+  background: var(--paper-3);
+  padding-block-end: clamp(22px, 3vw, 30px);
+}
+
+/* خط النهاية الأحمر. متدرّج الشفافية من النص للأطراف عشان ما يبانش
+   كخط جدول — بيبان كضربة قلم اتسحبت بعرض الصفحة. */
+.footer-rule {
+  height: 2px;
+  background: linear-gradient(
+    to left,
+    transparent,
+    var(--redpen-soft) 12%,
+    var(--redpen) 50%,
+    var(--redpen-soft) 88%,
+    transparent
+  );
+}
+
+.footer-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 2fr);
+  gap: clamp(28px, 4vw, 56px);
+  padding-block: clamp(34px, 4.5vw, 56px);
+}
+
+/* ---- العمود الأول: الشعار والوصف والسوشيال ---- */
+
+.footer-brand-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* الشعار: نفس تركيب الـ nav بس من غير ضربة الفسفوري الساكنة —
+   تلات ضربات في الصفحة الواحدة (الهيرو + الناف + الفوتر) بتكسر
+   قاعدة «ضربة واحدة في الشاشة». الفسفوري بييجي على الهوفر. */
+.footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-size: 1.28rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* أكبر شوية من بتاعة النافبار: الفوتر عمود عريض وفيه مساحة، والشعار هنا
+   هو رأس العمود مش عنصر في شريط مزنوق. */
+.footer-brand-glyph {
+  flex: none;
+  height: 2rem;
+  aspect-ratio: 56.87 / 45;
+  width: auto;
+  color: var(--hl-yellow-ink);
+  transition: transform 0.3s ease;
+}
+
+.footer-brand:hover .footer-brand-glyph {
+  transform: scale(1.07);
+}
+
+.footer-tagline {
+  margin: 14px 0 0;
+  max-width: 42ch;
+  font-size: var(--t-sm);
+  line-height: 1.8;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.footer-social-title {
+  margin: clamp(18px, 2.4vw, 26px) 0 10px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+
+.footer-social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* الأيقونة: مربّع ورق بحدّ. بتترفع وتتلوّن فسفوري مع الهوفر —
+   نفس حركة الكروت (‎-2px‎) عشان الحركة تفضل لغة واحدة. */
+.footer-social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  color: var(--ink-soft);
+  transition: transform 0.22s ease, color 0.22s ease, background 0.22s ease,
+    border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.footer-social-link:hover {
+  transform: translateY(-2px);
+  background: var(--marker);
+  border-color: var(--marker-deep);
+  color: var(--on-marker);
+  box-shadow: 0 6px 14px -6px var(--shade-lift);
+}
+
+/* ---- أعمدة التنقل ---- */
+
+.footer-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(18px, 2.6vw, 32px);
+}
+
+.footer-col-title {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.footer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* اللينك: بيزحف ناحية القراية مع الهوفر. الإزاحة منطقية
+   (margin-inline-start) فبتشتغل صح في الاتجاهين من غير قاعدة تانية.
+   ⚠️ inline-flex مش inline: الزحف على عنصر سطري بيحرّك السطر كله. */
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: color 0.2s ease, margin 0.2s ease;
+}
+
+.footer-link:hover {
+  color: var(--ink);
+  margin-inline-start: 3px;
+}
+
+/* لينك التواصل: الأيقونة بتتلوّن فسفوري مع الهوفر عشان تفرقه عن
+   لينكات التنقل العادية من غير ما تاخد لون ثابت. */
+.footer-link-icon svg {
+  flex: none;
+  color: var(--ink-soft);
+  transition: color 0.2s ease;
+}
+
+.footer-link-icon:hover svg {
+  color: var(--hl-yellow-ink);
+}
+
+/* ---- الشريط السفلي ---- */
+
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding-block-start: clamp(16px, 2vw, 22px);
+  border-block-start: 1px solid var(--rule);
+}
+
+.footer-copy {
+  margin: 0;
+  font-size: var(--t-label);
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+.footer-copy-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-label);
+}
+
+.footer-legal-link {
+  color: var(--ink-soft);
+  text-decoration: none;
+  /* تسطير رفيع بيوضح مع الهوفر — اللينكات القانونية لازم تبان إنها
+     لينكات، بس من غير ما تسحب العين من فوقها. */
+  box-shadow: inset 0 -1px 0 0 transparent;
+  transition: color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.footer-legal-link:hover {
+  color: var(--ink);
+  box-shadow: inset 0 -1px 0 0 var(--rule-strong);
+}
+
+/* التوقيع: أهدى حاجة في الشريط — مش لينك ومش محتاج يتقرا من بعيد */
+.footer-made {
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+/* ==========================================================================
+   الصفحات القانونية (الخصوصية والشروط)
+   ========================================================================== */
+
+/* عرض القراءة: الصفحة دي نص متواصل مش شبكة. الحد الأقصى للسطر متحطّ
+   على الفقرات نفسها مش على الحاوية، عشان الفهرس واللافتة ياخدوا عرض
+   أوسع من المتن — ده بيخليهم يقروا كعناصر تنقّل مش كجزء من الكلام. */
+.legal {
+  max-width: 78ch;
+}
+
+.legal-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 26px;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  text-decoration: none;
+  transition: color 0.18s ease, gap 0.18s ease;
+}
+
+.legal-back:hover {
+  color: var(--ink);
+  /* المسافة بتكبر ناحية السهم: حركة صغيرة بتقول «ده بيرجّعك» */
+  gap: 11px;
+}
+
+/* ملحوظة: مفيش قاعدة بتقلب السهم مع الاتجاه هنا عن قصد.
+   الصفحتين القانونيتين نصهم عربي ثابت، و LegalDoc بيكتب dir="rtl"
+   على <article> نفسه — يعني المحتوى بيفضل RTL حتى لو الزائر حوّل
+   الموقع للإنجليزي. فالسهم لازم يفضل شمال↔يمين حسب RTL دايماً.
+   كانت هنا قاعدة `[dir='ltr'] .legal-back svg { transform: scaleX(-1) }`
+   واتشالت لأنها كانت **بتضر مش بتنفع**: المحدد بيطابق لو أي سلف عنده
+   dir="ltr" — و <html> بيبقى ltr لما الزائر يحوّل اللغة. فكانت هتقلب
+   السهم في صفحة نصها لسه عربي RTL. لو اتعملت ترجمة إنجليزي مراجَعة
+   للصفحتين، شيل dir="rtl" من LegalDoc ورجّع القاعدة دي مع بعض. */
+
+.legal-title {
+  max-width: 20ch;
+}
+
+.legal-lede {
+  max-width: 56ch;
+  margin-block: 18px 20px;
+}
+
+.legal-updated {
+  margin: 0 0 24px;
+  color: var(--ink-soft);
+  font-size: var(--t-label);
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
+/* لافتة المسودّة: بالقلم الأحمر مش بالفسفوري. الفسفوري معناه «إنت هنا»،
+   والأحمر معناه «ملاحظة على الهامش» — وده بالظبط اللي اللافتة دي بتقوله. */
+.legal-draft {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  margin-bottom: 34px;
+  border: 1px solid color-mix(in srgb, var(--redpen) 32%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--redpen) 6%, transparent);
+}
+
+.legal-draft svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--redpen);
+}
+
+.legal-draft p {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  line-height: 1.75;
+}
+
+/* الفهرس: كرت ورق منفصل عن المتن */
+.legal-toc {
+  padding: 20px 22px;
+  margin-bottom: 40px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper-2);
+}
+
+.legal-toc-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.legal-toc-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.legal-toc-link:hover {
+  color: var(--ink);
+}
+
+.legal-toc-num {
+  flex: none;
+  color: var(--rule-strong);
+  font-size: var(--t-label);
+  transition: color 0.18s ease;
+}
+
+.legal-toc-link:hover .legal-toc-num {
+  color: var(--hl-yellow-ink);
+}
+
+.legal-section {
+  /* المرساة بتنط تحت أي حاجة ثابتة فوق + مسافة تنفّس */
+  scroll-margin-top: 90px;
+}
+
+.legal-section + .legal-section {
+  margin-top: 38px;
+}
+
+.legal-h {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: var(--t-h3);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.legal-h-num {
+  flex: none;
+  color: var(--rule-strong);
+  font-size: var(--t-label);
+}
+
+.legal-p {
+  max-width: 68ch;
+  margin: 0 0 12px;
+  color: var(--ink-soft);
+  font-size: var(--t-body);
+  line-height: 1.9;
+  text-wrap: pretty;
+}
+
+.legal-p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-contact {
+  padding-top: 26px;
+  margin-top: 46px;
+  border-top: 1px solid var(--rule);
+  font-size: var(--t-sm);
+}
+
+.legal-contact-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: inset 0 -1px 0 0 var(--rule-strong);
+  transition: box-shadow 0.22s ease, color 0.22s ease;
+}
+
+.legal-contact-link:hover {
+  box-shadow: inset 0 -0.85em 0 0 var(--marker);
+}
+
+/* ==========================================================================
+   🎬 مراحل الماكيت المتحرك
+
+   الماكيت بيلف على تلات مراحل: رفع ← توليد ← جاهز. رقم المرحلة بيتحط
+   ككلاس `.is-stage-N` على `.hm` من الـ JS، وكل التغييرات هنا بتتفرّع
+   منه بـ CSS transitions.
+
+   ⚠️ ليه CSS مش JS: التغييرات كلها opacity و transform، فبتشتغل على
+   الـ compositor من غير ما تلمس الـ main thread. الحركة في الهيرو
+   بتلف على طول، فكل فريم بيتحسب على الـ CPU كان هياكل بطارية.
+
+   ⚠️ ولازم كل قاعدة هنا تفضل داخل `@layer components` — أي CSS بره
+   الطبقات بيغلب أي CSS جواها مهما كانت الـ specificity.
+   ========================================================================== */
+
+/* الماكيت كله بيهدى شوية في أول مرحلتين — الإحساس إنه "لسه بيتبني" */
+.hm-main {
+  transition: opacity 0.5s ease;
+}
+
+/* ---- شريط رفع الملف: بيبان في المرحلة الأولى بس ---- */
+.hm-upload {
+  display: block;
+  overflow: hidden;
+  height: 0;
+  margin-top: 0;
+  border-radius: 999px;
+  background: var(--paper-3);
+  opacity: 0;
+  transition:
+    height 0.35s ease,
+    margin-top 0.35s ease,
+    opacity 0.3s ease;
+}
+
+.hm.is-stage-0 .hm-upload {
+  height: 0.35em;
+  margin-top: 0.45em;
+  opacity: 1;
+}
+
+.hm-upload-fill {
+  display: block;
+  width: 30%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--marker-deep);
+}
+
+/* التعبئة بتمشي بس وهي ظاهرة. الحركة على width مش transform عن قصد:
+   العنصر ده ٤ بكسل ارتفاع وشريط واحد في الشاشة، والـ transform كان
+   هيحتاج طبقة تانية عشان الحواف المدوّرة تفضل مظبوطة. */
+.hm.is-stage-0 .hm-upload-fill {
+  animation: hm-upload-run 2.4s ease-out forwards;
+}
+
+@keyframes hm-upload-run {
+  from {
+    width: 12%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* ---- علامة صح الملف: مبتظهرش غير لما الرفع يخلص ---- */
+.hm-check {
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.hm.is-stage-0 .hm-check {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+/* ---- غطاء التوليد على كارت التركيز ---- */
+.hm-focus {
+  position: relative;
+}
+
+.hm-building {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  /* شبه معتّم مش معتّم بالكامل: الزائر لازم يحس إن فيه حاجة بتتبني
+     تحت الغطاء، مش إن الكارت اختفى. */
+  background: color-mix(in srgb, var(--paper-2) 82%, transparent);
+  color: var(--ink-soft);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.hm.is-stage-1 .hm-building {
+  opacity: 1;
+}
+
+.hm-building-spin {
+  display: inline-flex;
+  width: 1.6em;
+  height: 1.6em;
+  animation: hm-spin 0.9s linear infinite;
+}
+
+.hm-building-spin svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes hm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- مسطرة التقدم: فاضية لحد ما التوليد يخلص ---- */
+/* ⚠️ `transform-origin` مالوش قيم منطقية (مفيش `inline-start`)، فلازم
+   القيمة الفيزيائية + قلبها في RTL، زي باقي الملف. لو اتسابت `left`
+   لوحدها المسطرة كانت هتنمو من الناحية الغلط في العربي. */
+.hm-meter-fill {
+  transform-origin: left center;
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[dir="rtl"] .hm-meter-fill {
+  transform-origin: right center;
+}
+
+.hm.is-stage-0 .hm-meter-fill,
+.hm.is-stage-1 .hm-meter-fill {
+  transform: scaleX(0);
+}
+
+/* ---- سطور الملخص: بتتكتب سطر ورا سطر في المرحلة الأخيرة ---- */
+.hm-list li {
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
+}
+
+.hm.is-stage-0 .hm-list li,
+.hm.is-stage-1 .hm-list li {
+  opacity: 0;
+  transform: translateY(0.3em);
+  /* التأخير المتدرّج (inline من الـ JSX) للدخول بس — الخروج فوري
+     عشان الدورة الجاية تبدأ من نضافة */
+  transition-delay: 0s !important;
+}
+
+/* الكروت الجانبية بتظهر مع الخطوة الأخيرة كمان */
+.hm-flash,
+.hm-quiz {
+  transition:
+    opacity 0.45s ease,
+    transform 0.45s ease;
+}
+
+.hm.is-stage-0 .hm-flash,
+.hm.is-stage-0 .hm-quiz,
+.hm.is-stage-1 .hm-flash,
+.hm.is-stage-1 .hm-quiz {
+  opacity: 0.35;
+  transform: translateY(0.4em);
+}
+
+/* ==========================================================================
+   🚦 شريط مراحل الهيرو
+
+   تلات خطوات جنب الماكيت بتتعلّم بالتتابع. ده اللي بيدّي الجملة اللي
+   الزائر بيقراها: ارفع ← بيولّد ← ابدأ.
+
+   ⚠️ ميزانية اللون: الخطوة النشطة بس هي اللي بتاخد الفسفوري. الخطوات
+   اللي خلصت بتتعلّم بالأخضر الهادي والباقي رمادي — لو التلاتة أخدوا
+   أصفر الشريط كان هيبقى حايط أصفر والعين مش لاقية تركز فين.
+   ========================================================================== */
+
+.hero-rail {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-rail-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+  opacity: 0.55;
+  transition:
+    opacity 0.4s ease,
+    color 0.4s ease;
+}
+
+.hero-rail-step.is-active,
+.hero-rail-step.is-done {
+  opacity: 1;
+}
+
+.hero-rail-step.is-active {
+  color: var(--ink);
+}
+
+.hero-rail-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background 0.4s ease,
+    border-color 0.4s ease,
+    color 0.4s ease,
+    transform 0.4s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* الخطوة النشطة: الفسفوري + كبرة بسيطة. دي الحاجة الوحيدة اللي بتاخد
+   الأكسنت في الشريط. */
+.hero-rail-step.is-active .hero-rail-dot {
+  border-color: var(--marker-deep);
+  background: var(--marker);
+  color: var(--on-marker);
+  transform: scale(1.12);
+}
+
+/* اللي خلص: أخضر هادي، بيقول "تم" من غير ما ينافس النشط */
+.hero-rail-step.is-done .hero-rail-dot {
+  border-color: color-mix(in srgb, var(--hl-green-fill) 45%, var(--rule));
+  background: color-mix(in srgb, var(--hl-green-fill) 22%, var(--paper-2));
+  color: var(--hl-green-ink);
+}
+
+/* الرقم جوه الدايرة: `.ltr-num` مش محتاجة هنا لأنه رقم واحد (١–٣)
+   ومفيش ترتيب يتقلب، بس الخط المونوسبيس بيخلي التلات دواير بنفس
+   العرض البصري بدل ما الـ 1 تبان أرفع من الـ 3. */
+.hero-rail-num {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-rail-label {
+  /* السطر ما يتقطعش: "ارفع ملزمتك" على سطرين بيبوّظ صف الخطوات */
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   🎁 صفحة الديمو
+   ========================================================================== */
+
+.demo-head {
+  max-width: 62ch;
+}
+
+.demo-title {
+  font-family: var(--font-display);
+  color: var(--ink);
+  margin: 10px 0 0;
+  font-size: clamp(1.9rem, 4.4vw, 3rem);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.demo-lede {
+  margin: 16px 0 0;
+  max-width: 54ch;
+}
+
+/* ---- منطقة الرفع ---- */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: clamp(30px, 5vw, 52px) var(--gutter);
+  /* الحد المتقطّع هو الإشارة المتعارف عليها لـ "ارمي هنا" — وهي كمان
+     بتناسب اتجاه الملزمة: شكل المكان الفاضي في ورقة الدفتر. */
+  border: 2px dashed var(--rule-strong);
+  border-radius: var(--r-lg);
+  background: var(--paper-2);
+  transition:
+    border-color 0.25s ease,
+    background 0.25s ease;
+}
+
+.dropzone.is-dragging {
+  border-color: var(--marker-deep);
+  background: color-mix(in srgb, var(--marker) 12%, var(--paper-2));
+}
+
+.dropzone.is-busy {
+  opacity: 0.6;
+}
+
+.dropzone-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+  padding: 10px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--marker) 20%, var(--paper-3));
+  color: var(--ink);
+}
+
+.dropzone-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dropzone-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-h3);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dropzone-or {
+  margin: 8px 0 0;
+}
+
+.dropzone-formats {
+  margin: 14px 0 0;
+  font-size: var(--t-label);
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
+
+/* زرار شكله لينك: بيتستخدم لما الإجراء جوه جملة. `button` مش `a`
+   لأنه بيعمل حاجة في الصفحة مش بيروح لمكان. */
+.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--marker-deep);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+
+.linkish:hover {
+  text-decoration-color: var(--ink);
+}
+
+.linkish:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- الملف المختار ---- */
+.demo-chosen {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper-2);
+}
+
+.demo-chosen-badge {
+  display: inline-flex;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hl-green-fill) 20%, var(--paper-3));
+  color: var(--hl-green-ink);
+}
+
+.demo-chosen-badge svg {
+  width: 100%;
+  height: 100%;
+}
+
+.demo-chosen-meta {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.demo-chosen-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* اسم الملف ممكن يكون طويل جداً — القص أحسن من إنه يكسر الصف */
+.demo-chosen-name {
+  margin: 3px 0 0;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demo-sample {
+  margin: 16px 0 0;
+  text-align: center;
+}
+
+/* ---- شريط المراحل أثناء التوليد ---- */
+.demo-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 20px 22px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper-2);
+}
+
+.demo-step {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.demo-step.is-active,
+.demo-step.is-done {
+  opacity: 1;
+}
+
+.demo-step.is-active .demo-step-label {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.demo-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.demo-step.is-active .demo-step-dot {
+  border-color: var(--marker-deep);
+  background: color-mix(in srgb, var(--marker) 30%, var(--paper-2));
+}
+
+.demo-step.is-done .demo-step-dot {
+  border-color: color-mix(in srgb, var(--hl-green-fill) 45%, var(--rule));
+  background: color-mix(in srgb, var(--hl-green-fill) 22%, var(--paper-2));
+  color: var(--hl-green-ink);
+  padding: 4px;
+}
+
+.demo-step-dot svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* نبضة في الخطوة الشغالة — الإشارة الوحيدة إن فيه حاجة بتحصل دلوقتي */
+.demo-step-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--marker-deep);
+}
+
+.demo-step.is-active .demo-step-pulse {
+  animation: demo-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes demo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.55);
+    opacity: 0.45;
+  }
+}
+
+/* ---- الخطأ ---- */
+.demo-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--redpen-soft);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--redpen) 8%, var(--paper-2));
+  color: var(--ink);
+  font-size: var(--t-sm);
+  line-height: 1.65;
+}
+
+.demo-error-icon {
+  display: inline-flex;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  color: var(--redpen);
+}
+
+.demo-error-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- النتيجة ---- */
+.demo-result-head {
+  margin-bottom: 30px;
+}
+
+/* التركيز بينتقل هنا برمجياً، فلازم يفضل باين للي بيستخدم كيبورد */
+.demo-result-head:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 6px;
+  border-radius: var(--r-sm);
+}
+
+/* بلوك النتيجة: ورقة بهامش أحمر زي كروت الداشبورد */
+.sheet-block {
+  margin-top: 26px;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper-2);
+}
+
+.demo-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-summary li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.demo-tick {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 5px;
+  color: var(--hl-green-ink);
+}
+
+.demo-tick svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- كروت المراجعة ---- */
+.demo-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.demo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 108px;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.demo-card:hover {
+  border-color: var(--rule-strong);
+  transform: translateY(-2px);
+}
+
+.demo-card.is-flipped {
+  border-color: var(--marker-deep);
+  background: color-mix(in srgb, var(--marker) 10%, var(--paper-2));
+}
+
+.demo-card-q {
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.demo-card-a {
+  font-size: var(--t-sm);
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+.demo-card-hint {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
+/* ---- سؤال الامتحان ---- */
+.demo-quiz-q {
+  margin: 14px 0 16px;
+  font-size: var(--t-lede);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.demo-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.demo-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.55;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.demo-choice:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+  background: var(--paper-2);
+}
+
+.demo-choice:disabled {
+  cursor: default;
+}
+
+/* الصح بيتعلّم بالأخضر حتى لو المستخدم اختار غلط — الهدف إنه يتعلّم
+   مش إنه يتحاسب */
+.demo-choice.is-correct {
+  border-color: color-mix(in srgb, var(--hl-green-fill) 55%, var(--rule));
+  background: color-mix(in srgb, var(--hl-green-fill) 14%, var(--paper-2));
+}
+
+.demo-choice.is-wrong {
+  border-color: var(--redpen-soft);
+  background: color-mix(in srgb, var(--redpen) 9%, var(--paper-2));
+}
+
+.demo-choice.is-dim {
+  opacity: 0.5;
+}
+
+.demo-choice-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.demo-choice.is-correct .demo-choice-mark {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--hl-green-fill) 30%, var(--paper-2));
+  color: var(--hl-green-ink);
+  padding: 6px;
+}
+
+.demo-choice.is-wrong .demo-choice-mark {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--redpen) 16%, var(--paper-2));
+  color: var(--redpen);
+  padding: 6px;
+}
+
+.demo-choice-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.demo-verdict {
+  margin: 14px 0 0;
+  padding: 12px 15px;
+  border-inline-start: 3px solid var(--redpen);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.demo-verdict.is-correct {
+  border-inline-start-color: var(--hl-green-ink);
+}
+
+/* ---- الخطة ---- */
+.demo-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.demo-plan-day {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper);
+}
+
+/* مربّع اليوم: هو اللي بيحمل حالة "إنت هنا" في الداشبورد، فبياخد
+   الفسفوري. النص جواه ثابت `--on-marker` في التيمين. */
+.demo-plan-num {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: 1px;
+  width: 52px;
+  padding: 8px 4px;
+  border-radius: var(--r-sm);
+  background: var(--marker);
+  color: var(--on-marker);
+}
+
+.demo-plan-num-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.demo-plan-num-value {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.demo-plan-title {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.demo-cta-lede {
+  margin: 12px auto 22px;
+  max-width: 46ch;
+}
+
+/* ==========================================================================
+   الاستجابة
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .hero,
+  .showcase {
+    grid-template-columns: 1fr;
+  }
+
+  /* عمود واحد: العنوان والمتن بياخدوا عرض السطر كله */
+  .hero-title {
+    max-width: none;
+  }
+
+  .hero-lede {
+    max-width: 60ch;
+  }
+
+  /* الميل بيتشال في العمود الواحد: الماكيت بياخد عرض الشاشة كله،
+     فأي ميل بيخلي حرفه يخبط في الهامش. */
+  .hero-mockup-tilt {
+    transform: none;
+  }
+
+  /* الماكيت بيتوسّع مع الشاشة دلوقتي مش مع نص العمود، فالجذر بيكبر
+     عشان النص يفضل مقروء بدل ما يفضل مربوط بـ 0.92vw */
+  .hm {
+    font-size: clamp(0.56rem, 1.55vw, 0.78rem);
+  }
+
+  .hero-glow {
+    inset: -8% 0 -10%;
+    opacity: 0.4;
+  }
+
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .outcomes-shell {
+    grid-template-columns: 1fr;
+  }
+
+  /* الميزات مابتنزلش لعمود واحد هنا زي الخطوات: اتناشر كارت في عمود
+     واحد على تابلت = عمود طوله شاشتين، والمستخدم بيوصل لآخره وهو نسي
+     أول واحد. عمودين بيفضلوا مقروءين لحد ٥٦٠. */
+  .features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* الآراء بتنزل لعمودين هنا لنفس سبب الميزات: ست كروت في عمود واحد
+     على تابلت = عمود طويل، والزائر بيوصل لآخره وهو نسي أول رأي. */
+  .testimonials {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* كروت الشخصية فيها وصف سطرين، فتحت ٩٠٠ بتبقى ضيقة جداً في ٣ أعمدة */
+  .choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-aside {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--rule);
+  }
+
+  /* الفوتر: عمود العلامة بيطلع فوق أعمدة التنقل. جنب بعض على تابلت
+     يعني عمود العلامة بيبقى ٤٠٪ من عرض ضيق أصلاً، والوصف بيتقطّع
+     كلمتين في السطر. */
+  .footer-top {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  /* أربع أعمدة تنقل على تابلت = عمود عرضه كلمة. اتنين بيسيبوا لكل
+     عمود عرض يكفي أطول لينك من غير قطع. */
+  .footer-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px 24px;
+  }
+
+  /* الفهرس القانوني: عمود واحد. عمودين على تابلت بيخلوا عناوين البنود
+     الطويلة تتقطّع، والفهرس اللي بيتقطّع بيبطّل يكون فهرس. */
+  .legal-toc-list {
+    grid-template-columns: 1fr;
+  }
+
+  /* شريط المراحل في العمود الواحد: بيتوسّط فوق الماكيت بدل ما يبقى
+     سطر مزنوق على طرف واحد */
+  .hero-rail {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  /* عمود واحد على الموبايل. الأيقونة بتصغر شوية عشان الكارت ما ياخدش
+     طول الشاشة كلها وهو فيه سطرين نص بس. */
+  .features {
+    grid-template-columns: 1fr;
+  }
+
+  .f-card-icon {
+    width: 38px;
+    height: 38px;
+    margin-bottom: 13px;
+  }
+
+  /* عمود واحد على الموبايل. الاقتباس هو المحتوى الأساسي هنا فبيفضل
+     بحجمه، واللي بيصغر هو الأفاتار وعلامة الاقتباس الزخرفية. */
+  .testimonials {
+    grid-template-columns: 1fr;
+  }
+
+  .t-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* علامة الاقتباس بتتشال خالص على الموبايل: الكارت بقى عرض الشاشة
+     كله، والعلامة في الركن بتزاحم أول سطر من النجوم. */
+  .t-quote-mark {
+    display: none;
+  }
+
+  .compare th,
+  .compare td {
+    font-size: var(--t-sm);
+  }
+
+  .compare .col-mark {
+    width: 52px;
+  }
+
+  /* الأزرار بتاخد عرض الشاشة على الموبايل الضيق — هدف لمس أوسع وأسهل */
+  .hero-actions {
+    width: 100%;
+  }
+
+  .hero-cta {
+    flex: 1 1 100%;
+  }
+
+  /* الموبايل: السايدبار بيتشال خالص. عمود ١٢٫٥em جنب المحتوى على شاشة
+     ٣٦٠ بيسيب للمحتوى مساحة مش كفاية، والنتيجة كارت مضغوط مالوش لازمة —
+     والحكاية اللي الماكيت بيحكيها (ملف ← ملخص ← بطاقات ← أسئلة) كلها
+     في عمود المحتوى مش في السايدبار. */
+  .hm-side {
+    display: none;
+  }
+
+  .hm-body {
+    grid-template-columns: 1fr;
+  }
+
+  .hm {
+    font-size: clamp(0.6rem, 2.85vw, 0.8rem);
+  }
+
+  /* الملخص والبطاقات فوق بعض: عمودين على ٣٦٠ بيخلوا سطور الملخص
+     تتقطع كلمة في السطر */
+  .hm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── شريط مراحل الهيرو ──
+     عمود مش صف: تلات خطوات جنب بعض على ٣٦٠ بتتقطّع كل واحدة على سطرين،
+     والنتيجة كتلة نص مش شريط خطوات. عمود بيسيب كل خطوة على سطرها
+     ويخلي الترتيب (١ ← ٢ ← ٣) أوضح. */
+  .hero-rail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 9px;
+    justify-content: flex-start;
+  }
+
+  /* ── الديمو ──
+     منطقة الرفع بتقل حشوها، والحد المتقطّع بيفضل — هو الإشارة الوحيدة
+     إن المكان ده بيستقبل ملف. */
+  .dropzone {
+    padding: 28px 18px;
+  }
+
+  /* الملف المختار بينزل عمود: الاسم + الزرار جنب بعض على ٣٦٠ بيخلوا
+     الزرار عرضه كلمة ونص. والزرار بياخد عرض الصف كله كهدف لمس. */
+  .demo-chosen {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: start;
+  }
+
+  .demo-chosen .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* كارت مراجعة واحد في الصف: minmax(220px) بيسمح بعمودين على ٤٨٠،
+     والسؤال والإجابة بيتقطّعوا كلمة في السطر */
+  .demo-cards {
+    grid-template-columns: 1fr;
+  }
+
+  /* مربّع اليوم بيصغر عشان عنوان اليوم ياخد عرض أوسع */
+  .demo-plan-num {
+    width: 44px;
+  }
+
+  .demo-plan-day {
+    gap: 11px;
+    padding: 12px 13px;
+  }
+
+  /* ── الأسئلة الشائعة ──
+     الحشو بيقل عشان النص ياخد عرض الشاشة، بس الزرار بيفضل ٤٤ بكسل
+     ارتفاع على الأقل — ده أصغر هدف لمس مريح، والصف اللي أقل منه
+     بيخلي الزائر يضغط على السؤال اللي تحته. */
+  .faq-q {
+    gap: 12px;
+    padding: 15px 16px;
+  }
+
+  /* الرقم بيتشال على الموبايل: تلات عناصر في سطر عرضه ٣٦٠ بيخلوا
+     السؤال يتقطّع لتلات سطور. الرقم كان إيقاع بصري، والسؤال هو
+     المحتوى — فاللي بيمشي هو الإيقاع. */
+  .faq-num {
+    display: none;
+  }
+
+  .faq-q-text {
+    font-size: 0.96rem;
+  }
+
+  /* الحشو الجانبي كان محسوب عشان يتساوى مع بداية نص السؤال (رقم +
+     مسافة). الرقم اتشال فوق، فالحساب بيرجع لحشو الزرار العادي. */
+  .faq-answer {
+    padding-inline-start: 16px;
+    padding-inline-end: 16px;
+  }
+
+  .faq-answer-text {
+    font-size: var(--t-sm);
+    line-height: 1.8;
+  }
+
+  /* ── الفوتر ──
+     عمود واحد على الموبايل. عمودين على ٣٦٠ بيخلوا «مساحة العمل»
+     تتقطّع سطرين. */
+  .footer-nav {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+
+  /* الشريط السفلي بينزل تحت بعضه: الحقوق والقانوني جنب بعض على ٣٦٠
+     بيتزنقوا في نص كلمة. */
+  .footer-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  /* أيقونات السوشيال بتكبر شوية على اللمس: ٣٦ بكسل ماوس مظبوط،
+     بس الصباع عايز ٤٤. */
+  .footer-social-link {
+    width: 42px;
+    height: 42px;
+  }
+
+  /* ── القانوني ── */
+  .legal-draft {
+    padding: 14px 15px;
+  }
+
+  .legal-toc {
+    padding: 16px 17px;
+  }
+
+  /* العنوان والرقم فوق بعض بيبقى أوضح من صف بيتقطّع: العناوين هنا
+     جمل كاملة مش كلمة. */
+  .legal-h {
+    gap: 9px;
+  }
+
+  .legal-p {
+    line-height: 1.85;
+  }
+
+  /* ── أهداف اللمس ──
+     الشيبس والتابات حشوها 9px وخطها --t-sm، يعني الارتفاع الناتج
+     حوالي 35px — أقل من الـ 44px اللي الصباع محتاجها. min-height
+     مش padding عشان الشكل ما يتغيّرش على الشاشات الكبيرة، والنص
+     يفضل متوسّط رأسياً بالـ inline-flex.
+
+     نفس منطق .footer-social-link فوق: الشكل ثابت، منطقة اللمس بتكبر. */
+  .chip,
+  .tab {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* ==========================================================================
+   المتجر والمخزن
+
+   الطلب كان «إحساس لعبة». القرار اللي المستخدم اختاره: **بالحركة مش
+   باللون** — يعني الورق يفضل ورق، والندرة ليها تلات مساحات صغيرة بس
+   (شريط فوق الكارت، البادج، خط الكارت). اللون بييجي من `--rar` اللي
+   الكارت بيحطّه inline من `RARITY[r].fill`، فأي باليتة من الـ١٥ تشتغل.
+
+   ⚠️ مفيش hex ولا rgb هنا خالص — كله توكنز. ده اللي بيخلّي «خرافي» أحمر
+   على الورق العادي وأحمر تاني على ماتريكس بدل ما يبقى بقعة غلط.
+   ========================================================================== */
+
+  .shop-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.95rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    overflow: hidden;
+    text-align: start;
+    transition:
+      transform 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+
+  /* الشريط بيقول الندرة قبل القراية. ٣ بكسل عشان يبان وميغلبش. */
+  .shop-card::before {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    height: 3px;
+    background: var(--rar, var(--rule-strong));
+  }
+
+  @media (hover: hover) {
+    .shop-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--rar, var(--rule-strong));
+      box-shadow: 0 8px 20px -12px var(--shadow, rgb(0 0 0 / 0.35));
+    }
+  }
+
+  .shop-card:focus-visible {
+    outline: 2px solid var(--rar, var(--rule-strong));
+    outline-offset: 2px;
+  }
+
+  /* الملبوس: خط كامل بلون الندرة — أوضح من بادج لوحده */
+  .shop-card-on {
+    border-color: var(--rar, var(--rule-strong));
+    box-shadow: inset 0 0 0 1px var(--rar, var(--rule-strong));
+  }
+
+  /* المقفول باهت بس **مقروء** — الشرط لازم يتقرا عشان يبان ناقص إيه */
+  .shop-card-locked {
+    opacity: 0.62;
+  }
+
+  .shop-thumb {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    width: 100%;
+    max-height: 92px;
+    font-size: 2rem;
+    line-height: 1;
+    background: var(--paper-3);
+    border-radius: 10px;
+    user-select: none;
+  }
+
+  /* بادج الندرة والحالة */
+  .shop-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.6;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+
+  /* سعر بالكوينز — الرقم لاتيني والعملة إيموجي */
+  .coin-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    font-family: var(--font-mono, ui-monospace), monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--paper-3);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+  }
+
+  .coin-pill-lg {
+    padding: 0.3rem 0.65rem;
+    font-size: 13px;
+  }
+
+  /* الشريط العلوي: الرصيد والمستوى والدوري والصورة واللقب */
+  .shop-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 0.85rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+  }
+
+  /* شبكة الكروت — auto-fill عشان تتصرّف لوحدها من غير media queries */
+  .shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 0.7rem;
+  }
+
+  /* صندوق المعاينة الكبير جوّه ورقة العنصر.
+
+     ⚠️ الثيمات **مش** بتتعرض بـ `data-pack` هنا. الباليتات متعرّفة على
+     `:root[data-pack="..."]` بس (سطر ١٦٩ وبعده)، فحطّ `data-pack` على
+     div جوّه الصفحة مابيعملش حاجة — كانت هتطلع معاينة فاضية بالباليتة
+     الحالية من غير أي رسالة خطأ. بدل ما نعدّل ١٥ بلوك، الألوان بتتحقن
+     inline من `swatch` في theme-packs.ts (نفس القيم بالحرف)، والـ inline
+     بيغلب الكلاس اللي في الطبقة فده بيشتغل صح. */
+  .shop-preview {
+    position: relative;
+    display: grid;
+    place-items: center;
+    gap: 0.6rem;
+    padding: 1.1rem;
+    min-height: 148px;
+    background: var(--paper-3);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* عيّنة مصغّرة من صفحة حقيقية: سطرين وضربة قلم — عشان الباليتة تتحكم
+     عليها في سياقها مش كأربع مستطيلات لون. */
+  .shop-preview-demo {
+    display: grid;
+    gap: 0.4rem;
+    width: 100%;
+    max-width: 190px;
+    padding: 0.65rem 0.7rem;
+    border-radius: 8px;
+    border: 1px solid currentColor;
+  }
+
+  .shop-preview-line {
+    display: block;
+    height: 5px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.32;
+  }
+
+  /* وميض بسيط بعد الشرا. مرة واحدة، وبيقف لو الحركة مقفولة. */
+  @keyframes shop-pop {
+    40% {
+      transform: scale(1.04);
+    }
+  }
+
+  .shop-card-bought {
+    animation: shop-pop 0.42s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shop-card,
+    .shop-card-bought {
+      transition: none;
+      animation: none;
+    }
+
+    .shop-card:hover {
+      transform: none;
+    }
+  }
+
+/* ==========================================================================
+   أبرواز الصور — المتجر
+
+   `value` بتاع كل إطار في `lib/shop/catalog.ts` هو اسم الكلاس هنا
+   (`frame-thin` → `.frame-thin`). ١٢ إطار = ١٢ كلاس، ومفيش صور خالص:
+   كلهم CSS، فبيتلوّنوا مع الباليتة الملبوسة تلقائياً وميحتاجوش أصول.
+
+   ⚠️ كلهم جوه `@layer components` عن قصد — أي قاعدة بره الطبقات بتغلب
+   أي utility جواها، فإطار مكتوب بره كان هيكسر `rounded-*` و`p-*` على
+   نفس العنصر.
+
+   ⚠️ الحركة في `prism` و`glow` متلفّة لو المستخدم طالب حركة أقل. الحركة
+   حوالين صورة الحساب بتفضل في مجال النظر على طول، فدي مش رفاهية.
+   ⚠️ مفيش `@layer components {` جديدة هنا — إحنا **جوّه** الطبقة اللي
+   فتحت في سطر ٨٧٣ أصلاً. لو فتحنا واحدة تانية بنفس الاسم كانت هتبقى
+   طبقة فرعية (`components.components`)، والقواعد اللي في الطبقة الأصلية
+   مباشرة بتغلب اللي في الفرعية عند تساوي الـ specificity — يعني الأبرواز
+   كانت هتخسر بصمت من غير أي رسالة.
+   ========================================================================== */
+
+  /* المقاس من `--frame-size` عشان نفس البرواز يشتغل في الكارت الصغير وفي
+     المعاينة الكبيرة. الافتراضي ٤٨ بكسل = مقاس الصورة في الشريط العلوي.
+
+     ⚠️ لازم مقاس صريح: العناصر الجوّه كلها `position: absolute` بـ `inset`،
+     فمن غير مقاس على الأب البرواز بيتلزّق على الإيموجي وبيبان بيضان. */
+  .shop-frame {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--frame-size, 48px);
+    block-size: var(--frame-size, 48px);
+    border-radius: 50%;
+    background: var(--paper-2);
+    isolation: isolate;
+    flex-shrink: 0;
+  }
+
+  .frame-thin {
+    box-shadow: 0 0 0 2px var(--rule-strong);
+  }
+
+  .frame-dashed {
+    outline: 2px dashed var(--rule-strong);
+    outline-offset: 3px;
+  }
+
+  .frame-double {
+    box-shadow:
+      0 0 0 2px var(--rule-strong),
+      0 0 0 5px var(--paper-3);
+  }
+
+  /* أربع زوايا بس: تدرّج مخروطي بيرسم الأركان ويسيب النص شفاف */
+  .frame-corners::before {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border: 2px solid var(--ink-soft);
+    border-radius: 12px;
+    -webkit-mask:
+      linear-gradient(#000 0 0) top left / 34% 34% no-repeat,
+      linear-gradient(#000 0 0) top right / 34% 34% no-repeat,
+      linear-gradient(#000 0 0) bottom left / 34% 34% no-repeat,
+      linear-gradient(#000 0 0) bottom right / 34% 34% no-repeat;
+    mask:
+      linear-gradient(#000 0 0) top left / 34% 34% no-repeat,
+      linear-gradient(#000 0 0) top right / 34% 34% no-repeat,
+      linear-gradient(#000 0 0) bottom left / 34% 34% no-repeat,
+      linear-gradient(#000 0 0) bottom right / 34% 34% no-repeat;
+  }
+
+  /* الهامش الأحمر بتاع الملزمة — نفس فكرة الموقع كله */
+  .frame-notebook {
+    box-shadow: 0 0 0 2px var(--rule);
+  }
+
+  .frame-notebook::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: -7px;
+    inset-block: -2px;
+    width: 2px;
+    background: var(--hl-red-fill);
+    opacity: 0.7;
+  }
+
+  /* شريط لاصق فوق وتحت — كإن الصورة ملزوقة في ألبوم */
+  .frame-tape::before,
+  .frame-tape::after {
+    content: "";
+    position: absolute;
+    width: 34px;
+    height: 13px;
+    background: var(--hl-yellow-fill);
+    opacity: 0.72;
+    z-index: 2;
+  }
+
+  .frame-tape::before {
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%) rotate(-7deg);
+  }
+
+  .frame-tape::after {
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%) rotate(6deg);
+  }
+
+  .frame-stitch {
+    outline: 2px dashed var(--hl-orange-ink);
+    outline-offset: 4px;
+    box-shadow: 0 0 0 2px var(--paper-3);
+  }
+
+  .frame-glow {
+    box-shadow:
+      0 0 0 2px var(--hl-blue-fill),
+      0 0 14px 2px color-mix(in srgb, var(--hl-blue-fill) 55%, transparent);
+    animation: frame-breathe 3.4s ease-in-out infinite;
+  }
+
+  .frame-marker {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--hl-yellow-fill) 78%, transparent);
+    border-radius: 46% 54% 52% 48% / 50% 47% 53% 50%;
+  }
+
+  .frame-circuit::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid var(--hl-green-fill);
+    -webkit-mask: repeating-conic-gradient(#000 0 12deg, transparent 12deg 24deg);
+    mask: repeating-conic-gradient(#000 0 12deg, transparent 12deg 24deg);
+  }
+
+  /* إكليل غار: ورقتين إيموجي على الجنبين — أوضح من محاولة رسمه بـ CSS */
+  .frame-laurel {
+    box-shadow: 0 0 0 2px var(--hl-yellow-deep);
+  }
+
+  .frame-laurel::before,
+  .frame-laurel::after {
+    content: "🌿";
+    position: absolute;
+    font-size: 0.85em;
+    line-height: 1;
+    z-index: 2;
+  }
+
+  .frame-laurel::before {
+    inset-inline-start: -0.55em;
+    transform: scaleX(-1);
+  }
+
+  .frame-laurel::after {
+    inset-inline-end: -0.55em;
+  }
+
+  .frame-prism::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    padding: 3px;
+    background: conic-gradient(
+      from 0deg,
+      var(--hl-red-fill),
+      var(--hl-yellow-fill),
+      var(--hl-green-fill),
+      var(--hl-blue-fill),
+      var(--hl-purple-fill),
+      var(--hl-red-fill)
+    );
+    /* حيلة «الإطار المتدرّج»: طبقتين ماسك، الجوّه بتتشال من البره فيفضل
+       الحلق بس. لازم الأربع سطور: `exclude` مش كلمة WebKit — لو سيبناها
+       في الشورت-هاند بتاعه الحلق بيبقى دايرة مليانة في سفاري. */
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: frame-spin 6s linear infinite;
+  }
+
+  @keyframes frame-breathe {
+    50% {
+      box-shadow:
+        0 0 0 2px var(--hl-blue-fill),
+        0 0 22px 5px color-mix(in srgb, var(--hl-blue-fill) 42%, transparent);
+    }
+  }
+
+  @keyframes frame-spin {
+    to {
+      rotate: 360deg;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .frame-glow,
+    .frame-prism::before {
+      animation: none;
+    }
+  }
+
+/* ==========================================================================
+   الصناديق والعجلة والمتجر اليومي
+
+   نفس قاعدة القسم اللي فوق: **مفيش hex** — كله توكنز، فالأربع حاجات دي
+   بتتلوّن مع أي باليتة من الـ١٥ ومع فاتح/غامق.
+
+   ⚠️ كل الأنيميشن هنا متلفّي في `prefers-reduced-motion` تحت. الصندوق
+   بيهتزّ والعجلة بتلف — الاتنين حركة كبيرة في وسط الشاشة، ودي بالظبط
+   الحالة اللي التفضيل ده موجود لأجلها.
+   ========================================================================== */
+
+  /* شريط الاحتمالات: شرايح بعرض متناسب مع الوزن. بيقول «إيه اللي ممكن
+     يطلع» قبل الدفع — الاحتمالات معروضة مش مخبّية. */
+  .odds-bar {
+    display: flex;
+    overflow: hidden;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--paper-3);
+  }
+
+  .odds-seg {
+    height: 100%;
+    background: var(--seg, var(--rule-strong));
+  }
+
+  /* مسرح الفتح — الصندوق قبل ما يتفتح والعنصر بعده */
+  .box-stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 172px;
+    padding: 1.2rem;
+    background: var(--paper-3);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .box-lid {
+    font-size: 3.4rem;
+    line-height: 1;
+    user-select: none;
+  }
+
+  @keyframes box-shake {
+    0%,
+    100% {
+      transform: translateX(0) rotate(0deg);
+    }
+    20% {
+      transform: translateX(-5px) rotate(-5deg);
+    }
+    40% {
+      transform: translateX(5px) rotate(5deg);
+    }
+    60% {
+      transform: translateX(-4px) rotate(-3deg);
+    }
+    80% {
+      transform: translateX(4px) rotate(3deg);
+    }
+  }
+
+  .box-shaking {
+    animation: box-shake 0.52s ease-in-out infinite;
+  }
+
+  /* أشعة ورا العنصر المكشوف. اللون من `--rar` فالخرافي بيبان أقوى من
+     العادي من غير أي كلاس زيادة. */
+  .reveal-rays {
+    position: absolute;
+    inset: 0;
+    background: repeating-conic-gradient(
+      from 0deg,
+      var(--rar, var(--rule-strong)) 0deg 6deg,
+      transparent 6deg 18deg
+    );
+    opacity: 0.16;
+    animation: frame-spin 9s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .box-shaking,
+    .reveal-rays {
+      animation: none;
+    }
+  }
+
+  /* ── عجلة الحظ ─────────────────────────────────────────────────────────
+     الشرايح **بعرض وزنها** مش بعرض متساوي. عجلة شرايحها متساوية واحتمالاتها
+     مختلفة بتكدب بالشكل: العين تقرا ٨ فرص متكافئة والحقيقة إن الكبيرة ١٪.
+     فالـ conic-gradient بيتبنى في الـ TSX من الأوزان، والشريحة النادرة
+     تطلع خط رفيع — وده الصدق البصري المطلوب. */
+  .wheel-wrap {
+    position: relative;
+    width: min(15rem, 62vw);
+    aspect-ratio: 1;
+    margin-inline: auto;
+    display: grid;
+    place-items: center;
+  }
+
+  .wheel-disc {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    border: 2px solid var(--rule-strong);
+    /* التدرّج نفسه جاي inline من الأوزان */
+    box-shadow: 0 2px 0 var(--rule-strong);
+  }
+
+  /* المؤشّر ثابت فوق، والقرص هو اللي بيلف تحته */
+  .wheel-needle {
+    position: absolute;
+    top: -2px;
+    inset-inline: 0;
+    margin-inline: auto;
+    width: 0;
+    height: 0;
+    z-index: 2;
+    border-inline: 8px solid transparent;
+    border-top: 15px solid var(--ink);
+  }
+
+  .wheel-hub {
+    position: relative;
+    z-index: 1;
+    width: 32%;
+    aspect-ratio: 1;
+    border-radius: 999px;
+    background: var(--paper-2);
+    border: 2px solid var(--rule-strong);
+    display: grid;
+    place-items: center;
+    font-size: 1.5rem;
+    user-select: none;
+  }
+
+} /* نهاية @layer components */
