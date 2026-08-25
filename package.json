@@ -10,7 +10,8 @@
     "test:ai": "node scripts/test-ai-providers.mjs",
     "test:ai:groq": "node scripts/test-ai-providers.mjs groq",
     "test:ai:gemini": "node scripts/test-ai-providers.mjs gemini",
-    "test:ai:router": "node --experimental-strip-types scripts/test-ai-router.mjs",
+    "test:ai:router": "node scripts/run-ai-router-test.mjs",
+    "test:ai:core": "node scripts/run-ai-core-tests.mjs",
     "test:ai:agents": "node --experimental-strip-types scripts/test-ai-agents.mjs",
     "test:ai:image": "node scripts/test-gemini-image.mjs"
   },

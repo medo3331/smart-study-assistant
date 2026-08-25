@@ -82,12 +82,13 @@ export interface AiImageProvider {
  * Provider response bodies are deliberately logged on the server only.
  */
 export class AiProviderError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly provider: AiProviderName
-  ) {
+  readonly status: number;
+  readonly provider: AiProviderName;
+
+  constructor(message: string, status: number, provider: AiProviderName) {
     super(message);
     this.name = "AiProviderError";
+    this.status = status;
+    this.provider = provider;
   }
 }
