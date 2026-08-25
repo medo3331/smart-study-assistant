@@ -74,6 +74,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
       // موجود؟ البند ده بينزّل على كارت القرآن في الداشبورد، والكارت نفسه
       // فيه زرار للمكتبة الكاملة. جنب الملاحظات لأن الاتنين `scrollTo`.
       { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
+      // 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
+      // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
+      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
       { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
