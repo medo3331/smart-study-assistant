@@ -5,6 +5,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { LanguageProvider } from '../lib/i18n/LanguageProvider';
 import { AudioProvider } from '@/components/audio/AudioProvider';
+import { QuranAudioProvider } from '@/hooks/useQuranAudio';
 import { SupportWidget } from '@/components/SupportWidget';
 import { FloatingAssistant } from '@/components/FloatingAssistant';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
@@ -200,7 +201,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <LanguageProvider>
             <AudioProvider>
-              {children}
+              <QuranAudioProvider>{children}</QuranAudioProvider>
               <SupportWidget />
               <FloatingAssistant />
             </AudioProvider>
