@@ -1,0 +1,68 @@
+/* Module CSS for ClosingCTA component */
+.section {
+  text-align: center;
+  padding: 8vh 6vw 10vh;
+  position: relative;
+}
+
+.title {
+  font-size: clamp(28px, 3.6vw, 44px);
+  font-weight: 800;
+  line-height: 1.4;
+  max-width: 760px;
+  margin: 0 auto 30px;
+}
+
+.hl {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 700;
+  background: linear-gradient(100deg, var(--ember-bright), var(--gold-soft));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.btnRow {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btnPrimary {
+  background: linear-gradient(120deg, var(--ember), #a3172c);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 14px 26px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 14.5px;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(200, 30, 58, 0.3);
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btnPrimary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(200, 30, 58, 0.4);
+}
+
+.btnGhost {
+  border: 1px solid var(--line);
+  padding: 14px 24px;
+  border-radius: 9px;
+  font-size: 14.5px;
+  color: var(--white);
+  background: transparent;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btnGhost:hover {
+  background: var(--panel-tint);
+}
