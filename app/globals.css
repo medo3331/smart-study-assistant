@@ -5877,3 +5877,11 @@ html {
   background: var(--panel-tint);
   color: var(--white);
 }
+
+/* developed by text under made with */
+.footer-developed {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  opacity: 0.8;
+  margin-left: 4px;
+}

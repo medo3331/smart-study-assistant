@@ -283,6 +283,8 @@ export type Dictionary = {
   footer_terms: string;
   /** السطر الصغير جنب الحقوق */
   footer_made_with: string;
+  /** developed by */
+  footer_developed_by: string;
   /** لقارئ الشاشة: عنوان منطقة التنقل في الفوتر */
   footer_nav_label: string;
   footer_social_label: string;
@@ -657,7 +659,7 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     footer_rights: 'كل الحقوق محفوظة.',
     footer_privacy: 'سياسة الخصوصية',
     footer_terms: 'شروط الاستخدام',
-    footer_made_with: 'مصنوع في مصر',
+    footer_made_with: 'مطور من قبل E/Mohamed ELsayed',
     footer_nav_label: 'روابط الموقع',
     footer_social_label: 'تابعنا',
 
@@ -1018,6 +1020,7 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     footer_privacy: 'Privacy Policy',
     footer_terms: 'Terms of Use',
     footer_made_with: 'Made in Egypt',
+  footer_developed_by: 'مطور من قبل E/Mohamed ELsayed',
     footer_nav_label: 'Site links',
     footer_social_label: 'Follow us',
 

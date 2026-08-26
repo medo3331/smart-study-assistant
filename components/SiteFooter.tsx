@@ -264,6 +264,7 @@ export function SiteFooter() {
                 توقيع مش لينك، فمكتوب span مش anchor. */}
             <li>
               <span className="footer-made">{t.footer_made_with}</span>
+              <span className="footer-developed">{t.footer_developed_by}</span>
             </li>
           </ul>
         </div>
