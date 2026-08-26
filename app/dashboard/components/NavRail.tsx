@@ -210,7 +210,8 @@ export function NavRail({
 
   async function handleSignOut(): Promise<void> {
     await createClient().auth.signOut();
-    router.push("/login");
+    // بعد الخروج: شاشة الترحيب هي البداية الطبيعية للتدفّق الجديد.
+    router.push("/welcome");
   }
 
   /* ---- بند واحد في القايمة ---- */

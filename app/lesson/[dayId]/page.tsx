@@ -11,6 +11,20 @@ import { setSlidesSeed } from "@/app/dashboard/components/nav-config";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { awardCoins } from "@/lib/shop/shop-data";
 
+// 🎴 إعادة تصميم صفحة الدرس — نفس نظام الداشبورد المنفَّذ (بنفسجي/تيل/عنبري على داكن)
+// كل الأرقام من نفس حالة الصفحة الحقيقية؛ مفيش مصدر بيانات جديد ولا منطق بديل.
+import { LessonShell, GlassCard, Reveal } from "./components/LessonChrome";
+import { LessonBreadcrumb, LessonUnitProgress } from "./components/LessonBreadcrumb";
+import { LessonHero } from "./components/LessonHero";
+import { LessonModeTabs } from "./components/LessonModeTabs";
+import { LessonProgressPanel } from "./components/LessonProgressPanel";
+
+/** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
+interface UnitDayLite {
+  day_number: number;
+  is_completed: boolean;
+}
+
 // --- Types ---
 type CategoryType = "عمل ومشاريع" | "تعلم مهارة" | "دراسة أكاديمية" | "تطوير شخصي";
 type LearningStyle = "practical" | "visual" | "academic";
@@ -46,18 +60,7 @@ interface QuizQuestion {
   correctIndex: number;
 }
 
-// ✅ إضافة: عنصر ظهور بسيط (Fade + Slide) لكل Section بدل ما تظهر الصفحة كلها مرة واحدة
-function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
-}
+// ✅ عنصر الظهور الموحّد اتقفل من مكوّن LessonChrome المشترك (نفس السلوك: Fade+Slide مرة واحدة)
 
 // ✅ إضافة: عارض Markdown بسيط - بيحوّل **نص عريض** وقوائم النقاط (- / *) والعناوين (##)
 // لعناصر HTML حقيقية بدل ما تظهر كرموز خام (** و * ظاهرة كنص) زي ما كان بيحصل قبل كده
@@ -252,6 +255,8 @@ export default function LessonDetailPage() {
 
   // ✅ إضافة: تقدم الخطة الكلي (بيظهر فوق الصفحة) + رابط الدرس التالي (لزر "الدرس التالي" بعد الاحتفال)
   const [planProgress, setPlanProgress] = useState<{ completed: number; total: number } | null>(null);
+  // 🧩 أيام الخطة (id/day_number/is_completed) لتقدّم الوحدة المجزّأ — نفس الاستعلام الموجود
+  const [planDays, setPlanDays] = useState<UnitDayLite[]>([]);
   const [nextDayId, setNextDayId] = useState<string | null>(null);
 
   // ✅ إضافة: حالة محلية لأزرار الإجراءات السريعة (حفظ/مفضلة) - بصرية بحتة
@@ -341,6 +346,13 @@ export default function LessonDetailPage() {
       if (allDays) {
         const completed = allDays.filter((d: { is_completed: boolean }) => d.is_completed).length;
         setPlanProgress({ completed, total: allDays.length });
+        // 🧩 حفظ أيام الخطة للشريط المجزّأ (نفس البيانات، صفر استعلامات إضافية)
+        setPlanDays(
+          allDays.map((d: { day_number: number; is_completed: boolean }) => ({
+            day_number: d.day_number,
+            is_completed: d.is_completed,
+          }))
+        );
         const next = allDays.find((d: { day_number: number }) => d.day_number === typedDay.day_number + 1);
         setNextDayId(next ? (next as any).id : null);
       }
@@ -587,171 +599,132 @@ export default function LessonDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-paper flex items-center justify-center" dir="rtl">
-        <p className="tag animate-pulse">بيحمّل الدرس</p>
-      </div>
+      <LessonShell>
+        <div className="flex min-h-screen items-center justify-center" dir="rtl">
+          <p className="text-sm text-[#9AA0C0]">بيحمّل الدرس…</p>
+        </div>
+      </LessonShell>
     );
   }
 
   if (notFound || !dayRow) {
     return (
-      <div className="min-h-screen bg-paper flex items-center justify-center p-4" dir="rtl">
-        <div className="sheet-card p-6 w-full max-w-sm space-y-4">
-          <div>
-            <p className="eyebrow eyebrow-flush mb-1.5">مش موجود</p>
-            <h1 className="h3">الدرس ده مش متاح</h1>
-          </div>
-          <p className="text-xs text-ink-soft leading-relaxed">
-            الدرس ده مش موجود، أو معندكش صلاحية توصله من الحساب ده.
-          </p>
-          <button onClick={() => router.push("/dashboard")} className="btn btn-marker btn-block text-sm">
-            الرجوع للداشبورد
-          </button>
+      <LessonShell>
+        <div className="flex min-h-screen items-center justify-center p-4" dir="rtl">
+          <GlassCard className="w-full max-w-sm space-y-4 p-6">
+            <div>
+              <p className="mb-1.5 text-xs font-bold tracking-wide text-[#B69CFF]">مش موجود</p>
+              <h1 className="text-lg font-bold text-white">الدرس ده مش متاح</h1>
+            </div>
+            <p className="text-xs leading-relaxed text-[#9AA0C0]">
+              الدرس ده مش موجود، أو معندكش صلاحية توصله من الحساب ده.
+            </p>
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[#7C5CFF] text-sm font-semibold text-white transition-colors hover:bg-[#8E72FF]"
+            >
+              الرجوع للداشبورد
+            </button>
+          </GlassCard>
         </div>
-      </div>
+      </LessonShell>
     );
   }
 
   const suggestedResources = getSuggestedResources(dayRow.topic, config?.subject || "", dayRow.learning_style);
   const styleLabel = { practical: "عملي", visual: "مرئي", academic: "أكاديمي" }[dayRow.learning_style];
   const overallPercent = planProgress && planProgress.total > 0 ? Math.round((planProgress.completed / planProgress.total) * 100) : 0;
+  // 🧩 أيام نفس الخطة للشريط المجزّأ — من حالة الصفحة المحفوظة (مفيش استعلام جديد)
+  const unitDays: UnitDayLite[] = (planDays ?? [])
+    .slice()
+    .sort((a, b) => a.day_number - b.day_number);
+
+  /* 🎯 حالة الـ CTA من الحالة الفعلية فقط:
+     مكتمل → راجع · متُرك بدون إكمال وفيه أيام أبعد فُتحت → تابع · غير ده → ابدأ */
+  const ctaState: "start" | "continue" | "review" = dayRow.is_completed
+    ? "review"
+    : unitDays.some((d) => !d.is_completed && d.day_number > dayRow.day_number)
+      ? "continue"
+      : "start";
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans bg-paper text-ink" dir="rtl">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* هيدر التنقل */}
-        <div className="flex items-center justify-between gap-3">
-          <button onClick={() => router.push("/dashboard")} className="btn btn-quiet text-xs px-3.5 py-2">
-            الرجوع للداشبورد
-          </button>
-          {dayRow.is_completed && <span className="tag tag-quiet">الدرس ده مكتمل</span>}
-        </div>
+    <LessonShell>
+    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans text-[#E7E9F5]" dir="rtl">
+      <div className="max-w-3xl mx-auto space-y-5">
+        {/* ─── فاتحة الصفحة: مسار التنقل (المادة + عنوان الدرس الحقيقي) ─── */}
+        <Reveal index={0}>
+          <LessonBreadcrumb subject={config?.subject} title={dayRow.topic} />
+        </Reveal>
 
-        {/* موضعك في الخطة: العلامات كل ١٠٪ في المسطرة هي المعلومة، والنسبة تأكيد */}
-        {planProgress && planProgress.total > 0 && (
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="tag">
-                الدرس
-                <span className="ltr-num tnum">
-                  {dayRow.day_number} / {planProgress.total}
-                </span>
-              </p>
-              <p className="mono ltr-num tnum font-bold text-ink">{overallPercent}%</p>
-            </div>
-            <div className="meter meter-sm">
-              <motion.div
-                className="meter-fill bg-ink"
-                initial={{ width: 0 }}
-                animate={{ width: `${overallPercent}%` }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-              />
-            </div>
-          </div>
+        {/* ─── تقدّم الوحدة المجزّأ: نقاط حقيقية من أيام نفس الخطة ─── */}
+        {unitDays.length > 0 && (
+          <Reveal index={1}>
+            <LessonUnitProgress days={unitDays} currentDayNumber={dayRow.day_number} />
+          </Reveal>
         )}
 
-        {/* ترويسة الدرس: ختم برقم الدرس + العنوان معلّم بالفوسفوري (الضربة الوحيدة في الصفحة) */}
-        <Reveal>
-          <div className="sheet-card sheet-card-live p-6 sm:p-8">
-            <div className="flex items-start gap-4 sm:gap-5">
-              <div className="stamp bg-paper-3 text-ink" aria-hidden>
-                <span className="tag text-[8px] leading-none">درس</span>
-                <span className="ltr-num tnum font-display font-extrabold text-xl leading-none">
-                  {dayRow.day_number}
-                </span>
-              </div>
-
-              <div className="flex-1 min-w-0 space-y-2.5">
-                <p className="eyebrow eyebrow-flush">{config?.subject || "خطة المذاكرة"}</p>
-                <h1 className="h2">
-                  <span className="mark mark-tilt">{dayRow.topic}</span>
-                </h1>
-                <p className="text-xs text-ink-soft leading-relaxed">{dayRow.description}</p>
-
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="tag tag-quiet">{styleLabel}</span>
-                  <span className="tag tag-quiet">
-                    حوالي <span className="ltr-num tnum">20</span> دقيقة
-                  </span>
-                  <span className="tag tag-quiet">
-                    <span className="ltr-num tnum">+{dayRow.xp_reward}</span> XP
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* الفعل الأساسي الوحيد في الترويسة */}
-            <button
-              onClick={() => smartViewerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className="btn btn-marker text-sm mt-6 w-full sm:w-auto"
-            >
-              ابدأ الدرس
-            </button>
-          </div>
+        {/* ─── هيرو الدرس: العنوان والوصف وXP الحقيقيين + CTA ديناميكي ─── */}
+        <Reveal index={2}>
+          <LessonHero
+            subject={config?.subject}
+            title={dayRow.topic}
+            description={dayRow.description}
+            xpReward={dayRow.xp_reward}
+            state={ctaState}
+            onStart={() => smartViewerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            isSaved={isSaved}
+            onToggleSave={() => setIsSaved((v) => !v)}
+            isFavorite={isBookmarked}
+            onToggleFavorite={() => setIsBookmarked((v) => !v)}
+            onShare={handleShareLesson}
+          />
         </Reveal>
 
-        {/* إجراءات سريعة: الحالة المفعّلة بتتعلّم بالحبر، مش بالأصفر */}
-        <Reveal delay={0.05}>
-          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={handleShareLesson} className="btn btn-quiet text-xs px-3.5 py-2">
-              مشاركة
-            </button>
-            <button
-              onClick={() => setIsSaved((v) => !v)}
-              aria-pressed={isSaved}
-              className={`btn text-xs px-3.5 py-2 ${
-                isSaved ? "bg-ink text-paper-2 border-ink" : "btn-quiet"
-              }`}
-            >
-              {isSaved ? "محفوظ" : "حفظ الدرس"}
-            </button>
-            <button
-              onClick={() => setIsBookmarked((v) => !v)}
-              aria-pressed={isBookmarked}
-              className={`btn text-xs px-3.5 py-2 ${
-                isBookmarked ? "bg-ink text-paper-2 border-ink" : "btn-quiet"
-              }`}
-            >
-              {isBookmarked ? "في المفضلة" : "إضافة للمفضلة"}
-            </button>
-          </div>
-        </Reveal>
-
-        {/* محدد نمط الشرح */}
-        <Reveal delay={0.08}>
-          <div className="flex items-center gap-3">
-            <span className="tag shrink-0">نمط الشرح</span>
-            <div className="flex flex-1 bg-paper-2 border border-rule p-1 rounded-[var(--r-sm)] gap-1">
-              {[
-                { id: "practical", label: "عملي" },
-                { id: "visual", label: "مرئي" },
+        {/* ─── التبويبات الموحّدة: نفس learning_style الموجود ─── */}
+        <div className="flex justify-center sm:justify-start">
+          <Reveal index={3}>
+            <LessonModeTabs
+              modes={[
                 { id: "academic", label: "أكاديمي" },
-              ].map((st) => (
-                <button
-                  key={st.id}
-                  onClick={() => changeLearningStyle(st.id as LearningStyle)}
-                  aria-pressed={dayRow.learning_style === st.id}
-                  className={`mono flex-1 py-2 rounded-[6px] transition ${
-                    dayRow.learning_style === st.id ? "bg-ink text-paper-2" : "text-ink-soft hover:text-ink"
-                  }`}
-                >
-                  {st.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </Reveal>
+                { id: "visual", label: "بصري" },
+                { id: "practical", label: "تطبيقي" },
+              ]}
+              active={dayRow.learning_style as "academic" | "visual" | "practical"}
+              onChange={(id) => void changeLearningStyle(id)}
+            />
+          </Reveal>
+        </div>
 
-        {/* العارض الذكي */}
-        <Reveal delay={0.1}>
-          <div ref={smartViewerRef} className="sheet-card p-5 sm:p-6 space-y-4 scroll-mt-6">
-            <div>
-              <p className="eyebrow eyebrow-flush mb-1.5">الشرح</p>
-              <h2 className="h3">اقرا الدرس بالطريقة اللي تعجبك</h2>
+        {/* ─── الشرح + لوحة التقدّم: عمودان على الشاشات الواسعة، متراكبان على الموبايل ─── */}
+        <div className="grid gap-5 lg:grid-cols-[1fr_280px] lg:items-start">
+          {/* العارض الذكي */}
+          <Reveal delay={0.1} className="min-w-0">
+            <div ref={smartViewerRef} className="sheet-card p-5 sm:p-6 space-y-4 scroll-mt-6">
+              <div>
+                <p className="eyebrow eyebrow-flush mb-1.5">الشرح</p>
+                <h2 className="h3">اقرا الدرس بالطريقة اللي تعجبك</h2>
+              </div>
+              <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} />
             </div>
-            <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} />
-          </div>
-        </Reveal>
+          </Reveal>
+
+          {/* لوحة التقدّم: نسبة الخطة الحقيقية + أقسام الدرس + XP الحقيقي */}
+          <Reveal delay={0.14}>
+            <LessonProgressPanel
+              percent={overallPercent}
+              xpReward={dayRow.xp_reward}
+              sections={[
+                { label: "الشرح", state: "current" },
+                { label: "سؤال وجواب", state: "todo" },
+                { label: "موارد الدرس", state: "todo" },
+                {
+                  label: dayRow.is_completed ? "الاختبار — مكتمل ✓" : "الاختبار القصير",
+                  state: dayRow.is_completed ? "done" : "todo",
+                },
+              ]}
+            />
+          </Reveal>
+        </div>
 
         {/* المحادثة: نص مكتوب بأسماء المتكلمين، مش بابلز */}
         <Reveal delay={0.12}>
@@ -1107,5 +1080,6 @@ export default function LessonDetailPage() {
           نُص إيموجي مقصوص ومايقدرش يضغطه. */}
       <FeedbackWidget page="lesson" featureLabel="صفحة الدرس" enabled={!showCelebration} />
     </div>
+    </LessonShell>
   );
 }

@@ -34,6 +34,11 @@ import { KpiSection } from "./components/KpiSection";
 import { WeeklyProgress } from "./components/WeeklyProgress";
 import { AchievementsStrip } from "./components/AchievementsStrip";
 import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
+// 🎴 إعادة تصميم الداشبورد (نظام موحّد): هيرو + كروت أرقام + الخطوة الحالية.
+// نفس حالة الصفحة الحقيقية (profiles / study_days / activity_log) بدون أي مصدر بيانات جديد.
+import { HeroCard } from "./components/HeroCard";
+import { StatCards } from "./components/StatCards";
+import { CurrentStepCard } from "./components/CurrentStepCard";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
@@ -1065,6 +1070,49 @@ export default function DashboardPage() {
       />
 
       <div className="max-w-6xl mx-auto space-y-8">
+        {/* ═══ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
+                إجراءات سريعة (أكمل التعلّم · المساعد الذكي · العبادات · المتجر).
+                كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. ═══ */}
+        <HeroCard
+          displayName={displayName}
+          subtitle={headerSubtitle}
+          level={level}
+          streak={streak}
+          planProgressPct={overallProgress}
+          completedSteps={completedCount}
+          totalSteps={days.length}
+          onContinue={() => {
+            const el = document.getElementById(`day-${currentDayNumber}`);
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+          onOpenAiAssistant={handleOpenAiAssistant}
+        />
+
+        {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
+                — عدّ من صفر مرة واحدة بخط المونو ═══ */}
+        <StatCards
+          xp={xp}
+          streak={streak}
+          completedSteps={completedCount}
+          weeklyFocusMinutes={weeklyFocusMinutesTotal}
+        />
+
+        {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
+                (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية ═══ */}
+        <CurrentStepCard
+          currentDay={currentTaskForCoach ?? null}
+          completedSteps={completedCount}
+          totalSteps={days.length}
+          isCurrent={
+            currentTaskForCoach ? currentTaskForCoach.day === currentDayNumber : false
+          }
+          subjectName={config.subject}
+          onContinue={() => {
+            const el = document.getElementById(`day-${currentDayNumber}`);
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+        />
+
         <StatsSection
           level={level}
           xp={xp}
