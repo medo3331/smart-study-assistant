@@ -1,11 +1,16 @@
 import { cn } from "@/lib/cn";
 import type { NavItem } from "@/lib/types";
 import { IconBadge } from "@/components/ui/IconBadge";
+import type { ReactNode } from "react";
 
 interface SidebarProps {
   items: NavItem[];
   user: { name: string; initials: string };
   className?: string;
+  /** سطر تحت الاسم — الحالة الحقيقية بدل النص الثابت القديم. */
+  subtitle?: string;
+  /** كتلة أسفل الشريط (فوق chip المستخدم) — زي رصيد الكوينز. */
+  footer?: ReactNode;
 }
 
 /**
@@ -13,7 +18,7 @@ interface SidebarProps {
  * Each item is a uniformly-sized row with a 40px IconBadge + label; the active
  * item gets a brand pill. Hover/focus states match the Button component.
  */
-export function Sidebar({ items, user, className }: SidebarProps) {
+export function Sidebar({ items, user, className, subtitle, footer }: SidebarProps) {
   return (
     <aside
       className={cn(
@@ -52,6 +57,9 @@ export function Sidebar({ items, user, className }: SidebarProps) {
         })}
       </nav>
 
+      {/* Optional footer block (e.g. real coins balance → store) */}
+      {footer}
+
       {/* User chip at the bottom */}
       <div className="mt-auto flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7C5CFF]/20 font-bold text-[#B69CFF]">
@@ -59,7 +67,9 @@ export function Sidebar({ items, user, className }: SidebarProps) {
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">{user.name}</p>
-          <p className="text-xs text-[#9AA0C0]">عضوة مميزة</p>
+          {subtitle && (
+            <p className="truncate text-xs text-[#9AA0C0]">{subtitle}</p>
+          )}
         </div>
       </div>
     </aside>

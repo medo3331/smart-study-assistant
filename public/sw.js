@@ -13,7 +13,7 @@
 
 /* ⚠️ زوّد الرقم ده مع أي تعديل في السيرفس وركر عشان الكاش القديم يتمسح
    ويتفعّل الجديد للمستخدمين. */
-const VERSION = "v1";
+const VERSION = "v2";
 const PRECACHE = `magicly-precache-${VERSION}`;
 const STATIC = `magicly-static-${VERSION}`;
 const PAGES = `magicly-pages-${VERSION}`;

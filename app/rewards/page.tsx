@@ -4,7 +4,7 @@ import { PageShell, DataNotice, EmptyState, LoadingSheets } from '@/app/dashboar
 import { useAuthUser, formatArabicDate } from '@/app/dashboard/components/use-page-data';
 import { fetchLedger, type CoinEntry } from '@/lib/shop/shop-data';
 
-const SOURCE_LABEL: Record<string,string> = { day_done:'يوم مذاكرة', goal_done:'هدف من المخطط', daily_login:'دخول يومي', streak_day:'سلسلة مذاكرة', badge:'وسام', perfect_week:'أسبوع كامل', wheel:'عجلة المكافآت', break_riddle:'فزورة البريك', break_game:'لعبة بريك', daily_mission:'مهمة يومية', escape_room:'غرفة الهروب', purchase:'شراء من المتجر', box_refund:'تعويض صندوق' };
+const SOURCE_LABEL: Record<string,string> = { day_done:'يوم مذاكرة', goal_done:'هدف من المخطط', daily_login:'دخول يومي', streak_day:'سلسلة مذاكرة', badge:'وسام', perfect_week:'أسبوع كامل', wheel:'عجلة المكافآت', break_riddle:'فزورة البريك', break_game:'لعبة بريك', daily_mission:'مهمة يومية', escape_room:'غرفة الهروب', purchase:'شراء من المتجر', box_refund:'تعويض صندوق', worship_prayer:'صلاة مفروضة', worship_quran:'هدف القرآن اليومي', worship_adhkar:'تصنيف أذكار مكتمل' };
 export default function RewardsPage(){
  const {supabase,session}=useAuthUser(); const [items,setItems]=useState<CoinEntry[]|null>(null);const [error,setError]=useState('');
  useEffect(()=>{if(session.status!=='ready')return;void fetchLedger(supabase,session.user.id).then(r=>r.error?setError(r.error.message):setItems(r.data));},[supabase,session]);

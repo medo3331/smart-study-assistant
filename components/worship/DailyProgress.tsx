@@ -30,17 +30,22 @@ interface DailyProgressProps {
   items: DailyProgressItem[];
   title?: string;
   subtitle?: string;
+  /**
+   * معالج اختياري لتسجيل إتمام عنصر بالنقر عليه. لما يوُفَّر الصف بيبقى
+   * تفاعلي (زرار حقيقي) — وبدونه يفضل عرض زي ما هو.
+   */
+  onCompleteItem?: (item: DailyProgressItem) => void;
 }
 
 /**
  * Daily Progress Tracker
  * Lightweight overview of daily worship achievements
- * Not gamified - just a personal tracker
  */
 export function DailyProgress({ 
   items, 
   title = "إنجازاتك اليوم", 
-  subtitle 
+  subtitle,
+  onCompleteItem,
 }: DailyProgressProps) {
   const completedCount = items.filter(i => i.completed).length;
   const totalCount = items.length;
@@ -77,16 +82,29 @@ export function DailyProgress({
       <div className="space-y-2">
         {items.map((item, index) => {
           const Icon = ICON_MAP[item.iconName] || Circle;
+          const interactive = !!onCompleteItem && !item.completed;
           return (
             <Reveal key={item.id} index={index + 2}>
-              <div className={cn(
-                "flex items-center gap-4 p-4 rounded-2xl transition-colors",
-                item.completed 
-                  ? "bg-white/[0.02] border border-[#2DD4BF]/20" 
-                  : item.current 
-                    ? "bg-[#7C5CFF]/5 border border-[#7C5CFF]/20" 
-                    : "bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04]"
-              )}>
+              <button
+                type="button"
+                disabled={!interactive}
+                onClick={() => onCompleteItem?.(item)}
+                aria-pressed={item.completed}
+                aria-label={
+                  item.completed
+                    ? `${item.arabicLabel} — مكتمل`
+                    : `تسجيل إتمام ${item.arabicLabel}`
+                }
+                className={cn(
+                  "flex w-full items-center gap-4 rounded-2xl p-4 text-right transition-colors",
+                  item.completed 
+                    ? "border border-[#2DD4BF]/20 bg-white/[0.02]" 
+                    : item.current 
+                      ? "border border-[#7C5CFF]/20 bg-[#7C5CFF]/5" 
+                      : "border border-white/[0.04] bg-white/[0.02]",
+                  interactive && "hover:bg-white/[0.04] cursor-pointer",
+                  !interactive && "cursor-default"
+                )}>
                 {/* Status Indicator */}
                 <div className={cn(
                   "flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-xl",
@@ -129,7 +147,7 @@ export function DailyProgress({
                     <p className="text-sm font-mono font-medium text-[#B69CFF]">{item.time}</p>
                   </div>
                 )}
-              </div>
+              </button>
             </Reveal>
           );
         })}

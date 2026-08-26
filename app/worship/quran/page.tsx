@@ -1,71 +1,103 @@
 "use client";
 
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { MobileNav } from "@/components/dashboard/MobileNav";
+import { useEffect } from "react";
 import { QuranReader } from "@/components/worship/QuranReader";
-import { QuranAudioPlayer } from "@/components/worship/QuranAudioPlayer";
 import { ReciterSelector } from "@/components/worship/ReciterSelector";
-import { mockNavItems, mockUser } from "@/lib/mock-data";
-import { ArrowLeft, Headphones } from "lucide-react";
+import {
+  WorshipChrome,
+  useSharedWorshipData,
+  useWorshipReward,
+} from "@/components/worship/WorshipChrome";
+import { todayUtc } from "@/lib/worship-data";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 /**
- * Quran Reader Page
- * /worship/quran
+ * Quran Reader Page — /worship/quran
  *
- * Integrates the QuranAudioPlayer (sticky bottom) and ReciterSelector.
- * Uses the shared QuranAudioContext for audio state.
+ * القراءة بتتحفظ على حساب المستخدم (موضع + عدّاد آيات النهارده)، وبلوغ
+ * الورد/مضاعفة الهدف بيصرف مكافأة مؤكدة من السيرفر.
  */
-export const dynamic = "force-dynamic";
-
 export default function QuranPage() {
-  const navItems = mockNavItems.map((item) =>
-    item.href === "/worship"
-      ? { ...item, active: true }
-      : { ...item, active: false }
+  return (
+    <WorshipChrome>
+      <QuranHome />
+    </WorshipChrome>
   );
+}
+
+function QuranHome() {
+  const shared = useSharedWorshipData();
+  const { showReward } = useWorshipReward();
+
+  const target = shared?.settings.quranDailyTarget ?? 10;
+  const readToday = shared?.progress.quran.dailyCount ?? 0;
+
+  /* بلوغ ورد القرآن (+٥ مرة واحدة يوميًا) — الداتابيز بتتحقق من الهدف
+     المحفوظ وبتمنع التكرار بالمرجع اليومي. */
+  useEffect(() => {
+    if (!shared || !shared.user || shared.user.is_anonymous) return;
+    let cancelled = false;
+
+    void (async () => {
+      if (cancelled || target <= 0 || readToday < target) return;
+      const day = todayUtc();
+      await shared.recordEvent(
+        () => shared.progress,
+        "worship_quran",
+        day,
+        { activity: "quran", date: day, ayahs: readToday },
+        (r) => showReward(r.coins),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shared, readToday, target, showReward]);
 
   return (
-    <div className="flex min-h-screen bg-[#07091A]">
-      <Sidebar items={navItems} user={mockUser} />
-
-      <main className="flex-1 px-4 py-6 md:px-6 md:py-8 pb-[calc(4rem+env(safe-area-inset-bottom,0.5rem)] md:pb-8">
-        <div className="mx-auto flex max-w-5xl flex-col gap-6 h-[calc(100vh-12rem)]">
-          {/* Header */}
-          <div className="flex items-center justify-between flex-shrink-0">
-            <div>
-              <h1 className="text-2xl font-bold text-white">القرآن الكريم</h1>
-              <p className="text-[#9AA0C0] mt-1">قراءة وتلاوة وتدبر كتاب الله</p>
-            </div>
-            <Link
-              href="/worship"
-              className="flex items-center gap-1 text-sm text-[#B69CFF] hover:text-[#7C5CFF] transition-colors"
-            >
-              <ArrowLeft size={18} aria-hidden />
-              <span>عباداتي</span>
-            </Link>
-          </div>
-
-          {/* Reciter quick-select bar */}
-          <div className="flex-shrink-0">
-            <ReciterSelector />
-          </div>
-
-          {/* Quran Reader */}
-          <div className="flex-1 overflow-hidden">
-            <QuranReader
-              initialSurahId={2} // Start with Al-Baqarah (resume position takes priority)
-              onProgressUpdate={(surahId, ayahId) => {
-                // Saved via useQuranProgress inside QuranReader
-              }}
-            />
-          </div>
+    <>
+      {/* Header */}
+      <div className="flex flex-shrink-0 items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">القرآن الكريم</h1>
+          <p className="mt-1 text-[#9AA0C0]">
+            قراءة وتلاوة وتدبر كتاب الله
+            {target > 0 && (
+              <span className="mr-2 text-[#9AA0C0]/80">
+                • ورد اليوم:{" "}
+                <bdi>
+                  {readToday}/{target}
+                </bdi>{" "}
+                آية
+              </span>
+            )}
+          </p>
         </div>
-      </main>
+        <Link
+          href="/worship"
+          className="flex items-center gap-1 text-sm text-[#B69CFF] transition-colors hover:text-[#7C5CFF]"
+        >
+          <ArrowLeft size={18} aria-hidden />
+          <span>عباداتي</span>
+        </Link>
+      </div>
 
-      {/* MobileNav + Sticky Audio Player */}
-      <MobileNav />
-      <QuranAudioPlayer />
-    </div>
+      {/* Reciter quick-select bar */}
+      <div className="flex-shrink-0">
+        <ReciterSelector />
+      </div>
+
+      {/* Quran Reader */}
+      <div className="flex-1 overflow-hidden">
+        <QuranReader
+          initialSurahId={2}
+          onProgressUpdate={() => {
+            // الحفظ والمكافآت جوّه QuranReader عبر useQuranProgress المحدَّثة.
+          }}
+        />
+      </div>
+    </>
   );
 }

@@ -1,27 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import type { NavItem } from "@/lib/types";
 import {
   Home,
   BookOpen,
-  Trophy,
   Landmark,
   Settings,
-  Compass,
 } from "lucide-react";
 
 /**
- * Mobile navigation items — mirrors the sidebar but is optimized for
- * thumb-friendly bottom-of-screen placement.
+ * Mobile navigation items — real routes only. كل عنصر بيوصل لصفحة موجودة
+ * فعلاً (مافيش روابط ميتة لـ /dashboard).
  */
 export const mobileNavItems: NavItem[] = [
   { label: "لوحة التحكم", href: "/dashboard", icon: Home },
   { label: "عباداتي", href: "/worship", icon: Landmark },
-  { label: "استكشف", href: "/dashboard", icon: Compass },
-  { label: "الإنجازات", href: "/dashboard", icon: Trophy },
+  { label: "القرآن", href: "/worship/quran", icon: BookOpen },
+  { label: "الأذكار", href: "/worship/adhkar", icon: BookOpen },
   { label: "الإعدادات", href: "/worship/settings", icon: Settings },
 ];
 
@@ -40,6 +40,7 @@ interface MobileNavProps {
 export function MobileNav({ activeHref }: MobileNavProps) {
   const reduceMotion = useReducedMotion();
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     setMounted(true);
@@ -47,12 +48,13 @@ export function MobileNav({ activeHref }: MobileNavProps) {
 
   if (!mounted) return null;
 
-  const currentPath =
-    typeof window !== "undefined" ? window.location.pathname : "/";
-
   const isActive = (href: string) => {
     if (activeHref) return activeHref === href;
-    return currentPath === href;
+    // الأب /worship يفضل نشط في كل الصفحات الفرعية.
+    if (href === "/worship") {
+      return pathname === "/worship" || pathname.startsWith("/worship/");
+    }
+    return pathname === href;
   };
 
   return (
@@ -68,7 +70,7 @@ export function MobileNav({ activeHref }: MobileNavProps) {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
-              <a
+              <Link
                 key={item.label}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
@@ -90,7 +92,7 @@ export function MobileNav({ activeHref }: MobileNavProps) {
                   <Icon size={20} aria-hidden />
                 </span>
                 <span className="truncate">{item.label}</span>
-              </a>
+              </Link>
             );
           })}
         </div>

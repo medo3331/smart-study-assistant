@@ -42,10 +42,12 @@ export function useQuranProgress(
 
   const updatePosition = useCallback(
     (surahId: number, ayahId: number, dailyCount?: number) => {
+      // عدّاد آيات النهارده بيزيد فعليًا مع كل آية جديدة بتتقرا في اليوم
+      // (وليس موضع القراءة) — بيتصفّر طبيعيًا مع أول يوم جديد.
       const newCount =
         dailyCount !== undefined
           ? dailyCount
-          : Math.max(progress.dailyCount, ayahId);
+          : Math.max(progress.dailyCount + (ayahId !== progress.ayahId ? 1 : 0), ayahId);
       const next = {
         surahId,
         ayahId,
@@ -54,7 +56,7 @@ export function useQuranProgress(
       setProgress(next);
       setQuranPosition(surahId, ayahId, newCount);
     },
-    [progress.dailyCount]
+    [progress.dailyCount, progress.ayahId]
   );
 
   const dailyProgress =

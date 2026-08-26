@@ -68,6 +68,8 @@ function writeAll(data: Record<string, WorshipDayRecord>): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // إشارة للمكوّنات الحيّة (useWorshipData) إن التقدّم المحلي اتغيّر.
+    window.dispatchEvent(new Event("worship-progress-change"));
   } catch {
     /* quota exceeded — ignore */
   }

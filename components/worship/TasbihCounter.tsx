@@ -6,6 +6,7 @@ import { RotateCcw } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Reveal } from "@/components/ui/Reveal";
 import { cn } from "@/lib/cn";
+import { setTasbihCount } from "@/lib/islamic/worship-progress";
 
 interface TasbihCounterProps {
   index?: number;
@@ -65,6 +66,14 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
   const count = counts[active.id] ?? 0;
   const done = count >= active.target;
   const pct = Math.min(100, Math.round((count / active.target) * 100));
+
+  // 🔄 جسر للتخزين المركزي (lib/islamic/worship-progress) — نفس العدّاد
+  // المحلي زي ما هو، بس كمان بيتسجّل في سجل اليوم فيصل لـ Supabase
+  // مع باقي تقدّم العبادة. فشل الشبكة مش بيأثر على العدّاد نفسه.
+  useEffect(() => {
+    if (count > 0) setTasbihCount(count);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active.id, count]);
 
   const increment = useCallback(() => {
     persist({ ...counts, [active.id]: Math.min(active.target, count + 1) });
