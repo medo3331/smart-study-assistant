@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>معاينة ٢ — PersonalAssistant على نظام الورق</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* ═══ توكنز الورق الحقيقية من globals.css (الثيم الفاتح الافتراضي) ═══ */
+  :root{
+    --paper:#E4EAF4; --paper-2:#F6F8FC; --paper-3:#DCE4F0;
+    --ink:#232D49;   --ink-soft:#565F7D;
+    --rule:#C9D4E6;  --rule-strong:#AEBACF;
+    --redpen:#CE5A6C;
+    --shade:rgba(35,45,73,0.08); --shade-lift:rgba(35,45,73,0.12);
+    --r-sm:8px; --r-md:14px;
+    --hl-yellow-fill:#F5DE72; --hl-yellow-deep:#E2C95C; --hl-yellow-ink:#7A5A00;
+    --t-label:0.78rem;
+    --font-display:'IBM Plex Sans Arabic',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--font-display);
+       min-height:100vh;padding:28px clamp(14px,4vw,48px) 60px}
+
+  /* ═══ شريط أدوات المعاينة ═══ */
+  .pv-bar{max-width:720px;margin:0 auto 22px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .pv-note{font-size:12px;color:var(--ink-soft);border:1px dashed var(--rule-strong);
+           border-radius:999px;padding:6px 14px;background:var(--paper-2)}
+  .pv-btn{font-family:var(--font-mono);font-size:12px;font-weight:500;cursor:pointer;
+          border-radius:var(--r-sm);padding:6px 13px;border:1px solid var(--rule);
+          background:var(--paper-2);color:var(--ink);transition:border-color .15s}
+  .pv-btn:hover{border-color:var(--rule-strong)}
+  .pv-btn.active{background:var(--hl-yellow-fill);border-color:var(--hl-yellow-deep);color:var(--hl-yellow-ink)}
+
+  /* ═══ سياق المكان — أوراق باهتة فوق وتحت ═══ */
+  .frame{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+  .ghost-sheet{
+    border:1px solid var(--rule);border-inline-start:3px solid var(--rule);
+    border-radius:var(--r-md);background:repeating-linear-gradient(
+      to bottom, transparent 0 27px, rgba(201,212,230,.55) 27px 28px);
+    padding:18px;color:var(--ink-soft);font-size:12.5px;text-align:center;opacity:.75
+  }
+
+  /* ═══ كارت المساعد — نفس تشريح .sheet-card بالظبط ═══ */
+  .pa-sheet{
+    position:relative;background:var(--paper-2);
+    border:1px solid var(--rule);
+    border-inline-start:3px solid var(--redpen);      /* الهامش الأحمر — توقيع الكشكول */
+    border-radius:var(--r-md);
+    box-shadow:0 1px 2px var(--shade);
+    overflow:hidden;
+    animation:paReveal .45s cubic-bezier(.22,.8,.36,1) both;
+  }
+  @keyframes paReveal{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  /* إضاءة ورق خفيفة جدًا من فوق — نفس أسلوب المشروع */
+  .pa-sheet::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(to bottom, rgba(255,255,255,.5), transparent 90px)}
+  .pa-inner{position:relative;padding:20px 22px 18px}
+
+  /* اللافتة العلوية — نفس .eyebrow حرفيًا */
+  .eyebrow{display:flex;align-items:center;gap:10px;margin:0 0 16px;
+    font-family:var(--font-mono);font-size:var(--t-label);font-weight:500;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+  .eyebrow::before{content:"";width:22px;height:2px;flex:none;background:var(--redpen)}
+
+  /* الرأس: أفاتار + تحية */
+  .pa-head{display:flex;align-items:center;gap:15px}
+  .pa-avatar{
+    position:relative;width:56px;height:56px;flex:none;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--paper-3);border:1.5px solid var(--rule-strong);
+    box-shadow:0 0 0 5px rgba(245,222,114,0.30), 0 2px 6px var(--shade); /* هالة فسفوري هادية */
+    animation:breathe 5s ease-in-out infinite;
+  }
+  @keyframes breathe{0%,100%{box-shadow:0 0 0 4px rgba(245,222,114,0.25),0 2px 6px var(--shade)}
+                     50%{box-shadow:0 0 0 7px rgba(245,222,114,0.38),0 2px 6px var(--shade)}}
+  .pa-avatar svg{width:29px;height:29px;stroke:var(--ink)}
+  .pa-dot{position:absolute;top:-2px;left:-2px;width:13px;height:13px;border-radius:50%;
+    background:var(--hl-yellow-deep);border:2.5px solid var(--paper-2);
+    box-shadow:0 0 0 1px var(--hl-yellow-ink);animation:pulseDot 2.8s ease-in-out infinite}
+  @keyframes pulseDot{0%,100%{opacity:.5}50%{opacity:1}}
+
+  .pa-titles{min-width:0;display:flex;flex-direction:column;gap:5px}
+  .pa-title{font-family:var(--font-display);font-weight:700;font-size:17.5px;line-height:1.45;color:var(--ink)}
+  .pa-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .tag-quiet{font-size:11px;border-radius:var(--r-sm);background:var(--paper-3);color:var(--ink-soft);
+             padding:3px 9px;display:inline-flex;align-items:center;gap:5px}
+  .tag-quiet.mono{font-family:var(--font-mono);letter-spacing:.02em}
+
+  /* الفاصل — خط دفتر باهت */
+  .pa-sep{height:1px;margin:16px 0 14px;background:var(--rule)}
+
+  /* الرسالة الثابتة — سطور دفتر بهادية */
+  .pa-msg{display:flex;flex-direction:column;gap:8px}
+  .pa-line{display:flex;align-items:baseline;gap:9px;font-size:14.5px;line-height:1.9;color:var(--ink)}
+  .pa-line .b{background:linear-gradient(transparent 55%, rgba(245,222,114,.75) 55%);}
+  .pa-line i{flex:none;width:6px;height:6px;border-radius:50%;background:var(--hl-yellow-deep);
+             transform:translateY(-2px)}
+
+  /* سطر الدور — جملة مظللة بقلم الثيم */
+  .pa-role{
+    margin-top:14px;display:flex;align-items:flex-start;gap:9px;
+    border-radius:var(--r-sm);padding:11px 14px;
+    background:rgba(245,222,114,0.16);border:1px solid rgba(226,201,92,0.45);
+  }
+  .pa-role svg{width:17px;height:17px;stroke:var(--hl-yellow-ink);flex:none;margin-top:3px}
+  .pa-role span{font-size:14px;line-height:1.85;color:var(--ink);font-weight:500}
+
+  /* التذييل */
+  .pa-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .pa-hint{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);letter-spacing:.04em}
+  .pa-cta{
+    display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:none;
+    font-family:var(--font-display);font-size:13.5px;font-weight:700;color:#231402;
+    background:linear-gradient(180deg,var(--hl-yellow-fill),var(--hl-yellow-deep));
+    border-radius:999px;padding:9px 20px;
+    border:1px solid var(--hl-yellow-deep);
+    box-shadow:0 2px 0 var(--hl-yellow-ink);           /* ظل قلم صلب — لغة الـstamp */
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .pa-cta:hover{transform:translateY(-1px);box-shadow:0 3px 0 var(--hl-yellow-ink)}
+  .pa-cta:active{transform:translateY(1px);box-shadow:0 1px 0 var(--hl-yellow-ink)}
+  .pa-cta svg{width:15px;height:15px;stroke:#231402}
+
+  /* حالات الحافة */
+  .sec-label{max-width:720px;margin:36px auto 12px;font-family:var(--font-mono);font-size:var(--t-label);
+             letter-spacing:.08em;color:var(--ink-soft);text-transform:uppercase}
+  .states{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:10px}
+  .state-chip{border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--paper-2);
+              padding:11px 13px;font-size:12.5px;line-height:1.8;color:var(--ink-soft)}
+  .state-chip b{color:var(--ink);font-weight:600}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+
+<div class="pv-bar" id="controls">
+  <span class="pv-note">🎛️ معاينة تفاعلية — على نظام الورق الأصلي</span>
+  <button class="pv-btn active" data-role="student">🎓 طالب</button>
+  <button class="pv-btn" data-role="graduate">💼 خريج</button>
+  <button class="pv-btn" data-role="freelancer">🧑‍💻 فريلانسر</button>
+  <button class="pv-btn" data-role="none">بدون دور</button>
+  <button class="pv-btn active" data-time="morning">☀️ صباح</button>
+  <button class="pv-btn" data-time="evening">🌙 مساء</button>
+  <button class="pv-btn" data-name="off">بدون اسم</button>
+</div>
+
+<div class="frame">
+  <div class="ghost-sheet">⬆︎ ورقة الهيرو والخطوات الحالية في الداشبورد (نفس لغة sheet-card)</div>
+
+  <!-- ══════════ المساعد الشخصي — ورقة أصيلة في الدفتر ══════════ -->
+  <section class="pa-sheet" aria-label="المساعد الشخصي">
+    <div class="pa-inner">
+
+      <p class="eyebrow">المساعد الشخصي</p>
+
+      <div class="pa-head">
+        <div class="pa-avatar" role="img" aria-label="مساعدك الشخصي">
+          <!-- واجهة ودودة مرسومة بحبر الورقة -->
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 21h8M12 17v4"/>
+            <rect x="4" y="3" width="16" height="14" rx="4.5"/>
+            <path d="M9 9.2h.01M15 9.2h.01" stroke-width="2.3"/>
+            <path d="M9.2 12.6c.8.9 1.7 1.35 2.8 1.35s2-.45 2.8-1.35"/>
+          </svg>
+          <span class="pa-dot" aria-hidden="true"></span>
+        </div>
+
+        <div class="pa-titles">
+          <h2 class="pa-title" id="greeting">أسعد الله صباحك بكل خير يا محمد 💙</h2>
+          <div class="pa-meta">
+            <span class="tag-quiet mono" id="clock">08:05 صباحًا</span>
+            <span class="tag-quiet">خلاص اليوم في وشي 🌙</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pa-sep" role="presentation"></div>
+
+      <!-- الجزء الثابت — سطور دفتر -->
+      <div class="pa-msg" aria-live="polite">
+        <p class="pa-line"><i aria-hidden="true"></i><span>متنساش تقرأ <b class="b">الورد اليومي</b> بتاعك 💙</span></p>
+        <p class="pa-line"><i aria-hidden="true"></i><span>وتصلّي الفروض في وقتها</span></p>
+        <p class="pa-line"><i aria-hidden="true"></i><span>وتخلّص الأذكار</span></p>
+        <p class="pa-line"><i aria-hidden="true"></i><span>وتبدأ تخلّص مهامك عشان ربنا يوفقك 💙</span></p>
+      </div>
+
+      <!-- سطر الدور -->
+      <div class="pa-role" id="roleLine">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
+        <span id="roleMsg">وبعدها نبدأ درس النهارده ونخلّص جزء من مذاكرتك 📚</span>
+      </div>
+
+      <div class="pa-foot">
+        <span class="pa-hint">قريبًا · بريفينج ذكي بيفهم يومك</span>
+        <button class="pa-cta" type="button" id="cta">
+          نبدأ خطوة النهارده
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:scaleX(-1)"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="ghost-sheet">⬇︎ StatCards ثم باقي الأقسام — زي ما هي تمامًا بدون أي تغيير</div>
+</div>
+
+<p class="sec-label">ملاحظات المعاينة</p>
+<div class="states">
+  <div class="state-chip"><b>نفس تشريح sheet-card:</b> ورقة paper-2 + حدود rule + هامش أحمر + ظل خفيف — مش تصميم مستقل</div>
+  <div class="state-chip"><b>CTA له وظيفة حقيقية:</b> بيعمل scroll لخطوة اليوم (نفس سلوك زر «أكمل» في الهيرو)</div>
+  <div class="state-chip"><b>الساعة:</b> chip مونو صغير هادي — ممكن يتشال لو حسيتها زحمة</div>
+  <div class="state-chip"><b>Fallbacks:</b> «يا صاحبي» للاسم الناقص · سطر الدور يختفي للدور غير المتوقع</div>
+</div>
+
+<script>
+  const GREET={morning:"أسعد الله صباحك بكل خير",evening:"أسعد الله مساءك بكل خير"};
+  const ROLE_MSG={
+    student:"وبعدها نبدأ درس النهارده ونخلّص جزء من مذاكرتك 📚",
+    graduate:"وبعدها نكمّل تطوير مهاراتك ونقرّبك من هدفك المهني 🚀",
+    freelancer:"وبعدها نراجع مهام شغلك ونشوف أهم حاجة محتاجة تخلّصها النهارده 💼"};
+  let curRole="student",curTime="morning",hasName=true;
+
+  document.querySelectorAll("[data-role]").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll("[data-role]").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");curRole=b.dataset.role==="none"?null:b.dataset.role;render();}));
+  document.querySelectorAll("[data-time]").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll("[data-time]").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");curTime=b.dataset.time;render();}));
+  document.querySelector("[data-name]").addEventListener("click",e=>{
+    e.currentTarget.classList.toggle("active");hasName=!hasName;render();});
+
+  function render(){
+    document.getElementById("greeting").textContent=`${GREET[curTime]} ${hasName?"يا محمد":"يا صاحبي"} 💙`;
+    const rl=document.getElementById("roleLine");
+    if(curRole){rl.style.display="";document.getElementById("roleMsg").textContent=ROLE_MSG[curRole];}
+    else rl.style.display="none";
+    document.getElementById("clock").textContent=curTime==="morning"?"08:05 صباحًا":"07:42 مساءً";
+  }
+  render();
+</script>
+</body>
+</html>

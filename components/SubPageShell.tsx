@@ -48,8 +48,10 @@ export function SubPageShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* حاوية واحدة للـ nav + المحتوى — نفس هيكل اللاندينج: .page بتدّي
-          نفس الـ max-width والـ gutter، والبراند فوق شمال والمفاتيح يمين. */}
-      <div className="page">
+          نفس الـ max-width والـ gutter، والبراند فوق شمال والمفاتيح يمين.
+          .subpage-ember بيفعّل هوية Ember & Gold على الصفحات دي (خلفية
+          شعاعية + كروت/أزرار بألوان الإكسنت) من غير ما يأثر على الفوتر. */}
+      <div className="page subpage-ember">
         <nav className="nav" aria-label={t.nav_primary_label}>
           <BrandLock />
           <div className="row nav-actions">

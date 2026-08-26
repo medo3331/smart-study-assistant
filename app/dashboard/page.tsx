@@ -40,6 +40,8 @@ import { HeroCard } from "./components/HeroCard";
 import { StatCards } from "./components/StatCards";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
+// 🧩 سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
+import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
@@ -165,7 +167,12 @@ export default function DashboardPage() {
   const [isAddingPlanStep, setIsAddingPlanStep] = useState(false);
 
   // 14. 👤 الشخصية — بتتقرا من profiles.persona وبتغيّر نصوص الواجهة كلها
-  const [persona, setPersona] = useState<Persona>(DEFAULT_PERSONA);
+    const [persona, setPersona] = useState<Persona>(DEFAULT_PERSONA);
+
+    // 🎯 للمساعد الشخصي (Phase 2A): الأهداف المعلقة والمستوى الدراسي — خام،
+    // والتحويل لسياق مسؤولية buildPersonalContext تحت.
+    const [pendingGoals, setPendingGoals] = useState<PendingGoalRow[]>([]);
+    const [studentLevel, setStudentLevel] = useState<string | null>(null);
 
   // 🔴 دالة توليد الأيام
   // ⚠️ الشخصية بتتمرّر صريح مش بتتقرا من الحالة: أول نداء بيحصل جوه نفس دالة
@@ -276,7 +283,9 @@ export default function DashboardPage() {
         // المتغير المحلي ده هو اللي بيتمرّر لـ generateDays تحت — الحالة نفسها
         // مش بتبقى جاهزة قبل نهاية الدالة دي.
         const loadedPersona: Persona = isPersona(profile?.persona) ? profile.persona : DEFAULT_PERSONA;
-        setPersona(loadedPersona);
+                setPersona(loadedPersona);
+                // المستوى الدراسي (للطالب عليه) — بيفضل null لغيرهم، والمساعد بيلفه بسهولة.
+                setStudentLevel((profile?.student_level as string) ?? null);
 
         let currentStreak = profile?.streak || 1;
         if (profile) {
@@ -415,13 +424,28 @@ export default function DashboardPage() {
         }
 
         const { data: activityRows } = await supabase.from("activity_log").select("*").eq("user_id", currentUser.id);
-        if (activityRows) {
-          const logMap: ActivityLog = {};
-          activityRows.forEach((row: any) => {
-            logMap[row.activity_date] = { focusMinutes: row.focus_minutes, tasksCompleted: row.tasks_completed };
-          });
-          setActivityLog(logMap);
-        }
+                if (activityRows) {
+                          const logMap: ActivityLog = {};
+                          activityRows.forEach((row: any) => {
+                            logMap[row.activity_date] = { focusMinutes: row.focus_minutes, tasksCompleted: row.tasks_completed };
+                          });
+                          setActivityLog(logMap);
+                        }
+
+                        // 🎯 الأهداف غير المكتملة بتروح للمساعد الشخصي (تعداد + استعجال).
+                        // نفس أعمدة fetchGoals في lib/pages-data.ts — والصفوف خام عشان
+                        // buildPersonalContext هي اللي بتحسب الـ urgency بموعدها النهائي.
+                        const { data: goalRows, error: goalsError } = await supabase
+                          .from("planner_goals")
+                          .select("title, due_date, priority, is_done")
+                          .eq("user_id", currentUser.id)
+                          .eq("is_done", false);
+                        if (goalsError) {
+                          // جدول planner_goals مش متشغّل (db/pages.sql) → كارت الأهداف يختفي بهدوء.
+                          console.warn("تعذر جلب أهداف المخطط (شغّل db/pages.sql):", goalsError.message);
+                        } else if (goalRows) {
+                          setPendingGoals(goalRows as PendingGoalRow[]);
+                        }
 
         // 🏅 عدد الأوسمة. بيفشل بهدوء عن قصد: جدول badges جاي من
         // db/pages.sql، ولو الملف ده لسه ما اتشغّلش في Supabase الداشبورد
@@ -927,6 +951,22 @@ export default function DashboardPage() {
   // الدالة، فالاسم اللي في الترحيب هو نفس الاسم اللي في الكارت — مصدر واحد.
   const displayName = railAccountFromUser(authUser)?.displayName ?? "مستخدم";
 
+  // ═══ سياق المساعد الشخصي الحقيقي — نفس حالة هذه الصفحة بالضبط (Phase 2A) ═══
+  // أي رقم بيوصل للمساعد مصدره حالة الداشبورد دي: profile/study_days/activity/
+  // planner_goals — ومفيش أي رقم ملفَّق. لو مفيش خطة أو نشاط، السياق بيسقط
+  // الأقسام الفاضية مش بيعرض أرقام وهمية.
+  const personalAssistantContext = buildPersonalContext({
+    userName: displayName,
+    role: persona,
+    studentLevel,
+    subject: config?.subject ?? null,
+    streak,
+    xp,
+    days,
+    pendingGoals,
+    activityLog,
+  });
+
   const uiText = getUiText(config.category, persona);
   const completedCount = days.filter((d) => d.isCompleted).length;
   const overallProgress = days.length > 0 ? Math.round((completedCount / days.length) * 100) : 0;
@@ -1091,13 +1131,12 @@ export default function DashboardPage() {
 
         {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
         <PersonalAssistant
-          displayName={displayName}
-          persona={persona}
-          onContinue={() => {
-            const el = document.getElementById(`day-${currentDayNumber}`);
-            el?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
-        />
+                  context={personalAssistantContext}
+                  onContinue={() => {
+                    const el = document.getElementById(`day-${currentDayNumber}`);
+                    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                />
 
         {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
                 — عدّ من صفر مرة واحدة بخط المونو ═══ */}

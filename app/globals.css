@@ -3481,20 +3481,20 @@ html {
 
 .site-footer {
   margin-block-start: clamp(40px, 6vw, 72px);
-  background: var(--paper-3);
+  background: var(--bg-1);
   padding-block-end: clamp(22px, 3vw, 30px);
+  border-top: 1px solid var(--line);
 }
 
-/* خط النهاية الأحمر. متدرّج الشفافية من النص للأطراف عشان ما يبانش
-   كخط جدول — بيبان كضربة قلم اتسحبت بعرض الصفحة. */
+/* خط النهاية: ember بدل الأحمر الفسفوري القديم — نفس أكسنت اللاندينج. */
 .footer-rule {
   height: 2px;
   background: linear-gradient(
     to left,
     transparent,
-    var(--redpen-soft) 12%,
-    var(--redpen) 50%,
-    var(--redpen-soft) 88%,
+    color-mix(in srgb, var(--ember) 40%, transparent) 12%,
+    var(--ember) 50%,
+    color-mix(in srgb, var(--ember) 40%, transparent) 88%,
     transparent
   );
 }
@@ -3525,7 +3525,7 @@ html {
   font-size: 1.28rem;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--white);
   text-decoration: none;
 }
 
@@ -3549,13 +3549,13 @@ html {
   max-width: 42ch;
   font-size: var(--t-sm);
   line-height: 1.8;
-  color: var(--ink-soft);
+  color: var(--muted);
   text-wrap: pretty;
 }
 
 .footer-social-title {
   margin: clamp(18px, 2.4vw, 26px) 0 10px;
-  color: var(--ink-soft);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   opacity: 0.8;
@@ -3578,20 +3578,20 @@ html {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--rule-strong);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
-  background: var(--paper-2);
-  color: var(--ink-soft);
+  background: var(--bg-panel);
+  color: var(--muted);
   transition: transform 0.22s ease, color 0.22s ease, background 0.22s ease,
     border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
 .footer-social-link:hover {
   transform: translateY(-2px);
-  background: var(--marker);
-  border-color: var(--marker-deep);
-  color: var(--on-marker);
-  box-shadow: 0 6px 14px -6px var(--shade-lift);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ember) 24%, transparent), color-mix(in srgb, var(--gold) 18%, transparent));
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+  color: var(--gold-soft);
+  box-shadow: 0 6px 14px -6px var(--card-shadow);
 }
 
 /* ---- أعمدة التنقل ---- */
@@ -3608,7 +3608,7 @@ html {
   font-size: var(--t-sm);
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: var(--ink);
+  color: var(--white);
 }
 
 .footer-links {
@@ -3629,13 +3629,13 @@ html {
   gap: 7px;
   font-size: var(--t-sm);
   line-height: 1.5;
-  color: var(--ink-soft);
+  color: var(--muted);
   text-decoration: none;
   transition: color 0.2s ease, margin 0.2s ease;
 }
 
 .footer-link:hover {
-  color: var(--ink);
+  color: var(--white);
   margin-inline-start: 3px;
 }
 
@@ -3643,12 +3643,12 @@ html {
    لينكات التنقل العادية من غير ما تاخد لون ثابت. */
 .footer-link-icon svg {
   flex: none;
-  color: var(--ink-soft);
+  color: var(--muted);
   transition: color 0.2s ease;
 }
 
 .footer-link-icon:hover svg {
-  color: var(--hl-yellow-ink);
+  color: var(--gold-soft);
 }
 
 /* ---- الشريط السفلي ---- */
@@ -3660,19 +3660,19 @@ html {
   justify-content: space-between;
   gap: 12px 24px;
   padding-block-start: clamp(16px, 2vw, 22px);
-  border-block-start: 1px solid var(--rule);
+  border-block-start: 1px solid var(--line);
 }
 
 .footer-copy {
   margin: 0;
   font-size: var(--t-label);
   line-height: 1.7;
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .footer-copy-name {
   font-weight: 600;
-  color: var(--ink);
+  color: var(--white);
 }
 
 .footer-legal {
@@ -3687,7 +3687,7 @@ html {
 }
 
 .footer-legal-link {
-  color: var(--ink-soft);
+  color: var(--muted);
   text-decoration: none;
   /* تسطير رفيع بيوضح مع الهوفر — اللينكات القانونية لازم تبان إنها
      لينكات، بس من غير ما تسحب العين من فوقها. */
@@ -3696,13 +3696,13 @@ html {
 }
 
 .footer-legal-link:hover {
-  color: var(--ink);
-  box-shadow: inset 0 -1px 0 0 var(--rule-strong);
+  color: var(--white);
+  box-shadow: inset 0 -1px 0 0 var(--gold);
 }
 
 /* التوقيع: أهدى حاجة في الشريط — مش لينك ومش محتاج يتقرا من بعيد */
 .footer-made {
-  color: var(--ink-soft);
+  color: var(--muted);
   opacity: 0.7;
 }
 
@@ -5565,3 +5565,315 @@ html {
   }
 
 } /* نهاية @layer components */
+
+/* ==========================================================================
+   هوية Ember & Gold للصفحات الفرعية (الذراع: /features وغيرها)
+   ⚠️ ده CSS برّة أي @layer، هياخد اللون الداكن الدافئ (Ember) والبرتقالي (Gold) 
+   ويطبق على كل الصفحات: /features، /login، /assessment، و/faq
+   */
+   .subpage-ember {
+     margin-block-start: clamp(40px, 6vw, 72px);
+     background: var(--bg-1);
+     padding-block-end: clamp(22px, 3vw, 30px);
+     border-top: 1px solid var(--line);
+   }
+
+   /* كارتات المميزات (.f-card) */
+   .f-card {
+     background: var(--bg-panel);
+     border: 1px solid var(--line);
+     border-radius: var(--r-sm);
+     padding: 24px;
+     margin-bottom: 24px;
+     transition: all 0.2s ease;
+   }
+
+   .f-card:hover {
+     box-shadow: 0 6px 16px -8px var(--card-shadow);
+     transform: translateY(-2px);
+   }
+
+   .f-card-icon {
+     color: var(--gold);
+     font-size: 1.5rem;
+     margin-bottom: 12px;
+   }
+
+   .f-card-title {
+     color: var(--white);
+     font-family: var(--font-display);
+     font-size: 1.25rem;
+     font-weight: 700;
+     margin-bottom: 8px;
+   }
+
+   .f-card-desc {
+     color: var(--muted);
+     line-height: 1.6;
+   }
+
+   /* eyebrow و lede */
+   .eyebrow {
+     color: var(--gold-soft);
+     font-size: 0.9rem;
+     margin-bottom: 16px;
+     display: block;
+   }
+
+   .lede {
+     color: var(--muted-2);
+     font-size: 0.95rem;
+     margin-bottom: 24px;
+   }
+
+   /* الأزرار */
+   .btn-marker {
+     background: linear-gradient(to right, var(--ember), color-mix(in srgb, var(--gold) 18%, transparent));
+     color: var(--white);
+     border: none;
+     padding: 10px 24px;
+     border-radius: var(--r-sm);
+     font-weight: 600;
+     cursor: pointer;
+     transition: all 0.2s ease;
+   }
+
+   .btn-marker:hover {
+     background: linear-gradient(to right, var(--ember) 24%, var(--gold) 18%);
+     transform: translateY(-2px);
+     box-shadow: 0 4px 10px -6px var(--card-shadow);
+   }
+
+   .btn-quiet {
+     background: transparent;
+     border: 1px solid var(--line-strong);
+     color: var(--muted);
+     padding: 8px 16px;
+     border-radius: var(--r-sm);
+     transition: all 0.2s ease;
+   }
+
+   .btn-quiet:hover {
+     background: var(--bg-panel);
+     color: var(--white);
+     border-color: var(--gold);
+   }
+
+   /* الفوتر */
+   .site-footer {
+     margin-block-start: clamp(40px, 6vw, 72px);
+     background: var(--bg-1);
+     padding-block-end: clamp(22px, 3vw, 30px);
+     border-top: 1px solid var(--line);
+   }
+
+   .footer-rule {
+     height: 2px;
+     background: linear-gradient(
+       to left,
+       transparent,
+       color-mix(in srgb, var(--ember) 40%, transparent) 12%,
+       var(--ember) 50%,
+       color-mix(in srgb, var(--ember) 40%, transparent) 88%,
+       transparent
+     );
+   }
+
+   .footer-brand {
+     color: var(--white);
+   }
+
+   .footer-tagline {
+     color: var(--muted);
+   }
+
+   .footer-social-link {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     width: 36px;
+     height: 36px;
+     border: 1px solid var(--line-strong);
+     border-radius: var(--r-sm);
+     background: var(--bg-panel);
+     color: var(--muted);
+     transition: all 0.22s ease;
+   }
+
+   .footer-social-link:hover {
+     transform: translateY(-2px);
+     background: linear-gradient(135deg, color-mix(in srgb, var(--ember) 24%, transparent), color-mix(in srgb, var(--gold) 18%, transparent));
+     border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+     color: var(--gold-soft);
+     box-shadow: 0 6px 14px -6px var(--card-shadow);
+   }
+
+   .footer-nav {
+     display: grid;
+     grid-template-columns: repeat(4, minmax(0, 1fr));
+     gap: clamp(18px, 2.6vw, 32px);
+   }
+
+   .footer-nav a {
+     color: var(--muted);
+     text-decoration: none;
+     transition: color 0.2s ease, margin 0.2s ease;
+   }
+
+   .footer-nav a:hover {
+     color: var(--white);
+     margin-inline-start: 3px;
+   }
+
+   .footer-copy {
+     color: var(--muted);
+   }
+
+   .footer-copy-name {
+     color: var(--white);
+   }
+
+   .footer-legal-link {
+     color: var(--muted);
+     text-decoration: none;
+     box-shadow: inset 0 -1px 0 0 transparent;
+     transition: color 0.2s ease, box-shadow 0.2s ease;
+   }
+
+   .footer-legal-link:hover {
+     color: var(--white);
+     box-shadow: inset 0 -1px 0 0 var(--gold);
+   }
+
+   .footer-made {
+     color: var(--muted);
+     opacity: 0.7;
+   }
+
+/* ==========================================================================
+   هوية Ember & Gold للصفحات الفرعية (الذراع: /features وغيرها)
+   ⚠️ ده CSS برّة أي @layer عشان يغلب الكلاسات العالمية جوه @layer components
+   والباليتات المتجر. متعريف تحت .subpage-ember (اتحط على .page في
+   SubPageShell) عشان يغطّي كل الذراع من غير ما يمسّ الفوتر.
+
+   القيم مستخدمة من توكنز اللاندينج اللي اتعرّفت في :root (+ override
+   [data-theme="light"]): --bg-0/--bg-1/--bg-panel/--ember/--gold/--gold-soft/
+   --ember-bright/--line/--line-strong/--panel-tint/--glow-gold/--glow-ember/
+   --card-shadow/--card-ring. مفيش تغيير في أي منطق/state/validation.
+
+   ⚠️ /faq بيمرّ من نفس SubPageShell فيتأثر برضه (الذراع التسويقي التاني)،
+   وده المطلوب: كل الذراع يتماشوا مع الهوية. الفوتر (SiteFooter) برّه
+   .subpage-ember فمتأثرش.
+   ========================================================================== */
+
+.subpage-ember {
+  background:
+    radial-gradient(50% 38% at 85% 0%, var(--glow-gold), transparent 60%),
+    radial-gradient(60% 50% at 5% 100%, var(--glow-ember), transparent 60%),
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  min-height: 100vh;
+}
+
+.subpage-ember .f-card {
+  background-image: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  box-shadow: 0 1px 2px var(--card-shadow);
+}
+
+.subpage-ember .f-card:hover {
+  border-color: var(--line-strong);
+  border-inline-start-color: var(--gold);
+  box-shadow: 0 18px 44px -20px var(--card-shadow);
+}
+
+.subpage-ember .f-card-glow {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--gold-soft) 34%, transparent) 0%,
+    transparent 68%
+  );
+}
+
+.subpage-ember .f-card-icon {
+  color: var(--white);
+  background: var(--panel-tint);
+  border: 1px solid var(--line-strong);
+}
+
+.subpage-ember .f-card:hover .f-card-icon {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 22%, transparent), color-mix(in srgb, var(--ember) 16%, transparent));
+  border-color: color-mix(in srgb, var(--gold) 35%, transparent);
+  color: var(--gold-soft);
+}
+
+.subpage-ember .f-card-title {
+  color: var(--white);
+}
+
+.subpage-ember .f-card-desc {
+  color: var(--muted);
+}
+
+.subpage-ember .eyebrow {
+  color: var(--gold-soft);
+}
+
+.subpage-ember .eyebrow::before {
+  background: var(--gold);
+}
+
+.subpage-ember .lede {
+  color: var(--muted);
+}
+
+.subpage-ember .h1,
+.subpage-ember .h2 {
+  color: var(--white);
+}
+
+.subpage-ember .btn-marker {
+  background: linear-gradient(120deg, var(--ember) 0%, #a3172c 100%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(200, 30, 58, 0.3);
+}
+
+.subpage-ember .btn-marker:hover:not(:disabled) {
+  background: linear-gradient(120deg, var(--ember-bright) 0%, #a3172c 100%);
+  transform: translateY(-1px);
+}
+
+.subpage-ember .btn-quiet {
+  background: transparent;
+  color: var(--white);
+  border-color: var(--line-strong);
+}
+
+.subpage-ember .btn-quiet:hover:not(:disabled) {
+  background: var(--panel-tint);
+  border-color: var(--gold);
+}
+
+.subpage-ember .legal-back {
+  color: var(--muted);
+}
+
+.subpage-ember .legal-back:hover {
+  color: var(--white);
+}
+
+.subpage-ember .faq-more-link,
+.subpage-ember .section-more a {
+  color: var(--gold-soft);
+}
+
+.subpage-ember .nav-link {
+  color: var(--muted);
+}
+
+.subpage-ember .nav-link:hover {
+  background: var(--panel-tint);
+  color: var(--white);
+}

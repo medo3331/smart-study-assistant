@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 
-// تهيئة الـ AI باستخدام مفتاح الـ API المخزن في .env.local
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// تهيئة Groq باستخدام المفتاح الخاص به
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(request: Request) {
   try {
@@ -12,10 +12,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Lesson text is required' }, { status: 400 });
     }
 
-    // الـ Prompt اللي بيوجه الذكاء الاصطناعي لتوليد الأسئلة بدقة
     const prompt = `
       بناءً على النص التعليمي التالي، قم بإنشاء 4 أزواج من المصطلحات وتعريفاتها (أو الأسئلة وإجاباتها) المناسبة للعبة مطابقة الكروت.
-      يجب أن يكون الرد بصيغة JSON صالح فقط بدون أي نصوص أو علامات ترحيب إضافية، بحيث يكون بالهيكل التالي تماماً:
+      يجب أن يكون الرد بصيغة JSON صالح فقط بدون أي نصوص إضافية أو علامات Markdown (مثل \`\`\`json)، بحيث يكون بالهيكل التالي تماماً:
       [
         { "question": "السؤال أو المصطلح", "answer": "الإجابة أو التعريف" }
       ]
@@ -24,15 +23,19 @@ export async function POST(request: Request) {
       ${lessonText}
     `;
 
-    // استدعاء موديل الـ AI
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    // استدعاء موديل Groq القوي والسريع
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile", // موديل قوي جداً ودقيق في الـ JSON
+      messages: [
+        { role: "system", content: "You are a helpful educational assistant that outputs strictly in JSON format." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.7,
     });
 
-    const textResult = response.text ?? '';
+    const textResult = completion.choices[0]?.message?.content || '';
     
-    // استخراج الـ JSON بدقة من رد الـ AI
+    // تنظيف واستخراج الـ JSON بدقة
     const jsonStartIndex = textResult.indexOf('[');
     const jsonEndIndex = textResult.lastIndexOf(']') + 1;
     const jsonString = textResult.substring(jsonStartIndex, jsonEndIndex);
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ pairs });
 
   } catch (error) {
-    console.error('Error generating game questions:', error);
+    console.error('Error generating game questions with Groq:', error);
     return NextResponse.json({ error: 'Failed to generate questions' }, { status: 500 });
   }
 }

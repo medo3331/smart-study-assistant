@@ -1,0 +1,24 @@
+.pIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--gold-soft);
+}
+
+.logoText {
+  font-family: 'Cairo', sans-serif;
+  font-weight: 800;
+  color: var(--white);
+}
+
+.subtitleHighlight {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 700;
+  background: linear-gradient(100deg, var(--ember-bright), var(--gold-soft));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}

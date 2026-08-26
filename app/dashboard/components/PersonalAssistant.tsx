@@ -6,15 +6,22 @@ import {
   type BriefingResult,
 } from "@/lib/personal-assistant/briefing";
 import type { Persona } from "@/lib/user-persona";
+import type { PersonalAssistantContext } from "@/lib/personal-assistant/context";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 export interface PersonalAssistantProps {
-  /** اسم العرض — من railAccountFromUser */
-  displayName: string;
-  /** الشخصية — من profiles.persona */
+  /**
+   * السياق الحقيقي من الداشبورد (Phase 2A) — بيحمل بيانات فعلية
+   * (الخطة/الأهداف/النشاط/الستريك). لو غايب، الكارت بيشتغل على فولباك ثابت
+   * (الاسم والشخصية بس) — عشان ما يقعش في أي شاشة بتستخدمه من غير سياق.
+   */
+  context?: PersonalAssistantContext;
+  /** اسم العرض — فولباك بس لما مفيش context */
+  displayName?: string;
+  /** الشخصية — فولباك بس لما مفيش context */
   persona?: Persona | null;
   /** دالة تسكرول لخطوة اليوم — نفس onContinue في HeroCard */
   onContinue?: () => void;
@@ -25,26 +32,47 @@ export interface PersonalAssistantProps {
 // ---------------------------------------------------------------------------
 
 export function PersonalAssistant({
-  displayName,
+  context,
+  displayName = "مستخدم",
   persona,
   onContinue,
 }: PersonalAssistantProps) {
+  // السياق المطبّع: الحقيقي من الداشبورد لو وصل، وإلا فولباك ثابت.
+  const ctx: PersonalAssistantContext = useMemo(() => {
+    if (context) return context;
+    return {
+      userName: displayName,
+      role: persona || null,
+      studentLevel: null,
+      subject: null,
+      streak: 0,
+      xp: 0,
+      studyProgress: null,
+      goals: null,
+      recentActivity: null,
+    };
+  }, [context, displayName, persona]);
+
   const briefing: BriefingResult = useMemo(
-    () =>
-      getPersonalAssistantBriefing({
-        userName: displayName,
-        role: persona,
-      }),
-    [displayName, persona],
+    () => getPersonalAssistantBriefing({ ctx }),
+    [ctx],
   );
 
   const baseLines = briefing.baseMessage.split("\n");
+
+  // رسائل إضافية من السياق الحقيقي
+  const extraLines: { type: "progress" | "goals"; text: string }[] = [];
+  if (briefing.progressMessage) {
+    extraLines.push({ type: "progress", text: briefing.progressMessage });
+  }
+  if (briefing.goalsMessage) {
+    extraLines.push({ type: "goals", text: briefing.goalsMessage });
+  }
 
   return (
     <section
       aria-label="المساعد الشخصي"
       className="sheet-card card-lift overflow-hidden motion-safe:animate-[paReveal_.45s_cubic-bezier(.22,.8,.36,1)_both]"
-      // دخول الهويات مرة واحدة عند التركيب
       style={{ animationName: "paReveal" }}
     >
       <div className="relative p-5 sm:p-6">
@@ -106,7 +134,7 @@ export function PersonalAssistant({
           role="presentation"
         />
 
-        {/* الرسالة الثابتة */}
+        {/* الرسالة الثابتة + رسائل إضافية */}
         <div className="flex flex-col gap-2" aria-live="polite">
           {baseLines.map((line, i) => (
             <p key={i} className="flex items-baseline gap-2.5 text-sm leading-[1.9] text-ink">
@@ -118,6 +146,54 @@ export function PersonalAssistant({
               <HighlightLine text={line} />
             </p>
           ))}
+
+          {/* رسائل التقدم */}
+          {extraLines
+            .filter((e) => e.type === "progress")
+            .map((line, i) => (
+              <p
+                key={`progress-${i}`}
+                className="flex items-baseline gap-2.5 text-sm leading-[1.9] text-ink"
+              >
+                <span
+                  className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: "var(--hl-purple-fill)" }}
+                  aria-hidden
+                />
+                <span className="flex-1">{line.text}</span>
+              </p>
+            ))}
+
+          {/* رسائل الأهداف */}
+          {extraLines
+            .filter((e) => e.type === "goals")
+            .map((line, i) => (
+              <div
+                key={`goals-${i}`}
+                className="mt-3.5 flex items-start gap-2.5 rounded-[var(--r-sm)] p-3"
+                style={{
+                  background: "rgba(245,222,114,0.16)",
+                  border: "1px solid rgba(226,201,92,0.45)",
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mt-0.5 h-[17px] w-[17px] shrink-0"
+                  style={{ stroke: "var(--hl-yellow-ink)" }}
+                  aria-hidden
+                >
+                  <path d="M22 10L12 5 2 10l10 5 10-5z" />
+                  <path d="M6 12v5c0 1.7 2.7 6 3s6-1.3 6-3v-5" />
+                </svg>
+                <span className="text-sm leading-[1.85] font-medium text-ink whitespace-pre-line">
+                  {line.text}
+                </span>
+              </div>
+            ))}
         </div>
 
         {/* سطر الدور */}
@@ -157,11 +233,11 @@ export function PersonalAssistant({
         @keyframes paBreathe {
           0%,
           100% {
-            box-shadow: 0 0 0 4px rgba(245, 222, 114, 0.25),
+            box-shadow: 0 0 0 4px rgba(245,222,114, 0.25),
               0 2px 6px var(--shade);
           }
           50% {
-            box-shadow: 0 0 0 7px rgba(245, 222, 114, 0.38),
+            box-shadow: 0 0 0 7px rgba(245,222,114, 0.38),
               0 2px 6px var(--shade);
           }
         }
@@ -183,7 +259,6 @@ export function PersonalAssistant({
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** ساعة صغيرة مونو — تتغير حسب الوقت */
 function ClockChip({ period }: { period: "morning" | "evening" }) {
   const timeStr = useMemo(() => {
     const now = new Date();
@@ -200,7 +275,6 @@ function ClockChip({ period }: { period: "morning" | "evening" }) {
   );
 }
 
-/** سطر واحد — يظلّل «الورد اليومي» بالأصفر */
 function HighlightLine({ text }: { text: string }) {
   if (!text.includes("الورد اليومي")) {
     return <span>{text}</span>;
@@ -223,7 +297,6 @@ function HighlightLine({ text }: { text: string }) {
   );
 }
 
-/** سطر الدور — جملة مظللة بقلم الثيم */
 function RoleLine({ message }: { message: string }) {
   return (
     <div
@@ -244,7 +317,7 @@ function RoleLine({ message }: { message: string }) {
         aria-hidden
       >
         <path d="M22 10L12 5 2 10l10 5 10-5z" />
-        <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
+        <path d="M6 12v5c0 1.7 2.7 6 3s6-1.3 6-3v-5" />
       </svg>
       <span className="text-sm leading-[1.85] font-medium text-ink">
         {message}
