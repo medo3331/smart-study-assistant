@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
+import { ProviderRow } from "@/components/AuthProviders";
 
 type PasswordFlow = "signin" | "signup" | "forgot" | "reset";
 
@@ -324,7 +325,7 @@ function LoginForm() {
           </button>
         )}
 
-        {!isForgot && !isReset && <div className="divider small">{t.login_or}</div>}
+        {!isForgot && !isReset && <ProviderRow />}
 
         {!isForgot && !isReset && <div className="stack" style={{ gap: "8px" }}>
           <button

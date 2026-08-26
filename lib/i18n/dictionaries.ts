@@ -353,6 +353,46 @@ export type Dictionary = {
   demo_err_size: string;
   demo_err_type: string;
   demo_err_network: string;
+  /* ---- المرحلة ١: Auth & Onboarding Foundation ---- */
+  welcome_title_a: string;
+  welcome_title_mark: string;
+  welcome_lede: string;
+  welcome_cta_start: string;
+  welcome_cta_login: string;
+  welcome_cta_guest: string;
+  welcome_terms: string;
+  register_title: string;
+  register_name_label: string;
+  register_name_placeholder: string;
+  register_email_label: string;
+  register_password_label: string;
+  register_submit: string;
+  register_pw_weak: string;
+  register_pw_medium: string;
+  register_pw_strong: string;
+  register_pw_hint: string;
+  auth_google_cta: string;
+  auth_phone_cta: string;
+  auth_phone_soon: string;
+  auth_or_continue: string;
+  login_forgot_link: string;
+  onboarding_step: string;
+  onboarding_title: string;
+  onboarding_subtitle: string;
+  onboarding_role_student: string;
+  onboarding_role_student_desc: string;
+  onboarding_role_graduate: string;
+  onboarding_role_graduate_desc: string;
+  onboarding_role_freelancer: string;
+  onboarding_role_freelancer_desc: string;
+  onboarding_changeable_later: string;
+  onboarding_skip: string;
+  onboarding_next: string;
+  onboard_level_title: string;
+  onboard_level_subtitle: string;
+  onboard_level_note: string;
+  onboard_done_title: string;
+  onboard_done_lede: string;
 };
 
 export const dictionaries: Record<'ar' | 'en', Dictionary> = {
@@ -675,6 +715,46 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     demo_err_size: 'الملف كبير. الحد ٤ ميجا (والصور ١ ميجا).',
     demo_err_type: 'نوع الملف ده مش مدعوم. جرّب PDF أو Word أو صورة أو نص.',
     demo_err_network: 'الاتصال اتقطع. اتأكد من النت وجرّب تاني.',
+    /* ---- المرحلة ١: Auth & Onboarding Foundation ---- */
+    welcome_title_a: 'خطة تتعلم على',
+    welcome_title_mark: 'مقاسك',
+    welcome_lede: 'ماجيكلي بيفهم دورك ومستواك وهدفك، ويبنيلك خطة يومية بتتابعها خطوة بخطوة.',
+    welcome_cta_start: 'ابدأ رحلتك',
+    welcome_cta_login: 'عندي حساب بالفعل',
+    welcome_cta_guest: 'أكمل كزائر من غير حساب',
+    welcome_terms: 'بالإنشاء أنت توافق على الشروط وسياسة الخصوصية.',
+    register_title: 'اعمل حسابك',
+    register_name_label: 'الاسم',
+    register_name_placeholder: 'اسمك كما تحب أن نناديك',
+    register_email_label: 'البريد الإلكتروني',
+    register_password_label: 'كلمة السر',
+    register_submit: 'إنشاء الحساب',
+    register_pw_weak: 'ضعيفة — زوّد الحروف والأرقام',
+    register_pw_medium: 'متوسطة — كويسة، وتقدر تقوّيها أكتر',
+    register_pw_strong: 'قوية ✓',
+    register_pw_hint: '٦ حروف على الأقل.',
+    auth_google_cta: 'المتابعة بحساب Google',
+    auth_phone_cta: 'المتابعة برقم الموبايل',
+    auth_phone_soon: 'قريبًا',
+    auth_or_continue: 'أو كمّل بواسطة',
+    login_forgot_link: 'نسيت كلمة السر؟',
+    onboarding_step: 'الخطوة',
+    onboarding_title: 'خلينا نعرفك أكتر عشان نجهز ماجيكلي ليك 💙',
+    onboarding_subtitle: 'اختار اللي يشبهك — وتقدر تغيّره بعدين من إعدادات حسابك.',
+    onboarding_role_student: 'طالب',
+    onboarding_role_student_desc: 'بتذاكر منهج أو بتحضّر لامتحان',
+    onboarding_role_graduate: 'خريج',
+    onboarding_role_graduate_desc: 'بتجهّز نفسك لسوق الشغل والمقابلات',
+    onboarding_role_freelancer: 'فريلانسر',
+    onboarding_role_freelancer_desc: 'بتشتغل على مشاريع ومع عملاء',
+    onboarding_changeable_later: 'تقدر تغيّر اختيارك في أي وقت.',
+    onboarding_skip: 'تخطّي دلوقتي',
+    onboarding_next: 'كمّل',
+    onboard_level_title: 'بتدرس في أنهي مرحلة؟',
+    onboard_level_subtitle: 'ده بيظبط شرح الأمثلة ومستوى اللغة في خطتك.',
+    onboard_level_note: 'السؤال ده بيظهر لاختيار «طالب» فقط — باقي الأدوار بيتسجلوا على طول.',
+    onboard_done_title: 'جاهز! جهزنا ماجيكلي على مقاسك',
+    onboard_done_lede: 'بنودّيك على داشبورد دورك. لحد ما النسخ المتخصصة تجهز، الكل بينزل على الداشبورد الحالي بدون أي كسر.',
   },
   en: {
     dir: 'ltr',
@@ -995,6 +1075,46 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     demo_err_size: 'That file is too big. Limit is 4 MB (1 MB for images).',
     demo_err_type: 'That file type is not supported. Try PDF, Word, an image, or text.',
     demo_err_network: 'Connection dropped. Check your network and try again.',
+    /* ---- Phase 1: Auth & Onboarding Foundation ---- */
+    welcome_title_a: 'A learning plan built',
+    welcome_title_mark: 'around you',
+    welcome_lede: 'Magiclly understands your role, level and goal, then builds a daily plan you can follow step by step.',
+    welcome_cta_start: "Start your journey",
+    welcome_cta_login: 'I already have an account',
+    welcome_cta_guest: 'Continue as a guest',
+    welcome_terms: 'By creating an account you agree to the Terms and Privacy Policy.',
+    register_title: 'Create your account',
+    register_name_label: 'Name',
+    register_name_placeholder: 'Your name, as you like to be called',
+    register_email_label: 'Email',
+    register_password_label: 'Password',
+    register_submit: 'Create account',
+    register_pw_weak: 'Weak — add more letters and numbers',
+    register_pw_medium: 'Medium — good, could be stronger',
+    register_pw_strong: 'Strong ✓',
+    register_pw_hint: 'At least 6 characters.',
+    auth_google_cta: 'Continue with Google',
+    auth_phone_cta: 'Continue with phone number',
+    auth_phone_soon: 'Soon',
+    auth_or_continue: 'or continue with',
+    login_forgot_link: 'Forgot password?',
+    onboarding_step: 'Step',
+    onboarding_title: 'Tell us a bit about you so we can tailor Magiclly 💙',
+    onboarding_subtitle: 'Pick what fits — you can change it later from your account settings.',
+    onboarding_role_student: 'Student',
+    onboarding_role_student_desc: 'Studying a curriculum or preparing for exams',
+    onboarding_role_graduate: 'Graduate',
+    onboarding_role_graduate_desc: 'Getting ready for the job market and interviews',
+    onboarding_role_freelancer: 'Freelancer',
+    onboarding_role_freelancer_desc: 'Working on projects with clients',
+    onboarding_changeable_later: 'You can change this any time.',
+    onboarding_skip: 'Skip for now',
+    onboarding_next: 'Continue',
+    onboard_level_title: 'Which stage are you studying in?',
+    onboard_level_subtitle: 'It tunes the explanations and language level of your plan.',
+    onboard_level_note: 'This question appears only for “Student” — other roles continue straight away.',
+    onboard_done_title: "All set! Magiclly is tailored to you",
+    onboard_done_lede: "We're taking you to your role's dashboard. Until the specialized versions ship, everyone lands on the current dashboard — nothing breaks.",
   },
 };
 
