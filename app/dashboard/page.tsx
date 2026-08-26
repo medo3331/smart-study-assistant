@@ -39,6 +39,7 @@ import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
 import { HeroCard } from "./components/HeroCard";
 import { StatCards } from "./components/StatCards";
 import { CurrentStepCard } from "./components/CurrentStepCard";
+import { PersonalAssistant } from "./components/PersonalAssistant";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
@@ -1086,6 +1087,16 @@ export default function DashboardPage() {
             el?.scrollIntoView({ behavior: "smooth", block: "center" });
           }}
           onOpenAiAssistant={handleOpenAiAssistant}
+        />
+
+        {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
+        <PersonalAssistant
+          displayName={displayName}
+          persona={persona}
+          onContinue={() => {
+            const el = document.getElementById(`day-${currentDayNumber}`);
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
         />
 
         {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
