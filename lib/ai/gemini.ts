@@ -98,6 +98,25 @@ export class GeminiProvider implements AiMediaProvider, AiImageProvider {
     }
   }
 
+  /**
+   * Task 3B: نفس محرك توليد الصور الحقيقي الحالي تحت العقد الموحّد الجديد —
+   * مش مزوّد جديد ولا سلوك جديد، بس غلاف متوافق مع Media Router.
+   */
+  async generateMedia(input: import("./types").AiMediaGenerationRequest & { model?: string }): Promise<import("./types").AiMediaResult> {
+    if (input.imageInput) {
+      // تعديل صورة بموديل الصورة الحالي غير مدعوم فعليًا — بنقولها بصراحة.
+      throw new AiProviderError("Gemini image model does not support image editing", 400, this.name);
+    }
+    const generated = await this.generateImage({ prompt: input.prompt });
+    return {
+      type: "image",
+      provider: generated.provider,
+      model: generated.model,
+      base64: generated.data,
+      mimeType: generated.mimeType,
+    };
+  }
+
   async generateImage(input: AiImageGenerationRequest): Promise<AiImageGenerationResponse> {
     const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) throw new AiProviderError("Gemini is not configured", 503, this.name);

@@ -9,6 +9,11 @@ import type { RouterAttempt } from "./routing";
 const USD_PER_MILLION_TOKENS: Record<AiProviderName, { prompt: number; completion: number }> = {
   groq: { prompt: 0.25, completion: 0.59 },
   gemini: { prompt: 0.30, completion: 2.5 },
+  // نقطة NVIDIA المجانية — تكلفة مقدَّرة صفر؛ لو الموديلات اتغيرت لمدفوعة
+  // يتراجع المدخل ده مع تحديث freeEndpoint في السجل.
+  nvidia: { prompt: 0, completion: 0 },
+  // OpenRouter بيتسخدم بس بموديلات free متحقق منها (بوابة free-only)، فالتقدير صفر.
+  openrouter: { prompt: 0, completion: 0 },
 };
 
 /** توليد الصور بيتحسب بالصورة مش بالتوكن — تقدير تقريبي لكل صورة. */

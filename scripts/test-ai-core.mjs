@@ -42,9 +42,18 @@ console.log("\n[1] Task→provider policy preserved");
 await test("AI_PROVIDER_BY_TASK matches the audited policy", () => {
   const expected = {
     chat: "groq",
+    explain: "groq",
+    summarize: "groq",
     content: "groq",
     marketing_copy: "groq",
-    coding: "groq",
+    tutor: "nvidia",
+    agent: "nvidia",
+    coding: "nvidia",
+    quiz: "groq",
+    flashcards: "gemini",
+    study_plan: "gemini",
+    lesson_analysis: "gemini",
+    mind_map: "gemini",
     file_analysis: "gemini",
     image_analysis: "gemini",
     data_analysis: "gemini",
@@ -53,6 +62,9 @@ await test("AI_PROVIDER_BY_TASK matches the audited policy", () => {
     marketing_plan: "gemini",
     roadmap: "gemini",
     image_generation: "gemini",
+    image_edit: "gemini",
+    video_generation: "gemini",
+    rag_embeddings: "nvidia",
   };
   assert.deepEqual(AI_PROVIDER_BY_TASK, expected);
 });
@@ -83,7 +95,11 @@ await test("unknown model id throws instead of being silently ignored", () => {
 
 await test("modelsForCapabilities filters by every required capability", () => {
   const visionModels = modelsForCapabilities(["vision"]).map((m) => m.id);
-  assert.deepEqual(visionModels, ["gemini-3.6-flash"]);
+  assert.ok(visionModels.includes("gemini-3.6-flash"));
+  // Task 3B: موديلات OpenRouter المجانية ذات الرؤية المؤكدة بتبان كمان
+  // (inkling-small مستبعد لأنه disabled بعد 403 حي).
+  assert.ok(visionModels.includes("dots-studio/dots-3-note-preview:free"));
+  assert.ok(!visionModels.includes("thinkingmachines/inkling-small:free"));
   const textModels = modelsForCapabilities(["text"]).map((m) => m.id);
   assert.ok(textModels.includes("openai/gpt-oss-120b"));
   // the image-only model has no text capability
@@ -123,11 +139,16 @@ await test("5xx marks UNAVAILABLE, repeat failure degrades to DEGRADED after coo
   assert.equal(health.getProviderHealth("groq"), "AVAILABLE");
 });
 
-await test("client errors (400/401/403) do not change provider health", () => {
+await test("400 leaves provider health unchanged, while 401/403 mark AUTH_ERROR (Task 3A)", () => {
   const before = health.getProviderHealth("groq");
-  health.recordProviderResult("groq", { ok: false, status: 401, reason: "bad key test" });
   health.recordProviderResult("groq", { ok: false, status: 400, reason: "bad request test" });
-  assert.equal(health.getProviderHealth("groq"), before);
+  assert.equal(health.getProviderHealth("groq"), before, "request-shape errors are not provider health");
+  health.recordProviderResult("groq", { ok: true }); // reset to AVAILABLE
+  health.recordProviderResult("groq", { ok: false, status: 401, reason: "bad key test" });
+  assert.equal(health.getProviderHealth("groq"), "AUTH_ERROR", "auth failures must mark AUTH_ERROR");
+  assert.equal(health.isUsable("groq"), false);
+  health.recordProviderResult("groq", { ok: true }); // explicit success recovers
+  assert.equal(health.getProviderHealth("groq"), "AVAILABLE");
 });
 
 await test("diagnostics expose cooldown without leaking payloads", () => {
@@ -536,6 +557,510 @@ await test("client-safe files contain no secret env references", () => {
     }
   }
 });
+
+/* ==================================================================== */
+console.log("\n[9] Task layer (chat / explain) + normalized errors + key rotation");
+/* ==================================================================== */
+
+const tasks = await import("../lib/ai/tasks/index.ts");
+const errors = await import("../lib/ai/errors.ts");
+const groqModule = await import("../lib/ai/groq.ts");
+
+await test("task registry: chat and explain implemented with extension points", () => {
+  assert.ok(tasks.isImplementedAiTask("chat"));
+  assert.ok(tasks.isImplementedAiTask("explain"));
+  assert.ok(!tasks.isImplementedAiTask("quiz"), "quiz is an extension point until its flow ships");
+  assert.ok(!tasks.isImplementedAiTask("mind_map"));
+  const explain = tasks.getAiTask("explain");
+  assert.equal(typeof explain.buildSystemPrompt, "function");
+});
+
+await test("explain builds an Arabic system prompt honoring user context", async () => {
+  let captured;
+  const fakeRouter = new AiRouter([
+    {
+      name: "groq",
+      async completeChat(input) {
+        captured = input;
+        return { provider: "groq", model: "test-model", content: "شرح بسيط", payload: {} };
+      },
+    },
+    { name: "gemini", async completeChat() { throw new Error("must not be called"); } },
+  ]);
+  AIService.__setRouterForTests(fakeRouter);
+  try {
+    const result = await tasks.runAiTask("explain", {
+      messages: [{ role: "user", content: "اشرح لي التربة" }],
+      user: { userId: "u1", educationLevel: "ثانوي" },
+    });
+    assert.equal(result.task, "explain");
+    assert.equal(result.provider, "groq");
+    assert.equal(captured.messages[0].role, "system");
+    assert.match(captured.messages[0].content, /ماجيكلي/);
+    assert.match(captured.messages[0].content, /ثانوي/);
+  } finally {
+    AIService.__setRouterForTests(undefined);
+  }
+});
+
+await test("runAiTask keeps a caller-provided system prompt untouched", async () => {
+  let captured;
+  const fakeRouter = new AiRouter([
+    {
+      name: "groq",
+      async completeChat(input) {
+        captured = input;
+        return { provider: "groq", model: "test-model", content: "تمام", payload: {} };
+      },
+    },
+    { name: "gemini", async completeChat() { throw new Error("must not be called"); } },
+  ]);
+  AIService.__setRouterForTests(fakeRouter);
+  try {
+    await tasks.runAiTask("explain", {
+      messages: [{ role: "system", content: "نظام خاص بي" }, { role: "user", content: "مرحبا" }],
+    });
+    assert.deepEqual(
+      captured.messages.filter((m) => m.role === "system").map((m) => m.content),
+      ["نظام خاص بي"],
+      "caller system prompt must win; no task default injected"
+    );
+  } finally {
+    AIService.__setRouterForTests(undefined);
+  }
+});
+
+await test("normalized error taxonomy maps statuses correctly", () => {
+  const cases = [
+    [429, "RATE_LIMIT", true],
+    [401, "AUTH_ERROR", false],
+    [403, "AUTH_ERROR", false],
+    [404, "MODEL_UNAVAILABLE", true],
+    [400, "INVALID_REQUEST", false],
+    [408, "TIMEOUT", true],
+    [504, "TIMEOUT", true],
+    [503, "CONFIGURATION_ERROR", false],
+    [500, "NETWORK_ERROR", true],
+  ];
+  for (const [status, expectedCode, retryable] of cases) {
+    const pub = errors.statusToPublicError(status);
+    assert.equal(pub.code, expectedCode, `status ${status}`);
+    assert.equal(pub.retryable, retryable, `retryable ${status}`);
+    assert.ok(pub.message.length > 0 && !/\d{3}/.test(pub.message), `safe Arabic message for ${status}`);
+  }
+});
+
+await test("toAiPublicError normalizes provider/route errors without leaking details", () => {
+  const fromProvider = errors.toAiPublicError(new types.AiProviderError("GroqError gsk_live_whatever", 429, "groq"));
+  assert.equal(fromProvider.code, "RATE_LIMIT");
+  assert.equal(fromProvider.message.includes("gsk"), false);
+  assert.equal(fromProvider.message.includes("Groq"), false);
+
+  const routeError = new routing.AiRouteError("all failed", "chat", [
+    { provider: "groq", ok: false, reason: "HTTP 502" },
+    { provider: "gemini", ok: false, reason: "HTTP 500" },
+  ]);
+  const fromRoute = errors.toAiPublicError(routeError);
+  assert.equal(fromRoute.code, "NETWORK_ERROR", "classified from the first real failure");
+  assert.equal(fromRoute.message.toLowerCase().includes("gemini"), false);
+
+  const unknown = errors.toAiPublicError(new Error("stack trace with secrets"));
+  assert.equal(unknown.code, "UNKNOWN");
+  assert.equal(unknown.retryable, false);
+});
+
+await test("fallback eligibility follows the router policy (400 family excluded)", () => {
+  for (const status of [429, 408, 500, 502, 503, 504]) {
+    assert.ok(errors.isFallbackEligibleStatus(status), `${status} should fall back`);
+  }
+  for (const status of [400, 413, 422]) {
+    assert.ok(!errors.isFallbackEligibleStatus(status), `${status} must not fall back`);
+  }
+});
+
+await test("groq key rotation orders keys preferred-first and skips blocked ones", () => {
+  const saved = {
+    k1: process.env.GROQ_API_KEY_1,
+    k2: process.env.GROQ_API_KEY_2,
+    k3: process.env.GROQ_API_KEY_3,
+    base: process.env.GROQ_API_KEY,
+  };
+  try {
+    process.env.GROQ_API_KEY_1 = "key-one";
+    process.env.GROQ_API_KEY_2 = "key-two";
+    process.env.GROQ_API_KEY_3 = "";
+    delete process.env.GROQ_API_KEY;
+
+    // first success pins the preference on key-two
+    groqModule.reportGroqKeyOutcome("key-two", { ok: true });
+    assert.deepEqual(groqModule.orderedGroqKeys(), ["key-two", "key-one"]);
+
+    // a 429 blocks key-two temporarily — rotation moves on without code changes
+    groqModule.reportGroqKeyOutcome("key-two", { ok: false, status: 429 });
+    assert.deepEqual(groqModule.orderedGroqKeys(), ["key-one"]);
+
+    // environment change resets cleanly
+    process.env.GROQ_API_KEY_1 = "fresh-key";
+    process.env.GROQ_API_KEY_2 = "";
+    assert.deepEqual(groqModule.orderedGroqKeys(), ["fresh-key"]);
+
+    // a rejected single key is still retried; success clears its block
+    groqModule.reportGroqKeyOutcome("fresh-key", { ok: false, status: 403 });
+    assert.deepEqual(groqModule.orderedGroqKeys(), ["fresh-key"]);
+    groqModule.reportGroqKeyOutcome("fresh-key", { ok: true });
+    assert.deepEqual(groqModule.orderedGroqKeys(), ["fresh-key"]);
+  } finally {
+    if (saved.k1 === undefined) delete process.env.GROQ_API_KEY_1; else process.env.GROQ_API_KEY_1 = saved.k1;
+    if (saved.k2 === undefined) delete process.env.GROQ_API_KEY_2; else process.env.GROQ_API_KEY_2 = saved.k2;
+    if (saved.k3 === undefined) delete process.env.GROQ_API_KEY_3; else process.env.GROQ_API_KEY_3 = saved.k3;
+    if (saved.base === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = saved.base;
+  }
+});
+
+/* ==================================================================== */
+console.log("\n[10] Free-first model router (Task 3A)");
+/* ==================================================================== */
+
+const models3a = await import("../lib/ai/models.ts");
+
+// بيئة الاختبار: التلاتة مزوّدين مهيأين بمفاتيح وهمية، والموديلات المدفوعة ممنوعة.
+const __origNvidia = process.env.NVIDIA_API_KEY;
+const __origPaid = process.env.AI_ALLOW_PAID_MODELS;
+process.env.NVIDIA_API_KEY = "test-key-not-real";
+delete process.env.AI_ALLOW_PAID_MODELS;
+
+await test("free-only gate: paid models are skipped unless explicitly allowed", () => {
+  const fake = { enabled: true, freeEndpoint: false };
+  assert.equal(models3a.isModelSelectable(fake, false), false, "paid model must be skipped by default");
+  assert.equal(models3a.isModelSelectable(fake, true), true, "explicit opt-in enables paid models");
+  assert.equal(
+    models3a.isModelSelectable({ enabled: true, freeEndpoint: true }, false),
+    true,
+    "free models always selectable"
+  );
+  assert.equal(
+    models3a.isModelSelectable({ enabled: false, freeEndpoint: true }, true),
+    false,
+    "disabled models never selectable"
+  );
+});
+
+await test("registry integrity: NVIDIA entries freeEndpoint-only, verified ones enabled, unverified disabled", () => {
+  for (const model of models3a.modelsForProvider("nvidia")) {
+    assert.equal(model.freeEndpoint, true, `${model.id} must be a free endpoint`);
+    const isVerified =
+      model.id === "nvidia/nemotron-3.5-lightning-30b-a3b" ||
+      model.id === "nvidia/nemotron-3-super-120b-a12b" ||
+      model.id === "nvidia/nemotron-3-ultra-550b-a55b" ||
+      model.id === "nvidia/nemotron-3-embed-1b";
+    assert.equal(model.enabled, isVerified, `${model.id} enabled-state must match live verification (404 = disabled)`);
+    if (model.capabilities.includes("embeddings")) {
+      assert.ok(!model.capabilities.includes("text"), "embedding model must not claim text capability");
+      assert.equal(model.fallbackPriority, -1, "embedding model is not a fallback for chat tasks");
+    }
+  }
+});
+
+await test("capability isolation: vision/embedding requests can never hit text-only models", () => {
+  const visionModels = models3a.selectableModelsForCapabilities(["vision"]).map((m) => m.id);
+  // Gemini + موديلات OpenRouter ذات الرؤية المؤكدة — ومفيش موديل نص-فقط.
+  assert.ok(visionModels.includes("gemini-3.6-flash"), "gemini vision stays available");
+  assert.ok(!visionModels.includes("openai/gpt-oss-120b"), "text-only groq must never serve vision");
+  for (const id of visionModels) {
+    const model = models3a.getModel(id);
+    if (!model.capabilities.includes("vision")) throw new Error(`${id} served vision without capability`);
+  }
+  const embedModels = models3a.selectableModelsForCapabilities(["embeddings"]).map((m) => m.id);
+  // موديل الـ embeddings اتأكد حيًا وهو الوحيد المؤهل — ولا موديل شات يوصل هنا أبدًا.
+  assert.deepEqual(embedModels, ["nvidia/nemotron-3-embed-1b"], "only the verified embedding model may serve RAG");
+});
+
+await test("TASK_MODEL_PREFERENCE respects the registry and dynamic availability", async () => {
+  const routing = await import("../lib/ai/routing.ts");
+  for (const [task, modelIds] of Object.entries(routing.TASK_MODEL_PREFERENCE)) {
+    for (const id of modelIds) {
+      assert.ok(models3a.findModel(id), `${task} preference ${id} not registered`);
+    }
+  }
+  // chat: Groq أولاً؛ Nemotron المتحقق منه احتياطي حقيقي؛ DeepSeek (404) مستبعد.
+  const chatCandidates = routing.routeCandidates("chat").map((c) => `${c.provider}:${c.model ?? "*"}`);
+  assert.equal(chatCandidates[0], "groq:openai/gpt-oss-120b", "chat primary must be Groq 120B");
+  assert.ok(
+    chatCandidates.some((c) => c === "nvidia:nvidia/nemotron-3.5-lightning-30b-a3b"),
+    "verified nemotron backup must appear"
+  );
+  assert.ok(!chatCandidates.some((c) => c.includes("deepseek")), "unverified deepseek never appears");
+  // planning: يبدأ بـ Nemotron Super المتحقق منه حسب مصفوفة 3A.
+  const planFirst = routing.routeCandidates("planning")[0];
+  assert.equal(planFirst?.model, "nvidia/nemotron-3-super-120b-a12b", "planning leads with verified Super");
+  // quiz: Groq أولاً حسب المواصفة.
+  const quizFirst = routing.routeCandidates("quiz")[0];
+  assert.equal(quizFirst?.provider, "groq", "quiz primary must be groq");
+});
+
+await test("fallback: 429 rate limit → next model with cooldown recorded", async () => {
+  const health = await import("../lib/ai/health.ts");
+  // الحالة الصحية مشتركة في الذاكرة بين أقسام الاختبار — بنبدأ من نظيف.
+  health.recordProviderResult("groq", { ok: true });
+  health.recordProviderResult("nvidia", { ok: true });
+  health.recordProviderResult("gemini", { ok: true });
+  let callsMade = 0;
+  const groq = {
+    name: "groq",
+    async completeChat() {
+      callsMade++;
+      throw new types.AiProviderError("rate limited", 429, "groq");
+    },
+  };
+  const gemini = {
+    name: "gemini",
+    async completeChat() {
+      return { provider: "gemini", model: "gemini-3.6-flash", content: "نجينا", payload: {} };
+    },
+  };
+  const router = new AiRouter([groq, gemini]);
+  const response = await router.completeChat("chat", { messages: [{ role: "user", content: "hi" }] });
+  assert.equal(response.provider, "gemini", "must fall back after 429");
+  assert.equal(health.getProviderHealth("groq"), "RATE_LIMITED", "429 records RATE_LIMITED cooldown");
+  assert.ok(response.fallback, "fallback metadata present");
+  void callsMade;
+});
+
+await test("fallback: auth failure (401) marks AUTH_ERROR and moves to next provider once", async () => {
+  const health = await import("../lib/ai/health.ts");
+  health.recordProviderResult("groq", { ok: true });
+  health.recordProviderResult("nvidia", { ok: true });
+  health.recordProviderResult("gemini", { ok: true });
+  let nvidiaCalls = 0;
+  const groq = {
+    name: "groq",
+    async completeChat() {
+      throw new types.AiProviderError("bad key", 401, "groq");
+    },
+  };
+  const nvidia = {
+    name: "nvidia",
+    async completeChat() {
+      nvidiaCalls++;
+      return { provider: "nvidia", model: "m", content: "ok", payload: {} };
+    },
+  };
+  const gemini = {
+    name: "gemini",
+    async completeChat() {
+      return { provider: "gemini", model: "gemini-3.6-flash", content: "ok", payload: {} };
+    },
+  };
+  const router = new AiRouter([groq, nvidia, gemini]);
+  // موديلات NVIDIA مفعّلة الآن بعد التحقق، فالـ 401 على Groq بيروح لـ NVIDIA
+  // (ترتيب المصفوفة) مرّة واحدة بالظبط — وGemini مايلمسهاش.
+  const response = await router.completeChat("chat", { messages: [{ role: "user", content: "hi" }] });
+  assert.equal(nvidiaCalls, 1, "moved to the next preferred provider exactly once");
+  assert.equal(response.provider, "nvidia");
+  assert.equal(health.getProviderHealth("groq"), "AUTH_ERROR", "401 records AUTH_ERROR");
+  assert.equal(health.isUsable("groq"), false);
+});
+
+await test("fallback: empty response (HTTP 200, no content) triggers fallback", async () => {
+  const health = await import("../lib/ai/health.ts");
+  // نفس السبب: الحالة الصحية مشتركة — الاختبار اللي فات ساب AUTH_ERROR على Groq.
+  health.recordProviderResult("groq", { ok: true });
+  health.recordProviderResult("gemini", { ok: true });
+  let attempts = 0;
+  const flaky = {
+    name: "groq",
+    async completeChat() {
+      attempts++;
+      if (attempts === 1) {
+        throw new types.AiProviderError("empty", 200, "groq", "EMPTY_RESPONSE");
+      }
+      return { provider: "groq", model: "openai/gpt-oss-20b", content: "في محتوى", payload: {} };
+    },
+  };
+  const gemini = { name: "gemini", async completeChat() { throw new Error("should stay on groq"); } };
+  const router = new AiRouter([flaky, gemini]);
+  const response = await router.completeChat("chat", { messages: [{ role: "user", content: "hi" }] });
+  assert.equal(attempts, 2, "retried within same provider chain");
+  assert.equal(response.content, "في محتوى");
+});
+
+await test("normalized error: EMPTY_RESPONSE maps to retryable CONTENT_ERROR without leaking provider details", () => {
+  const pub = errors.toAiPublicError(new types.AiProviderError("NVIDIA empty body xyz", 200, "nvidia", "EMPTY_RESPONSE"));
+  assert.equal(pub.code, "CONTENT_ERROR");
+  assert.equal(pub.retryable, true);
+  assert.equal(pub.message.toLowerCase().includes("nvidia"), false);
+});
+
+await test("provider stats track success/failure/latency without sensitive data", async () => {
+  const health = await import("../lib/ai/health.ts");
+  health.recordProviderResult("nvidia", { ok: true, latencyMs: 100 });
+  health.recordProviderResult("nvidia", { ok: true, latencyMs: 300 });
+  health.recordProviderResult("nvidia", { ok: false, status: 502, reason: "test" });
+  const stats = health.getProviderStats("nvidia");
+  assert.equal(stats.successCount >= 2, true);
+  assert.ok(stats.averageLatencyMs > 0 && stats.averageLatencyMs <= 400);
+  assert.match(String(stats.lastError), /^502:/);
+  assert.equal(JSON.stringify(stats).includes("test-key"), false, "stats must never contain secrets");
+});
+
+// استرجاع البيئة بالظبط زي ما كانت.
+if (__origNvidia === undefined) delete process.env.NVIDIA_API_KEY;
+else process.env.NVIDIA_API_KEY = __origNvidia;
+if (__origPaid === undefined) delete process.env.AI_ALLOW_PAID_MODELS;
+else process.env.AI_ALLOW_PAID_MODELS = __origPaid;
+
+/* ==================================================================== */
+console.log("\n[11] OpenRouter + Media Router (Task 3B)");
+/* ==================================================================== */
+
+const openrouterModule = await import("../lib/ai/openrouter.ts");
+const mediaRouter = await import("../lib/ai/media-router.ts");
+const health3b = await import("../lib/ai/health.ts");
+
+const __origOpenrouter = process.env.OPENROUTER_API_KEY;
+
+await test("openrouter: missing key = NOT_CONFIGURED without breaking anything", async () => {
+  delete process.env.OPENROUTER_API_KEY;
+  assert.equal(health3b.providerConfigStatus("openrouter"), "NOT_CONFIGURED");
+  const provider = new openrouterModule.OpenRouterProvider();
+  await assert.rejects(
+    provider.completeChat({ messages: [{ role: "user", content: "hi" }] }),
+    (error) => error instanceof types.AiProviderError && error.status === 503
+  );
+});
+
+await test("openrouter: auth failure / 429 / 5xx normalize through AiProviderError", async () => {
+  process.env.OPENROUTER_API_KEY = "test-key-not-real";
+  const originalFetch = globalThis.fetch;
+  const cases = [
+    [401, 401],
+    [429, 429],
+    [500, 500],
+    [503, 503],
+  ];
+  try {
+    for (const [httpStatus, expectedStatus] of cases) {
+      globalThis.fetch = async () => new Response("{}", { status: httpStatus });
+      const provider = new openrouterModule.OpenRouterProvider();
+      await assert.rejects(
+        provider.completeChat({ messages: [{ role: "user", content: "hi" }] }),
+        (error) => error instanceof types.AiProviderError && error.status === expectedStatus
+      );
+    }
+    // استجابة 200 من غير محتوى = EMPTY_RESPONSE (فشل كامل).
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: "" } }] }), { status: 200 });
+    const provider = new openrouterModule.OpenRouterProvider();
+    await assert.rejects(
+      provider.completeChat({ messages: [{ role: "user", content: "hi" }] }),
+      (error) =>
+        error instanceof types.AiProviderError &&
+        error.status === 200 &&
+        error.reasonCode === "EMPTY_RESPONSE"
+    );
+    // نجاح حقيقي بمحتوى يرجع موحّد.
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({ model: "x:free", choices: [{ message: { content: "أهلاً" } }], usage: { prompt_tokens: 5, completion_tokens: 2 } }),
+        { status: 200 }
+      );
+    const ok = await new openrouterModule.OpenRouterProvider().completeChat({
+      messages: [{ role: "user", content: "hi" }],
+    });
+    assert.equal(ok.content, "أهلاً");
+    assert.equal(ok.usage?.promptTokens, 5);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+await test("media capability isolation: text/vision models can never serve image or video generation", () => {
+  // مفيش ولا موديل OpenRouter مجاني لتوليد الصور/الفيديو في الكتالوج الحالي.
+  const orImageCandidates = mediaRouter
+    .mediaCandidates("image_generation")
+    .filter((c) => c.provider === "openrouter");
+  assert.deepEqual(orImageCandidates, [], "OpenRouter has no free image model — must stay empty");
+  assert.deepEqual(mediaRouter.mediaCandidates("video_generation"), [], "no video model exists — must stay empty");
+  // الرؤية وحدها مش توليد صور: dots/inkling عندها vision لكن بدون image_generation.
+  for (const model of MODEL_REGISTRY.filter((m) => m.capabilities.includes("vision") && !m.capabilities.includes("image_generation"))) {
+    assert.equal(
+      mediaRouter.mediaCandidates("image_generation").some((c) => c.modelId === model.id),
+      false,
+      `${model.id} is vision-only and must not generate images`
+    );
+  }
+});
+
+await test("media router: video (no verified model anywhere) → MEDIA_MODEL_UNAVAILABLE", async () => {
+  await assert.rejects(
+    mediaRouter.generateVideoWithFallback({ prompt: "فيديو للدرس" }),
+    (error) => error.name === "MediaModelUnavailableError"
+  );
+  // والخطأ العام بيترجم لـ MEDIA_MODEL_UNAVAILABLE برسالة عربية آمنة.
+  const pub = errors.toAiPublicError(new mediaRouter.MediaModelUnavailableError("video_generation"));
+  assert.equal(pub.code, "MEDIA_MODEL_UNAVAILABLE");
+  assert.equal(pub.message, "خدمة إنشاء الوسائط غير متاحة حاليًا.");
+  assert.equal(pub.retryable, false);
+});
+
+await test("media router fallback chain: openrouter image fails → next candidate → unavailable summary", async () => {
+  // محاكاة كاملة لمسار §15: موديل OpenRouter صور مسجّل + فشل 429 →
+  // تسجيل RATE_LIMITED → نهاية المرشحين → MEDIA_MODEL_UNAVAILABLE مش خطأ خام.
+  const registry = models3a.MODEL_REGISTRY;
+  registry.push({
+    id: "test/or-image-fake:free",
+    provider: "openrouter",
+    displayName: "Fake OR Image",
+    capabilities: ["image_generation"],
+    priority: 9,
+    tier: "free",
+    fallbackPriority: 1,
+    freeEndpoint: true,
+    enabled: true,
+  });
+  let generateCalls = 0;
+  const fakeExecutor = {
+    name: "openrouter",
+    async generateMedia() {
+      generateCalls++;
+      throw new types.AiProviderError("rate limited", 429, "openrouter");
+    },
+  };
+  mediaRouter.registerMediaExecutors({ openrouter: fakeExecutor });
+  try {
+    await assert.rejects(
+      mediaRouter.generateImageWithFallback("image_generation", { prompt: "x" }),
+      (error) => error.name === "MediaModelUnavailableError"
+    );
+    assert.equal(generateCalls, 1, "executor actually attempted");
+    assert.equal(health3b.getProviderHealth("openrouter"), "RATE_LIMITED", "429 records cooldown");
+  } finally {
+    registry.pop();
+    mediaRouter.registerMediaExecutors({ openrouter: undefined });
+  }
+});
+
+await test("openrouter free vision/text entries respect the registry gate", () => {
+  // nemotron-lightning وdots: تسعير مجاني مؤكد + 429 مؤقت فقط (بيتعافى ديناميكيًا).
+  for (const id of [
+    "nvidia/nemotron-3.5-lightning:free",
+    "dots-studio/dots-3-note-preview:free",
+  ]) {
+    const model = models3a.findModel(id);
+    assert.ok(model, `${id} registered`);
+    assert.equal(model.freeEndpoint, true);
+    assert.equal(model.enabled, true);
+    assert.ok(model.capabilities.includes("text"));
+  }
+  // inkling-small: البروب الحي رجّع 403 على الحساب — لازم يكون disabled.
+  assert.equal(models3a.findModel("thinkingmachines/inkling-small:free")?.enabled, false);
+  // موديلات OpenRouter المدفوعة (زي gpt-image) مش مسجّلة أصلًا — الحماية من المصدر.
+  assert.equal(models3a.findModel("openai/gpt-5-image"), undefined);
+});
+
+// استرجاع البيئة بالظبط زي ما كانت (الجزء بتاع [11]).
+if (__origOpenrouter === undefined) delete process.env.OPENROUTER_API_KEY;
+else process.env.OPENROUTER_API_KEY = __origOpenrouter;
 
 // Restore the original environment exactly as we found it.
 if (__origEnv.groq === undefined) delete process.env.GROQ_API_KEY;
