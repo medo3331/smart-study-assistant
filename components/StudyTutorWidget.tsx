@@ -36,7 +36,7 @@ export function StudyTutorWidget(props: StudyTutorWidgetProps) {
       };
       // Execute through AgentRouter / AiRouter via /api/ai/route (tutor task with NVIDIA primary)
       const runAgent = async (opts: any): Promise<any> => {
-        const res = await fetch("/api/ai/route", {
+        const res = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

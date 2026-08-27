@@ -35,7 +35,7 @@ export function AgentLauncher({ agentId, title, description, userRole = "student
     try {
       // Route through AgentRouter / AiRouter using existing architecture
       // In production: invoke agent via AgentRouter (e.g., through /api/ai/route or direct agent use)
-      const runAgent = (opts: any): Promise<AgentResult> => fetch("/api/ai/route", {
+      const runAgent = (opts: any): Promise<AgentResult> => fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
