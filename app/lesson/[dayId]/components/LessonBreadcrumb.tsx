@@ -26,13 +26,13 @@ export function LessonBreadcrumb({ subject, title }: LessonBreadcrumbProps) {
     >
       <Link
         href="/"
-        className="inline-flex items-center gap-1.5 transition-colors hover:text-[#B69CFF]"
+        className="inline-flex items-center gap-1.5 transition-colors hover:text-[#F5A25C]"
       >
         <Home size={13} aria-hidden />
         الرئيسية
       </Link>
       <Sep />
-      <Link href="/dashboard" className="transition-colors hover:text-[#B69CFF]">
+      <Link href="/dashboard" className="transition-colors hover:text-[#F5A25C]">
         لوحة التحكم
       </Link>
       {subject && (
@@ -112,7 +112,7 @@ export function LessonUnitProgress({ days, currentDayNumber }: LessonUnitProgres
                   className={
                     "mx-1 h-[2px] min-w-[8px] flex-1 rounded-full " +
                     (done
-                      ? "bg-gradient-to-l from-[rgba(124,92,255,0.5)] to-[rgba(45,212,191,0.55)]"
+                      ? "bg-gradient-to-l from-[rgba(220,76,76,0.5)] to-[rgba(45,212,191,0.55)]"
                       : "bg-white/[0.07]")
                   }
                 />
@@ -136,7 +136,7 @@ export function LessonUnitProgress({ days, currentDayNumber }: LessonUnitProgres
                     (done
                       ? "bg-[#2DD4BF] text-[#052e29] shadow-[0_0_9px_rgba(45,212,191,0.5)]"
                       : cur
-                        ? "bg-[#7C5CFF] shadow-[0_0_0_4px_rgba(124,92,255,0.18),0_0_14px_rgba(124,92,255,0.65)]"
+                        ? "bg-[#DC4C4C] shadow-[0_0_0_4px_rgba(220,76,76,0.18),0_0_14px_rgba(220,76,76,0.65)]"
                         : "border-[1.6px] border-dashed border-white/[0.16]")
                   }
                 >

@@ -20,7 +20,7 @@ import type { ThemeColor } from "./types";
    ========================================================================== */
 
 function isThemeColor(v: unknown): v is ThemeColor {
-  return v === "amber" || v === "emerald" || v === "purple" || v === "cyan";
+  return v === "amber" || v === "emerald" || v === "coral" || v === "cyan";
 }
 
 /** لون القلم المختار. الداشبورد بتحفظه محلياً، والصفحات دي بتقراه. */

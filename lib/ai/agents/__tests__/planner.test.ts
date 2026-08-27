@@ -6,7 +6,7 @@ describe("Planner Agent", () => {
     const r = await plannerAgent({ prompt: "Plan my exam study" });
     expect(r.agent).toBe("planner");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("student study planning with real context", async () => {
     const r = await plannerAgent({ prompt: "Plan study for exam in 5 days", context: { role: "student", field: "cs", preferences: { subject: "CS", level: "grad", streak: 5, progress: { currentDay: 3, totalDays: 10 } } } }, () =>
@@ -67,6 +67,6 @@ describe("Planner Agent", () => {
       Promise.resolve({ ok: false, agent: "planner", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
 });

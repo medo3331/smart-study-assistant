@@ -75,7 +75,7 @@ interface SidebarProps {
 const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
   { id: "amber", name: "أصفر", swatch: "bg-amber-500" },
   { id: "emerald", name: "أخضر", swatch: "bg-emerald-500" },
-  { id: "purple", name: "بنفسجي", swatch: "bg-purple-500" },
+  { id: "coral", name: "كورال", swatch: "bg-[#DC4C4C]" },
   { id: "cyan", name: "أزرق", swatch: "bg-cyan-500" },
 ];
 

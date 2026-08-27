@@ -6,7 +6,7 @@ describe("Exam Solver Agent", () => {
     const r = await examSolverAgent({ prompt: "Solve: integral of x^2 dx" });
     expect(r.agent).toBe("exam_solver");
     expect(r.ok).toBe(false); // router not injected
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
 
   it("Arabic question handled with auto language detect", async () => {
@@ -28,7 +28,7 @@ describe("Exam Solver Agent", () => {
       Promise.resolve({ ok: true, agent: "exam_solver", provider: "nvidia", model: "test", content: "Step 1: Identify integral. Step 2: Apply rule. Step 3: x² + C.", retryable: false } as any)
     );
     expect(r.ok).toBe(true);
-    expect(typeof r.content).toBe("string");
+    expect(typeof (r as any).content).toBe("string");
     expect((r.content ?? "").toLowerCase()).toContain("step");
   });
 
@@ -44,7 +44,7 @@ describe("Exam Solver Agent", () => {
       Promise.resolve({ ok: false, agent: "exam_solver", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
 
   it("vision/image input shape supported (context.preferences.imageInput)", async () => {

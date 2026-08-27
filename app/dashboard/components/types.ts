@@ -4,7 +4,7 @@
 // إن في نوعين مختلفين بنفس الاسم).
 
 export type CategoryType = "عمل ومشاريع" | "تعلم مهارة" | "دراسة أكاديمية" | "تطوير شخصي";
-export type ThemeColor = "amber" | "emerald" | "purple" | "cyan";
+export type ThemeColor = "amber" | "emerald" | "coral" | "cyan";
 
 // 👤 الشخصية: ليه المستخدم بيتعلم. بتتخزن في profiles.persona.
 // المحور التاني (التراك: أي لغة/فريم-وورك) بيتخزن في profiles.subject.

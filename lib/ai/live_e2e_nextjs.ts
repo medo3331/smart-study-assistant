@@ -3,9 +3,9 @@ export async function runLiveE2E(): Promise<any> {
   const nvidia = !!(process.env.NVIDIA_API_KEY || process.env.HERMES_CUSTOM_NVIDIA_CODING_API_KEY);
   const or = !!process.env.OPENROUTER_API_KEY;
   const groq = !!process.env.GROQ_API_KEY;
-  const exam = { provider: "n/a", model: "n/a", status: "SKIPPED_NO_KEY", normalized: "NO_NVIDIA_KEY", preview: "" };
-  const study = { provider: "n/a", model: "n/a", status: "SKIPPED_NO_KEY", normalized: "NO_NVIDIA_KEY", preview: "" };
-  const fb = { provider: "n/a", model: "n/a", status: "SKIPPED_NO_KEY", normalized: "NO_OPENROUTER_KEY", preview: "" };
+  const exam: { provider: string; model: string; status: string; normalized: string; preview: string; latency_ms?: number } = { provider: "n/a", model: "n/a", status: "SKIPPED_NO_KEY", normalized: "NO_NVIDIA_KEY", preview: "", latency_ms: undefined };
+  const study: { provider: string; model: string; status: string; normalized: string; preview: string; latency_ms?: number } = { provider: "n/a", model: "n/a", status: "SKIPPED_NO_KEY", normalized: "NO_NVIDIA_KEY", preview: "", latency_ms: undefined };
+  const fb: { provider: string; model: string; status: string; normalized: string; preview: string; latency_ms?: number } = { provider: "n/a", model: "n/a", status: "SKIPPED_NO_KEY", normalized: "NO_OPENROUTER_KEY", preview: "", latency_ms: undefined };
   if (nvidia) {
     const key = process.env.NVIDIA_API_KEY || process.env.HERMES_CUSTOM_NVIDIA_CODING_API_KEY || "";
     const start = Date.now();

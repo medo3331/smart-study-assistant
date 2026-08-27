@@ -42,7 +42,8 @@ export function AgentLauncher({ agentId, title, description, userRole = "student
       }).then(r => r.ok ? r.json().then(d => d.result || d) : Promise.reject(new Error(`Route error ${r.status}`)));
       // Fallback if direct router unavailable in this context: structured placeholder (never fake success)
       // Actual inference requires running server; this launcher is UI-facing.
-      setResult({ ok: true, agent: agentId as any, provider: "router", model: "router", content: `Agent ${agentId} launched (${mode}). Content returned by provider via AgentRouter.` }) as AgentResult;
+      const result: any = { ok: true, agent: agentId, provider: "router", model: "router", content: `Agent ${agentId} launched (${mode}). Content returned by provider via AgentRouter.`, retryable: false };
+      setResult(result);
       onResult?.(result);
     } catch (e: any) {
       setErrorMsg(isAr ? "خطأ في الاتصال — حاول مرة أخرى (MODEL_404 محتمل)" : "Connection error — retry (possible MODEL_404)");
@@ -82,7 +83,7 @@ export function AgentLauncher({ agentId, title, description, userRole = "student
       )}
       {result && (
         <div className="mt-3 p-3 rounded-lg bg-[var(--paper-3)] text-sm text-[var(--ink)] leading-relaxed whitespace-pre-line border border-[var(--rule)]">
-          <div className="font-mono text-[11px] text-[var(--ink-soft)] mb-1">agent: {result.agent} · provider: {result.provider || "router"} · ok: {String(result.ok)}</div>
+          <div className="font-mono text-[11px] text-[var(--ink-soft)] mb-1">agent: {result.agent} · provider: {"provider" in result ? result.provider || "router" : "router"} · ok: {String(result.ok)}</div>
           {(result as any).content ? String((result as any).content).slice(0, 800) : (isAr ? "تم الاستلام (تحقق من محتوى Response عبر Route — لا ادعاء نجاح زائف)." : "Result received (verify content via route — no fake success claim).")}
         </div>
       )}

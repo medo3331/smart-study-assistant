@@ -6,7 +6,7 @@ describe("Writing Assistant Agent", () => {
     const r = await writingAgent({ prompt: "Write an essay outline" });
     expect(r.agent).toBe("writing");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("arabic request", async () => {
     const r = await writingAgent({ prompt: "اكتب مسودة عن الذكاء الاصطناعي", context: { language: "ar", preferences: { subject: "AI" } } }, () =>
@@ -37,7 +37,7 @@ describe("Writing Assistant Agent", () => {
       Promise.resolve({ ok: false, agent: "writing", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
   it("vision input shape", async () => {
     const r = await writingAgent({ prompt: "Write from image", context: { preferences: { imageInput: "img" } } }, () =>

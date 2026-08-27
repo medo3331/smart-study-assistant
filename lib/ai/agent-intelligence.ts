@@ -5,7 +5,7 @@
  * Does NOT replace AgentRouter; feeds context into existing agents.
  * No invented data; asks for missing context explicitly.
  */
-import type { AgentResult, AgentId } from "./types";
+import type { AgentResult, AgentId } from "./agents/types";
 
 export interface IntelligenceContext {
   userName?: string;

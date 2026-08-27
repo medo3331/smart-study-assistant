@@ -37,8 +37,12 @@ export async function careerCoachAgent(
 
     if (runAgent) {
       const result = await runAgent({ agent: AGENT_ID, prompt, context: ctx, options: { ...input.options, agent: AGENT_ID, vision } });
-      if (!result.ok && result.code === "MODEL_404") {
-        return { ok: false, agent: AGENT_ID, code: "MODEL_404", message: "Career Coach: NVIDIA unavailable. Router should fallback.", retryable: true };
+      if (!result.ok) {
+        const fail = result as Extract<typeof result, { ok: false }>;
+        if (fail.code === "MODEL_404") {
+          return { ok: false, agent: AGENT_ID, code: fail.code, message: "Career Coach: NVIDIA unavailable. Router should fallback.", retryable: true };
+        }
+        return result;
       }
       return result;
     }
