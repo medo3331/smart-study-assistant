@@ -57,7 +57,7 @@ export function CurrentStepCard({
       initial={reduceMotion ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 0.8, 0.36, 1], delay: 0.08 }}
-      className="relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0D1029]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-5 sm:p-6"
+      className="relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0D0906]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-5 sm:p-6"
     >
       {/* خيط بنفسجي رفيع فوق الكارت — إشارة الأهمية */}
       <div
@@ -65,12 +65,12 @@ export function CurrentStepCard({
         className="absolute inset-x-0 top-0 h-px"
         style={{
           background:
-            "linear-gradient(to left, transparent, rgba(124,92,255,0.6), transparent)",
+            "linear-gradient(to left, transparent, rgba(220,76,76,0.6), transparent)",
         }}
       />
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <span className="rounded-full bg-[#7C5CFF]/15 px-3 py-1 text-xs font-semibold text-[#B69CFF]">
+        <span className="rounded-full bg-[#DC4C4C]/15 px-3 py-1 text-xs font-semibold text-[#F5A25C]">
           {stateBadge}
         </span>
         <span className="text-xs text-[#9AA0C0]">الخطوة الحالية</span>
@@ -119,7 +119,7 @@ export function CurrentStepCard({
             <button
               type="button"
               onClick={onContinue}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#7C5CFF] px-4 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,92,255,0.35)] transition-colors hover:bg-[#8E72FF] active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7C5CFF]"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#DC4C4C] px-4 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(220,76,76,0.35)] transition-colors hover:bg-[#F2745C] active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#DC4C4C]"
             >
               <Play size={18} aria-hidden />
               {ctaLabel}
