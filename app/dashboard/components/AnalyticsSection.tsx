@@ -36,7 +36,7 @@ interface AnalyticsSectionProps {
 const BAR_TOKEN: Record<ThemeColor, string> = {
   amber: "--hl-yellow-fill",
   emerald: "--hl-green-fill",
-  purple: "--hl-purple-fill",
+  coral: "--hl-purple-fill",
   cyan: "--hl-blue-fill",
 };
 
