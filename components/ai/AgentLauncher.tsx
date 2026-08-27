@@ -64,14 +64,14 @@ export function AgentLauncher({ agentId, title, description, userRole = "student
         value={prompt}
         onChange={e => setPrompt(e.target.value)}
         placeholder={isAr ? "اكتب طلبك..." : "Enter your request..."}
-        className="w-full rounded-md bg-white border border-[var(--rule)] px-3 py-2 text-sm text-[var(--ink)] resize-y min-h-[64px] focus:outline-none focus:border-[var(--rule-strong)]"
+        className="w-full rounded-md bg-[#0D0906]/70 border border-white/[0.08] px-3 py-2 text-sm text-[#F3F0EC] resize-y min-h-[64px] focus:outline-none focus:border-[#DC4C4C]/50 placeholder:text-[#9AA0C0]"
         rows={2}
       />
       <div className="flex gap-2 mt-3">
-        <button onClick={handleRun} disabled={loading || !prompt.trim()} className="rounded-md px-4 py-2 text-sm font-bold text-[#231402] bg-gradient-to-b from-[var(--hl-yellow-fill)] to-[var(--hl-yellow-deep)] border border-[var(--hl-yellow-deep)] shadow-sm hover:-translate-y-px transition" aria-label={isAr ? "تشغيل" : "Run"}>
+        <button onClick={handleRun} disabled={loading || !prompt.trim()} className="rounded-md px-4 py-2 text-sm font-bold text-white bg-gradient-to-b from-[#DC4C4C] to-[#F2745C] border border-[#F2745C] shadow-sm hover:-translate-y-px transition" aria-label={isAr ? "تشغيل" : "Run"}>
           {loading ? (isAr ? "جارٍ..." : "...") : (isAr ? "تشغيل" : "Run")}
         </button>
-        <button onClick={() => { setPrompt(initialPrompt); setResult(null); setErrorMsg(""); }} className="rounded-md px-3 py-2 text-sm border border-[var(--rule)] bg-[var(--paper-3)] text-[var(--ink-soft)]" aria-label={isAr ? "إعادة ضبط" : "Reset"}>
+        <button onClick={() => { setPrompt(initialPrompt); setResult(null); setErrorMsg(""); }} className="rounded-md px-3 py-2 text-sm border border-white/[0.16] bg-transparent text-[#F3F0EC] hover:bg-white/[0.06] transition" aria-label={isAr ? "إعادة ضبط" : "Reset"}>
           {isAr ? "إعادة" : "Reset"}
         </button>
       </div>
