@@ -26,12 +26,14 @@ export const THEME_STYLES: Record<ThemeColor, ThemeStyles> = {
     lightBg: "bg-emerald-500/12",
   },
   purple: {
-    accentBg: "bg-purple-500",
-    accentText: "text-purple-400",
-    border: "border-purple-500/70",
-    ring: "ring-purple-500/50",
-    gradient: "from-purple-500 to-purple-400",
-    lightBg: "bg-purple-500/12",
+    // ⚠️ تم تغيير اللون من البنفسج (#7C5CFF) للكورال المطابق للاندينج (#DC4C4C)
+    // كجزء من توحيد الهوية البصرية مع صفحة الهبوط (color-migration 2026-08-27)
+    accentBg: "bg-[#DC4C4C]",
+    accentText: "text-[#F2745C]",
+    border: "border-[#DC4C4C]/70",
+    ring: "ring-[#DC4C4C]/50",
+    gradient: "from-[#F2745C] to-[#F5A25C]",
+    lightBg: "bg-[#DC4C4C]/12",
   },
   cyan: {
     accentBg: "bg-cyan-500",
