@@ -59,7 +59,7 @@ export function WorshipChrome({
         // الأب /worship نشط في كل صفحات العبادة الفرعية.
         active:
           item.href === pathname ||
-          (item.href === "/worship" && pathname.startsWith("/worship")),
+          (item.href === "/worship" && ((pathname ?? "").startsWith("/worship") ?? false))
       })),
     [pathname],
   );

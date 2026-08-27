@@ -22,21 +22,21 @@ import { useReducedMotion } from "@/lib/useReducedMotion";
  * وبيتنفّس، ودي بالظبط الحركة اللي بتوجع اللي عندهم حساسية للحركة.
  */
 
-type ThemeColor = "amber" | "emerald" | "purple" | "cyan";
+type ThemeColor = "amber" | "emerald" | "coral" | "cyan";
 
 // لون قلم الثيم — الشريط والنص بس. الكارت نفسه ورق زي باقي الكروت
 // (`sheet-card`)، عشان يقعد جنب `AchievementsStrip` من غير ما يبان غريب.
 const THEME_BAR: Record<ThemeColor, string> = {
   amber: "bg-amber-500",
   emerald: "bg-emerald-500",
-  purple: "bg-purple-500",
+  coral: "bg-[#DC4C4C]",
   cyan: "bg-cyan-500",
 };
 
 const THEME_TEXT: Record<ThemeColor, string> = {
   amber: "text-amber-400",
   emerald: "text-emerald-400",
-  purple: "text-purple-400",
+  coral: "text-[#F2745C]",
   cyan: "text-cyan-400",
 };
 

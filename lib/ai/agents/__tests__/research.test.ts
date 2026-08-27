@@ -6,7 +6,7 @@ describe("Research Assistant Agent", () => {
     const r = await researchAgent({ prompt: "Best sources for quantum physics" });
     expect(r.agent).toBe("research");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("arabic query", async () => {
     const r = await researchAgent({ prompt: "ابحث عن أفضل مصادر لفهم الفيزياء الكمومية", context: { language: "ar" } }, () =>
@@ -45,7 +45,7 @@ describe("Research Assistant Agent", () => {
       Promise.resolve({ ok: false, agent: "research", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
   it("missing input asks", async () => {
     const r = await researchAgent({ prompt: "" }, () =>

@@ -107,7 +107,7 @@ export function NavRail({
   const selfAccount = useSelfAccount(account === undefined);
   const acct = account ?? selfAccount;
 
-  const routeId = activeNavId(pathname);
+  const routeId = activeNavId(pathname ?? "");
   const onDashboard = pathname === "/dashboard";
   const activeId = onDashboard ? clickedId ?? routeId : routeId;
 

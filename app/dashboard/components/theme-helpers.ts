@@ -25,13 +25,15 @@ export const THEME_STYLES: Record<ThemeColor, ThemeStyles> = {
     gradient: "from-emerald-500 to-emerald-600",
     lightBg: "bg-emerald-500/12",
   },
-  purple: {
-    accentBg: "bg-purple-500",
-    accentText: "text-purple-400",
-    border: "border-purple-500/70",
-    ring: "ring-purple-500/50",
-    gradient: "from-purple-500 to-purple-400",
-    lightBg: "bg-purple-500/12",
+  coral: {
+    // ⚠️ تم تغيير اللون من البنفسج (#7C5CFF) للكورال المطابق للاندينج (#DC4C4C)
+    // كجزء من توحيد الهوية البصرية مع صفحة الهبوط (color-migration 2026-08-27)
+    accentBg: "bg-[#DC4C4C]",
+    accentText: "text-[#F2745C]",
+    border: "border-[#DC4C4C]/70",
+    ring: "ring-[#DC4C4C]/50",
+    gradient: "from-[#F2745C] to-[#F5A25C]",
+    lightBg: "bg-[#DC4C4C]/12",
   },
   cyan: {
     accentBg: "bg-cyan-500",
@@ -68,12 +70,12 @@ export const HEATMAP_COLORS: Record<ThemeColor, string[]> = {
     "bg-emerald-500/70 border-emerald-500/80",
     "bg-emerald-500 border-emerald-600",
   ],
-  purple: [
+  coral: [
     "bg-paper border-rule",
-    "bg-purple-500/20 border-purple-500/30",
-    "bg-purple-500/45 border-purple-500/55",
-    "bg-purple-500/70 border-purple-500/80",
-    "bg-purple-500 border-purple-400",
+    "bg-[#DC4C4C]/20 border-[#DC4C4C]/30",
+    "bg-[#DC4C4C]/45 border-[#DC4C4C]/55",
+    "bg-[#DC4C4C]/70 border-[#DC4C4C]/80",
+    "bg-[#DC4C4C] border-[#F2745C]",
   ],
   cyan: [
     "bg-paper border-rule",

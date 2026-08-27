@@ -614,7 +614,7 @@ export default function LessonDetailPage() {
         <div className="flex min-h-screen items-center justify-center p-4" dir="rtl">
           <GlassCard className="w-full max-w-sm space-y-4 p-6">
             <div>
-              <p className="mb-1.5 text-xs font-bold tracking-wide text-[#B69CFF]">مش موجود</p>
+              <p className="mb-1.5 text-xs font-bold tracking-wide text-[#F5A25C]">مش موجود</p>
               <h1 className="text-lg font-bold text-white">الدرس ده مش متاح</h1>
             </div>
             <p className="text-xs leading-relaxed text-[#9AA0C0]">
@@ -622,7 +622,7 @@ export default function LessonDetailPage() {
             </p>
             <button
               onClick={() => router.push("/dashboard")}
-              className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[#7C5CFF] text-sm font-semibold text-white transition-colors hover:bg-[#8E72FF]"
+              className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[#DC4C4C] text-sm font-semibold text-white transition-colors hover:bg-[#F2745C]"
             >
               الرجوع للداشبورد
             </button>

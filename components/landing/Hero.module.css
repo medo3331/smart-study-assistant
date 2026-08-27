@@ -175,6 +175,31 @@
   transform: translateY(0);
 }
 
+/* شاشات متوسطة: تكديس الـ nav مع الحفاظ على الروابط وجعل الـ steps يلف */
+@media (max-width: 1024px) {
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 18px;
+  }
+  .navLinks {
+    flex-wrap: wrap;
+    justify-content: center;
+    order: 3;
+    width: 100%;
+  }
+  .logoRow {
+    order: 1;
+  }
+  .navActions {
+    order: 2;
+  }
+  .steps {
+    padding: 14px 4vw;
+  }
+}
+
 @media (max-width: 880px) {
   .hero {
     grid-template-columns: 1fr;
@@ -202,6 +227,7 @@
   padding: 20px 6vw;
   font-size: 13px;
   color: var(--muted-2);
+  flex-wrap: wrap;
 }
 
 .step {

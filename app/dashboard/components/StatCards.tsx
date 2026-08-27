@@ -80,14 +80,14 @@ function StatCard({ stat }: { stat: Stat }) {
       ? "bg-[#FB923C]/15 text-[#FB923C]"
       : stat.tone === "teal"
         ? "bg-[#2DD4BF]/15 text-[#2DD4BF]"
-        : "bg-[#7C5CFF]/15 text-[#B69CFF]";
+        : "bg-[#DC4C4C]/15 text-[#F5A25C]";
 
   return (
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 0.8, 0.36, 1], delay: 0.05 }}
-      className="rounded-[24px] border border-white/[0.06] bg-[#0D1029]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(124,92,255,0.12)]"
+      className="rounded-[24px] border border-white/[0.06] bg-[#0D0906]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(220,76,76,0.12)]"
     >
       <div className="flex items-center gap-3">
         <span

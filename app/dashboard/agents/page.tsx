@@ -27,7 +27,7 @@ function inputText(value: unknown) {
 export default function AgentsPage() {
   const { session } = useAuthUser();
   const searchParams = useSearchParams();
-  const agentFromUrl = searchParams.get("agent");
+  const agentFromUrl = searchParams?.get("agent") || null;
   const [agent, setAgent] = useState<AiAgentId>("marketing");
   const [mode, setMode] = useState("copy");
   const [goal, setGoal] = useState("");

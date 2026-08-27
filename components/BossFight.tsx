@@ -74,7 +74,7 @@ import { awardCoins } from "@/lib/shop/shop-data";
  * -------------------------------------------------------------
  */
 
-type ThemeColor = "amber" | "emerald" | "purple" | "cyan";
+type ThemeColor = "amber" | "emerald" | "coral" | "cyan";
 
 interface BossFightProps {
   subject: string;
@@ -99,7 +99,7 @@ const WIN_XP_BASE = 150;
 const themeAccentBg: Record<ThemeColor, string> = {
   amber: "bg-amber-500",
   emerald: "bg-emerald-500",
-  purple: "bg-purple-500",
+  coral: "bg-[#DC4C4C]",
   cyan: "bg-cyan-500",
 };
 

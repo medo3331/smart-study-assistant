@@ -6,7 +6,7 @@ describe("Career Coach Agent", () => {
     const r = await careerCoachAgent({ prompt: "Plan my career" });
     expect(r.agent).toBe("career");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("student career guidance", async () => {
     const r = await careerCoachAgent({ prompt: "How should I prepare for a tech career?", context: { role: "student", preferences: { field: "cs", level: "grad", goals: { pendingCount: 2 } } } }, () =>
@@ -67,13 +67,13 @@ describe("Career Coach Agent", () => {
       Promise.resolve({ ok: true, agent: "career", provider: "nvidia", model: "test", content: "I cannot invent job openings or credentials — provide your profile and target for real guidance.", retryable: false } as any)
     );
     expect(r.ok).toBe(true); // agent correctly refuses to invent
-    expect(r.content || "").not.toContain("Google"); // no specific company invented
+    expect(((r as any).content) || "").not.toContain("Google"); // no specific company invented
   });
   it("provider error MODEL_404", async () => {
     const r = await careerCoachAgent({ prompt: "Plan", context: { preferences: { field: "cs" } } }, () =>
       Promise.resolve({ ok: false, agent: "career", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
 });

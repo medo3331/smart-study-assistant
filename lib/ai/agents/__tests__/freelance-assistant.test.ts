@@ -6,7 +6,7 @@ describe("Freelance Assistant Agent", () => {
     const r = await freelanceAgent({ prompt: "Plan my freelance career" });
     expect(r.agent).toBe("freelance");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("student to freelance transition", async () => {
     const r = await freelanceAgent({ prompt: "How to start as freelancer", context: { role: "student", preferences: { field: "cs", level: "grad" } } }, () =>
@@ -24,7 +24,7 @@ describe("Freelance Assistant Agent", () => {
     const r = await freelanceAgent({ prompt: "What skills am I missing?", context: { role: "freelancer", preferences: { subject: "dev" } } }, () =>
       Promise.resolve({ ok: true, agent: "freelance", provider: "nvidia", model: "test", content: "Gaps: portfolio, pricing, client communication.", retryable: false } as any)
     );
-    expect(r.ok).to(true);
+    expect(r.ok).toBe(true);
   });
   it("multilingual ar", async () => {
     const r = await freelanceAgent({ prompt: "كيف أبدأ كمستقل؟", context: { language: "ar" } }, () =>
@@ -49,7 +49,7 @@ describe("Freelance Assistant Agent", () => {
       Promise.resolve({ ok: false, agent: "freelance", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
   it("no invented job/currency/source", async () => {
     const r = await freelanceAgent({ prompt: "Find job listings", context: { preferences: {} } }, () =>
