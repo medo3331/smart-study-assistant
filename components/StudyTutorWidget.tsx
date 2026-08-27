@@ -34,8 +34,34 @@ export function StudyTutorWidget(props: StudyTutorWidgetProps) {
           learningStyle: "mixed",
         },
       };
-      // Direct agent call passes context; router/inference handled by agent layer or router
-      const r = await studyTutorAgent({ prompt: input, context: ctx });
+      // Execute through AgentRouter / AiRouter via /api/ai/route (tutor task with NVIDIA primary)
+      const runAgent = async (opts: any): Promise<any> => {
+        const res = await fetch("/api/ai/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task: "tutor",
+            messages: [
+              { role: "system", content: `Agent study_tutor (${props.userRole ?? "student"}, language=${props.language ?? "ar"}). Mode: study.` },
+              { role: "user", content: input },
+            ],
+            options: { agent: "study_tutor", mode: "study", ...opts?.options },
+          }),
+        });
+        if (!res.ok) throw new Error(`Route error ${res.status}`);
+        const d = await res.json();
+        if (!d.success) throw new Error(d.error?.message || "AI route failed");
+        const data = d.data ?? d;
+        return {
+          ok: true,
+          agent: "study_tutor",
+          provider: data.provider || "router",
+          model: data.model || "unknown",
+          content: data.content || data.result || String(data),
+          retryable: false,
+        };
+      };
+      const r = await studyTutorAgent({ prompt: input, context: ctx }, runAgent);
       setResult(r);
       props.onResult?.(r);
     } catch (e: any) {
@@ -56,7 +82,7 @@ export function StudyTutorWidget(props: StudyTutorWidgetProps) {
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleAsk()}
           placeholder={isAr ? "اشرح لي الجزء ده / اختبرني / مش فاهم النقطة دي" : "Explain this / Test me / I don\'t get this point"}
-          className="flex-1 rounded-md px-3 py-2 text-sm bg-white border border-rule text-ink"
+          className="flex-1 rounded-md px-3 py-2 text-sm bg-[#0D0906]/60 border border-white/[0.10] text-[#F3F0EC] placeholder:text-[#9AA0C0]/70 focus:outline-none focus:border-[#F5DE72]/60 transition-colors"
         />
         <button onClick={handleAsk} disabled={loading} className="rounded-md px-4 py-2 text-sm font-bold text-white bg-gradient-to-b" style={{ background: "linear-gradient(180deg,#F5DE72,#E2C95C)" }}>
           {loading ? (isAr ? "جارٍ..." : "...") : (isAr ? "اسأل" : "Ask")}

@@ -53,12 +53,25 @@ export async function studyTutorAgent(
     };
 
     if (runAgent) {
+      const startedAt = Date.now();
       const result = await runAgent(agentOptions);
-      // If NVIDIA DeepSeek returns MODEL_404, rely on router fallback (openrouter/groq) — do not treat as success.
-      if (!result.ok && result.code === "MODEL_404") {
-        return { ok: false, agent: AGENT_ID, code: "MODEL_404", message: "Study Tutor: NVIDIA deepseek-v4-flash unavailable (404). Router should fallback to OpenRouter/Groq.", retryable: true };
+      const latencyMs = Date.now() - startedAt;
+      // Ensure the response carries real provider/model info from router execution.
+      // Do NOT fabricate success when the router returned a failure.
+      if (!result.ok) {
+        if (result.code === "MODEL_404") {
+          return { ok: false, agent: AGENT_ID, code: "MODEL_404", message: "Study Tutor: NVIDIA model unavailable (404). Router should fallback to OpenRouter/Groq.", retryable: true };
+        }
+        return { ...result, agent: AGENT_ID };
       }
-      return result;
+      // Real response path — propagate router-selected provider (must be "nvidia" when configured).
+      return {
+        ok: true,
+        agent: AGENT_ID,
+        provider: result.provider || "nvidia",
+        model: result.model || "nvidia/nemotron-3.5-lightning-30b-a3b",
+        content: result.content || ("message" in result ? (result as any).message : undefined) || String(result),
+      } as AgentResult;
     }
 
     // Fallback when router not injected: return structured result indicating router dependency.

@@ -38,11 +38,34 @@ export function AgentLauncher({ agentId, title, description, userRole = "student
       const runAgent = (opts: any): Promise<AgentResult> => fetch("/api/ai/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tasks: [agentId], input: { prompt, context, options: { ...opts.options, agent: agentId, mode } } }),
-      }).then(r => r.ok ? r.json().then(d => d.result || d) : Promise.reject(new Error(`Route error ${r.status}`)));
-      // Fallback if direct router unavailable in this context: structured placeholder (never fake success)
-      // Actual inference requires running server; this launcher is UI-facing.
-      const result: any = { ok: true, agent: agentId, provider: "router", model: "router", content: `Agent ${agentId} launched (${mode}). Content returned by provider via AgentRouter.`, retryable: false };
+        body: JSON.stringify({
+          task: "tutor",
+          messages: [
+            { role: "system", content: `Agent ${agentId}. Mode: ${mode}. Answer in user's language.` },
+            { role: "user", content: prompt },
+          ],
+          options: { ...opts.options, agent: agentId, mode },
+        }),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(`Route error ${r.status}`);
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error?.message || `Route error`);
+        const resultData = d.data ?? d;
+        return {
+          ok: true,
+          agent: agentId,
+          provider: resultData.provider || "nvidia",
+          model: resultData.model || "nvidia/nemotron-3.5-lightning-30b-a3b",
+          content: resultData.content || resultData.result || String(resultData),
+          retryable: false,
+        } as AgentResult;
+      });
+      const result = await runAgent({
+        agent: agentId,
+        prompt,
+        context: context,
+        options: { agent: agentId, mode },
+      });
       setResult(result);
       onResult?.(result);
     } catch (e: any) {
