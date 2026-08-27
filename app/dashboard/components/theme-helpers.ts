@@ -25,7 +25,7 @@ export const THEME_STYLES: Record<ThemeColor, ThemeStyles> = {
     gradient: "from-emerald-500 to-emerald-600",
     lightBg: "bg-emerald-500/12",
   },
-  purple: {
+  coral: {
     // ⚠️ تم تغيير اللون من البنفسج (#7C5CFF) للكورال المطابق للاندينج (#DC4C4C)
     // كجزء من توحيد الهوية البصرية مع صفحة الهبوط (color-migration 2026-08-27)
     accentBg: "bg-[#DC4C4C]",
@@ -70,7 +70,7 @@ export const HEATMAP_COLORS: Record<ThemeColor, string[]> = {
     "bg-emerald-500/70 border-emerald-500/80",
     "bg-emerald-500 border-emerald-600",
   ],
-  purple: [
+  coral: [
     "bg-paper border-rule",
     "bg-[#DC4C4C]/20 border-[#DC4C4C]/30",
     "bg-[#DC4C4C]/45 border-[#DC4C4C]/55",
