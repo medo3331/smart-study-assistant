@@ -196,6 +196,29 @@ export function PersonalAssistant({
             ))}
         </div>
 
+        {/* رسائل السياق الحقيقي المفقودة من briefing */}
+        {briefing.streakMessage && (
+          <div className="mt-3 flex items-baseline gap-2.5 text-sm leading-[1.9] text-ink">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "#CE5A6C" }} aria-hidden />
+            <span className="font-medium">{briefing.streakMessage}</span>
+          </div>
+        )}
+        {briefing.xpMessage && (
+          <div className="mt-2 flex items-baseline gap-2.5 text-sm leading-[1.9] text-ink">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "#E2C95C" }} aria-hidden />
+            <span className="font-medium">{briefing.xpMessage}</span>
+          </div>
+        )}
+        {briefing.activityMessage && (
+          <div className="mt-2 flex items-baseline gap-2.5 text-sm leading-[1.9] text-ink">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "#2A7A4B" }} aria-hidden />
+            <span className="font-medium">{briefing.activityMessage}</span>
+          </div>
+        )}
+        {briefing.launchMessage && (
+          <div className="mt-2 text-sm leading-[1.9] text-ink-soft italic">{briefing.launchMessage}</div>
+        )}
+
         {/* سطر الدور */}
         {briefing.roleMessage && (
           <RoleLine message={briefing.roleMessage} />
