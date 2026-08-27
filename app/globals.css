@@ -165,8 +165,8 @@
   --hl-orange-ink: #9A4B10;
   --hl-blue-fill: #3BA8D4;
   --hl-blue-ink: #0E6389;
-  --hl-purple-fill: #9B6BD6;
-  --hl-purple-ink: #6B3FA8;
+  --hl-purple-fill: #DC4C4C;
+  --hl-purple-ink: #F2745C;
   --hl-indigo-fill: #4F5BD5;
   --hl-indigo-ink: #3A44B0;
 
@@ -210,7 +210,7 @@
   --hl-orange-ink: #F0A868;
   --hl-blue-fill: #4FBEE8;
   --hl-blue-ink: #6FD0F0;
-  --hl-purple-fill: #B08BE8;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #C0A0F0;
   --hl-indigo-fill: #6E79E8;
   --hl-indigo-ink: #8F98F0;
@@ -269,7 +269,7 @@
   --hl-orange-ink: #DD903D;
   --hl-blue-fill: #60B8DC;
   --hl-blue-ink: #37ADDC;
-  --hl-purple-fill: #9867D5;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #B78FE8;
   --hl-indigo-fill: #636DDA;
   --hl-indigo-ink: #929BEC;
@@ -304,7 +304,7 @@
   --hl-orange-ink: #DD903D;
   --hl-blue-fill: #60B8DC;
   --hl-blue-ink: #37ADDC;
-  --hl-purple-fill: #9867D5;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #B78FE9;
   --hl-indigo-fill: #636DDA;
   --hl-indigo-ink: #929BEC;
@@ -339,7 +339,7 @@
   --hl-orange-ink: #DD903D;
   --hl-blue-fill: #60B8DC;
   --hl-blue-ink: #36ACDC;
-  --hl-purple-fill: #9867D5;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #B78FE8;
   --hl-indigo-fill: #636DDA;
   --hl-indigo-ink: #929BEC;
@@ -374,7 +374,7 @@
   --hl-orange-ink: #DD903D;
   --hl-blue-fill: #60B8DC;
   --hl-blue-ink: #36ACDC;
-  --hl-purple-fill: #9867D5;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #B78FE8;
   --hl-indigo-fill: #636DDA;
   --hl-indigo-ink: #929BEC;
@@ -409,7 +409,7 @@
   --hl-orange-ink: #DD903D;
   --hl-blue-fill: #60B8DC;
   --hl-blue-ink: #36ACDB;
-  --hl-purple-fill: #9867D5;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #B78FE8;
   --hl-indigo-fill: #636DDA;
   --hl-indigo-ink: #929BEC;
@@ -444,7 +444,7 @@
   --hl-orange-ink: #DD903D;
   --hl-blue-fill: #60B8DC;
   --hl-blue-ink: #37ADDC;
-  --hl-purple-fill: #9867D5;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #B78FE9;
   --hl-indigo-fill: #636DDA;
   --hl-indigo-ink: #939BEC;
@@ -479,7 +479,7 @@
   --hl-orange-ink: #9F5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B4ADB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -514,7 +514,7 @@
   --hl-orange-ink: #9F601C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8C4BDB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #5460E1;
@@ -549,7 +549,7 @@
   --hl-orange-ink: #9F5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B4ADB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -584,7 +584,7 @@
   --hl-orange-ink: #9F5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B4ADB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -619,7 +619,7 @@
   --hl-orange-ink: #9F5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B4ADB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -654,7 +654,7 @@
   --hl-orange-ink: #9F5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B4ADB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -689,7 +689,7 @@
   --hl-orange-ink: #9D5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B759A;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B49DB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -724,7 +724,7 @@
   --hl-orange-ink: #9F5F1C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8B4ADB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #535FE1;
@@ -759,7 +759,7 @@
   --hl-orange-ink: #9F601C;
   --hl-blue-fill: #2992BC;
   --hl-blue-ink: #1B769B;
-  --hl-purple-fill: #6C32B4;
+  --hl-purple-fill: #DC4C4C;
   --hl-purple-ink: #8C4BDB;
   --hl-indigo-fill: #2C39B9;
   --hl-indigo-ink: #5460E1;
