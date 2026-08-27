@@ -34,7 +34,7 @@ export function LessonProgressPanel({ percent, sections, xpReward }: LessonProgr
       {/* الشريط يمتلئ مرة واحدة للقيمة الحقيقية */}
       <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/[0.07]">
         <motion.div
-          className="h-full rounded-full bg-gradient-to-l from-[#B69CFF] to-[#7C5CFF] shadow-[0_0_10px_rgba(124,92,255,0.5)]"
+          className="h-full rounded-full bg-gradient-to-l from-[#F5A25C] to-[#DC4C4C] shadow-[0_0_10px_rgba(220,76,76,0.5)]"
           initial={reduceMotion ? false : { width: 0 }}
           animate={{ width: `${Math.max(shown, 1)}%` }}
           transition={{ duration: 1, ease: [0.22, 0.8, 0.36, 1], delay: 0.25 }}
@@ -73,9 +73,9 @@ function SectionRow({ label, state }: { label: string; state: "done" | "current"
   if (state === "current") {
     return (
       <Reveal index={0}>
-        <div className="flex items-center gap-2.5 rounded-xl border border-[rgba(124,92,255,0.28)] bg-[rgba(124,92,255,0.10)] px-2.5 py-2 text-[13px] font-bold text-white">
-          <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[rgba(124,92,255,0.2)]">
-            <CircleDot size={13} strokeWidth={2.4} className="stroke-[#B69CFF]" />
+        <div className="flex items-center gap-2.5 rounded-xl border border-[rgba(220,76,76,0.28)] bg-[rgba(220,76,76,0.10)] px-2.5 py-2 text-[13px] font-bold text-white">
+          <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[rgba(220,76,76,0.2)]">
+            <CircleDot size={13} strokeWidth={2.4} className="stroke-[#F5A25C]" />
           </span>
           {label}
         </div>

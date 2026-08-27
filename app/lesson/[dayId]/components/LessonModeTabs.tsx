@@ -55,7 +55,7 @@ export function LessonModeTabs({ modes, active, onChange }: LessonModeTabsProps)
       <span
         id={PILL_ID}
         aria-hidden
-        className="absolute bottom-[5px] top-[5px] z-0 rounded-xl bg-gradient-to-b from-[#7C5CFF] to-[#8E72FF] shadow-[0_4px_18px_rgba(124,92,255,0.4),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+        className="absolute bottom-[5px] top-[5px] z-0 rounded-xl bg-gradient-to-b from-[#DC4C4C] to-[#F2745C] shadow-[0_4px_18px_rgba(220,76,76,0.4),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
         style={{ right: 0, transition: reduceMotion ? "none" : "right .28s cubic-bezier(.22,.8,.36,1), width .28s cubic-bezier(.22,.8,.36,1)" }}
       />
       {modes.map((m) => {
