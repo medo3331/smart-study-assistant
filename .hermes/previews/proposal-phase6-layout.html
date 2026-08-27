@@ -1,0 +1,85 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>Phase 6 — Dashboard UI Refactor Design</title><style>
+:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;--rule:#C9D4E6;--r-sm:8px;--r-md:14px;--font-display:'IBM Plex Sans Arabic',system-ui,sans-serif}
+body{background:var(--paper);color:var(--ink);font-family:var(--font-display);padding:28px;max-width:780px;margin:auto;line-height:1.7}
+h1{font-size:1.25rem;border-inline-start:4px solid var(--red);padding-inline-start:14px}
+h2{font-size:1rem;color:var(--ink-soft);margin-top:24px;border-bottom:1px solid var(--rule);padding-bottom:6px}
+.card{background:#fff;border:1px solid var(--rule);border-radius:var(--r-md);padding:16px;margin:12px 0;box-shadow:0 1px 2px rgba(35,45,73,.08)}
+.verified{border-inline-start:3px solid #2A7A4B}
+.tag{font-family:'JetBrains Mono',monospace;font-size:.7rem;padding:2px 6px;border-radius:var(--r-sm);background:var(--paper-3);color:var(--ink-soft);border:1px solid var(--rule);display:inline-block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0}
+.item{border:1px solid var(--rule);border-radius:var(--r-sm);padding:10px;background:var(--paper-2);font-size:.88rem}
+.item b{color:var(--ink);display:block;margin-bottom:3px;font-size:.92rem}
+.preserve{background:#f6fdf8;border-color:#2A7A4B}
+</style></head><body>
+<h1>Phase 6 — Dashboard UI Refactor (Preview Before Code)</h1>
+
+<div class="card verified">
+<b>مؤكد — لا أساس جديد، لا AI Foundation، لا Landing Page</b>
+<ul>
+<li>Dashboard page (<code>app/dashboard/page.tsx</code>) — 1494 خط — تم الحفاظ على كل شيء موجود</li>
+<li>Personal Assistant (existing) — preserved</li>
+<li>Study Tutor (lesson integration) — preserved</li>
+<li>AIHub + AgentLauncher — preserved, سيتم توسيعهـ أكثر حسب الـRole</li>
+<li>Sidebar — redesigned (collapsible groups)</li>
+<li>Lesson cards — unified</li>
+<li>Hero + Stats — cleaned (not rebuilt)</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>الترتيب الجديد (Hierarchy)</h2>
+<div class="grid">
+  <div class="item"><b>Hero + Personal Assistant</b>يتم الاحتفاظ بهما في الأعلى</div>
+  <div class="item"><b>AI Tools Hub</b>بعد Hero — Role-filtered cards</div>
+  <div class="item"><b>Study Section</b>بعد AI — الدروس + التقدم</div>
+  <div class="item"><b>Stats / Progress</b>بعد Study — بيانات دقيقة</div>
+  <div class="item"><b>Sidebar</b>يسار — مجموعات قابلة للطي</div>
+</div>
+</div>
+
+<div class="card">
+<h2>Sidebar — شكل جديد (groups collapsible)</h2>
+<table style="width:100%;font-size:.85rem;border-collapse:collapse">
+<thead><tr style="background:var(--paper-3)"><th>المجموعة</th><th>العناصر</th><th>ملاحظة</th></tr></thead>
+<tbody>
+<tr><td><b>الرئيسية</b></td><td>لوحة التحكم (dashboard)</td><td>بيان دائم</td></tr>
+<tr><td><b>الدراسة</b></td><td>خطتي / الدروس / المواد</td><td>بناءً على role</td></tr>
+<tr><td><b>الذكاء الاصطناعي</b></td><td>AI Hub / المساعد / الأدوات</td><td>حسب الـAgent system</td></tr>
+<tr><td><b>التخطيط</b></td><td>الأهداف / المخطط / التقدم</td><td>من Planner agent</td></tr>
+<tr><td><b>أخرى</b></td><td>الإنجازات / الإعدادات</td><td>بيانات ثانوية</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="card">
+<h2>Lesson Card — شكل موحد جديد</h2>
+<ul>
+<li><b>المادة / الكورس</b> — عنوان واضح</li>
+<li><b>رقم اليوم / Day</b> — مونو، واضح</li>
+<li><b>عنوان الدرس</b> — عريض، واضح</li>
+<li><b>Progress واضح</b> — شريط أو نسبة</li>
+<li><b>حالة الدرس</b> — مكتمل / جاري / قادم (badge)</li>
+<li><b>CTA واحد</b> — "ابدأ" أو "تابع" أو "راجع" حسب الحالة</li>
+<li><b>Hover / Active</b> — ظل خفيف + تأكد من التفاعل</li>
+<li><b>Mobile</b> — عمود واحد، لا overflow</li>
+</ul>
+</div>
+
+<div class="card preserve">
+<h2>✅ المحفوظ (لا يتغير)</h2>
+<ul>
+<li><code>PersonalAssistant</code> (dashboard component) — لا إعادة تصميم</li>
+<li><code>StudyTutorWidget</code> (lesson page) — لا تغيير</li>
+<li><code>AIHubSection</code> / <code>AgentLauncher</code> — لا إعادة بناء</li>
+<li>Landing Page — خارج نطاق هذا المرحلة</li>
+<li>Auth / Supabase / DB — لا تغيير</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>موافقة — لنبدأ التنفيذ بعد هذه المعاينة</h2>
+<p>هذا هو التصميم المقترح:Sidebar (groups) + Dashboard (Hero + AI Hub + Study + Stats) + Lesson Card (unified). لا يوجد إعادة بناء؛ فقط تنظيف وتسلسل.</p>
+<p><b>هل توافق على هذا الشكل قبل تعديل الكود؟</b> قل <b>"موافق"</b>.</p>
+</div>
+</body>
+</html>
