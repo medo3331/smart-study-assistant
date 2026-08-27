@@ -72,10 +72,10 @@ export const HEATMAP_COLORS: Record<ThemeColor, string[]> = {
   ],
   purple: [
     "bg-paper border-rule",
-    "bg-purple-500/20 border-purple-500/30",
-    "bg-purple-500/45 border-purple-500/55",
-    "bg-purple-500/70 border-purple-500/80",
-    "bg-purple-500 border-purple-400",
+    "bg-[#DC4C4C]/20 border-[#DC4C4C]/30",
+    "bg-[#DC4C4C]/45 border-[#DC4C4C]/55",
+    "bg-[#DC4C4C]/70 border-[#DC4C4C]/80",
+    "bg-[#DC4C4C] border-[#F2745C]",
   ],
   cyan: [
     "bg-paper border-rule",
