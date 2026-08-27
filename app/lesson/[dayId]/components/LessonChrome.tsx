@@ -34,7 +34,7 @@ export function LessonShell({ children }: { children: React.ReactNode }) {
 
 /* أنماط التوافق — نطاقها مغلق داخل .magicly-lesson فقط */
 const LESSON_DARK_COMPAT = `
-.magicly-lesson .sheet-card{background:rgba(13,16,41,.7);border:1px solid rgba(255,255,255,.06);backdrop-filter:blur(20px);box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.magicly-lesson .sheet-card{background:rgba(13,9,6,.7);border:1px solid rgba(255,255,255,.06);backdrop-filter:blur(20px);box-shadow:0 8px 30px rgba(0,0,0,.35)}
 .magicly-lesson .sheet-card-live{border-top:1px solid rgba(220,76,76,.25)}
 .magicly-lesson .eyebrow{color:#F5A25C}
 .magicly-lesson .h1,.magicly-lesson .h2,.magicly-lesson .h3{color:#fff}
