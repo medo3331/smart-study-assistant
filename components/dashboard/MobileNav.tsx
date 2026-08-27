@@ -52,6 +52,7 @@ export function MobileNav({ activeHref }: MobileNavProps) {
     if (activeHref) return activeHref === href;
     // الأب /worship يفضل نشط في كل الصفحات الفرعية.
     if (href === "/worship") {
+      if (!pathname) return false;
       return pathname === "/worship" || pathname.startsWith("/worship/");
     }
     return pathname === href;

@@ -6,7 +6,7 @@ describe("Document Analyzer Agent", () => {
     const r = await documentAnalyzerAgent({ prompt: "Summarize this document", context: { preferences: { content: "Physics: Newton's laws..." } } });
     expect(r.agent).toBe("document_analyzer");
     expect(r.ok).toBe(false); // router not injected
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("Arabic document content", async () => {
     const r = await documentAnalyzerAgent({ prompt: "لخص هذا", context: { language: "ar", preferences: { content: "الدروس: الفيزياء الأساسية.", subject: "physics" } } }, () =>
@@ -49,6 +49,6 @@ describe("Document Analyzer Agent", () => {
       Promise.resolve({ ok: false, agent: "document_analyzer", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
 });

@@ -6,7 +6,7 @@ describe("Quiz Generator Agent", () => {
     const r = await quizGeneratorAgent({ prompt: "Generate 3 MCQs on Pointers" });
     expect(r.agent).toBe("quiz_generator");
     expect(r.ok).toBe(false); // router not injected
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("Arabic request handled", async () => {
     const r = await quizGeneratorAgent({ prompt: "جدي أسئلة اختبار على الدرس", context: { language: "ar", preferences: { subject: "CS" } } }, () =>
@@ -37,7 +37,7 @@ describe("Quiz Generator Agent", () => {
       Promise.resolve({ ok: false, agent: "quiz_generator", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
   it("structured output (MCQ/True-False/Short)", async () => {
     const r = await quizGeneratorAgent({ prompt: "Quiz on pointers", context: { preferences: { subject: "CS" } } }, () =>

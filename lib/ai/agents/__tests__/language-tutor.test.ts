@@ -6,7 +6,7 @@ describe("Language Tutor Agent", () => {
     const r = await languageTutorAgent({ prompt: "Explain grammar" });
     expect(r.agent).toBe("language");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("Arabic user → English learning (user ar, target en)", async () => {
     const r = await languageTutorAgent({ prompt: "كيف أقول hello بالعربية؟", context: { language: "ar", preferences: { targetLanguage: "en", level: "intermediate" } } }, () =>
@@ -73,6 +73,6 @@ describe("Language Tutor Agent", () => {
       Promise.resolve({ ok: false, agent: "language", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
 });

@@ -6,7 +6,7 @@ describe("Image Agent", () => {
     const r = await imageAgent({ prompt: "Generate a diagram of photosynthesis" });
     expect(r.agent).toBe("image");
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("ROUTER_REQUIRED");
+    expect((r as any).code).toBe("ROUTER_REQUIRED");
   });
   it("generate mode", async () => {
     const r = await imageAgent({ prompt: "Draw a concept diagram", options: { mode: "generate" } }, () =>
@@ -61,13 +61,13 @@ describe("Image Agent", () => {
       Promise.resolve({ ok: false, agent: "image", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.code).toBe("MODEL_404");
+    expect((r as any).code).toBe("MODEL_404");
   });
   it("no fabricated image on failure", async () => {
     const r = await imageAgent({ prompt: "Generate image", context: { preferences: {} } }, () =>
       Promise.resolve({ ok: false, agent: "image", provider: "nvidia", code: "MODEL_404", message: "404", retryable: true } as any)
     );
     expect(r.ok).toBe(false);
-    expect(r.content).toBeUndefined();
+    expect((r as any).content).toBeUndefined();
   });
 });
