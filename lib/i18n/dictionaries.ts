@@ -660,6 +660,7 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     footer_privacy: 'سياسة الخصوصية',
     footer_terms: 'شروط الاستخدام',
     footer_made_with: 'مطور من قبل E/Mohamed ELsayed',
+    footer_developed_by: 'مطور من قبل م/محمدالسيد',
     footer_nav_label: 'روابط الموقع',
     footer_social_label: 'تابعنا',
 

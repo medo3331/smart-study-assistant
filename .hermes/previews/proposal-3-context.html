@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>مقترح #3 — إكمال السياق الحقيقي</title>
+<style>:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;font-family:system-ui,sans-serif}
+body{background:var(--paper);color:var(--ink);padding:28px;max-width:720px;margin:auto;line-height:1.7}
+h1{font-size:1.25rem;border-inline-start:4px solid var(--red);padding-inline-start:12px}
+.card{background:#fff;border:1px solid #C9D4E6;border-radius:14px;padding:16px;margin:14px 0}
+.b{font-weight:700;color:var(--red)}.good{color:#2A7A4B;font-weight:600}
+</style></head><body>
+<h1>مقترح إكمال #3 — السياق الحقيقي للمساعد</h1>
+<div class="card"><b>الحالة الحالية (مؤكدة بإخراج الأدوات):</b>
+<ul><li>صفحة <code>page.tsx:1133</code> تمرّر <code>context={personalAssistantContext}</code> (من <code>buildPersonalContext</code> — بيانات حقيقية: اسم، شخصية، مستوى، مادة، سلسلة، XP، أيام، أهداف)</li>
+<li>مكون <code>PersonalAssistant.tsx</code> (326 سطر) يستخدم السياق عبر <code>getPersonalAssistantBriefing</code></li>
+<li><b>لم يُعثَر على أخطاء TypeScript</b> — لا يوجد كسر في الربط</li>
+<li>المعاينة <code>personal-assistant-preview.html</code> كاملة وتفاعلية (سطور ثابتة فقط — لا سياق حقيقي)</li></ul></div>
+<div class="card"><b>ما يُقترح إكماله (الهدف من #3):</b>
+<ul><li>التأكد من أن <code>briefing.ts</code> يستخرج <b>كل</b> حقول السياق (progress, goals, streak) — لا يسقط أي منها صمتًا</li>
+<li>التأكد من أن <code>PersonalAssistant.tsx</code> يعرض بيانات حقيقية عندما يأتي السياق (وليس فقط السطور الثابتة)</li>
+<li>التحقق عبر <code>npm run build</code> + لقطة من <code>localhost:3000/dashboard</code> أن المكون يعرض الأرقام الحقيقية</li></ul></div>
+<div class="card"><b>الخطوات المقترحة (بعد موافقتك):</b>
+<ol><li>فحص <code>lib/personal-assistant/briefing.ts</code> للتحقق من استخدام جميع حقول السياق</li><li>تصحيح أي خطأ / إضافة أي سطور مفقودة في <code>PersonalAssistant.tsx</code></li><li>تشغيل <code>npx tsc --noEmit && npm run build</code></li><li>التقاط لقطة من الإعداد المحلي للتحقق</li><li>تقرير النتيجة مع السطور التي تغيرت</li></ol></div>
+<p><b>هل توافق على هذا المقترح؟</b> أؤكد: لن أعدل أي ملف حتى تقول <b>"أوافق"</b> أو تحدد تعديلًا معينًا.</p>
+</body></html>

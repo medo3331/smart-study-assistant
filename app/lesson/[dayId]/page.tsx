@@ -9,6 +9,7 @@ import { ReadAloud } from "@/components/ReadAloud";
 import { MicButton } from "@/components/MicButton";
 import { setSlidesSeed } from "@/app/dashboard/components/nav-config";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
+import { StudyTutorWidget } from "@/components/StudyTutorWidget";
 import { awardCoins } from "@/lib/shop/shop-data";
 
 // 🎴 إعادة تصميم صفحة الدرس — نفس نظام الداشبورد المنفَّذ (بنفسجي/تيل/عنبري على داكن)
@@ -679,6 +680,20 @@ export default function LessonDetailPage() {
             onShare={handleShareLesson}
           />
         </Reveal>
+
+        {/* Study Tutor Widget — lesson integration */}
+        <Reveal index={3}>
+          <StudyTutorWidget
+            userRole="student"
+            field={typeof config!=="undefined" ? config?.subject : "study"}
+            subject={typeof config!=="undefined" ? config?.subject : "unknown"}
+            studentLevel="unknown"
+            currentLesson={dayRow?.topic ?? "current lesson"}
+            progress="current"
+            language="ar"
+          />
+        </Reveal>
+
 
         {/* ─── التبويبات الموحّدة: نفس learning_style الموجود ─── */}
         <div className="flex justify-center sm:justify-start">

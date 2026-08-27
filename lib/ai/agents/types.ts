@@ -23,7 +23,13 @@ export const AGENT_IDS = [
 
 export type AgentId = (typeof AGENT_IDS)[number];
 
-/** What the agent needs from the model. The router maps these to provider capabilities. */
+/**
+ * What the agent needs from the model. The router maps these to provider capabilities.
+ * Note: this is intentionally a SUPERSET of `lib/ai/health.ts` `AiCapability` — agent-layer
+ * needs (e.g. structured_output for Quiz Generator) are declared here and the Phase 2 router
+ * will map them to model capabilities at the call boundary. Until then, every capability is
+ * informational and does not gate provider selection.
+ */
 export const AGENT_CAPABILITIES = [
   "chat",
   "reasoning",
@@ -33,6 +39,7 @@ export const AGENT_CAPABILITIES = [
   "tool_calling",
   "document_ingest",
   "vision",
+  "structured_output",
 ] as const;
 
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];

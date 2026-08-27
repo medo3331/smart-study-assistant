@@ -58,6 +58,8 @@ import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { CommunityInvite } from "@/components/CommunityInvite";
 // 🐣 الرفيق: الكمبوننت موجود من الأول، والمتجر بيغيّر إيموجيه بس
 import { StudyPet } from "@/components/StudyPet";
+import { AIHubSection } from "@/components/ai/AIHubSection";
+import { StudyTutorWidget } from "@/components/StudyTutorWidget";
 import { useEquippedCompanion } from "@/lib/shop/use-companion";
 
 // ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
@@ -1137,6 +1139,12 @@ export default function DashboardPage() {
                     el?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }}
                 />
+
+
+        {/* ═══ AI Tools Hub — Role-based Agent Launcher ═══ */}
+        <section aria-label="AI Tools" className="py-5">
+          <AIHubSection role={persona || "student"} initialContext={personalAssistantContext} />
+        </section>
 
         {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
                 — عدّ من صفر مرة واحدة بخط المونو ═══ */}

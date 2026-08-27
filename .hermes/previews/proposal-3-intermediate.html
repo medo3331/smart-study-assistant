@@ -1,0 +1,19 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>معاينة وسيطة — #3 إضافة السطور المفقودة</title><style>
+:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;font-family:system-ui,sans-serif}
+body{background:var(--paper);color:var(--ink);padding:28px;max-width:720px;margin:auto;line-height:1.7}
+h1{font-size:1.2rem;border-inline-start:4px solid var(--red);padding-inline-start:12px}
+.card{background:#fff;border:1px solid #C9D4E6;border-radius:14px;padding:14px;margin:12px 0}
+.add{border-inline-start:3px solid #2A7A4B;padding-inline-start:10px;background:#f3f7f0}
+.missing{border-inline-start:3px solid var(--red);padding-inline-start:10px;background:#fdf0f1}
+</style></head><body>
+<h1>معاينة وسيطة — ما سأضيفه لـ <code>PersonalAssistant.tsx</code></h1>
+<div class="card add"><b>سيُضاف (من briefing.ts → JSX):</b><ul>
+<li><code>streakMessage</code> — عرض السلسلة (مثلاً "سلسلتك 5 أيام")</li>
+<li><code>xpMessage</code> — عرض XP</li>
+<li><code>activityMessage</code> — دقائق التركيز اليوم / الأسبوع</li>
+<li><code>launchMessage</code> — رسالة 시작 اليوم (إن وجدت)</li></ul></div>
+<div class="card missing"><b>الحالة الحالية — غير موجودة في JSX (مؤكدة بgrep):</b> streak, xp, activity, launch — تُحسَب في briefing لكنها لا تُعرض.</div>
+<div class="card"><b>الخطوات بعد الموافقة على هذه المعاينة:</b>
+<ol><li>أضيف 4 كتل JSX في <code>PersonalAssistant.tsx</code> (بعد <code>extraLines</code>)</li><li>أشغّل <code>npx tsc --noEmit</code></li><li>أبني <code>npm run build</code></li><li>ألتقط لقطة من <code>localhost:3000/dashboard</code> للتحقق</li></ol></div>
+<p><b>أوافق على هذه المعاينة؟</b> قل <b>"أوافق"</b> وأبدأ التعديل مباشرة.</p>
+</body></html>

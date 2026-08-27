@@ -1,0 +1,21 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>مقترح A — إصلاح DeepSeek + الربط</title><style>
+:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;font-family:system-ui,sans-serif}
+body{background:var(--paper);color:var(--ink);padding:28px;max-width:720px;margin:auto;line-height:1.7}
+h1{font-size:1.2rem;border-inline-start:4px solid var(--red);padding-inline-start:12px}
+.card{background:#fff;border:1px solid #C9D4E6;border-radius:14px;padding:14px;margin:12px 0}
+.verified{border-inline-start:3px solid #2A7A4B}
+.missing{border-inline-start:3px solid var(--red)}
+</style></head><body>
+<h1>مقترح A — إصلاح DeepSeek stub + الربط (موافق عليه)</h1>
+<div class="card verified"><b>مؤكد (أدوات):</b><ul>
+<li>الحزمة: <code>lib/ai/agents/providers/deepseek.ts</code> — stub (خطأ TS2305 / TS2739)</li>
+<li>Repo: <code>C:\Desktop\smart-study-assistant</code> (main, pushed #3)</li>
+<li>الربط: NVIDIA / OpenRouter عبر <code>lib/ai/health.ts</code> + <code>agents.ts</code></li></ul></div>
+<div class="card missing"><b>مفقود / بحاجة توضيح:</b><ul>
+<li><code>OPENROUTER_API_KEY</code> — لم يُعثَر عليه في env (فقط <code>HERMES_CUSTOM_NVIDIA_CODING_API_KEY</code> جزئي)</li>
+<li>النموذج المطلوب من DeepSeek (deepseek-v4-flash؟ deepseek-reasoner؟) — غير محدد</li><li>هل نستخدم <code>nvidia</code> endpoint مباشر أم عبر OpenRouter fallback؟</li></ul></div>
+<div class="card"><b>الخطوات (بعد الموافقة على هذه المعاينة):</b>
+<ol><li>تحديد المفتاح / المصدر (NVIDIA vs OpenRouter vs كليهما)</li><li>إصلاح <code>deepseek.ts</code> (أنواع + دوال generate/healthCheck)</li><li>ربط بـ <code>agents/registry.ts</code></li><li>تشغيل <code>npx tsc --noEmit</code> + <code>npm run build</code></li><li>تقرير النتيجة (مع الإشارة إلى أي مفتاح مفقود)</li></ol></div>
+<p><b>هل تُوافق على البدء بعد تحديد المفتاح؟</b> قل أيًا من:</p>
+<ul><li><b>«نبدأ»</b> — إذا كنت متأكدًا من المصدر (النVIDIA/OpenRouter) والمفتاح</li><li><b>«أعطِ مفتاح OpenRouter أولاً»</b></li><li><b>«استخدم NVIDIA فقط»</b> — ثم أحدد النموذج</li></ul>
+</body></html>

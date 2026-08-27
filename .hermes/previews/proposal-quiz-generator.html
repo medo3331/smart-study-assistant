@@ -1,0 +1,7 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>Quiz Generator — Proposal</title><style>:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;font-family:system-ui,sans-serif}body{background:var(--paper);color:var(--ink);padding:28px;max-width:720px;margin:auto;line-height:1.7}h1{font-size:1.2rem;border-inline-start:4px solid var(--red);padding-inline-start:12px}.card{background:#fff;border:1px solid #C9D4E6;border-radius:14px;padding:14px;margin:12px 0}.verified{border-inline-start:3px solid #2A7A4B}</style></head><body>
+<h1>Quiz Generator — Proposal (موافق)</h1>
+<div class="card verified"><b>الأساسات موجودة ومثبتة:</b><ul><li>Study Tutor ✅</li><li>Exam Solver ✅</li><li>Live E2E (NVIDIA real, timeout reported honestly) ✅</li><li>AgentRouter/AiRouter/Provider routing ✅</li><li>.env.local + verified NVIDIA model (nemotron) ✅</li><li>OpenRouter fallback wired ✅</li></ul></div>
+<div class="card"><b>الملفات الجديدة فقط:</b><ul><li><code>lib/ai/agents/quiz-generator.ts</code></li><li><code>lib/ai/agents/__tests__/quiz-generator.test.ts</code></li></ul></div>
+<div class="card"><b>المنطق:</b><ul><li>استقبال سياق الدرس (AgentContext + preferences)</li><li>توليد أسئلة متعددة الأنواع (MCQ / True-False / Fill / Short)</li><li>تدعم Arabic + English</li><li>لا تخترع بيانات (تعتمد على context فقط)</li><li>يرجع AgentResult موحد</li><li>يدعم vision input عبر preferences.imageInput إذا وُجد</li><li>MODEL_404 → routing fallback</li></ul></div>
+<p><b>موافق — ابدأ Quiz Generator.</b></p>
+</body></html>

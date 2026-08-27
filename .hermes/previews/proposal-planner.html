@@ -1,0 +1,7 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>Planner — Proposal</title><style>:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;font-family:system-ui,sans-serif}body{background:var(--paper);color:var(--ink);padding:28px;max-width:720px;margin:auto;line-height:1.7}h1{font-size:1.2rem;border-inline-start:4px solid var(--red);padding-inline-start:12px}.card{background:#fff;border:1px solid #C9D4E6;border-radius:var(---md);padding:14px;margin:12px 0}.verified{border-inline-start:3px solid #2A7A4B}</style></head><body>
+<h1>Planner Agent — Proposal (موافق)</h1>
+<div class="card verified"><b>مؤكد:</b><ul><li>6 Agents + Research + Writing + Language Tutor جاهزون</li><li>AgentRouter/AiRouter/NVIDIA verified (nemotron)</li><li>Live E2E: HTTP 200, ~35s hang documented honestly</li><li>AgentId: planner موجود في registry (types.ts:17)</li><li>لا يوجد blocker في architecture</li></ul></div>
+<div class="card"><b>الملفات الجديدة:</b><ul><li><code>lib/ai/agents/planner.ts</code></li><li><code>lib/ai/agents/__tests__/planner.test.ts</code></li></ul></div>
+<div class="card"><b>المنطق:</b><ul><li>دعم student/graduate/freelancer</li><li>دعم: دراسة / هدف مهني / يومي / امتحان</li><li>يستخدم AgentContext (role/subject/streak/xp/progress/goals)</li><li>لا يخترع بيانات مفقودة (يطلب أو يقدم خطة مرنة)</li><li>multilingual (ar/en + generically)</li><li>AgentResult موحد</li><li>MODEL_404 → routing fallback</li></ul></div>
+<p><b>موافق — ابدأ Planner.</b></p>
+</</body></html>

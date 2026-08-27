@@ -1,0 +1,16 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>Study Tutor — proposal</title><style>
+:root{--paper:#E4EAF4;--ink:#232D49;--red:#CE5A6C;--hl:#F5DE72;font-family:system-ui,sans-serif}
+body{background:var(--paper);color:var(--ink);padding:28px;max-width:720px;margin:auto;line-height:1.7}
+h1{font-size:1.2rem;border-inline-start:4px solid var(--red);padding-inline-start:12px}
+.card{background:#fff;border:1px solid #C9D4E6;border-radius:14px;padding:14px;margin:12px 0}
+.verified{border-inline-start:3px solid #2A7A4B}
+</style></head><body>
+<h1>Study Tutor Agent — Proposal (موافق عليه)</h1>
+<div class="card verified"><b>مؤكد من الأدوات (لا اختراع):</b>
+<ul><li>Routing موجود: <code>routing.ts:32 tutor: "nvidia"</code> — لا نعدل</li><li>Keys موجودة في <code>.env.local</code> (NVIDIA/OpenRouter/Groq — الجميع)</li><li>AgentLayer: <code>lib/ai/agents/</code> + <code>registry.ts</code></li><li>Context: <code>AgentContext</code> من <code>agents/types.ts</code></li><li>Result: <code>AgentResult</code> موحد</li><li>Multi-language: يدعم Arabic + English حسب السياق</li></ul></div>
+<div class="card"><b>ما سيُبنى (ملف جديد فقط، لا تعديل أساسيات):</b>
+<ul><li><code>lib/ai/agents/study-tutor.ts</code> — Study Tutor Agent</li><li><code>lib/ai/agents/__tests__/study-tutor.test.ts</code> — tests (routing, context, multilingual, fallback, missing, errors)</li></ul></div>
+<div class="card"><b>القواعد (من تعليماتك):</b>
+<ul><li>لا Foundation — نستخدم Layer الحالي</li><li>لا تعديل routing/providers إلا blocker</li><li>لا Gemini</li><li>لا keys جديدة</li><li>لا كشف secrets</li><li>إذا NVIDIA 404 → router fallback (OpenRouter/Groq) — لا نعتبر نجاحًا</li></ul></div>
+<p><b>موافقة — ابدأ التنفيذ الآن؟</b> قل <b>"نبدأ"</b> وأبدأ الكتابة مباشرة بعد هذه المعاينة.</p>
+</body></html>
