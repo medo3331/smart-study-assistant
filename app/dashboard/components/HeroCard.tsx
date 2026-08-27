@@ -57,7 +57,7 @@ export function HeroCard({
       initial={reduceMotion ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 0.8, 0.36, 1] }}
-      className="relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0D1029]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-5 sm:p-6"
+      className="relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0D0906]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-5 sm:p-6"
     >
       {/* غسلة متدرجة واحدة هادية جدًا — نفس أسلوب hero-wash */}
       <div
@@ -65,7 +65,7 @@ export function HeroCard({
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(60% 90% at 85% 0%, rgba(124,92,255,0.08) 0%, transparent 70%)",
+            "radial-gradient(60% 90% at 85% 0%, rgba(220,76,76,0.08) 0%, transparent 70%)",
         }}
       />
 
@@ -105,9 +105,9 @@ export function HeroCard({
                 width: 92,
                 height: 92,
                 margin: "18px auto 0",
-                background: "linear-gradient(160deg, #7C5CFF 0%, #9A7BFF 100%)",
+                background: "linear-gradient(160deg, #DC4C4C 0%, #F2745C 100%)",
                 boxShadow:
-                  "0 0 0 3px rgba(124,92,255,0.5), 0 0 28px rgba(124,92,255,0.55)",
+                  "0 0 0 3px rgba(220,76,76,0.5), 0 0 28px rgba(220,76,76,0.55)",
               }}
             >
               <span className="text-[32px] leading-none pt-1">
@@ -230,10 +230,10 @@ function ActionPill({
   href?: string;
 }) {
   const cls =
-    "inline-flex h-10 items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm font-semibold text-[#E7E9F5] transition-colors hover:bg-white/[0.08] hover:border-[#7C5CFF]/35 active:scale-[0.97]";
+    "inline-flex h-10 items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm font-semibold text-[#E7E9F5] transition-colors hover:bg-white/[0.08] hover:border-[#DC4C4C]/35 active:scale-[0.97]";
   const inner = (
     <>
-      <span className="flex text-[#B69CFF]" aria-hidden>
+      <span className="flex text-[#F2745C]" aria-hidden>
         {icon}
       </span>
       {children}
