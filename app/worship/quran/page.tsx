@@ -84,9 +84,15 @@ function QuranHome() {
         </Link>
       </div>
 
-      {/* Reciter quick-select bar */}
+      {/* Reciter quick-select bar + audio list */}
       <div className="flex-shrink-0">
         <ReciterSelector />
+        <div className="mt-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs text-[#9AA0C0]">
+          <span>قائمة صوتية: </span>
+          <span className="text-[#2DD4BF]">عبد الله بصفر</span>,{" "}
+          <span className="text-[#B69CFF]">مشاري العفاسي</span>,{" "}
+          <span className="text-[#FB923C]">سعد الغامدي</span>
+        </div>
       </div>
 
       {/* Quran Reader */}

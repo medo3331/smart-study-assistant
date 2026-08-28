@@ -41,7 +41,8 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const [surahs, setSurahs] = useState<Surah[]>([]);
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
-  const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
+  // FULL SURAH VIEW (was single-ayah): display all ayahs + audio list
+  const [showAllAyahs, setShowAllAyahs] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSurahList, setShowSurahList] = useState(true);
   const [loading, setLoading] = useState(true);
