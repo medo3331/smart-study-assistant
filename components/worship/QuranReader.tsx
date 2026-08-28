@@ -91,7 +91,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     try {
       const data = await getAyahs(surahId);
       setAyahs(data);
-      setCurrentAyahIndex(0);
+      setShowAllAyahs(true);
     } catch (error) {
       console.error("Failed to load ayahs:", error);
       setAyahs([]);
@@ -108,7 +108,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
 
   const handleAyahChange = useCallback(
     (index: number) => {
-      setCurrentAyahIndex(index);
+      setShowAllAyahs(true);// index display only
       if (selectedSurah) {
         onProgressUpdate?.(selectedSurah.id, index + 1);
         updatePosition(selectedSurah.id, index + 1, readProgress.dailyCount);
@@ -118,8 +118,8 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   );
 
   const goToNextAyah = () => {
-    if (currentAyahIndex < ayahs.length - 1) {
-      handleAyahChange(currentAyahIndex + 1);
+    if (showAllAyahs && ayahs.length > 0) {
+      handleAyahChange(0); // full surah view
     } else if (selectedSurah && selectedSurah.id < 114) {
       const nextSurah = surahs.find((s) => s.id === selectedSurah.id + 1);
       if (nextSurah) {
@@ -129,13 +129,13 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   };
 
   const goToPrevAyah = () => {
-    if (currentAyahIndex > 0) {
-      handleAyahChange(currentAyahIndex - 1);
+    if (showAllAyahs && ayahs.length > 0) {
+      handleAyahChange(0);
     } else if (selectedSurah && selectedSurah.id > 1) {
       const prevSurah = surahs.find((s) => s.id === selectedSurah.id - 1);
       if (prevSurah) {
         handleSurahSelect(prevSurah);
-        setTimeout(() => setCurrentAyahIndex(prevSurah.ayahCount - 1), 100);
+        // full surah view (no single-ayah index)
       }
     }
   };
