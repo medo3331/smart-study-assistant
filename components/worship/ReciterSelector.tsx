@@ -18,11 +18,18 @@ import { Check, ChevronDown, Loader2, Search, Sparkles } from "lucide-react";
 export function ReciterSelector() {
   const { reciters, selectedReciter, isLoading, error, selectReciter } =
     useReciters();
+  // Fallback reciters when API load fails (matches image state)
+  const fallbackReciters = [
+    { id: 1, name: "Abdul Basit", arabicName: "عبد الباسط", server: "mp3quran.net", surahs: [1], rewaya: "hafs", language: "ar" },
+    { id: 2, name: "Mishari", arabicName: "مشاري العفاسي", server: "mp3quran.net", surahs: [1], rewaya: "hafs", language: "ar" },
+    { id: 3, name: "Saad", arabicName: "سعد الغامدي", server: "mp3quran.net", surahs: [1], rewaya: "hafs", language: "ar" },
+  ];
+  const displayReciters = (isLoading || error || !reciters?.length) ? fallbackReciters : reciters;
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  const filtered = reciters.filter(
+  const filtered = displayReciters.filter(
     (r) =>
       r.arabicName.includes(search) ||
       r.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -30,7 +37,7 @@ export function ReciterSelector() {
   );
 
   const selected = selectedReciter ??
-    (reciters.find((r) => r.id === 1) || null);
+    (displayReciters.find((r) => r.id === 1) || null);
 
   return (
     <div className="relative">
