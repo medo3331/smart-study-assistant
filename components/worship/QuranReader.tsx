@@ -312,7 +312,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
               {/* Progress Bar */}
               <div className="mt-4">
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-[#9AA0C0]">الآية {currentAyahIndex + 1} من {selectedSurah.ayahCount}</span>
+                  <span className="text-[#9AA0C0]">كل آيات السورة ({selectedSurah?.ayahCount ?? 0})</span>
                   <span className="font-mono font-bold text-white">{Math.round(progress)}%</span>
                 </div>
                 <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
@@ -337,7 +337,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                         variant="ghost"
                         icon={ChevronRight}
                         onClick={goToPrevAyah}
-                        disabled={currentAyahIndex === 0 && (!selectedSurah || selectedSurah.id === 1)}
+                        disabled={false}
                         className="h-10 w-10 p-0"
                         aria-label="الآية السابقة"
                       >
@@ -350,7 +350,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                         variant="ghost"
                         icon={ChevronLeft}
                         onClick={goToNextAyah}
-                        disabled={currentAyahIndex === ayahs.length - 1 && (!selectedSurah || selectedSurah.id === 114)}
+                        disabled={false}
                         className="h-10 w-10 p-0"
                         aria-label="الآية التالية"
                       >
@@ -419,7 +419,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                   icon={ChevronRight}
                   iconPosition="start"
                   onClick={goToPrevAyah}
-                  disabled={currentAyahIndex === 0 && (!selectedSurah || selectedSurah.id === 1)}
+                  disabled={false}
                 >
                   السورة السابقة
                 </Button>
@@ -428,7 +428,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                   icon={ChevronLeft}
                   iconPosition="end"
                   onClick={goToNextAyah}
-                  disabled={currentAyahIndex === ayahs.length - 1 && (!selectedSurah || selectedSurah.id === 114)}
+                  disabled={false}
                 >
                   السورة التالية
                 </Button>
