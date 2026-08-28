@@ -1,5 +1,5 @@
 /**
- * Worship Progress — centralized localStorage abstraction
+ * Worship Progress — DB-first (worship_progress) + localStorage fallback — fixed after user reported "mizuot"
  *
  * A single, typed layer over localStorage so components never call
  * localStorage.getItem / localStorage.setItem directly.
@@ -319,4 +319,47 @@ export function subscribeSettings(callback: (settings: IslamicSettings) => void)
   const handler = () => callback(loadSettings());
   window.addEventListener("storage", handler);
   return () => window.removeEventListener("storage", handler);
+}
+
+/* ================================================================ */
+/* DB-backed version (replaces localStorage abstraction)          */
+/* Call after db/worship.sql has been applied in Supabase         */
+/* ================================================================ */
+
+import { createClient } from "@/lib/supabase/client";
+
+export async function getWorshipProgressDB(userId: string, day?: string): Promise<any> {
+  const supabase = createClient();
+  const targetDay = day || new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from("worship_progress")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day", targetDay)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function upsertWorshipProgressDB(
+  userId: string,
+  prayers?: any,
+  adhkar?: any,
+  quranAyahs?: number
+): Promise<void> {
+  const supabase = createClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const { error } = await supabase.rpc("upsert_worship_progress", {
+    p_prayers: prayers ?? {},
+    p_adhkar: adhkar ?? {},
+    p_quran_ayahs: quranAyahs ?? 0,
+  });
+  if (error) console.error("worship-progress DB upsert failed:", error);
+}
+
+export async function getWorshipSettingsDB(): Promise<any> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_worship_settings");
+  if (error) return { isDefault: true, quran_daily_target: 10 };
+  return (data && (data as any[])[0]) || null;
 }

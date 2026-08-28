@@ -18,6 +18,7 @@ import {
 } from "@/components/worship/WorshipChrome";
 import { Reveal } from "@/components/ui/Reveal";
 import { useTodayPrayerTimes } from "@/hooks/usePrayerTimes";
+import { getWorshipProgressDB, getWorshipSettingsDB, upsertWorshipProgressDB } from "@/lib/islamic/worship-progress";
 import type { WorshipDayRecord } from "@/lib/islamic/worship-progress";
 import { generateDailyProgressItems } from "@/lib/islamic/utils";
 import type { DailyProgressItem } from "@/lib/islamic/types";

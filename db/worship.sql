@@ -83,8 +83,13 @@ grant execute on function public.upsert_worship_progress(jsonb, jsonb, int) to a
 -- ٢) إعدادات العبادة على البروفايل — عمود واحد + قائمة بيضاء للحفظ.
 --    هدف القرآن المحفوظ هنا هو اللي التحقق السيرفي بيقراه (fallback: ١٠).
 -- ----------------------------------------------------------------------------
+-- FIXED: ensure profiles table and worship_settings exist before RPC
 alter table public.profiles
-  add column if not exists worship_settings jsonb;
+  add column if not exists worship_settings jsonb
+  default '{"quran_daily_target":10,"calc_method":"makkah","madhab":"shafi"}'::jsonb;
+
+create index if not exists idx_profiles_worship_settings
+  on public.profiles (id) include (worship_settings);
 
 create or replace function public.get_worship_settings()
 returns table (islamic_settings jsonb)
