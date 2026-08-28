@@ -74,7 +74,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
 
         if (initial) {
           setSelectedSurah(initial);
-          setCurrentAyahIndex(Math.max(0, resumeRef.current.ayahId - 1));
+          setShowAllAyahs(true);
           await loadAyahs(initial.id);
         }
       } catch (error) {
