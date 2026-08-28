@@ -162,9 +162,9 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       s.id.toString().includes(searchQuery)
   );
 
-  const currentAyah = ayahs[currentAyahIndex];
+  const currentAyah = ayahs.length > 0 ? ayahs[0] : null; // full surah view
   const progress = selectedSurah
-    ? ((currentAyahIndex + 1) / selectedSurah.ayahCount) * 100
+    ? 100
     : 0;
 
   const isThisSurahPlaying = isPlaying && currentSurahId === selectedSurah?.id;
