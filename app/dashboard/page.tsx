@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -1264,6 +1266,21 @@ export default function DashboardPage() {
             الكارت مختصر عن قصد: آخر سورة + ٦ سور + رابط للمكتبة الكاملة.
             الصوت نفسه عايش في مزوّد الـ root layout، فالسورة اللي تبدأ
             من هنا بتكمّل معاك في أي صفحة. */}
+        <Link href="/worship" className="block mb-6">
+          <button
+            type="button"
+            aria-label="عباداتي — Worship Center"
+            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-gradient-to-l from-[#2DD4BF]/10 to-[#7C5CFF]/10 border border-[#2DD4BF]/20 hover:border-[#7C5CFF]/40 transition-colors text-right"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] text-xl">🕌</span>
+            <div className="min-w-0">
+              <h3 className="font-bold text-white leading-snug">عباداتي — Worship Center</h3>
+              <p className="text-sm text-[#B69CFF]">مواقيت الصلاة · الأذكار · القرآن · التسبيح</p>
+            </div>
+            <ArrowLeft size={18} className="mr-auto text-[#9AA0C0] shrink-0" aria-hidden />
+          </button>
+        </Link>
+
         <QuranSection
           themeStyles={themeStyles}
           onOpenLibrary={() => {
