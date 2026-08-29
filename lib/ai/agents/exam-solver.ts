@@ -8,6 +8,7 @@
  */
 
 import type { AgentResult, AgentId } from "./types";
+import { withImageUnderstanding } from "./references/image-understanding-extension";
 
 const AGENT_ID: AgentId = "exam_solver";
 
@@ -26,18 +27,64 @@ function buildPrompt(ctx: any, question: string, imageInput?: unknown): string {
     ? `أنت Exam Solver. دورك: حل سؤال الامتحان للمستخدم (${role}, ${subject}, مستوى ${level}). افهم السؤال أولاً، حدّد المادة، استخرج المطلوب، ثم حل خطوة بخطوة. إذا البيانات ناقصة، اطلبها بدل الاختراع. الإجابة النهائية واضحة. يدعم أنواع: الرياضيات، الفيزياء، الكيمياء، البرمجة، الإشارات، أسئلة أكاديمية.`
     : `You are Exam Solver. Role: solve exam questions for (${role}, ${subject}, level ${level}). Understand the question first, identify subject, extract requirements, solve step-by-step. If data missing, ask for it — do not invent. Final answer clear. Supports: Math, Physics, Chemistry, Programming, Signals, Academic.`;
 
-  const visionNote = imageInput ? (lang === "ar" ? "\nملاحظة: هناك صورة/ملف مرفق — حل بناءً على ما فيها إذا كان واضحًا." : "\nNote: image/attachment provided — solve based on visible content if clear.") : "";
+  const visionNote = imageInput ? (lang === "ar" ? "\nملاحظة: هناك صورة/ملف مرفق — النص المستخرج من الصورة سيستخدم للحل." : "\nNote: image/attachment provided — extracted text from image will be used.") : "";
 
   return `${intro}\n\nQuestion (from user):\n${question}\n${visionNote}\n\nRules:\n- Understand before solving.\n- Identify subject/domain.\n- If information missing, request it explicitly.\n- Step-by-step reasoning.\n- Clear final answer.\n- No invented data.`;
 }
 
 export async function examSolverAgent(
-  input: { prompt: string; context?: any; options?: Record<string, unknown> },
+  input: { prompt: string; context?: any; options?: Record<string, unknown>; imageInput?: File | unknown },
   runAgent?: (opts: any) => Promise<AgentResult>
 ): Promise<AgentResult> {
   try {
     const ctx = input.context ?? {};
-    const visionInput = ctx.preferences?.imageInput ?? ctx.preferences?.vision ?? undefined;
+    const visionInput = ctx.preferences?.imageInput ?? ctx.preferences?.vision ?? input.imageInput ?? undefined;
+
+    // Phase 8: Shared Image Understanding Pipeline — OCR first, then text agent.
+    // This removes the dependency on NVIDIA/OpenRouter vision for text-heavy images.
+    if (visionInput) {
+      try {
+        const imgRes = await withImageUnderstanding({
+          prompt: input.prompt,
+          context: ctx,
+          options: input.options,
+          imageInput: visionInput as File,
+        }, async (opts: any) => {
+          if (runAgent) return await runAgent({ ...opts, agent: AGENT_ID, vision: false });
+          return { ok: false, message: "Router required" };
+        });
+
+        if (!imgRes.ok && imgRes.error) {
+          const prompt = buildPrompt(ctx, input.prompt, visionInput);
+          if (runAgent) {
+            const result = await runAgent({ agent: AGENT_ID, prompt, context: ctx, options: { ...input.options, agent: AGENT_ID, vision: !!visionInput } });
+            return result.ok ? result : { ok: false, agent: AGENT_ID, code: "OCR_FAILED", message: (result as any)?.message || "Agent failed" + " | OCR also failed: " + imgRes.error, retryable: true };
+          }
+          return { ok: false, agent: AGENT_ID, code: "OCR_FAILED", message: imgRes.error, retryable: true };
+        }
+
+        if (imgRes.combinedPrompt && runAgent) {
+          const result = await runAgent({
+            agent: AGENT_ID,
+            prompt: imgRes.combinedPrompt,
+            context: { ...ctx, imageUnderstood: true, ocrText: imgRes.imageResult?.text, ocrMeta: imgRes.imageResult?.metadata },
+            options: { ...input.options, agent: AGENT_ID, vision: false, imageInput: true },
+          });
+          if (!result.ok && (result as any)?.code === "MODEL_404") {
+            return { ok: false, agent: AGENT_ID, code: "MODEL_404", message: "Exam Solver: NVIDIA model unavailable (404). OCR fallback provided text; router should use Groq text model.", retryable: true };
+          }
+          return result;
+        }
+      } catch (e: any) {
+        const prompt = buildPrompt(ctx, input.prompt, visionInput);
+        if (runAgent) {
+          const result = await runAgent({ agent: AGENT_ID, prompt, context: ctx, options: { ...input.options, agent: AGENT_ID, vision: !!visionInput } });
+          return result;
+        }
+        return { ok: false, agent: AGENT_ID, code: "EXAM_SOLVER_ERROR", message: e?.message ?? String(e), retryable: true };
+      }
+    }
+
     const prompt = buildPrompt(ctx, input.prompt, visionInput);
 
     if (runAgent) {

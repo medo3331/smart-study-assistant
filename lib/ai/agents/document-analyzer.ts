@@ -1,5 +1,6 @@
 "use strict";
 import type { AgentResult, AgentId } from "./types";
+import { withImageUnderstanding } from "./references/image-understanding-extension";
 const AGENT_ID: AgentId = "document_analyzer";
 
 function detectLang(ctx: any): "ar" | "en" {
@@ -18,14 +19,39 @@ function buildPrompt(ctx: any, task: string, content?: string, imageInput?: unkn
 }
 
 export async function documentAnalyzerAgent(
-  input: { prompt: string; context?: any; options?: Record<string, unknown> },
+  input: { prompt: string; context?: any; options?: Record<string, unknown>; imageInput?: File | unknown },
   runAgent?: (opts: any) => Promise<AgentResult>
 ): Promise<AgentResult> {
   try {
     const ctx = input.context ?? {};
     const content = ctx.preferences?.content || ctx.preferences?.documentText || ctx.preferences?.fileText || ctx.preferences?.pdfText || "";
-    const imageInput = ctx.preferences?.imageInput || ctx.preferences?.vision || undefined;
     const task = input.prompt;
+    const imageInput = ctx.preferences?.imageInput || ctx.preferences?.vision || input.imageInput || undefined;
+
+    // Phase 8: Shared Image Understanding Pipeline
+    if (imageInput) {
+      try {
+        const imgRes = await withImageUnderstanding({ prompt: task, context: ctx, options: input.options, imageInput: imageInput as File }, async (opts: any) => {
+          if (runAgent) return await runAgent({ ...opts, agent: AGENT_ID, vision: false });
+          return { ok: false, message: "Router required" };
+        });
+        if (!imgRes.ok && imgRes.error) {
+          const prompt = buildPrompt(ctx, task, content, imageInput);
+          if (runAgent) { const result = await runAgent({ agent: AGENT_ID, prompt, context: ctx, options: { ...input.options, agent: AGENT_ID, vision: !!imageInput } }); return result; }
+          return { ok: false, agent: AGENT_ID, code: "OCR_FAILED", message: imgRes.error, retryable: true };
+        }
+        if (imgRes.combinedPrompt && runAgent) {
+          const result = await runAgent({ agent: AGENT_ID, prompt: imgRes.combinedPrompt, context: { ...ctx, imageUnderstood: true, ocrText: imgRes.imageResult?.text }, options: { ...input.options, agent: AGENT_ID, vision: false, imageInput: true } });
+          if (!result.ok && (result as any)?.code === "MODEL_404") return { ok: false, agent: AGENT_ID, code: "MODEL_404", message: "Document Analyzer: NVIDIA unavailable. OCR text available; use Groq text.", retryable: true };
+          return result;
+        }
+      } catch (e: any) {
+        const prompt = buildPrompt(ctx, task, content, imageInput);
+        if (runAgent) { const result = await runAgent({ agent: AGENT_ID, prompt, context: ctx, options: { ...input.options, agent: AGENT_ID, vision: !!imageInput } }); return result; }
+        return { ok: false, agent: AGENT_ID, code: "DOCUMENT_ANALYZER_ERROR", message: e?.message || String(e), retryable: true };
+      }
+    }
+
     const prompt = buildPrompt(ctx, task, typeof content === "string" ? content : undefined, imageInput);
     if (runAgent) {
       const result = await runAgent({ agent: AGENT_ID, prompt, context: ctx, options: { ...input.options, agent: AGENT_ID, vision: !!imageInput } });
