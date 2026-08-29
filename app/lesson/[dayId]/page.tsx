@@ -10,6 +10,7 @@ import { MicButton } from "@/components/MicButton";
 import { setSlidesSeed } from "@/app/dashboard/components/nav-config";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { StudyTutorWidget } from "@/components/StudyTutorWidget";
+import { UnifiedChat } from "@/components/unified-ai/UnifiedChat";
 import { awardCoins } from "@/lib/shop/shop-data";
 
 // 🎴 إعادة تصميم صفحة الدرس — نفس نظام الداشبورد المنفَّذ (بنفسجي/تيل/عنبري على داكن)
@@ -681,7 +682,7 @@ export default function LessonDetailPage() {
           />
         </Reveal>
 
-        {/* Study Tutor Widget — lesson integration */}
+        {/* Study Tutor Widget — lesson integration (preserved, embedded in unified system) */}
         <Reveal index={3}>
           <StudyTutorWidget
             userRole="student"
@@ -692,6 +693,13 @@ export default function LessonDetailPage() {
             progress="current"
             language="ar"
           />
+        </Reveal>
+
+        {/* Unified AI — single interface (upload + chat) on lesson page */}
+        <Reveal index={4}>
+          <section aria-label="مساعد Magic الموحد" className="max-w-3xl mx-auto px-4 py-5 mt-4">
+            <UnifiedChat initialContext={{ language: "ar", preferences: { language: "ar", field: typeof config!=="undefined" ? config?.subject : "study" } }} />
+          </section>
         </Reveal>
 
 
