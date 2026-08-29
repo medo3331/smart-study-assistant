@@ -31,7 +31,7 @@ const MIN_USEFUL_CHARS = 12;
 /** مهلة نداء الـ OCR — من غيرها الراوت يقدر يستنى للأبد. */
 const OCR_TIMEOUT_MS = 25_000;
 
-type OcrAttempt = { engine: 1 | 3; language?: string };
+type OcrAttempt = { engine: 1 | 3 };
 
 export type FileKind = 'pdf' | 'docx' | 'image' | 'text';
 
@@ -78,7 +78,7 @@ async function callOcrSpace(
   buffer: Uint8Array,
   fileName: string,
   mimeType: string,
-  { engine, language }: OcrAttempt
+  { engine }: OcrAttempt
 ): Promise<string> {
   const form = new FormData();
   // النوع لازم يتمرر مع الـ Blob — Blob من غير type بيوصلهم
@@ -86,7 +86,6 @@ async function callOcrSpace(
   form.append('file', new Blob([new Uint8Array(buffer)], { type: mimeType }), fileName);
   form.append('OCREngine', String(engine));
   // إنجن ٣ بياخد auto بس، وإنجن ١ محتاج كود اللغة صريح
-  form.append('language', language ?? 'auto');
   form.append('isOverlayRequired', 'false');
   form.append('scale', 'true');
   form.append('detectOrientation', 'true');
@@ -176,7 +175,7 @@ async function extractTextFromImage(
   fileName: string,
   mimeType: string
 ): Promise<string> {
-  const attempts: OcrAttempt[] = [{ engine: 1, language: 'ara' }, { engine: 3 }];
+  const attempts: OcrAttempt[] = [{ engine: 1 }, { engine: 3 }];
 
   let lastError: ExtractError | null = null;
   // أحسن نص لقيناه لحد دلوقتي — نص قصير أفيد للمستخدم من رسالة خطأ
