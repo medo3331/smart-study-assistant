@@ -14,7 +14,7 @@
 
 import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
-import { extractTextFromFile } from "../../extract-text"; // Magic OCR — existing, unchanged
+import { extractTextFromFile } from "../extract-text";
 
 export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult> {
   try {

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>Unified AI — Preview</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');body{font-family:'Cairo',sans-serif;background:#0b0c10;color:#ececf1;padding:3rem;max-width:900px;margin:auto;line-height:1.6}</style>
+</head>
+<body>
+<h1>Unified AI — Design Preview (Approval Required)</h1>
+<p><strong>Single interface — no agent picker.</strong> User writes / uploads → Hidden Router + OCR → Answer.</p>
+
+<div style="background:#111318;border:1px solid #23242f;border-radius:1rem;padding:1.2rem;margin:1rem 0">
+<h3>What user sees (NOT developer info):</h3>
+<ul>
+<li>Chat box: <code>[اكتب سؤالك...] [📎] [🖼️] [إرسال]</code></li>
+<li>Attach preview: image thumbnail with ❌ to remove</li>
+<li>Response bubble: assistant text — <strong>no mention of "Exam Solver" / "AgentRouter" / "OCR" / "NVIDIA"</strong></li>
+<li>Small reassurance: "تم اختيار الوكيل الأنسب تلقائيًا خلف الكواليس" (optional, not technical)</li>
+</ul>
+</div>
+
+<div style="background:#171925;border:1px solid #23242f;border-radius:1rem;padding:1.2rem;margin:1rem 0">
+<h3>Hidden behind (developer only — not shown)</h3>
+<pre>Image → Magic OCR (extract-text.ts) → AgentRouter.select() → 11 backend agents → Unified response</pre>
+<p>Design preserved. Nothing deleted except the picker UI (AIHub/AgentLauncher).</p>
+</div>
+
+<p><strong>Next (after your approval):</strong> wire into /chat, /dashboard/agents, lesson page.</p>
+<p><strong>Current file:</strong> <code>components/unified-ai/UnifiedChat.tsx</code> (9,206 bytes, created)</p>
+</body></html>

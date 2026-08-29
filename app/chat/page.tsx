@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { ChatWorkspace } from "@/components/ChatWorkspace";
+import { UnifiedChat } from "@/components/unified-ai/UnifiedChat";
 
 export const metadata: Metadata = {
-  title: "مساعدك الذكي",
+  title: "مساعد Magic — Unified AI",
   robots: { index: false, follow: false },
 };
 
 export default function ChatPage() {
-  return <ChatWorkspace />;
+  return <UnifiedChat />;
 }

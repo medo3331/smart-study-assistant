@@ -21,8 +21,8 @@ import type { AgentRouterDecision } from "./types";
 
 export function routerSelectAgent(prompt: string, context?: Record<string, unknown>, hasImage?: boolean): AgentRouterDecision {
   const p = (prompt || "").toLowerCase();
-  const role = String(context?.role || context?.preferences?.role || "").toLowerCase();
-  const field = String(context?.field || context?.preferences?.subject || "").toLowerCase();
+  const role = String((context as any)?.role || (context as any)?.preferences?.role || "").toLowerCase();
+  const field = String((context as any)?.field || (context as any)?.preferences?.subject || "").toLowerCase();
 
   const rules = [
     { id: "exam_solver", keywords: ["حل", "سؤال", "امتحان", "معادلة", "رياضيات", "فيزياء", "كيمياء", "solve", "question", "exam", "equation"], conf: 0.95 },

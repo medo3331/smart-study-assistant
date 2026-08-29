@@ -60,3 +60,4 @@ next-env.d.ts
 # لازم تفضل بعد كل قواعد .env* عشان تغلبهم.
 !.env.example
 .hermes-tmp.*
+.env.local
