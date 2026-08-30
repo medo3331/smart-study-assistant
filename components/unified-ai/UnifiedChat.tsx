@@ -3,10 +3,13 @@
  * Unified Chat — واجهة واحدة فقط للمستخدم.
  * لا يظهر AgentRouter / OCR / 11 Agents للمستخدم.
  * Upload: 📎 (PDF/text) / 🖼️ (image) → Preview → OCR إذا لزم → Router داخلي → Response.
+ * يكبُر الطلب على /api/unified-ai ويدير OCR + Router خلف الكواليس.
  */
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type ChatMsg = { role: "user" | "assistant"; content: string; attachmentName?: string };
 
@@ -50,33 +53,39 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
     setLoading(true);
 
     try {
-      // Hidden flow (user never sees these steps):
-      // 1) If attachment -> OCR (Magic pipeline, hidden)
-      // 2) Router selects agent (hidden)
-      // 3) Agent responds (hidden backend)
-      // For UX we show a single assistant message — agent identity is hidden by design.
-
-      // Simulated unified response (in production: call /api/unified-ai with attachment + prompt)
-      const combinedPrompt = text + (attachment ? ` [مرفق: ${attachment.file.name}]` : "");
-      const agentUsed = /حل|سؤال|معادلة|امتحان/i.test(text) ? "exam_solver" :
-                        /اشرح|درس|مفهوم/i.test(text) ? "study_tutor" :
-                        /ملف|وثيقة|PDF/i.test(text) ? "document_analyzer" :
-                        /اختبر|أسئلة/i.test(text) ? "quiz_generator" :
-                        "study_tutor"; // default
-
-      // Build response — no agent name shown to user
-      let assistantText = "";
-      if (text.includes("حل") || /سؤال|معادلة/i.test(text)) {
-        assistantText = "تم حل السؤال خطوة بخطوة. الإجابة واضحة ومبنية على تحليل النص المستخرج (إذا كان هناك مرفق) أو على السياق. لا حاجة لاختيار وكيل — Router فعله تلقائيًا.";
-      } else if (text.includes("اشرح") || /درس|مفهوم/i.test(text)) {
-        assistantText = "تم شرح النقطة بالتدرج. الدرس متكامل مع السياق الحالي، والشرح باللغة العربية مع الحفاظ على المصطلحات العلمية.";
-      } else if (attachment) {
-        assistantText = "تم قراءة الملف/الصورة وتحليل المحتوى. النص المستخرج تم تمريره للوكيل المناسب — الإجابة مبنية عليه.";
+      // Build FormData for /api/unified-ai (supports prompt + file/photo)
+      const formData = new FormData();
+      formData.append("prompt", text);
+      if (attachment) {
+        formData.append("file", attachment.file, attachment.file.name);
+        // Also mark imageInput for OCR path
+        if (attachment.kind === "image") {
+          formData.append("imageInput", attachment.file, attachment.file.name);
+        }
+      }
+      // Pass context language
+      if (initialContext && initialContext.language) {
+        formData.append("language", initialContext.language);
       } else {
-        assistantText = "تم معالجة طلبك عبر Unified AI. الإجابة مبنية على السياق + أي ملف مرفق + اختيار تلقائي للوكيل الأنسب.";
+        formData.append("language", "ar");
       }
 
-      // Small hidden note for user clarity (NOT developer info — just reassurance)
+      const res = await fetch("/api/unified-ai", {
+        method: "POST",
+        body: formData,  // Use FormData instead of JSON
+      });
+
+      const data = await res.json().catch(() => ({}));
+      setLoading(false);
+
+      if (!res.ok || !data?.ok) {
+        const errorMsg = data?.error || (res.statusText || "حدث خطأ");
+        setMessages((m) => [...m, { role: "assistant", content: "حدث خطأ أثناء المعالجة. جرب مرة أخرى." }]);
+        return;
+      }
+
+      // Show assistant response
+      const assistantText = data?.answer || "تم المعالجة عبر Unified AI.";
       const hiddenReason = `(تم اختيار الوكيل الأنسب تلقائيًا خلف الكواليس — لا تحتاج لتحديده)`;
 
       setMessages((m) => [
@@ -85,9 +94,8 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
       ]);
       removeAttachment();
     } catch (e: any) {
-      setMessages((m) => [...m, { role: "assistant", content: "حدث خطأ أثناء المعالجة. جرب مرة أخرى." }]);
-    } finally {
       setLoading(false);
+      setMessages((m) => [...m, { role: "assistant", content: "حدث خطأ أثناء المعالجة. جرب مرة أخرى." }]);
     }
   };
 
@@ -104,7 +112,7 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
             <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--red)] text-white"}`}>
-              <p>{msg.content}</p>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-sm leading-relaxed text-ink">{msg.content}</ReactMarkdown>
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
               )}
