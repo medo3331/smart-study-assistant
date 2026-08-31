@@ -531,11 +531,38 @@ export default function LessonDetailPage() {
     if (!dayRow || !userId || completing) return;
     setCompleting(true);
 
-    await supabase.from("study_days").update({ is_completed: true }).eq("id", dayRow.id);
-    await supabase
-      .from("profiles")
-      .update({ xp: profileXp + dayRow.xp_reward })
-      .eq("id", userId);
+    // Phase C: مسار موحد — إكمال اليوم + XP + Coins في معاملة واحدة validated
+    const { data, error } = await supabase.rpc("complete_study_day", { p_day_id: dayRow.id });
+
+    if (error) {
+      // fallback للتوافق مع DB قديمة لم تُطبق Phase C بعد
+      console.warn("complete_study_day failed — fallback to legacy:", error.message);
+      await supabase.from("study_days").update({ is_completed: true }).eq("id", dayRow.id);
+      const { error: xpError } = await supabase.rpc("increment_xp", { p_delta: dayRow.xp_reward });
+      if (xpError) {
+        console.warn("increment_xp fallback failed:", xpError.message);
+        await supabase.from("profiles").update({ xp: profileXp + dayRow.xp_reward }).eq("id", userId);
+      }
+      try {
+        const res = await awardCoins(supabase, "day_done", dayRow.id);
+        if (res.data && res.data.awarded > 0) setCoinsWon(res.data.awarded);
+      } catch (err) {
+        console.error("award day_done failed (متجاهَل):", err);
+      }
+      setDayRow({ ...dayRow, is_completed: true });
+      setProfileXp((prev) => prev + dayRow.xp_reward);
+    } else {
+      const row: any = Array.isArray(data) ? data[0] : data;
+      const xpAwarded = row?.xp_awarded ?? dayRow.xp_reward;
+      const coinsAwarded = row?.coins_awarded ?? 0;
+      if (xpAwarded > 0) setProfileXp((prev) => prev + xpAwarded);
+      if (coinsAwarded > 0) setCoinsWon(coinsAwarded);
+      // لو اليوم كان مكتملاً بالفعل (idempotency)، لا نضيف XP مرة أخرى
+      if (row && row.xp_awarded === 0 && dayRow.is_completed) {
+        // لا شيء
+      }
+      setDayRow({ ...dayRow, is_completed: true });
+    }
 
     const todayKey = new Date().toISOString().slice(0, 10);
     const { data: existingActivity } = await supabase
@@ -560,8 +587,6 @@ export default function LessonDetailPage() {
       });
     }
 
-    setDayRow({ ...dayRow, is_completed: true });
-    setProfileXp((prev) => prev + dayRow.xp_reward);
     setPlanProgress((prev) => (prev ? { ...prev, completed: Math.min(prev.completed + 1, prev.total) } : prev));
     setJustCompleted(true);
     setCompleting(false);
@@ -574,12 +599,6 @@ export default function LessonDetailPage() {
 
        ⚠️ المبلغ والسقف اليومي من السيرفر (`award_coins`)، مش من هنا —
        الكلاينت مابيبعتش رقم خالص. */
-    try {
-      const res = await awardCoins(supabase, "day_done", dayRow.id);
-      if (res.data && res.data.awarded > 0) setCoinsWon(res.data.awarded);
-    } catch (err) {
-      console.error("award day_done failed (متجاهَل):", err);
-    }
   };
 
   const handleShareLesson = async () => {

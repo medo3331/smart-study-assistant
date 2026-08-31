@@ -501,12 +501,13 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
-  // 🔴 حفظ XP / الستريك / الثيم في قاعدة البيانات عند أي تغيير
+  // Phase B: XP محمي — لا تحديث مباشر لـ profiles.xp (يمر عبر increment_xp RPC فقط)
+  // هذا الـ effect يحفظ streak/theme فقط. الـ XP يُحفظ عبر increment_xp عند كسبه.
   useEffect(() => {
     if (isInitialized && authUser) {
-      supabase.from("profiles").update({ xp, streak, theme }).eq("id", authUser.id).then();
+      supabase.from("profiles").update({ streak, theme }).eq("id", authUser.id).then();
     }
-  }, [xp, streak, theme, isInitialized, authUser]);
+  }, [streak, theme, isInitialized, authUser]);
 
   /* 📖 تصفير الفتحة الموجّهة عند قفل الدرج.
      كارت القرآن بيقول «افتح على الصوت»، والدرج بيفتح القسم ده. لو القيمة
@@ -859,18 +860,44 @@ export default function DashboardPage() {
   const toggleDayCompletion = (dayNumber: number) => {
     if (dayNumber > currentDayNumber && !earlyUnlockedDays.includes(dayNumber)) return;
 
-    setDays((prev) =>
-      prev.map((d) => {
-        if (d.day === dayNumber) {
-          const nextState = !d.isCompleted;
-          setXp((prevXp) => Math.max(0, prevXp + (nextState ? d.xpReward : -d.xpReward)));
-          if (nextState) setCelebration({ topic: d.topic, xp: d.xpReward });
-          logActivity({ tasksCompleted: nextState ? 1 : -1 });
-          return { ...d, isCompleted: nextState };
+    const target = days.find((d) => d.day === dayNumber);
+    if (!target) return;
+    const nextState = !target.isCompleted;
+
+    // Phase C: لا رجوع للـ XP عند إلغاء الإكمال — XP غير قابل للسحب بعد المنح
+    // الإكمال فقط يمر عبر complete_study_day (server-validated + idempotent)
+    if (!nextState) {
+      setDays((prev) => prev.map((d) => (d.day === dayNumber ? { ...d, isCompleted: false } : d)));
+      logActivity({ tasksCompleted: -1 });
+      return;
+    }
+
+    // تفاؤلي: حدّث الواجهة فوراً ثم أكد عبر السيرفر
+    setDays((prev) => prev.map((d) => (d.day === dayNumber ? { ...d, isCompleted: true } : d)));
+    setCelebration({ topic: target.topic, xp: target.xpReward });
+    logActivity({ tasksCompleted: 1 });
+
+    if (!target.id) {
+      // يوم محلي لم يُحفظ بعد في DB — fallback محلي فقط
+      setXp((prev) => prev + target.xpReward);
+      return;
+    }
+
+    supabase
+      .rpc("complete_study_day", { p_day_id: target.id })
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn("complete_study_day failed:", error.message);
+          // تراجع تفاؤلي
+          setDays((prev) => prev.map((d) => (d.day === dayNumber ? { ...d, isCompleted: false } : d)));
+          return;
         }
-        return d;
-      })
-    );
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          if (row.xp_awarded > 0) setXp((prev) => prev + row.xp_awarded);
+          // الكوينز تُقرأ من coin_balance عبر الهوك الحالي — لا حاجة لتحديث يدوي
+        }
+      });
   };
 
   useEffect(() => {
@@ -883,6 +910,10 @@ export default function DashboardPage() {
   const handleBuyStreakFreeze = () => {
     if (xp >= 200) {
       setXp((prev) => prev - 200);
+      // Phase B: خصم XP عبر RPC محمي
+      supabase.rpc("increment_xp", { p_delta: -200 }).then(({ error }) => {
+        if (error) console.warn("increment_xp (-200) failed:", error.message);
+      });
       alert("تم شراء تجميد الستريك بنجاح! 🎉 تم خصم 200 XP.");
       setShowShopModal(false);
     } else {
@@ -1473,6 +1504,10 @@ export default function DashboardPage() {
           onClose={() => setActiveBossChapter(null)}
           onWin={(xpEarned) => {
             setXp((prev) => prev + xpEarned);
+            // Phase C: ثبّت XP الفوز عبر RPC (مع idempotency عبر badge لاحقاً)
+            supabase.rpc("increment_xp", { p_delta: xpEarned }).then(({ error }) => {
+              if (error) console.warn("increment_xp boss failed:", error.message);
+            });
             logActivity({ tasksCompleted: 1 });
             // BossFight هو اللي بيعمل insert في جدول badges، فبنزوّد العدد
             // محلياً بدل ما نستعلم تاني — الشريط يتحرك في نفس اللحظة.
