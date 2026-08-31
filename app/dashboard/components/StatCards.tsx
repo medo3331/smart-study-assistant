@@ -75,35 +75,39 @@ export function StatCards({ xp, streak, completedSteps, weeklyFocusMinutes }: St
 
 function StatCard({ stat }: { stat: Stat }) {
   const reduceMotion = useReducedMotion();
-  const toneBg =
-    stat.tone === "amber"
-      ? "bg-[#FB923C]/15 text-[#FB923C]"
-      : stat.tone === "teal"
-        ? "bg-[#2DD4BF]/15 text-[#2DD4BF]"
-        : "bg-[#DC4C4C]/15 text-[#F5A25C]";
+  const isAccentTone = stat.tone !== "teal";
+  const iconStyle: React.CSSProperties = isAccentTone
+    ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }
+    : { backgroundColor: "color-mix(in srgb, var(--accent-highlight) 15%, transparent)", color: "var(--accent-highlight)" };
 
   return (
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 0.8, 0.36, 1], delay: 0.05 }}
-      className="rounded-[24px] border border-white/[0.06] bg-[#0D0906]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(220,76,76,0.12)]"
+      className="rounded-[24px] border backdrop-blur-xl p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5"
+      style={{
+        backgroundColor: "var(--card-primary)",
+        borderColor: "var(--rule)",
+        boxShadow: "0 8px 30px var(--shade)",
+      }}
     >
       <div className="flex items-center gap-3">
         <span
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${toneBg}`}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          style={iconStyle}
           aria-hidden
         >
           {stat.icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm text-[#9AA0C0]">{stat.label}</p>
-          <p className="mt-1 flex items-baseline gap-1">
+          <p className="truncate text-sm" style={{ color: "var(--muted)" }}>{stat.label}</p>
+          <p className="mt-1 flex items-baseline gap-1" style={{ color: "var(--text)" }}>
             <AnimatedNumber
               value={stat.value}
-              className="font-mono text-2xl font-bold text-white"
+              className="font-mono text-2xl font-bold"
             />
-            <span className="text-xs text-[#9AA0C0]">{stat.unit}</span>
+            <span className="text-xs" style={{ color: "var(--muted)" }}>{stat.unit}</span>
           </p>
         </div>
       </div>

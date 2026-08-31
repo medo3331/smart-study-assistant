@@ -167,14 +167,23 @@ export const viewport: Viewport = {
    (شوف PACK_KEY في lib/shop/shop-data.ts — الاسم لازم يتطابق.) */
 const noFlashTheme = `
 (function(){try{
+  var VALID=['indigo-light','warm-dark','slate','deep-green'];
+  var LEGACY={light:'indigo-light',dark:'warm-dark'};
   var s=localStorage.getItem('theme');
-  var t=s||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  var t=null;
+  if(s && VALID.indexOf(s)!==-1) t=s;
+  else if(s && LEGACY[s]) { t=LEGACY[s]; try{localStorage.setItem('theme',t);}catch(e){} }
+  else if(!s) {
+    t=(window.matchMedia('(prefers-color-scheme: light)').matches?'indigo-light':'warm-dark');
+    try{localStorage.setItem('theme',t);}catch(e){}
+  }
+  if(!t || VALID.indexOf(t)===-1) t='warm-dark';
   document.documentElement.setAttribute('data-theme',t);
   var p=localStorage.getItem('shop_pack');
   if(p){document.documentElement.setAttribute('data-pack',p);}
   var l=localStorage.getItem('locale');
   if(l==='en'){document.documentElement.lang='en';document.documentElement.dir='ltr';}
-}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+}catch(e){try{document.documentElement.setAttribute('data-theme','warm-dark');}catch(_){}})();
 `;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

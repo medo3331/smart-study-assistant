@@ -5,7 +5,7 @@ import React, { useEffect, useId, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationToolsPanel } from "./ToolsSection";
 import { SoundLibrary } from "./SoundLibrary";
-import { useTheme } from "@/theme/ThemeProvider";
+import { useTheme, type ThemeId } from "@/theme/ThemeProvider";
 import { useAudio } from "@/components/audio/AudioProvider";
 import type { ThemeColor, ThemeStyles } from "./types";
 
@@ -80,6 +80,14 @@ const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
   { id: "cyan", name: "أزرق", swatch: "bg-cyan-500" },
 ];
 
+// Phase 1 — 4 ثيمات الداشبورد (العقدة الجديدة)
+const THEME_SWATCHES: { id: ThemeId; label: string; accent: string; bg: string }[] = [
+  { id: "indigo-light", label: "نيلي فاتح", accent: "#4338CA", bg: "#F3F5FC" },
+  { id: "warm-dark", label: "أسود دافي", accent: "#DC4C4C", bg: "#0D0906" },
+  { id: "slate", label: "رمادي", accent: "#64748B", bg: "#1A1D23" },
+  { id: "deep-green", label: "أخضر داكن", accent: "#10B981", bg: "#0B1A14" },
+];
+
 /* ⚠️ سلّم الورق: `paper-2` هو الأفتح (سطح الورقة) و`paper` أغمق شوية
    (حتة غايرة) و`paper-3` أغمق (تمرير الماوس). فالدرج نفسه `paper-2`،
    وكل عنصر تحكّم جواه `paper` عشان يبان غاير. كروت الأقسام الجديدة
@@ -98,7 +106,7 @@ const SECTIONS: {
   hint: string;
 }[] = [
   { id: "plan", label: "الخطة والمادة", icon: "📚", hint: "عدّل اسم المادة أو ابدأ خطة جديدة" },
-  { id: "look", label: "الشكل والإضاءة", icon: "🎨", hint: "ليل ونهار وأربع أقلام تعليم" },
+  { id: "look", label: "الشكل والإضاءة", icon: "🎨", hint: "أربع ثيمات: نيلي فاتح · أسود دافي · رمادي · أخضر" },
   { id: "sound", label: "المكتبة الصوتية", icon: "🎧", hint: "قرآن وموسيقى وصوتياتك" },
   { id: "notif", label: "التنبيهات", icon: "🔔", hint: "تذكير يومي قبل السلسلة تنكسر" },
 ];
@@ -113,7 +121,8 @@ export function Sidebar({
   isChangingSubject,
   handleSubjectChange,
   theme,
-  setTheme,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy pen setter, preserved for compatibility
+  setTheme: _legacySetTheme,
   themeStyles,
   notificationsEnabled,
   handleToggleNotifications,
@@ -124,9 +133,7 @@ export function Sidebar({
   onNavigateHome,
   focusSection = null,
 }: SidebarProps) {
-  // الداشبورد كان بيورّث الليل/النهار من اللاندينج من غير أي طريقة يغيّره
-  // من جوه. الدرج ده أنسب مكان للمفتاح.
-  const { theme: mode, toggle: toggleMode } = useTheme();
+  const { theme: activeTheme, setTheme: setAppTheme } = useTheme();
 
   // التراك الشغّال بيتقرا هنا للسطر التعريفي بس. التحكّم كله جوه
   // `SoundLibrary` وفي المشغّل العائم.
@@ -150,14 +157,17 @@ export function Sidebar({
   const toggleSection = (id: SettingsSectionId) =>
     setOpenSections((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy profiles.theme bridge, kept for compatibility
   const penName = PENS.find((p) => p.id === theme)?.name ?? "";
 
   /** السطر تحت عنوان القسم: الحالة الحقيقية لو فيها معلومة، وإلا التعريف.
       ده بيت القصيد من التنظيم — القسم المقفول بيقول إيه جواه وإيه شغّال. */
   const sectionStatus = (id: SettingsSectionId): string | null => {
     switch (id) {
-      case "look":
-        return `${mode === "dark" ? "ليل" : "نهار"} · قلم ${penName}`;
+      case "look": {
+        const cur = THEME_SWATCHES.find((t) => t.id === activeTheme)?.label ?? activeTheme;
+        return cur;
+      }
       case "sound":
         return activeTrack ? `${isPlaying ? "بيشتغل" : "متوقف"}: ${activeTrack.name}` : null;
       case "notif":
@@ -193,58 +203,54 @@ export function Sidebar({
 
       case "look":
         return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <p className="tag">الإضاءة</p>
-              <div className="flex gap-1 bg-paper p-1 rounded-[var(--r-sm)] border border-rule">
-                {(
-                  [
-                    { id: "light", label: "نهار" },
-                    { id: "dark", label: "ليل" },
-                  ] as const
-                ).map((m) => (
+          <div className="space-y-3">
+            <p className="tag">الثيم</p>
+            <p className="text-xs leading-5 text-ink-soft">
+              اختر مظهر الداشبورد — يُحفظ تلقائياً
+            </p>
+            <div
+              className="flex items-center gap-3 flex-wrap"
+              role="group"
+              aria-label="اختيار الثيم"
+            >
+              {THEME_SWATCHES.map((sw) => {
+                const selected = activeTheme === sw.id;
+                return (
                   <button
-                    key={m.id}
-                    onClick={() => {
-                      if (mode !== m.id) toggleMode();
-                    }}
-                    aria-pressed={mode === m.id}
-                    className={`mono flex-1 px-3 py-2 rounded-[6px] transition ${
-                      mode === m.id ? "bg-ink text-paper-2" : "text-ink-soft hover:text-ink"
+                    key={sw.id}
+                    type="button"
+                    onClick={() => setAppTheme(sw.id)}
+                    aria-label={sw.label}
+                    aria-pressed={selected}
+                    title={sw.label}
+                    className={`relative h-10 w-10 shrink-0 rounded-full border-2 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
+                      selected
+                        ? "border-[var(--accent)] shadow-[0_0_0_3px_var(--card-secondary)]"
+                        : "border-[var(--card-secondary)] hover:border-[var(--accent-highlight)]"
                     }`}
+                    style={{ backgroundColor: sw.accent }}
                   >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="tag">قلم التعليم</p>
-              <div className="grid grid-cols-4 gap-2">
-                {PENS.map((pen) => (
-                  <button
-                    key={pen.id}
-                    onClick={() => setTheme(pen.id)}
-                    aria-pressed={theme === pen.id}
-                    className={`p-2 rounded-[var(--r-sm)] border transition flex flex-col items-center gap-2 ${
-                      theme === pen.id
-                        ? "border-ink bg-paper-3"
-                        : "border-rule bg-paper hover:border-rule-strong"
-                    }`}
-                  >
-                    {/* الضربة نفسها هي العيّنة — مستطيل زي أثر القلم، مش دايرة */}
+                    {/* لمسة خلفية الثيم داخل الدائرة */}
                     <span
-                      className={`w-full h-3 rounded-[2px] ${pen.swatch}`}
-                      style={{ transform: "rotate(-1.5deg)" }}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-[6px] rounded-full"
+                      style={{ backgroundColor: sw.bg, opacity: 0.18 }}
                     />
-                    <span className={`mono ${theme === pen.id ? "text-ink" : "text-ink-soft"}`}>
-                      {pen.name}
-                    </span>
+                    {selected && (
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 grid place-items-center text-[11px] font-bold text-white drop-shadow"
+                      >
+                        ✓
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
+            <p className="mono text-[11px] text-ink-soft">
+              الحالي: {THEME_SWATCHES.find((t) => t.id === activeTheme)?.label ?? activeTheme}
+            </p>
           </div>
         );
 

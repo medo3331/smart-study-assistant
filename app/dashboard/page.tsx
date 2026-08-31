@@ -1097,7 +1097,12 @@ export default function DashboardPage() {
 
   return (
     <div
-      className="min-h-screen p-4 sm:p-6 md:p-10 lg:pe-[16.5rem] xl:pe-[18.5rem] font-sans bg-paper text-ink relative pb-24"
+      className="min-h-screen p-4 sm:p-6 md:p-10 lg:pe-[16.5rem] xl:pe-[18.5rem] font-sans relative pb-24"
+      style={{
+        backgroundColor: "var(--app-bg)",
+        backgroundImage: "var(--app-bg-image)",
+        color: "var(--text)",
+      }}
       dir="rtl"
     >
       {/* 🎧 عنصر الـ <audio> والمشغّل العائم بقوا في `AudioProvider` جوه

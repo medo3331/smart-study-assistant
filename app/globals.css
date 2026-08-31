@@ -125,41 +125,51 @@
    الحدّ (ΔL* = ١٢٫٩، كان ١٣٫٨). التهدئة كانت في سطوع النص والألوان بس، لأن لو
    هدّينا الحدود كمان كانت الصفحة هترجع "ملخبطة" — وهي المشكلة اللي التصميم ده
    اتعمل أصلاً لحلها. */
+/* ==========================================================================
+   Dashboard Premium — 4-theme foundation (Phase 1)
+   Contract: --app-bg / --card-primary / --card-secondary / --accent /
+             --accent-highlight / --text / --muted / --app-bg-image
+   Legacy bridge: --paper/--paper-2/--paper-3/--ink/--ink-soft etc
+                 map to the new vars so existing sheet-card etc adapt.
+   Legacy aliases: "light" → indigo-light, "dark" → warm-dark.
+   PACKS ([data-pack]) are defined later and override these when present.
+   ========================================================================== */
+
+/* ---- THEME 1 — نيلي فاتح (Indigo Light) ---- */
 :root,
+:root[data-theme="indigo-light"],
 :root[data-theme="light"] {
-  --paper: #E4EAF4;
-  --paper-2: #F6F8FC;
-  --paper-3: #DCE4F0;
-  --rule: #C9D4E6;
-  --rule-strong: #AEBACF;
-  --ink: #232D49;
-  --ink-soft: #565F7D;
-  --marker: #F5DE72;
-  --marker-deep: #E2C95C;
+  --app-bg: #F3F5FC;
+  --card-primary: #FFFFFF;
+  --card-secondary: #F6F7FD;
+  --accent: #4338CA;
+  --accent-highlight: #6366F1;
+  --text: #1E2340;
+  --muted: #6B7280;
+  --app-bg-image: none;
+
+  /* legacy bridge — بقيّة المشروع لسه بيقرا --paper/--ink */
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: #D6DDF0;
+  --rule-strong: #BFC9E6;
+  --marker: var(--accent);
+  --marker-deep: #3730A3;
   --redpen: #CE5A6C;
   --redpen-soft: rgba(206, 90, 108, 0.34);
-  --shade: rgba(35, 45, 73, 0.08);
-  --shade-lift: rgba(35, 45, 73, 0.12);
-
-  /* النص اللي بيقع فوق الأحمر الصريح. بيتغير مع الثيم لأن الأحمر نفسه
-     بيفتح في الليل: أبيض على أحمر النهار = ٤.٤، وكحلي على أحمر الليل = ٥.٢.
-     لو ثبّتنا الأبيض في الحالتين كان هيسقط لـ ٣.٢ في الليل. */
+  --shade: rgba(30, 35, 64, 0.07);
+  --shade-lift: rgba(30, 35, 64, 0.11);
   --on-danger: #FFFFFF;
+  --on-marker: #FFFFFF;
 
-  /* ---- أقلام الفسفوري: لكل لون نسختين ----
-     fill  = الحبر الصريح، بيتحط خلفية وتحته نص --on-marker
-     ink   = نسخة غامقة مقروءة كنص فوق الورق الفاتح
-     tint  = ظل خفيف جداً للخلفيات الهادية
-     السبب: الأصفر الفسفوري كنص على ورق أبيض مش بيتقرا خالص، فلازم
-     الخلفية والنص يبقوا قيمتين مختلفتين مش قيمة واحدة. */
   --hl-yellow-fill: #F5DE72;
   --hl-yellow-deep: #E2C95C;
   --hl-yellow-ink: #7A5A00;
   --hl-green-fill: #35C285;
   --hl-green-ink: #0F6B4E;
-  /* ⚠️ الأحمر ده فضل صريح على عكس --redpen اللي هدّيناه: --redpen خط هامش
-     مفيهوش نص، لكن --hl-red-fill بيتحط تحته `text-ondanger` أبيض. لو هدّيناه
-     الأبيض بيسقط لـ ٣٫٩ — فلكل واحد قيمته حسب دوره. */
   --hl-red-fill: #D8455E;
   --hl-red-ink: #B3283F;
   --hl-orange-ink: #9A4B10;
@@ -170,36 +180,42 @@
   --hl-indigo-fill: #4F5BD5;
   --hl-indigo-ink: #3A44B0;
 
-  /* أسماء قديمة، متسيبة كشبكة أمان لأي مكان لسه بيستخدمها */
   --bg: var(--paper);
   --bg-elevated: var(--paper-2);
-  --text: var(--ink);
-  --text-muted: var(--ink-soft);
   --border: var(--rule);
   --emerald: var(--ink);
   --amber: var(--marker);
   --shadow: var(--shade);
 }
 
-/* ---- الباليت: ليل، مكتب بلمبة ---- */
+/* ---- THEME 2 — أسود دافي (Warm Dark) — الحالي ---- */
+:root[data-theme="warm-dark"],
 :root[data-theme="dark"] {
-  /* ⚠️ تم تغيير الخلفية للدافئ (#0D0906 / #120B08 / #16110A) — color-migration 2026-08-27 */
-  --paper: #0D0906;
-  --paper-2: #120B08;
-  --paper-3: #16110A;
-  --rule: rgba(203, 216, 236, 0.15);
-  --rule-strong: rgba(203, 216, 236, 0.3);
-  --ink: #E9EDF8;
-  --ink-soft: #929DBA;
-  --marker: #F0D24A;
-  --marker-deep: #D8B932;
+  --app-bg: #0D0906;
+  --card-primary: #161009;
+  --card-secondary: #1D1510;
+  --accent: #DC4C4C;
+  --accent-highlight: #F2745C;
+  --text: #F3F0EC;
+  --muted: #9A958F;
+  --app-bg-image: none;
+
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(243, 240, 236, 0.08);
+  --rule-strong: rgba(243, 240, 236, 0.16);
+  --marker: var(--accent);
+  --marker-deep: #B91C1C;
   --redpen: #E8697F;
   --redpen-soft: rgba(232, 105, 127, 0.36);
-  --shade: rgba(0, 0, 0, 0.4);
-  --shade-lift: rgba(0, 0, 0, 0.55);
-  --on-danger: #141C33;
+  --shade: rgba(0, 0, 0, 0.45);
+  --shade-lift: rgba(0, 0, 0, 0.6);
+  --on-danger: #1A0A0A;
+  --on-marker: #FFFFFF;
 
-  /* في الليل الحبر الصريح نفسه بيتقرا كنص، فـ ink بتقرب من fill */
   --hl-yellow-fill: #F0D24A;
   --hl-yellow-deep: #D8B932;
   --hl-yellow-ink: #F0D24A;
@@ -214,6 +230,113 @@
   --hl-purple-ink: #C0A0F0;
   --hl-indigo-fill: #6E79E8;
   --hl-indigo-ink: #8F98F0;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* ---- THEME 3 — رمادي (Slate) ---- */
+:root[data-theme="slate"] {
+  --app-bg: #1A1D23;
+  --card-primary: #22262E;
+  --card-secondary: #2A2F38;
+  --accent: #64748B;
+  --accent-highlight: #94A3B8;
+  --text: #E5E7EB;
+  --muted: #8B93A3;
+  --app-bg-image: none;
+
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(229, 231, 235, 0.08);
+  --rule-strong: rgba(229, 231, 235, 0.16);
+  --marker: var(--accent);
+  --marker-deep: #475569;
+  --redpen: #E0697A;
+  --redpen-soft: rgba(224, 105, 122, 0.32);
+  --shade: rgba(0, 0, 0, 0.4);
+  --shade-lift: rgba(0, 0, 0, 0.55);
+  --on-danger: #0F1419;
+  --on-marker: #FFFFFF;
+
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
+  --hl-green-fill: #34D399;
+  --hl-green-ink: #6EE7B7;
+  --hl-red-fill: #E8697F;
+  --hl-red-ink: #F08090;
+  --hl-orange-ink: #F0A868;
+  --hl-blue-fill: #60A5FA;
+  --hl-blue-ink: #93C5FD;
+  --hl-purple-fill: #A78BFA;
+  --hl-purple-ink: #C4B5FD;
+  --hl-indigo-fill: #818CF8;
+  --hl-indigo-ink: #A5B4FC;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* ---- THEME 4 — أخضر داكن (Deep Green) ---- */
+:root[data-theme="deep-green"] {
+  --app-bg: #0B1A14;
+  --card-primary: #10261D;
+  --card-secondary: #163326;
+  --accent: #10B981;
+  --accent-highlight: #34D399;
+  --text: #EAF5EF;
+  --muted: #7FA394;
+  --app-bg-image: none;
+
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(234, 245, 239, 0.08);
+  --rule-strong: rgba(234, 245, 239, 0.16);
+  --marker: var(--accent);
+  --marker-deep: #059669;
+  --redpen: #E8697F;
+  --redpen-soft: rgba(232, 105, 127, 0.32);
+  --shade: rgba(0, 0, 0, 0.45);
+  --shade-lift: rgba(0, 0, 0, 0.6);
+  --on-danger: #0B1A14;
+  --on-marker: #FFFFFF;
+
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
+  --hl-green-fill: #10B981;
+  --hl-green-ink: #6EE7B7;
+  --hl-red-fill: #E8697F;
+  --hl-red-ink: #F08090;
+  --hl-orange-ink: #F0A868;
+  --hl-blue-fill: #38BDF8;
+  --hl-blue-ink: #7DD3FC;
+  --hl-purple-fill: #A78BFA;
+  --hl-purple-ink: #C4B5FD;
+  --hl-indigo-fill: #818CF8;
+  --hl-indigo-ink: #A5B4FC;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
 }
 
 /* ==========================================================================
