@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
@@ -39,14 +38,7 @@ interface MobileNavProps {
  */
 export function MobileNav({ activeHref }: MobileNavProps) {
   const reduceMotion = useReducedMotion();
-  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
 
   const isActive = (href: string) => {
     if (activeHref) return activeHref === href;
