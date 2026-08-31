@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -131,7 +132,7 @@ function useStageLoop(reduced: boolean) {
   useEffect(() => {
     if (reduced) {
       setStage(MOCKUP_STAGES - 1);
-      return;
+                  return;
     }
 
     const host = hostRef.current;

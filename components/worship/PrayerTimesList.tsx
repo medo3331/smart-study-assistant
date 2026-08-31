@@ -14,15 +14,12 @@ import {
   Sun,
   Moon,
   Sunrise,
-  Sunset,
   MapPin,
   Calendar,
   Settings,
   ChevronDown,
   Bell,
-  Music,
   Globe,
-  Landmark,
 } from "lucide-react";
 
 interface PrayerTimesListProps {

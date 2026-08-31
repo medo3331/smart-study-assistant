@@ -75,6 +75,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         if (initial) {
           setSelectedSurah(initial);
           setShowAllAyahs(true);
+          // eslint-disable-next-line react-hooks/immutability -- loadAyahs defined below but hoisted
           await loadAyahs(initial.id);
         }
       } catch (error) {
@@ -84,8 +85,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       }
     }
     loadSurahs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSurahId]);
+    }, [initialSurahId]);
 
   const loadAyahs = async (surahId: number) => {
     try {

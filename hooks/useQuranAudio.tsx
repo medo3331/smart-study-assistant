@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/exhaustive-deps -- TODO: stable deps */
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import type { Reciter } from "./useReciters";

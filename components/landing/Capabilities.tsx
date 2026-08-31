@@ -2,16 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Cairo, Playfair_Display } from 'next/font/google';
+import { Playfair_Display } from 'next/font/google';
 import styles from './Capabilities.module.css';
 import PreviewCard from './PreviewCard';
-
-const cairo = Cairo({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '600'],
-  display: 'swap',
-  variable: '--font-cairo-src',
-});
 
 const playfair = Playfair_Display({
   subsets: ['latin'],

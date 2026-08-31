@@ -14,6 +14,14 @@ const eslintConfig = defineConfig([
     ".redesign-backup/**",
     "next-env.d.ts",
   ]),
+  {
+    // CommonJS scripts use require() intentionally — e.g. *.cjs and run-migration.js
+    // Disabling no-require-imports here is behavior-preserving; converting to ESM would break Node execution.
+    files: ["**/*.cjs", "**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

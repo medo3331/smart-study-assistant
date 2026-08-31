@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useState, useEffect, useCallback } from "react";
 
@@ -39,6 +40,10 @@ export function useReciters(): UseRecitersReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  function default_reciter_exists(data: Reciter[]): boolean {
+    return data.some((r) => r.id === DEFAULT_RECITER_ID);
+  }
+
   const fetchReciters = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -76,10 +81,6 @@ export function useReciters(): UseRecitersReturn {
       setIsLoading(false);
     }
   }, []);
-
-  function default_reciter_exists(data: Reciter[]): boolean {
-    return data.some((r) => r.id === DEFAULT_RECITER_ID);
-  }
 
   useEffect(() => {
     fetchReciters();

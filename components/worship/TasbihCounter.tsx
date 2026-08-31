@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useCallback, useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -72,7 +73,6 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
   // مع باقي تقدّم العبادة. فشل الشبكة مش بيأثر على العدّاد نفسه.
   useEffect(() => {
     if (count > 0) setTasbihCount(count);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active.id, count]);
 
   const increment = useCallback(() => {

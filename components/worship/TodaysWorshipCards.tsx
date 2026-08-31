@@ -5,8 +5,7 @@ import { IconBadge } from "@/components/ui/IconBadge";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/ui/Reveal";
-import { cn } from "@/lib/cn";
-import { Sun, Moon, BookOpen, CheckCircle, Clock, Sparkles } from "lucide-react";
+import { Sun, BookOpen, CheckCircle, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface WorshipCardProps {

@@ -43,11 +43,12 @@ export async function understandImage(
     const { buffer, meta } = await preprocessImage(input);
 
     // 2. OCR — نفس attempts الموجودة (1 بالعربية، 3 للأقوى)
-    const attempts = input.options?.preferEngine
-      ? [{ engine: input.options.preferEngine }]
-      : [{ engine: 1, language: "ara" }, { engine: 3 }];
+    type OcrAttempt = { engine: 1 | 3; language?: string };
+    const attempts: OcrAttempt[] = input.options?.preferEngine
+      ? [{ engine: input.options.preferEngine as 1 | 3 }]
+      : [{ engine: 1 as const, language: "ara" }, { engine: 3 as const }];
 
-    const ocr = await extractOcrText(apiKey, buffer, meta.fileName, meta.mimeType, attempts as any);
+    const ocr = await extractOcrText(apiKey, buffer, meta.fileName, meta.mimeType, attempts);
 
     // 3. metadata + language guess (بسيط — من النص)
     const text = (ocr.text || "").trim();
@@ -63,7 +64,7 @@ export async function understandImage(
       metadata: {
         fileName: meta.fileName,
         mimeType: meta.mimeType,
-        languageDetected: langDetected as any,
+        languageDetected: (langDetected === "unknown" ? undefined : langDetected) as "ar" | "en" | "mixed" | undefined,
         ocrEngineUsed: ocr.engineUsed,
         confidence,
         imagePreprocessed: meta.prep,

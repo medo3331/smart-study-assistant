@@ -1,7 +1,5 @@
 'use client';
 
-import styles from './MIcon.module.css';
-
 export default function MIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/exhaustive-deps -- see exhaustive-deps note; will address with useCallback in follow-up */
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";

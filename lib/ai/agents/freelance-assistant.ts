@@ -1,16 +1,16 @@
 "use strict";
-import type { AgentResult, AgentId } from "./types";
+import type { AgentResult, AgentId, AgentContext } from "./types";
 const AGENT_ID: AgentId = "freelance";
 
-function detectLang(ctx: any): "ar" | "en" | string {
+function detectLang(ctx: AgentContext): "ar" | "en" | string {
   const l = (ctx?.language || ctx?.preferences?.language || "").toLowerCase();
   if (l.startsWith("ar") || l === "arabic") return "ar";
   return "en";
 }
 
 export async function freelanceAgent(
-  input: { prompt: string; context?: any; options?: Record<string, unknown> },
-  runAgent?: (opts: { agent: AgentId; prompt: string; context?: any; options?: Record<string, unknown> }) => Promise<AgentResult>
+  input: { prompt: string; context?: AgentContext; options?: Record<string, unknown> },
+  runAgent?: (opts: { agent: AgentId; prompt: string; context?: AgentContext; options?: Record<string, unknown> }) => Promise<AgentResult>
 ): Promise<AgentResult> {
   try {
     const ctx = input.context ?? {};
@@ -30,7 +30,7 @@ export async function freelanceAgent(
       return result;
     }
     return { ok: false, agent: AGENT_ID, code: "ROUTER_REQUIRED", message: "Freelance Assistant requires AgentRouter / AiRouter.", retryable: true };
-  } catch (e: any) {
-    return { ok: false, agent: AGENT_ID, code: "FREELANCE_ERROR", message: e?.message || String(e), retryable: true };
+  } catch (e: unknown) {
+    return { ok: false, agent: AGENT_ID, code: "FREELANCE_ERROR", message: (e instanceof Error ? (e instanceof Error ? e.message : String(e)) : undefined) || String(e), retryable: true };
   }
 }

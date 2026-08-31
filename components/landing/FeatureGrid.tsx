@@ -1,14 +1,6 @@
 'use client';
 
-import { Cairo } from 'next/font/google';
 import styles from './FeatureGrid.module.css';
-
-const cairo = Cairo({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '600'],
-  display: 'swap',
-  variable: '--font-cairo-src',
-});
 
 const items = [
   { icon: '🤖', title: 'مساعد ذكاء اصطناعي', desc: 'موجود معاك دايمًا يساعدك في أي حاجة.' },

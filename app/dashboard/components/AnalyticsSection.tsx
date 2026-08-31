@@ -2,7 +2,7 @@
 
 import React from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import type { ThemeColor, ThemeStyles } from "./types";
+import type { ThemeColor } from "./types";
 import { useCssVars } from "./use-css-vars";
 
 interface ChartPoint {
@@ -27,7 +27,6 @@ interface AnalyticsSectionProps {
   streak: number;
   activeChartData: ChartPoint[];
   theme: ThemeColor;
-  themeStyles: ThemeStyles;
   heatmapCells: HeatmapCell[];
   heatmapColors: string[];
 }
@@ -50,7 +49,6 @@ export function AnalyticsSection({
   streak,
   activeChartData,
   theme,
-  themeStyles,
   heatmapCells,
   heatmapColors,
 }: AnalyticsSectionProps) {

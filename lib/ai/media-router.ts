@@ -7,7 +7,7 @@ import type {
 import { AiProviderError } from "./types";
 import type { AiCapability } from "./health";
 import { getProviderHealth, isConfigured, recordProviderResult } from "./health";
-import { MODEL_REGISTRY, getModel, paidModelsAllowed } from "./models";
+import { MODEL_REGISTRY, paidModelsAllowed } from "./models";
 
 /**
  * Media Router — منفصل تمامًا عن راوتر النصوص.
@@ -138,18 +138,20 @@ export async function generateImageWithFallback(
  * موديل نص أبدًا ولا نفترض توليد sync.
  */
 export async function generateVideoWithFallback(
-  input: AiVideoRequest
+  _input: AiVideoRequest
 ): Promise<{ result: AiMediaResult | AiVideoResult; attempts: MediaAttempt[] }> {
+  void _input;
   const candidates = mediaCandidates("video_generation");
   if (candidates.length === 0) {
     throw new MediaModelUnavailableError("video_generation");
   }
   // حاليًا مفيش أي مزوّد بينفّذ AiVideoGenerationCapable — الحالة دي ثابتة
   // لحد ما يتحقق موديل فيديو حقيقي ويُسجّل بقدرة video_generation.
-  const attempts: MediaAttempt[] = candidates.map((candidate) => ({
+  const _attempts: MediaAttempt[] = candidates.map((candidate) => ({
     ...candidate,
     ok: false,
     reason: "no provider implements verified video generation",
   }));
+  void _attempts;
   throw new MediaModelUnavailableError("video_generation");
 }

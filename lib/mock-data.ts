@@ -25,7 +25,6 @@ import {
   Route,
   Coffee,
   Plus,
-  Play,
   Landmark,
 } from "lucide-react";
 

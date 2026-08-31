@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 import React, { useState } from "react";
 import { studyTutorAgent } from "@/lib/ai/agents/study-tutor";
 

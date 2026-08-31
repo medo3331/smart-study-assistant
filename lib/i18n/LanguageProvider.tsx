@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { dictionaries, Locale } from './dictionaries';
 
@@ -19,7 +20,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('locale') as Locale | null;
     const initial = saved ?? 'ar';
     setLocale(initial);
-    document.documentElement.lang = initial;
+          document.documentElement.lang = initial;
     document.documentElement.dir = dictionaries[initial].dir;
   }, []);
 

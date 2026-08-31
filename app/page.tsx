@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useLanguage } from '../lib/i18n/LanguageProvider';
 import Hero from '@/components/landing/Hero';
 import Roles from '@/components/landing/Roles';

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useEffect, useState } from "react";
 import type { Reciter } from "./audio-library";
@@ -50,7 +51,7 @@ export function useReciters(enabled: boolean): RecitersState {
     // وصلت خلاص من مستهلك تاني — مفيش داعي لأي شبكة
     if (cached) {
       setState({ reciters: cached.reciters, stale: cached.stale, failed: false });
-      return;
+                  return;
     }
 
     const controller = new AbortController();

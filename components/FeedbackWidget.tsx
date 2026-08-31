@@ -135,6 +135,7 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
 
     let interacted = false;
     let timePassed = false;
+    // eslint-disable-next-line prefer-const -- timer reassigned after declaration, const would break TDZ
     let timer: number | undefined;
 
     const maybeShow = () => {

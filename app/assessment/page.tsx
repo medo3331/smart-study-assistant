@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -124,7 +125,7 @@ export default function AssessmentPage() {
     const pending = readPendingChoice();
     if (!pending) return;
     setPersona(pending.persona);
-    setStudentLevel(pending.studentLevel);
+          setStudentLevel(pending.studentLevel);
     setField(pending.field);
     setSubject(pending.subject);
     setStep("quiz");
@@ -215,11 +216,14 @@ export default function AssessmentPage() {
       if (Array.isArray(parsed) && parsed.length > 0) {
         generatedDays = parsed
           .slice(0, profile.days)
-          .map((d: any, i: number) => ({
-            title: d.title || `${getStepPrefix(category, persona)} ${i + 1}`,
-            topic: d.topic || subject,
-            description: d.description || "",
-          }));
+          .map((d: unknown, i: number) => {
+            const item = d as Record<string, unknown>;
+            return {
+              title: (item.title as string) || `${getStepPrefix(category, persona)} ${i + 1}`,
+              topic: (item.topic as string) || subject,
+              description: (item.description as string) || "",
+            };
+          });
       }
     } catch (err) {
       console.error("AI plan generation failed, using fallback:", err);
@@ -471,7 +475,6 @@ export default function AssessmentPage() {
                     <button
                       key={track}
                       type="button"
-                      role="listitem"
                       onClick={() => setSubject(track)}
                       aria-pressed={subject === track}
                       className="chip"

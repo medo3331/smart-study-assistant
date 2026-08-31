@@ -1,6 +1,5 @@
 import { cn } from "@/lib/cn";
 import type { NavItem } from "@/lib/types";
-import { IconBadge } from "@/components/ui/IconBadge";
 import type { ReactNode } from "react";
 
 interface SidebarProps {

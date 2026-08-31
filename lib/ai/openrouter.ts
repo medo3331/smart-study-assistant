@@ -35,8 +35,6 @@ export function openrouterApiKey(): string | undefined {
   return process.env.OPENROUTER_API_KEY?.trim() || undefined;
 }
 
-type ChatMessageInput = AiChatRequest["messages"][number];
-
 /** يبني رسالة متوافقة مع OpenAI مع دعم الرؤية عند توفر صورة إدخال. */
 export function buildVisionMessage(
   message: { role: string; content: string },
@@ -146,7 +144,8 @@ export class OpenRouterProvider implements AiTextProvider {
    * بترمي 501-style AiProviderError لما الموديل مايدعمش — لكن الوضع الطبيعي
    * إن الراوتر مايوصلش هنا أصلًا لعدم وجود موديل مجاني متحقق منه.
    */
-  async generateMedia(input: AiMediaGenerationRequest): Promise<AiMediaResult> {
+  async generateMedia(_input: AiMediaGenerationRequest): Promise<AiMediaResult> {
+    void _input;
     const apiKey = openrouterApiKey();
     if (!apiKey) throw new AiProviderError("OpenRouter is not configured", 503, this.name);
     throw new AiProviderError(

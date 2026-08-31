@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -75,7 +76,7 @@ export function ExamPlanCard({ userId, themeStyles, onChanged }: ExamPlanCardPro
   useEffect(() => {
     aliveRef.current = true;
     void load();
-    return () => {
+          return () => {
       aliveRef.current = false;
     };
   }, [load]);

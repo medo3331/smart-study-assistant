@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, createContext, useContext } from "react";
+import { useMemo, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";

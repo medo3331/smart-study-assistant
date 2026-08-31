@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
@@ -175,7 +176,7 @@ export function useWorshipData(): UseWorshipDataReturn {
 
   useEffect(() => {
     setSettings(loadSettings());
-    setSettingsLoaded(true);
+          setSettingsLoaded(true);
     const unsub = subscribeSettings((updated) => setSettings(updated));
     const handler = () => setSettings(loadSettings());
     window.addEventListener("islamic-settings-change", handler);
@@ -233,9 +234,9 @@ export function useWorshipData(): UseWorshipDataReturn {
   );
 
   useEffect(() => {
-    setLocalProgress(getTodayWorship(todayUtc()));
+      setLocalProgress(getTodayWorship(todayUtc()));
     // القرآن والتسبيح بيكتبوا في التخزين مباشرة — بنسمع للحدث ونعيد القراءة.
-    const handler = () => {
+      const handler = () => {
       const fresh = getTodayWorship(todayUtc());
       setLocalProgress((prev) =>
         JSON.stringify(recordToCloud(prev)) ===

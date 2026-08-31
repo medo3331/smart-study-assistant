@@ -60,6 +60,7 @@ export function CommunityQuiz({ subject, isGuest, onClose, onSubmitted }: Commun
   const topic = subject?.trim() || "مراجعة عامة";
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- fetchQuestions is hoisted function declaration
     fetchQuestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -178,7 +179,7 @@ export function CommunityQuiz({ subject, isGuest, onClose, onSubmitted }: Commun
     setIsNewBest(false);
     setSubmitState("idle");
     submittedRef.current = false;
-    fetchQuestions();
+      fetchQuestions();
   }
 
   const total = questions.length || TOTAL_QUESTIONS;

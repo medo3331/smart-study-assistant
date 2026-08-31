@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -98,7 +99,7 @@ function AnimatedPercent({ value }: { value: number }) {
   React.useEffect(() => {
     if (reduceMotion) {
       setDisplay(value);
-      return;
+                  return;
     }
     let raf = 0;
     const start = performance.now();

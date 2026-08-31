@@ -1,5 +1,5 @@
 import type { ProviderInterface, ProviderHealth } from "./types.ts";
-import type { AgentInput, AgentContext, AgentResult } from "../types.ts";
+import type { AgentResult } from "../types.ts";
 
 /**
  * DeepSeek provider — STUB.
@@ -27,16 +27,15 @@ export class DeepSeekProvider implements ProviderInterface {
       const res = await fetch(this.endpoint, {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "nvidia/nemotron-3.5-lightning-30b-a3b", messages: [{ role: "user", content: input.prompt }] }),
-      });
+        body: JSON.stringify({ model: "nvidia/nemotron-3.5-lightning-30b-a3b", messages: [{ role: "user", content: input.prompt }] }) });
       if (res.status === 404) {
         return { ok: false, agent: (input.options?.agent as string) ?? "personal_assistant", provider: this.name, code: "MODEL_404", message: "nemotron-3.5-lightning (NVIDIA verified) returns 404 on this account (models.ts:78). Retry via NVIDIA fallback or different model.", retryable: true } as AgentResult;
       }
       if (!res.ok) return { ok: false, agent: (input.options?.agent as string) ?? "personal_assistant", provider: this.name, code: `NVIDIA_${res.status}`, message: `NVIDIA endpoint ${res.status}`, retryable: true } as AgentResult;
       const data = await res.json();
       return { ok: true, agent: (input.options?.agent as string) ?? "personal_assistant", provider: this.name, model: "nvidia/nemotron-3.5-lightning-30b-a3b", content: (data.choices?.[0]?.message?.content) ?? JSON.stringify(data) } as AgentResult;
-    } catch (e: any) {
-      return { ok: false, agent: (input.options?.agent as string) ?? "personal_assistant", provider: this.name, code: "NW_ERROR", message: `NVIDIA error: ${e?.message ?? e}`, retryable: true } as AgentResult;
+    } catch (e: unknown) {
+      return { ok: false, agent: (input.options?.agent as string) ?? "personal_assistant", provider: this.name, code: "NW_ERROR", message: `NVIDIA error: ${e instanceof Error ? e.message : String(e)}`, retryable: true } as AgentResult;
     }
   }
 
@@ -45,7 +44,6 @@ export class DeepSeekProvider implements ProviderInterface {
     return {
       status: key ? "AVAILABLE" : "NOT_CONFIGURED",
       detail: key ? "NVIDIA endpoint configured (nemotron-3.5-lightning (NVIDIA verified) 404 noted)." : "NVIDIA key missing.",
-      lastChecked: new Date().toISOString(),
-    };
+      lastChecked: new Date().toISOString() };
   }
 }

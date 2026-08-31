@@ -26,9 +26,9 @@ export async function runIntelligentAgent(
   prompt: string,
   rawCtx: IntelligenceContext,
   options?: { vision?: boolean; mode?: string },
-  runAgent?: (opts: { agent: AgentId; prompt: string; context?: any; options?: Record<string, unknown> }) => Promise<AgentResult>
+  runAgent?: (opts: { agent: AgentId; prompt: string; context?: unknown; options?: Record<string, unknown> }) => Promise<AgentResult>
 ): Promise<AgentResult> {
-  const ctx: any = {
+  const ctx: unknown = {
     userId: "user",
     role: rawCtx.role || "student",
     language: rawCtx.language || "ar",

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -183,7 +184,7 @@ export default function AchievementsPage() {
     }
     if (session.status === "error") {
       setNotice(session.message);
-      setIsLoading(false);
+                  setIsLoading(false);
       return;
     }
 

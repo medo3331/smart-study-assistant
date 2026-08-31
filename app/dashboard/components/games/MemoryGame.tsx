@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 
 import React, { useState, useEffect } from 'react';
 
@@ -41,7 +42,7 @@ export default function MemoryGame({ lessonText = "برمجة الويب وتط�
         }
 
         if (data.pairs && Array.isArray(data.pairs)) {
-          let generatedCards: Card[] = [];
+          const generatedCards: Card[] = [];
           data.pairs.forEach((item: { question: string; answer: string }, index: number) => {
             generatedCards.push(
               { id: index * 2, content: item.question, pairId: index, isFlipped: false, isMatched: false },

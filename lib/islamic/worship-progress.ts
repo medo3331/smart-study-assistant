@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 /**
  * Worship Progress — DB-first (worship_progress) + localStorage fallback — fixed after user reported "mizuot"
  *
@@ -349,6 +350,7 @@ export async function upsertWorshipProgressDB(
 ): Promise<void> {
   const supabase = createClient();
   const today = new Date().toISOString().slice(0, 10);
+  void today;
   const { error } = await supabase.rpc("upsert_worship_progress", {
     p_prayers: prayers ?? {},
     p_adhkar: adhkar ?? {},

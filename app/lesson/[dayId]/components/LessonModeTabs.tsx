@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 
 /* ==========================================================================
    التبويبات الموحّدة (أكاديمي / بصري / تطبيقي) بحبة بنفسجية منزلقة —

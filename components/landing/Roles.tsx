@@ -1,22 +1,6 @@
 'use client';
 
-import { Cairo, Playfair_Display } from 'next/font/google';
 import styles from './Roles.module.css';
-
-const cairo = Cairo({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '600'],
-  display: 'swap',
-  variable: '--font-cairo-src',
-});
-
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: '700',
-  style: ['italic'],
-  display: 'swap',
-  variable: '--font-playfair-display-src',
-});
 
 const roles = [
   {

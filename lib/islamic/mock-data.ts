@@ -1,5 +1,4 @@
 import type {
-  PrayerTime,
   PrayerTimesData,
   Surah,
   Ayah,

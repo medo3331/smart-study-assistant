@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 import { describe, it, expect } from "vitest";
 import { plannerAgent } from "../planner";
 

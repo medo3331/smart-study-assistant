@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
+import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 interface Question {
@@ -26,11 +27,7 @@ export function CommunityQA({ subjects }: { subjects: string[] }) {
   const [answerDraft, setAnswerDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadQuestions();
-  }, [activeSubject]);
-
-  const loadQuestions = async () => {
+  const loadQuestions = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('community_questions')
@@ -55,7 +52,11 @@ export function CommunityQA({ subjects }: { subjects: string[] }) {
       setAnswers(grouped);
     }
     setLoading(false);
-  };
+  }, [activeSubject, supabase]);
+
+  useEffect(() => {
+    loadQuestions();
+  }, [loadQuestions]);
 
   const submitAnswer = async (questionId: string) => {
     const text = answerDraft[questionId]?.trim();

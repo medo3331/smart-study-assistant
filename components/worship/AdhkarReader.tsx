@@ -13,12 +13,10 @@ import {
   ChevronRight, 
   CheckCircle, 
   RotateCcw, 
-  Volume2,
   Sun,
   Moon,
   Sparkles,
-  BookOpen,
-  Zap
+  BookOpen
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 

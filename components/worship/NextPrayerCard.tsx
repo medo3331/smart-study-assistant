@@ -6,7 +6,6 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { IconBadge } from "@/components/ui/IconBadge";
 import { ProgressRing } from "@/components/ui/ProgressRing";
-import { cn } from "@/lib/cn";
 import type { PrayerTime } from "@/lib/islamic/types";
 import { formatTimeRemaining } from "@/lib/islamic/prayer-times";
 import { Moon, Clock, MapPin, ChevronRight } from "lucide-react";
@@ -24,6 +23,7 @@ interface NextPrayerCardProps {
  */
 export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
   const [timeRemaining, setTimeRemaining] = useState("");
+  const [now] = useState(() => Date.now());
 
   // Update countdown every second
   useEffect(() => {
@@ -53,7 +53,6 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
   }
 
   // Calculate progress through the day (0-100)
-  const now = Date.now();
   const dayStart = new Date().setHours(0, 0, 0, 0);
   const dayEnd = dayStart + 24 * 60 * 60 * 1000;
   const dayProgress = Math.max(0, Math.min(100, ((now - dayStart) / (dayEnd - dayStart)) * 100));

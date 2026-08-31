@@ -1,4 +1,3 @@
-import { get } from "http";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -63,7 +62,7 @@ export const GET = async (request: NextRequest) => {
         },
       }
     );
-  } catch (error: any) {
+  } catch {
     const formatTime = (minutes: number): string => {
       return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(
         minutes % 60
@@ -89,7 +88,6 @@ export const GET = async (request: NextRequest) => {
     };
 
     const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
     let nextPrayer: { name: string; time: string; timestamp: number } | null = null;
     let nextTimestamp = Infinity;
 

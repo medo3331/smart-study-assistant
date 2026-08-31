@@ -11,8 +11,6 @@
  * الفرق: هذه نسخة مستقلة في lib/ai/media/ يمكن Agents استيرادها مباشرة.
  */
 
-import type { ImageUnderstandingResult, ImageUnderstandingInput } from "./types";
-
 const OCR_TIMEOUT_MS = 25_000;
 const MIN_USEFUL_CHARS = 12;
 
@@ -46,7 +44,8 @@ async function callOcrSpace(
   });
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
+    const _detail = await response.text().catch(() => "");
+    void _detail;
     throw new Error(
       response.status === 403 ? "OCR key rejected (403)" : `OCR HTTP ${response.status}`
     );

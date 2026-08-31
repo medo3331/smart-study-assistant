@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -298,7 +299,7 @@ export function useMic({ onTranscript }: UseMicOptions) {
     if (!Ctor) return;
     setSupported(true);
 
-    const rec = new Ctor();
+      const rec = new Ctor();
     rec.lang = "ar-EG";
     rec.continuous = false;
     rec.interimResults = true;

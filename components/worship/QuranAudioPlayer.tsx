@@ -6,7 +6,6 @@ import { cn } from "@/lib/cn";
 import { useQuranAudio } from "@/hooks/useQuranAudio";
 import { useReciters } from "@/hooks/useReciters";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Button } from "@/components/ui/Button";
 import { IconBadge } from "@/components/ui/IconBadge";
 import {
   Play,
@@ -43,7 +42,6 @@ export function QuranAudioPlayer() {
     progress,
     volume,
     error,
-    play,
     pause,
     resume,
     nextSurah,
@@ -52,7 +50,7 @@ export function QuranAudioPlayer() {
     setVolume,
   } = useQuranAudio();
 
-  const { reciters, selectedReciter, isLoading: recitersLoading } = useReciters();
+  const { reciters, selectedReciter } = useReciters();
   const reduceMotion = useReducedMotion();
   const [expanded, setExpanded] = useState(false);
 
@@ -240,7 +238,8 @@ export function QuranAudioPlayer() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          const v = volume < 0.01 ? setVolume(0.5) : setVolume(0);
+                          if (volume < 0.01) setVolume(0.5);
+                          else setVolume(0);
                         }}
                         className="p-2 text-[#9AA0C0] hover:text-white"
                         aria-label={volume < 0.01 ? "تشغيل الصوت" : "كتم الصوت"}

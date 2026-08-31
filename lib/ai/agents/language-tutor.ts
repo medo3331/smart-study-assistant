@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 "use strict";
 import type { AgentResult, AgentId } from "./types";
 import { withImageUnderstanding } from "./references/image-understanding-extension";

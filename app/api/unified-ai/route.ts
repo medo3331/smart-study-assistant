@@ -87,8 +87,8 @@ export async function POST(req: Request) {
       reasoning: result.reasoning,
     };
     return NextResponse.json(uiResponse);
-  } catch (e: any) {
-    console.error("unified-ai route error:", e?.message || e);
+  } catch (e: unknown) {
+    console.error("unified-ai route error:", (e as Error)?.message || String(e));
     return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى." }, { status: 500 });
   }
 }

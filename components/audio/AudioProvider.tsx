@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import {
   createContext,
@@ -81,7 +82,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (saved === null) return;
       const parsed = Number(saved);
       if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) setVolumeState(parsed);
-    } catch {
+          } catch {
       // الستوريج مقفول — النص الافتراضي مقبول
     }
   }, []);

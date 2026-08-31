@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { POPULAR_SURAHS, SURAH_NAMES, quranTrack } from "./audio-library";
 import { useReciters } from "./use-reciters";
 import { loadRecentSurah, rememberQuranTrack, type RecentSurah } from "./quran-recent";
@@ -38,10 +38,8 @@ export function QuranSection({ themeStyles, onOpenLibrary }: QuranSectionProps) 
   /* القراءة في إيفكت مش في مُهيّئ الحالة: الـ localStorage مش موجود على
      السيرفر، فالقراءة بدري بتخلّي رسمة السيرفر مختلفة عن المتصفح ويكسر
      الترطيب. */
-  const [recent, setRecent] = useState<RecentSurah | null>(null);
-  useEffect(() => {
-    setRecent(loadRecentSurah());
-  }, []);
+  const [recent, setRecent] = useState<RecentSurah | null>(() => loadRecentSurah());
+
 
   /* القارئ: اللي المستخدم سمع بيه آخر مرة لو لسه في القايمة، وإلا أول
      واحد فيها. ⚠️ الرابط بيتبني من القايمة اللي جاية من الراوت بتاعنا —

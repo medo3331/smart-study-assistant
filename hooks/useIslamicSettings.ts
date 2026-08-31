@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -36,7 +37,7 @@ export function useIslamicSettings(): UseIslamicSettingsReturn {
   useEffect(() => {
     const loaded = loadSettings();
     setSettings(loaded);
-    setIsLoaded(true);
+          setIsLoaded(true);
 
     const unsub = subscribeSettings((updated) => {
       setSettings(updated);

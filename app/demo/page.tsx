@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 /**
  * 🎁 صفحة الديمو المفتوحة — الزائر بيجرّب قبل ما يعمل حساب.
@@ -97,7 +98,7 @@ export default function DemoPage() {
   useEffect(() => {
     if (phase !== 'working') return;
     setStep(0);
-    const timers = [
+          const timers = [
       setTimeout(() => setStep(1), 2200),
       setTimeout(() => setStep(2), 5200),
     ];

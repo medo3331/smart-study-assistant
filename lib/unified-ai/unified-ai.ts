@@ -22,7 +22,8 @@ import { extractTextFromFile } from "../extract-text";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
-async function callGroq(prompt: string, language: string = "ar"): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
+async function callGroq(prompt: string, _language: string = "ar"): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
+  void _language;
   const key = process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
   try {
@@ -48,8 +49,8 @@ async function callGroq(prompt: string, language: string = "ar"): Promise<{ ok: 
       return { ok: false, error: "AI returned an empty response. Please try again." };
     }
     return { ok: true, content };
-  } catch (e: any) {
-    console.error("Groq exception:", e?.message || e);
+  } catch (e: unknown) {
+    console.error("Groq exception:", e instanceof Error ? e.message : String(e));
     return { ok: false, error: "AI request failed. Please try again." };
   }
 }
@@ -70,8 +71,8 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         });
         extractedText = text.trim();
         ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? "high" : "medium" };
-      } catch (ocrErr: any) {
-        console.error("OCR error (resilient):", ocrErr?.message || ocrErr);
+      } catch (ocrErr: unknown) {
+        console.error("OCR error (resilient):", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
         extractedText = "";
         ocrMeta = { engineUsed: 3, confidence: "low" };
         // Continue — don't throw
@@ -122,8 +123,8 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
       },
       reasoning: decision.reason,
     };
-  } catch (e: any) {
-    console.error("unifiedAI exception:", e?.message || e);
+  } catch (e: unknown) {
+    console.error("unifiedAI exception:", e instanceof Error ? e.message : String(e));
     return {
       ok: false,
       agentUsed: "unknown",

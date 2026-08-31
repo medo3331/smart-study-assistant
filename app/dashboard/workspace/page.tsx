@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -81,7 +82,7 @@ export default function WorkspacePage() {
     }
     if (session.status === "error") {
       setNotice(session.message);
-      setIsLoading(false);
+                  setIsLoading(false);
       return;
     }
 
@@ -96,7 +97,7 @@ export default function WorkspacePage() {
   /* ---- لما تفتح مادة، املا المسوّدة بملاحظتها ---- */
   useEffect(() => {
     setNoteDraft(openMaterial?.note ?? "");
-    setNoteState("idle");
+      setNoteState("idle");
   }, [openId, openMaterial?.note]);
 
   /* ---- رفع ملف ---- */

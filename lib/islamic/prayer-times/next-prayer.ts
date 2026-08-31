@@ -152,7 +152,8 @@ export function formatTimeRemaining(inputMs: number): string {
 /**
  * Get day progress percentage (0-100)
  */
-export function getDayProgress(prayerTimes: PrayerTimes): number {
+export function getDayProgress(_prayerTimes: PrayerTimes): number {
+  void _prayerTimes;
   const now = Date.now();
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);

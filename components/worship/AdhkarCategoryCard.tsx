@@ -7,11 +7,6 @@ import { Reveal } from "@/components/ui/Reveal";
 import { cn } from "@/lib/cn";
 import type { AdhkarCategory } from "@/lib/islamic/types";
 import { 
-  Sun, 
-  Moon, 
-  Sparkles, 
-  BookOpen, 
-  Zap,
   ChevronLeft,
   CheckCircle
 } from "lucide-react";
@@ -34,7 +29,6 @@ interface AdhkarCategoryCardProps {
 }
 
 export function AdhkarCategoryCard({
-  category,
   label,
   description,
   icon: Icon,

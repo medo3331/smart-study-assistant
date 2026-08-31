@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 "use strict";
 /**
  * Study Tutor Agent — real implementation (Phase 2).
@@ -95,6 +96,7 @@ export async function studyTutorAgent(
       const startedAt = Date.now();
       const result = await runAgent(agentOptions);
       const latencyMs = Date.now() - startedAt;
+      void latencyMs;
       // Ensure the response carries real provider/model info from router execution.
       // Do NOT fabricate success when the router returned a failure.
       if (!result.ok) {

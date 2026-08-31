@@ -1,15 +1,15 @@
 "use strict";
-import type { AgentResult, AgentId } from "./types";
+import type { AgentResult, AgentId, AgentContext } from "./types";
 const AGENT_ID: AgentId = "writing";
 
-function detectLang(ctx: any): "ar" | "en" {
+function detectLang(ctx: AgentContext): "ar" | "en" {
   const l = (ctx?.language || ctx?.preferences?.language || "").toLowerCase();
   return l.startsWith("ar") || l === "arabic" ? "ar" : "en";
 }
 
 export async function writingAgent(
-  input: { prompt: string; context?: any; options?: Record<string, unknown> },
-  runAgent?: (opts: any) => Promise<AgentResult>
+  input: { prompt: string; context?: AgentContext; options?: Record<string, unknown> },
+  runAgent?: (opts: { agent: AgentId; prompt: string; context?: AgentContext; options?: Record<string, unknown> }) => Promise<AgentResult>
 ): Promise<AgentResult> {
   try {
     const ctx = input.context ?? {};
@@ -28,7 +28,7 @@ export async function writingAgent(
       return result;
     }
     return { ok: false, agent: AGENT_ID, code: "ROUTER_REQUIRED", message: "Writing Assistant requires AgentRouter / AiRouter.", retryable: true };
-  } catch (e: any) {
-    return { ok: false, agent: AGENT_ID, code: "WRITING_ERROR", message: e?.message || String(e), retryable: true };
+  } catch (e: unknown) {
+    return { ok: false, agent: AGENT_ID, code: "WRITING_ERROR", message: (e instanceof Error ? (e instanceof Error ? e.message : String(e)) : undefined) || String(e), retryable: true };
   }
 }

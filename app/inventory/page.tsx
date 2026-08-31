@@ -11,7 +11,7 @@
    وده مالوش لازمة في المتجر.
    ========================================================================== */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
 import { Search, X, Star } from "lucide-react";
@@ -55,8 +55,8 @@ export default function InventoryPage() {
     if (session.status === "anonymous") router.push("/dashboard");
   }, [session.status, router]);
 
-  const say = (text: string, ok: boolean) =>
-    setToast({ id: Date.now(), text, ok });
+  const say = useCallback((text: string, ok: boolean) =>
+    setToast({ id: Date.now(), text, ok }), []);
 
   const state = shop.state;
 

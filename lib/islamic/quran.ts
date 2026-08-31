@@ -19,7 +19,7 @@ export async function getAllSurahs(): Promise<Surah[]> {
     const response = await fetch(`${QURAN_API_BASE}/surah`);
     if (!response.ok) throw new Error("Failed to fetch surahs");
     const data = await response.json();
-    return data.data.map((s: any) => ({
+    return data.data.map((s: { number: number; englishName: string; name: string; revelationType: string; numberOfAyahs: number }) => ({
       id: s.number,
       name: s.englishName,
       arabicName: s.name,
@@ -64,7 +64,7 @@ export async function getAyahs(surahId: number): Promise<Ayah[]> {
     const response = await fetch(`${QURAN_API_BASE}/surah/${surahId}/ar.alafasy`);
     if (!response.ok) throw new Error("Failed to fetch ayahs");
     const data = await response.json();
-    return data.data.ayahs.map((a: any) => ({
+    return data.data.ayahs.map((a: { numberInSurah: number; text: string; juz: number; page: number }) => ({
       number: a.numberInSurah,
       text: a.text,
       surahId: surahId,
@@ -98,7 +98,8 @@ export async function getAyah(surahId: number, ayahNumber: number): Promise<Ayah
   }
 }
 
-export async function searchQuran(query: string): Promise<Ayah[]> {
+export async function searchQuran(_query: string): Promise<Ayah[]> {
+  void _query;
   // Alquran.cloud doesn't have search, would need a different API
   // For now return empty - implement with a search-capable API in production
   return [];
@@ -108,7 +109,8 @@ export async function searchQuran(query: string): Promise<Ayah[]> {
  * Get Quran reading progress for a user
  * In production, this would come from your database
  */
-export async function getQuranProgress(userId: string): Promise<QuranProgress> {
+export async function getQuranProgress(_userId: string): Promise<QuranProgress> {
+  void _userId;
   // Mock implementation - replace with database call
   const { mockQuranProgress } = await import("./mock-data");
   return mockQuranProgress;

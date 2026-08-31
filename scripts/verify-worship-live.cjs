@@ -19,7 +19,8 @@
  * (guest protection, RPC presence, rules table state) and reports the rest
  * as NOT-EXECUTABLE with the precise blocker.
  */
-const crypto = require("crypto");
+const _crypto = require("crypto");
+void _crypto;
 const fs = require("fs");
 const path = require("path");
 
@@ -47,7 +48,7 @@ async function rpc(token, fn, body) {
     body: JSON.stringify(body),
   });
   let data;
-  try { data = await res.json(); } catch (e) { data = null; }
+  try { data = await res.json(); } catch (_e) { void _e; data = null; }
   return { status: res.status, ok: res.ok, data };
 }
 
@@ -110,7 +111,8 @@ async function rpc(token, fn, body) {
   const failed = results.filter((r) => !r.pass).length;
   console.log("\n" + (results.length - failed) + "/" + results.length + " executable checks passed");
   console.log("BLOCKED-CHECKS: full authenticated reward matrix needs either (a) migration applied + email confirmation OFF, or (b) DATABASE_URL/service key.");
-})().catch((e) => {
-  console.error(e.message);
+})().catch((_e) => {
+  void _e;
+  console.error(_e.message);
   process.exit(1);
 });

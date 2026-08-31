@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useState, useEffect, useCallback } from "react";
 import type { PrayerTimes, PrayerTimesData } from "@/lib/islamic/types";
@@ -182,7 +183,6 @@ export function useCurrentPrayer(prayerTimes: PrayerTimesData | PrayerTimes | nu
 
   // Legacy format
   if ("times" in prayerTimes) {
-    const now = Date.now();
     for (const prayer of prayerTimes.times) {
       if (prayer.isCurrent) {
         return prayer;

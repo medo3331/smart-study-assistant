@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Reveal } from "@/components/ui/Reveal";
@@ -55,13 +54,6 @@ function SettingsHome() {
     key: K,
     value: IslamicSettings[K],
   ) => update({ [key]: value } as Partial<IslamicSettings>);
-
-  const tabs = ["prayer", "adhkar", "quran"] as const;
-  const tabLabels: Record<(typeof tabs)[number], string> = {
-    prayer: "الصلاة",
-    adhkar: "الأذكار",
-    quran: "القرآن",
-  };
 
   return (
     <>

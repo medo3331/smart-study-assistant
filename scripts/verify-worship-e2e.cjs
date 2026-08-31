@@ -62,16 +62,18 @@ async function rpc(token, fn, body) {
     body: JSON.stringify(body),
   });
   let data;
-  try { data = await res.json(); } catch (e) { data = null; }
+  try { data = await res.json(); } catch (_e) { void _e; data = null; }
   return { status: res.status, ok: res.ok, data };
 }
 function firstRow(d) { return Array.isArray(d) ? d[0] : d; }
 
 /** b64url decode of a JWT payload. */
-function jwtPayload(jwt) {
+function _jwtPayload(jwt) {
+  void jwt;
   const part = jwt.split(".")[1];
   return JSON.parse(Buffer.from(part, "base64").toString("utf8"));
 }
+void _jwtPayload;
 
 /**
  * Derive GoTrue's email-confirmation token_hash:
@@ -152,11 +154,12 @@ async function signUpUser(label, jwtSecret) {
   return { email, userId: sess.user.id, token: sess.access_token };
 }
 
-async function cleanupUser(email, jwtSecret) {
+async function _cleanupUser(email, jwtSecret) {
   // No admin delete without service role; anonymize by requesting deletion
   // is not available either. Leave the account; report its email only.
   void email; void jwtSecret;
 }
+void _cleanupUser;
 
 async function main() {
   console.log("=== creating real test users via Supabase Auth ===");

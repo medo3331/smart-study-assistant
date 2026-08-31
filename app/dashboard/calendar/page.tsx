@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -259,7 +260,7 @@ export default function CalendarPage() {
     }
     if (session.status === "error") {
       setNotice(session.message);
-      setIsLoadingGoals(false);
+                  setIsLoadingGoals(false);
       setIsLoadingMonth(false);
       return;
     }

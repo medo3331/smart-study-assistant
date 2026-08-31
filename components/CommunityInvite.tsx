@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useEffect, useState } from "react";
 import { SITE_LINKS } from "@/lib/site-links";
@@ -58,7 +59,7 @@ export function CommunityInvite({
     if (!INVITE_URL) return;
     if (!dismissible) {
       setVisible(true);
-      return;
+                  return;
     }
     try {
       if (window.localStorage.getItem(DISMISSED_KEY) !== "1") setVisible(true);

@@ -1,12 +1,11 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useState, useEffect, useCallback } from "react";
 import {
   getQuranProgress,
   setQuranPosition,
-  type WorshipDayRecord,
 } from "@/lib/islamic/worship-progress";
-import type { Surah, Ayah } from "@/lib/islamic/types";
 
 interface UseQuranProgressReturn {
   progress: { surahId: number; ayahId: number; dailyCount: number };
@@ -33,7 +32,7 @@ export function useQuranProgress(
   useEffect(() => {
     const p = getQuranProgress();
     setProgress({
-      surahId: p.surahId,
+                  surahId: p.surahId,
       ayahId: p.ayahId,
       dailyCount: p.dailyCount,
     });

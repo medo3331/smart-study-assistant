@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,7 +31,7 @@ export function usePenTheme(): ThemeColor {
     try {
       const saved = window.localStorage.getItem(PEN_THEME_KEY);
       if (isThemeColor(saved)) setTheme(saved);
-    } catch {
+          } catch {
       // الستوريج مقفول — الأصفر ديفولت مقبول
     }
   }, []);

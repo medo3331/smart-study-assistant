@@ -16,7 +16,8 @@ try {
   const parts = response.candidates?.[0]?.content?.parts ?? [];
   if (!parts.some((part) => part.inlineData?.data)) throw new Error("Gemini image model returned no image");
   console.log("Gemini image: OK");
-} catch (error) {
+} catch (_error) {
+  void _error;
   // Do not print provider bodies: they can contain account or quota metadata.
   console.error("Gemini image test failed. Confirm the model quota and billing in Google AI Studio.");
   process.exitCode = 1;

@@ -6,16 +6,7 @@ import MIcon from './MIcon';
 import PreviewCard from './PreviewCard';
 import { TopControls } from '@/components/TopControls';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
-import { Playfair_Display } from 'next/font/google';
 import styles from './Hero.module.css';
-
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: '700',
-  style: ['italic'],
-  display: 'swap',
-  variable: '--font-playfair-display-src',
-});
 
 export default function Hero() {
   const { t } = useLanguage();

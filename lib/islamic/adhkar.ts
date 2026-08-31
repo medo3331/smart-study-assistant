@@ -33,8 +33,9 @@ export async function getAdhkarById(id: string): Promise<Dhikr | null> {
 export async function getAdhkarProgress(
   userId: string,
   category: AdhkarCategory,
-  date: string
+  _date: string
 ): Promise<{ completed: boolean; currentCount: number }> {
+  void _date;
   const { mockAdhkarProgress } = await import("./mock-data");
   return mockAdhkarProgress[category] || { completed: false, currentCount: 0 };
 }
@@ -45,9 +46,10 @@ export async function getAdhkarProgress(
 export async function updateAdhkarProgress(
   userId: string,
   category: AdhkarCategory,
-  date: string,
+  _date: string,
   progress: { completed?: boolean; currentCount?: number }
 ): Promise<{ completed: boolean; currentCount: number }> {
+  void _date;
   // Mock implementation - replace with database call
   const { mockAdhkarProgress } = await import("./mock-data");
   const current = mockAdhkarProgress[category] || { completed: false, currentCount: 0 };

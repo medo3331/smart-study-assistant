@@ -1,5 +1,5 @@
 "use strict";
-import type { ImageUnderstandingInput, ImageUnderstandingResult } from "./types";
+import type { ImageUnderstandingInput } from "./types";
 
 /**
  * Image Preprocessor — يعتمد على lib/image-compress.ts الموجود.
@@ -25,11 +25,11 @@ export async function preprocessImage(
   if (file instanceof File) {
     const ab = await file.arrayBuffer();
     buffer = new Uint8Array(ab);
-  } else if (ArrayBuffer.isView(file as any) || file instanceof Uint8Array) {
-    const v = file as any;
+  } else if (ArrayBuffer.isView(file as unknown as ArrayBufferView) || file instanceof Uint8Array) {
+    const v = file as unknown as { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
     buffer = file instanceof Uint8Array ? file : new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-  } else if ((typeof Buffer !== "undefined" && Buffer.isBuffer && Buffer.isBuffer(file as any))) {
-    const b = file as any;
+  } else if ((typeof Buffer !== "undefined" && Buffer.isBuffer && Buffer.isBuffer(file as unknown as Buffer))) {
+    const b = file as unknown as { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
     buffer = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
   } else {
     // fallback — لو تم تمرير object غريب

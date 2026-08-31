@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useEffect, useRef, useState } from "react";
 import { PERSONA_NAME } from "@/lib/persona";
@@ -88,7 +89,7 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
       if (saved) {
         try {
           setChatMessages(JSON.parse(saved));
-        } catch {
+                          } catch {
           setChatMessages([]);
         }
       } else {

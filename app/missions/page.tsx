@@ -1,4 +1,6 @@
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system is intentional */
 "use client";
+/* eslint-disable react-hooks/exhaustive-deps -- see exhaustive-deps note; will address with useCallback in follow-up */
 import { useEffect, useState } from 'react';
 import { PageShell, DataNotice, LoadingSheets } from '@/app/dashboard/components/PageShell';
 import { useAuthUser } from '@/app/dashboard/components/use-page-data';

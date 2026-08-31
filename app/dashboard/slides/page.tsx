@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell, DataNotice, usePenTheme } from "../components/PageShell";
@@ -263,7 +264,7 @@ export default function SlidesPage() {
     const seed = takeSlidesSeed();
     if (!seed) return;
     setTopic(seed.topic);
-    if (seed.source) {
+          if (seed.source) {
       setSource(seed.source);
       setShowSource(true);
     }

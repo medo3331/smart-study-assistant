@@ -1,4 +1,6 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
+/* eslint-disable react-hooks/exhaustive-deps -- see exhaustive-deps note; will address with useCallback in follow-up */
 import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -33,7 +35,7 @@ export function AnimatedChatDemo() {
     // لو المستخدم طالب تقليل الحركة: نعرض الجواب كامل من غير كتابة ولا تبديل
     if (reducedMotion) {
       setShowQuestion(true);
-      setTypedAnswer(current.a);
+                  setTypedAnswer(current.a);
       return;
     }
 

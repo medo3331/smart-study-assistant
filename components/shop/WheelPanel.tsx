@@ -43,7 +43,7 @@ export function WheelPanel({
   onSpin: () => Promise<{ ok: boolean; message: string; data: SpinOutcome | null }>;
 }) {
   const reduced = useReducedMotion();
-  const segs = useMemo(slices, []);
+  const segs = useMemo(() => slices(), []);
 
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);

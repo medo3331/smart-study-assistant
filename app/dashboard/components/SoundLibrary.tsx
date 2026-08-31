@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
 import {
@@ -79,14 +80,11 @@ export function SoundLibrary({ themeStyles }: SoundLibraryProps) {
   const [reciterId, setReciterId] = useState<number | null>(null);
   const [surahQuery, setSurahQuery] = useState("");
 
-  const [customTracks, setCustomTracks] = useState<SoundTrack[]>([]);
+  const [customTracks, setCustomTracks] = useState<SoundTrack[]>(() => loadCustomTracks());
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [customError, setCustomError] = useState("");
 
-  useEffect(() => {
-    setCustomTracks(loadCustomTracks());
-  }, []);
 
   /* القارئ الافتراضي: اللي المستخدم سمع بيه آخر مرة لو لسه موجود في
      القايمة، وإلا أول واحد فيها (القايمة مرتّبة بالمصاحف الكاملة الأول).

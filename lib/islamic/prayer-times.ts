@@ -120,15 +120,6 @@ export function formatHijriLong(date: Date): string {
  * Convert normalized PrayerTimes to legacy PrayerTimesData for backward compatibility
  */
 export function convertToLegacyFormat(prayerTimes: PrayerTimes): PrayerTimesData {
-  const arabicNames: Record<string, string> = {
-    fajr: "الفجر",
-    sunrise: "الشروق",
-    dhuhr: "الظهر",
-    asr: "العصر",
-    maghrib: "المغرب",
-    isha: "العشاء",
-  };
-
   const times: PrayerTime[] = [
     {
       name: "Fajr",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import {
   NextPrayerCard,
@@ -18,8 +18,6 @@ import {
 } from "@/components/worship/WorshipChrome";
 import { Reveal } from "@/components/ui/Reveal";
 import { useTodayPrayerTimes } from "@/hooks/usePrayerTimes";
-import { getWorshipProgressDB, getWorshipSettingsDB, upsertWorshipProgressDB } from "@/lib/islamic/worship-progress";
-import type { WorshipDayRecord } from "@/lib/islamic/worship-progress";
 import { generateDailyProgressItems } from "@/lib/islamic/utils";
 import type { DailyProgressItem } from "@/lib/islamic/types";
 import { todayUtc } from "@/lib/worship-data";
@@ -98,38 +96,6 @@ function WorshipHome() {
     },
     [shared, showReward],
   );
-
-  /** بلوغ ورد القرآن اليومي: +٥ مرة واحدة يوميًا عند بلوغ الهدف الفعلي. */
-  const claimQuranWird = useCallback(async () => {
-    if (!shared || !shared.user || shared.user.is_anonymous) return;
-    const day = todayUtc();
-    await shared.recordEvent(
-      () => shared.progress,
-      "worship_quran",
-      day,
-      { activity: "quran", date: day, ayahs: shared.progress.quran.dailyCount },
-      (reward) => showReward(reward.coins),
-    );
-  }, [shared, showReward]);
-
-  /** مضاعفة هدف القرآن — نفس المصدر والمرجع اليومي، فالسيرفر بيرفضها بهدوء. */
-  const claimQuranGoal = useCallback(async () => {
-    if (!shared || !shared.user || shared.user.is_anonymous) return;
-    const day = todayUtc();
-    await shared.recordEvent(
-      () => shared.progress,
-      "worship_quran",
-      day,
-      { activity: "quran", date: day, ayahs: shared.progress.quran.dailyCount },
-      (reward) => showReward(reward.coins),
-    );
-  }, [shared, showReward]);
-
-  /** إتمام يوم العبادة الكامل — بدون مصدر مخصص في هذه المرحلة؛ التقدّم يُسجل فقط. */
-  const claimDayComplete = useCallback(async () => {
-    // مقصود: مفيش مكافأة مستقلة لإتمام اليوم كله في قواعد coin_source_rules
-    // الحالية. الحدث بيتسجّل في تقدّم العبادة بس.
-  }, []);
 
   /** معالج الأزرار في «إنجازاتك اليوم». */
   const handleCompleteItem = useCallback(
@@ -217,11 +183,6 @@ function WorshipHome() {
   const prayersDoneCount = ["fajr", "dhuhr", "asr", "maghrib", "isha"].filter(
     (p) => completedPrayers.has(p),
   ).length;
-  const dayComplete =
-    prayersDoneCount === 5 &&
-    morningCompleted &&
-    eveningCompleted &&
-    quranWirdDone;
 
   return (
     <>
