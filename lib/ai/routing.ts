@@ -21,6 +21,11 @@ import {
   paidModelsAllowed,
 } from "./models";
 
+/**
+ * AI Boundary (Phase A) — لا coupling مع Economy بعد.
+ * الحالي: AiRouter يختار provider/model عبر health + TASK_MODEL_PREFERENCE + قدرات فقط.
+ */
+
 /** سياسة المهام الحالية — مرجع التوافق والاختبارات (test-ai-router.mjs يعتمد عليه). */
 export const AI_PROVIDER_BY_TASK: Readonly<Record<AiTaskType, AiProviderName>> = {
   chat: "groq",

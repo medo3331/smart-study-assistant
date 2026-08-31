@@ -18,7 +18,7 @@ import { MISSING_TABLE, toDataError, type DataError, type Result } from "@/lib/p
 import { SLOTS, type Slot, type ShopItem } from "./types";
 import type { Rarity } from "./rarity";
 import { DEFAULT_ITEMS, itemById, slotOf } from "./catalog";
-import { leagueFromXp, levelFromXp, hasLeague, type League } from "./economy";
+import { leagueFromXp, levelFromXp, hasLeague, type League, type EconomyContext } from "./economy";
 
 /* --------------------------------------------------------------------------
    الأخطاء
@@ -96,6 +96,11 @@ export type EquippedMap = Partial<Record<Slot, string>>;
  *
  * الـ XP والسلسلة جوّه هنا مش في هوك تاني: شروط الفتح محتاجاهم، فلو
  * جِوا من مكان تاني كان ممكن الكارت يقول «مفتوح» والرصيد لسه بيتحمّل.
+ *
+ * Store Boundary (Phase A): المتجر يستهلك Coins فقط عبر coin_ledger/coin_balance()
+ * (شراء/صناديق/عجلة) — لا XP ولا AI Credits/Tokens. الـ XP/Level/League للعرض
+ * وشرط الفتح فقط (unlock_satisfied في DB). لا coupling مع AI Router بعد.
+ * ShopState ≈ EconomyContext + inventory — الـ context الخفيف في economy.ts هو التمثيل الموحّد.
  */
 export interface ShopState {
   balance: number;
@@ -117,6 +122,9 @@ export interface ShopState {
    */
   badgeCount: number;
 }
+
+/** Alias موثّق: نفس بيانات EconomyContext لكن مع المخزن — للتوافق مع spec §7 */
+export type ShopEconomyContext = EconomyContext;
 
 interface InventoryRow {
   item_id: string;

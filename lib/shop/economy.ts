@@ -5,6 +5,12 @@
  * مفيش دالة هنا بتزوّد الرصيد من غير مصدر مذاكرة، والداتابيز بتفرض ده
  * كمان (`db/shop.sql`: الإضافة بتمر من دالة `SECURITY DEFINER` بتقبل
  * مصادر معروفة بس). القاعدة دي مش قابلة للتفاوض.
+ *
+ * Phase A Architecture — فصل العملات (Currency Separation):
+ *   XP   → Progression فقط — profiles.xp — اشتقاق Level/League عبر levelFromXp/leagueFromXp
+ *   COINS → Store فقط — coin_ledger + coin_balance() — مصدر الحقيقة coin_source_rules
+ *   AI_CREDITS / ENTITLEMENT / SUBSCRIPTION → NOT IMPLEMENTED (Future only)
+ * القاعدة: XP ≠ Coins ≠ AI Credits ≠ Entitlements ≠ Subscription
  */
 
 /** ثابت المستويات — نفس القيمة المستخدمة في app/dashboard/achievements */
@@ -207,3 +213,21 @@ export function leagueRank(id: string): number {
 export function hasLeague(xp: number, required: string): boolean {
   return leagueRank(leagueFromXp(xp).id) >= leagueRank(required);
 }
+// Phase A — Economy Architecture : Currency Separation & EconomyContext
+export type EconomyCurrency = "XP" | "COINS";
+export type FutureCurrency = "AI_CREDITS" | "ENTITLEMENT" | "SUBSCRIPTION";
+export type AnyCurrency = EconomyCurrency | FutureCurrency;
+export const CURRENCY_META = {
+  XP: { purpose: "Progression", storage: "profiles.xp", status: "LIVE" as const },
+  COINS: { purpose: "Store economy", storage: "coin_ledger (via coin_balance())", status: "LIVE" as const },
+  AI_CREDITS: { purpose: "AI usage", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+  ENTITLEMENT: { purpose: "Model/feature unlock", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+  SUBSCRIPTION: { purpose: "Paid plan -> Entitlement", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+} as const;
+export interface EconomyContext { userId: string; xp: number; level: number; league: League; streak: number; coins: number; badgeCount: number; sessions: number; }
+export function createEconomyContext(args: { userId: string; xp: number; streak: number; coins: number; badgeCount: number; sessions: number; }): EconomyContext { return { userId: args.userId, xp: args.xp, level: levelFromXp(args.xp), league: leagueFromXp(args.xp), streak: args.streak, coins: args.coins, badgeCount: args.badgeCount, sessions: args.sessions }; }
+export const getLevelFromXp = levelFromXp;
+export const getLeagueFromXp = leagueFromXp;
+export function xpInLevel(xp: number): number { const safe = Math.max(0, xp); return safe % XP_PER_LEVEL; }
+export function xpProgressPercent(xp: number): number { return Math.round((xpInLevel(xp) / XP_PER_LEVEL) * 100); }
+export function xpRemainingToNextLevel(xp: number): number { return XP_PER_LEVEL - xpInLevel(xp); }

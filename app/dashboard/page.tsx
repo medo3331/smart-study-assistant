@@ -13,6 +13,7 @@ import type { CoachTask } from "@/components/AIStudyCoach";
 import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
 import { awardCoins } from "@/lib/shop/shop-data";
+import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
 
 import type {
   ActivityLog,
@@ -93,11 +94,11 @@ export default function DashboardPage() {
      مش داخل في `isInitialized` عن قصد: الصفحة مالهاش تستنى إيموجي. */
   const companion = useEquippedCompanion(supabase, authUser?.id ?? null);
 
-  const level = Math.floor(xp / 200) + 1;
-  const xpForCurrentLevelStart = (level - 1) * 200;
-  const xpForNextLevel = level * 200;
+  const level = levelFromXp(xp);
+  const xpForCurrentLevelStart = (level - 1) * XP_PER_LEVEL;
+  const xpForNextLevel = level * XP_PER_LEVEL;
   const xpInCurrentLevel = xp - xpForCurrentLevelStart;
-  const currentLevelProgress = Math.round((xpInCurrentLevel / 200) * 100);
+  const currentLevelProgress = Math.round((xpInCurrentLevel / XP_PER_LEVEL) * 100);
   const xpRemaining = xpForNextLevel - xp;
   // Phase 4: xpRemaining kept for level calculation (previously displayed in removed Kpi/StatsSection, preserved for future use)
   void xpRemaining;
