@@ -1,13 +1,13 @@
 /**
- * /api/unified-ai — REAL INFERENCE PATH (FormData + JSON) + Phase F Credits
+ * /api/unified-ai — REAL INFERENCE PATH (FormData + JSON) + Phase F Credits + Phase G Entitlements
  *
  * Contract:
  *   POST multipart/form-data  → prompt + file/image + language
  *   POST application/json     → prompt + imageInput/fileInput (base64/string) + context
  *
- * Phase F Flow:
- *   Request → Authenticate → Entitlement check → Reserve 1 credit (server requestId)
- *     → Execute unifiedAI → Success? confirm (keep reserve) : refund reserve
+ * Phase G Flow:
+ *   Request → Authenticate → Resolve model → getModelAccessPolicy → has_entitlement
+ *     → DENIED 403 (no reserve) → ALLOWED → Phase F reserve → unifiedAI → confirm/refund
  *   requestId is server-generated (crypto.randomUUID) — client cannot bypass
  *   1 request = 1 credit, no cost table yet
  *   Failure/timeout does not lose credit (refund idempotent)
@@ -16,6 +16,8 @@
  *   { ok:true, answer:string, agentUsed:string, extractedText?:string, metadata?:{}, reasoning?:string }
  * Response (insufficient credits):
  *   { ok:false, error:"الرصيد لا يكفي..." } status 402
+ * Response (entitlement required):
+ *   { ok:false, error:"هذا النموذج يتطلب صلاحية...", code:"entitlement_required" } status 403
  * Response (provider failure — NO fake answer):
  *   { ok:false, error:"Temporary AI problem. Please try again." }
  */
@@ -23,6 +25,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import type { UnifiedAIInput, UnifiedAIResult } from "@/lib/unified-ai/types";
+import { getModelAccessPolicy, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 
 function serverRequestId(): string {
   // Node 18+ / Edge has crypto.randomUUID
@@ -85,7 +88,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "المطلوب نص (prompt)" }, { status: 400 });
     }
 
-    // ---- Phase F: Auth + Credit Reserve ----
+    // ---- Phase G: Auth + Entitlement check (before reserve) ----
     try {
       supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -94,15 +97,37 @@ export async function POST(req: Request) {
       userId = null;
     }
 
-    // Entitlement check (Phase F: infrastructure ready, no gated models yet)
-    // Example future: if model requires 'advanced-study' and user lacks it → 403
-    // For now, allow all — but keep hook:
-    // if (userId) {
-    //   const { data: has } = await supabase!.rpc('has_entitlement', { p_user_id: userId, p_kind: 'feature', p_value: 'advanced-study' });
-    //   if (requiresAdvanced && !has) return 403
-    // }
+    // Phase G: Resolve model → policy → has_entitlement (server-side only)
+    // الحالي: unified-ai.ts يستدعي callGroq(CURRENT_AI_MODEL) مباشرة دون routeCandidates
+    // لا نعيد تصميم الـ Router — فقط نضيف boundary حول النموذج الفعلي
+    const modelId = CURRENT_AI_MODEL; // TODO: عندما يمر عبر routeCandidates، استخدم المرشح الفعلي
+    const policy = getModelAccessPolicy(modelId);
+    if (policy.access === "entitlement" && policy.entitlement) {
+      // free models تمر مباشرة — هذا الفرع للـ gated فقط (حالياً لا نماذج مقفلة)
+      if (!userId || !supabase) {
+        return NextResponse.json(
+          { ok: false, error: "هذا النموذج يتطلب تسجيل دخول وصلاحية.", code: "entitlement_required", required: policy.entitlement },
+          { status: 403 }
+        );
+      }
+      const { data: has, error: entErr } = await supabase.rpc('has_entitlement', {
+        p_user_id: userId,
+        p_kind: policy.entitlement.kind,
+        p_value: policy.entitlement.value,
+      });
+      if (entErr) {
+        console.error("[PhaseG] has_entitlement check failed:", entErr.message);
+        return NextResponse.json({ ok: false, error: "تعذر التحقق من الصلاحية." }, { status: 500 });
+      }
+      if (!has) {
+        return NextResponse.json(
+          { ok: false, error: "هذا النموذج يتطلب صلاحية غير متوفرة لديك. اشترِها من المتجر.", code: "entitlement_required", required: policy.entitlement },
+          { status: 403 }
+        );
+      }
+    }
 
-    // Reserve 1 credit atomically for authenticated users
+    // ---- Phase F: Reserve 1 credit atomically for authenticated users ----
     if (userId && supabase) {
       const refId = `ai_req:${serverRequestId()}`;
       reserveRef = refId;
