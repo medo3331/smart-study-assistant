@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
+import { MagicOrb } from "./HeroAvatar";
 import {
   Play,
   Sparkles,
@@ -77,63 +78,7 @@ export function HeroCard({
       <div className="relative flex flex-col gap-5">
         {/* ---- الأفاتار المداري + الترحيب ---- */}
         <div className="flex items-center gap-4 sm:gap-5">
-          {/* العنصر المميز: قرص بنفسجي متوهج + نقطة عنبرية تدور (الستريك)
-              + شارة المستوى — كلها قراءات حقيقية مش زخرفة. */}
-          <div
-            className="relative shrink-0"
-            style={{ width: 128, height: 128 }}
-            role="img"
-            aria-label={`صورة حسابك — المستوى ${level}`}
-          >
-            <motion.div
-              className="absolute inset-0"
-              animate={reduceMotion ? undefined : { rotate: 360 }}
-              transition={{ duration: 9, ease: "linear", repeat: Infinity }}
-              style={{ transformOrigin: "center" }}
-              aria-hidden
-            >
-              <span
-                className="absolute left-1/2 top-1/2 rounded-full"
-                style={{
-                  width: 11,
-                  height: 11,
-                  margin: "-5.5px",
-                  backgroundColor: "var(--accent)",
-                  boxShadow: "0 0 12px var(--accent)",
-                  transform: "translateY(-52px)",
-                }}
-              />
-            </motion.div>
-
-            <div
-              className="relative z-10 flex items-center justify-center overflow-hidden rounded-full font-display font-extrabold text-white"
-              style={{
-                width: 92,
-                height: 92,
-                margin: "18px auto 0",
-                background: "linear-gradient(160deg, var(--accent) 0%, var(--accent-highlight) 100%)",
-                boxShadow:
-                  "0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent), 0 0 28px color-mix(in srgb, var(--accent) 55%, transparent)",
-              }}
-            >
-              <span className="text-[32px] leading-none pt-1">
-                {displayName.trim().charAt(0).toUpperCase() || "؟"}
-              </span>
-            </div>
-
-            <span
-              className="absolute bottom-1.5 left-1/2 z-20 -translate-x-1/2 rounded-full font-mono text-[11px] font-bold whitespace-nowrap"
-              style={{
-                padding: "2px 10px",
-                backgroundColor: "var(--accent)",
-                color: "var(--on-marker)",
-                boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 60%, transparent)",
-              }}
-              dir="ltr"
-            >
-              LV {level}
-            </span>
-          </div>
+          <MagicOrb level={level} />
 
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold leading-snug" style={{ color: "var(--text)" }}>

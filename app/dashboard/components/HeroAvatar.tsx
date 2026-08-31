@@ -1,87 +1,65 @@
 "use client";
 
-import React from "react";
-import { motion } from "framer-motion";
-import { useReducedMotion } from "@/lib/useReducedMotion";
-
-/* ==========================================================================
-   صورة الحساب المتحركة في الترويسة (الهيرو)
-   مهاجَرة من مفهوم AvatarOrbit في magicly (feat/dashboard-premium-saas)
-   ومُعاد بناؤها على معمارية المشروع الحالي:
-
-   - الحرف في النص ثابت وواضح دايماً — مش بيلف.
-   - حلقة مدار أساسية بتلف ببطء وعليها نقطتين متوهجتين.
-   - حلقة ثانية متقطعة بتلف بالعكس أهدى بكثير.
-   - توهّج محيطي ناعم بنفسجي/أزرق (هوية ماجيكلي الليلية).
-   - دخول: الحجم من ٠٫٩٢ لـ ١ ثم المدار يظهر، وبعدها طفاوة خفيفة مستمرة.
-   - مع prefers-reduced-motion: كل ده بيقف — صورة ثابتة بدون حركة.
-   ========================================================================== */
-
-interface HeroAvatarProps {
-  /** الحرف الأول من اسم المستخدم. */
-  initial: string;
-  displayName: string;
+interface MagicOrbProps {
+  level: number;
+  /** Optional aria label override; defaults to LV badge text. */
+  ariaLabel?: string;
 }
 
-export function HeroAvatar({ initial, displayName }: HeroAvatarProps) {
-  const reduced = useReducedMotion();
-
+/**
+ * MagicOrb — glass glowing sphere (Phase 2)
+ *
+ * تصميم زجاجي مضيء يعتمد بالكامل على متغيرات الثيم:
+ * --accent / --accent-highlight / --on-marker
+ * بدون أي لون hard-coded.
+ *
+ * - radial gradient + highlight علوي يساري
+ * - outer glow ناعم
+ * - breathing 3.6s (opacity + blur + shadow)
+ * - 6 particles تدور 24s linear
+ * - LV badge أسفل الكرة
+ * - يحترم prefers-reduced-motion عبر CSS
+ */
+export function MagicOrb({ level, ariaLabel }: MagicOrbProps) {
   return (
-    // الغلاف الخارجي: الطفاوة الهادية بعد الدخول (واحدة بس — مش طبقتين حركة)
-    <motion.div
-      className="relative shrink-0"
-      initial={reduced ? false : { scale: 0.92, opacity: 0 }}
-      animate={reduced ? { scale: 1, opacity: 1 } : { scale: 1, opacity: 1 }}
-      transition={{ duration: 0.45, ease: "easeOut" }}
+    <div
+      className="magic-orb-wrap"
+      role="img"
+      aria-label={ariaLabel ?? `صورة حسابك — المستوى ${level}`}
     >
-      <motion.div
-        animate={reduced ? undefined : { y: [0, -3, 0] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-        className="relative"
-      >
-        <div className="hero-avatar h-28 w-28 sm:h-32 sm:w-32" aria-hidden={false}>
-          {/* التوهّج المحيطي */}
-          <span aria-hidden className="hero-avatar-glow" />
+      {/* Glow خلفي يتنفس */}
+      <span aria-hidden className="magic-orb-glow" />
 
-          {/* الحلقة الثانوية المتقطعة — بتلف بالعكس ببطء شديد */}
-          <motion.span
-            aria-hidden
-            className="hero-avatar-ring"
-            animate={reduced ? undefined : { rotate: -360 }}
-            transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
-          />
+      {/* مدار الجسيمات */}
+      <span aria-hidden className="magic-orb-orbit">
+        <span className="magic-orb-dot" style={{ ["--angle" as string]: "0deg" } as React.CSSProperties} />
+        <span className="magic-orb-dot" style={{ ["--angle" as string]: "60deg" } as React.CSSProperties} />
+        <span className="magic-orb-dot" style={{ ["--angle" as string]: "120deg" } as React.CSSProperties} />
+        <span className="magic-orb-dot" style={{ ["--angle" as string]: "180deg" } as React.CSSProperties} />
+        <span className="magic-orb-dot" style={{ ["--angle" as string]: "240deg" } as React.CSSProperties} />
+        <span className="magic-orb-dot" style={{ ["--angle" as string]: "300deg" } as React.CSSProperties} />
+      </span>
 
-          {/* حلقة المدار الأساسية + النقطتين — بتفضل تدور بهدوء */}
-          <motion.span
-            aria-hidden
-            className="hero-avatar-orbit"
-            initial={reduced ? false : { opacity: 0 }}
-            animate={{ opacity: 1, ...(reduced ? {} : { rotate: 360 }) }}
-            transition={
-              reduced
-                ? { duration: 0.3, delay: 0.15 }
-                : { opacity: { duration: 0.5, delay: 0.18 }, rotate: { duration: 16, repeat: Infinity, ease: "linear", delay: 0.18 } }
-            }
-          >
-            <span className="hero-avatar-dot" />
-            <span className="hero-avatar-dot hero-avatar-dot--b" />
-          </motion.span>
+      {/* الكرة الزجاجية */}
+      <div className="magic-orb-core" aria-hidden>
+        <span className="magic-orb-highlight" />
+        <span className="magic-orb-inner" />
+      </div>
 
-          {/* القرص المركزي: الحرف نفسه — ثابت ومقروء */}
-          <motion.div
-            role="img"
-            aria-label={`صورة حساب ${displayName}`}
-            className="hero-avatar-disc"
-            initial={reduced ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.08 }}
-          >
-            <span className="font-display font-extrabold text-4xl sm:text-5xl leading-none select-none">
-              {initial}
-            </span>
-          </motion.div>
-        </div>
-      </motion.div>
-    </motion.div>
+      {/* شارة المستوى */}
+      <span className="magic-orb-badge" dir="ltr">
+        LV {level}
+      </span>
+    </div>
   );
 }
+
+/** Alias للتوافق — نفس الملف كان يصدّر HeroAvatar كـ dead code. */
+export function HeroAvatar({ initial: _initial, displayName }: { initial: string; displayName: string }) {
+  // fallback بسيط لو استُخدم في مكان قديم — يعرض Orb بمستوى 1
+  void _initial;
+  void displayName;
+  return <MagicOrb level={1} />;
+}
+
+export default MagicOrb;
