@@ -1118,114 +1118,91 @@ export default function DashboardPage() {
         audioOn={isPlayingAudio}
       />
 
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* ═══ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
-                إجراءات سريعة (أكمل التعلّم · المساعد الذكي · العبادات · المتجر).
-                كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. ═══ */}
-        <HeroCard
-          displayName={displayName}
-          subtitle={headerSubtitle}
-          level={level}
-          streak={streak}
-          planProgressPct={overallProgress}
-          completedSteps={completedCount}
-          totalSteps={days.length}
-          onContinue={() => {
-            const el = document.getElementById(`day-${currentDayNumber}`);
-            el?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
-          onOpenAiAssistant={handleOpenAiAssistant}
-        />
-
-        {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
-        <PersonalAssistant
-                  context={personalAssistantContext}
-                  onContinue={() => {
-                    const el = document.getElementById(`day-${currentDayNumber}`);
-                    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  }}
-                />
-
-
-        {/* ═══ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا ═══ */}
-
-        {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
-                — عدّ من صفر مرة واحدة بخط المونو ═══ */}
-        <StatCards
-          xp={xp}
-          streak={streak}
-          completedSteps={completedCount}
-          weeklyFocusMinutes={weeklyFocusMinutesTotal}
-        />
-
-        {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
-                (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية ═══ */}
-        <CurrentStepCard
-          currentDay={currentTaskForCoach ?? null}
-          completedSteps={completedCount}
-          totalSteps={days.length}
-          isCurrent={
-            currentTaskForCoach ? currentTaskForCoach.day === currentDayNumber : false
-          }
-          subjectName={config.subject}
-          onContinue={() => {
-            const el = document.getElementById(`day-${currentDayNumber}`);
-            el?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
-        />
-
-        <StatsSection
-          level={level}
-          xp={xp}
-          currentLevelProgress={currentLevelProgress}
-          xpRemaining={xpRemaining}
-          streak={streak}
-          uiText={uiText}
-          themeStyles={themeStyles}
-          displayName={displayName}
-          subtitle={headerSubtitle}
-          isEmergencyMode={isEmergencyMode}
-        />
-
-        {/* 🚨 خطة الامتحان القريب.
-            مكانها فوق عن قصد: اللي عنده امتحان بعد ٣ أيام لازم يشوف
-            المطلوب منه النهاردة قبل أي إحصائية. الكارت بيخفي نفسه
-            لوحده لو مفيش خطة شغالة. */}
-        {authUser && (
-          // ⚠️ الـ key فيه examPlanKey: الكارت بيجيب الخطة مرة واحدة عند
-          // التركيب، فلو المستخدم عمل خطة من الشات الكارت كان هيفضل فاضي
-          // لحد ريفريش. تغيير الـ key بيعيد تركيبه فبيجيب الخطة الجديدة.
-          <ExamPlanCard
-            key={examPlanKey}
-            userId={authUser.id}
-            themeStyles={themeStyles}
+      <div className="max-w-6xl mx-auto space-y-10">
+        {/* ═══════════════════════════════════════════════════════
+            GROUP A — الهوية والفعل
+            HeroCard → CurrentStepCard → ExamPlanCard (conditional)
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6">
+          {/* ═══ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
+                  إجراءات سريعة (أكمل التعلّم · المساعد الذكي · العبادات · المتجر).
+                  كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. ═══ */}
+          <HeroCard
+            displayName={displayName}
+            subtitle={headerSubtitle}
+            level={level}
+            streak={streak}
+            planProgressPct={overallProgress}
+            completedSteps={completedCount}
+            totalSteps={days.length}
+            onContinue={() => {
+              const el = document.getElementById(`day-${currentDayNumber}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            onOpenAiAssistant={handleOpenAiAssistant}
           />
-        )}
 
-        <KpiSection
-          completedCount={completedCount}
-          totalDays={days.length}
-          weeklyTasks={weeklyTasksTotal}
-          xp={xp}
-          level={level}
-          xpRemaining={xpRemaining}
-          weeklyFocusMinutes={weeklyFocusMinutesTotal}
-          prevWeekFocusMinutes={prevWeekFocusMinutes}
-          streak={streak}
-          daysSinceLastActivity={daysSinceLastActivity}
-          themeStyles={themeStyles}
-        />
+          {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
+                  (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
+          <CurrentStepCard
+            currentDay={currentTaskForCoach ?? null}
+            completedSteps={completedCount}
+            totalSteps={days.length}
+            isCurrent={
+              currentTaskForCoach ? currentTaskForCoach.day === currentDayNumber : false
+            }
+            subjectName={config.subject}
+            onContinue={() => {
+              const el = document.getElementById(`day-${currentDayNumber}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          />
 
-        <HeroSection
-          displayName={displayName}
-          coachTasks={coachTasks}
-          days={days}
-          currentDayNumber={currentDayNumber}
-          completedCount={completedCount}
-          themeStyles={themeStyles}
-          uiText={uiText}
-        />
+          {/* 🚨 خطة الامتحان القريب — أهم deadline إذا وُجد.
+              مكانها بعد CTA مباشرة عن قصد: اللي عنده امتحان بعد ٣ أيام لازم يشوف
+              المطلوب منه النهاردة قبل أي إحصائية. الكارت بيخفي نفسه
+              لوحده لو مفيش خطة شغالة. */}
+          {authUser && (
+            // ⚠️ الـ key فيه examPlanKey: الكارت بيجيب الخطة مرة واحدة عند
+            // التركيب، فلو المستخدم عمل خطة من الشات الكارت كان هيفضل فاضي
+            // لحد ريفريش. تغيير الـ key بيعيد تركيبه فبيجيب الخطة الجديدة.
+            <ExamPlanCard
+              key={examPlanKey}
+              userId={authUser.id}
+              themeStyles={themeStyles}
+            />
+          )}
+        </div>
 
+        {/* ═══════════════════════════════════════════════════════
+            GROUP B — السياق اليومي
+            PersonalAssistant → HeroSection / AIStudyCoach
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6">
+          {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
+          <PersonalAssistant
+                    context={personalAssistantContext}
+                    onContinue={() => {
+                      const el = document.getElementById(`day-${currentDayNumber}`);
+                      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }}
+                  />
+
+          <HeroSection
+            displayName={displayName}
+            coachTasks={coachTasks}
+            days={days}
+            currentDayNumber={currentDayNumber}
+            completedCount={completedCount}
+            themeStyles={themeStyles}
+            uiText={uiText}
+          />
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP C — العمل الحقيقي
+            StudySections — قلب الداشبورد قبل أي أرقام
+            ═══════════════════════════════════════════════════════ */}
         <StudySections
           config={config}
           uiText={uiText}
@@ -1262,91 +1239,136 @@ export default function DashboardPage() {
           onUpdateCardStatus={updateCardStatus}
         />
 
-        {/* 📖 القرآن: بعد قايمة الدروس مباشرة عن قصد. «شغّل قرآن وإنت
-            بتذاكر» معناها إنك عرفت بتذاكر إيه الأول، فمكانه هنا مش فوق —
-            فوق كان هيزحزح الدروس عن الهيرو (وده قرار مقصود قديم)، وتحت
-            كان هيفضل مدفون زي ما كان جوه الدرج بالظبط.
+        {/* ═══════════════════════════════════════════════════════
+            GROUP D — الأرقام والتقدّم
+            كل progress/metrics في منطقة واحدة بعد العمل الحقيقي
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6">
+          {/* ═══ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا ═══ */}
 
-            الكارت مختصر عن قصد: آخر سورة + ٦ سور + رابط للمكتبة الكاملة.
-            الصوت نفسه عايش في مزوّد الـ root layout، فالسورة اللي تبدأ
-            من هنا بتكمّل معاك في أي صفحة. */}
-        <Link href="/worship" className="block mb-6">
-          <button
-            type="button"
-            aria-label="عباداتي — Worship Center"
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-gradient-to-l from-[#2DD4BF]/10 to-[#7C5CFF]/10 border border-[#2DD4BF]/20 hover:border-[#7C5CFF]/40 transition-colors text-right"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] text-xl">🕌</span>
-            <div className="min-w-0">
-              <h3 className="font-bold text-white leading-snug">عباداتي — Worship Center</h3>
-              <p className="text-sm text-[#B69CFF]">مواقيت الصلاة · الأذكار · القرآن · التسبيح</p>
-            </div>
-            <ArrowLeft size={18} className="mr-auto text-[#9AA0C0] shrink-0" aria-hidden />
-          </button>
-        </Link>
+          {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
+                  — عدّ من صفر مرة واحدة بخط المونو ═══ */}
+          <StatCards
+            xp={xp}
+            streak={streak}
+            completedSteps={completedCount}
+            weeklyFocusMinutes={weeklyFocusMinutesTotal}
+          />
 
-        <QuranSection
-          themeStyles={themeStyles}
-          onOpenLibrary={() => {
-            setSettingsFocus("sound");
-            setIsMenuOpen(true);
-          }}
-        />
+          <KpiSection
+            completedCount={completedCount}
+            totalDays={days.length}
+            weeklyTasks={weeklyTasksTotal}
+            xp={xp}
+            level={level}
+            xpRemaining={xpRemaining}
+            weeklyFocusMinutes={weeklyFocusMinutesTotal}
+            prevWeekFocusMinutes={prevWeekFocusMinutes}
+            streak={streak}
+            daysSinceLastActivity={daysSinceLastActivity}
+            themeStyles={themeStyles}
+          />
 
-        {/* 📊 طبقة المراجعة: بعد قايمة الدروس عن قصد، مش جنب الهيرو —
-            الهيرو لازم يفضل هو أول حاجة تشوفها وبعده الدروس مباشرة.
-            الكارتين دول بيتقروا كـ "إنت عملت إيه الأسبوع ده" و "إيه
-            الجاي"، وبعدهم قسم التحليلات بيدخل في التفاصيل. */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
-          {/* 🐣 الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في
-              الشبكة: الشبكة عمودين، والتالت كان هيسيب فراغ جنبه على
-              الشاشة الكبيرة. والعمود ده أقصر من الرسم البياني أصلاً. */}
-          <div className="flex flex-col gap-6">
-            <AchievementsStrip
-              streak={streak}
-              completedCount={completedCount}
-              level={level}
-              badgeCount={badgeCount}
-              themeStyles={themeStyles}
-            />
+          <StatsSection
+            level={level}
+            xp={xp}
+            currentLevelProgress={currentLevelProgress}
+            xpRemaining={xpRemaining}
+            streak={streak}
+            uiText={uiText}
+            themeStyles={themeStyles}
+            displayName={displayName}
+            subtitle={headerSubtitle}
+            isEmergencyMode={isEmergencyMode}
+          />
 
-            {companion.hidden ? (
-              <button
-                type="button"
-                onClick={companion.show}
-                className="mono text-ink-soft hover:text-ink border border-dashed border-rule rounded-[var(--r-sm)] py-2.5 hover:bg-paper-3 transition"
-              >
-                رجّع رفيقك
-              </button>
-            ) : (
-              <StudyPet
-                level={level}
-                xp={xp}
-                levelProgressPct={currentLevelProgress}
+          {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
+            {/* 🐣 الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في
+                الشبكة: الشبكة عمودين، والتالت كان هيسيب فراغ جنبه على
+                الشاشة الكبيرة. والعمود ده أقصر من الرسم البياني أصلاً. */}
+            <div className="flex flex-col gap-6">
+              <AchievementsStrip
                 streak={streak}
-                daysSinceLastActivity={daysSinceLastActivity}
-                theme={theme}
-                stages={companion.stages}
-                companionName={companion.name}
-                onDismiss={companion.hide}
+                completedCount={completedCount}
+                level={level}
+                badgeCount={badgeCount}
+                themeStyles={themeStyles}
               />
-            )}
+
+              {companion.hidden ? (
+                <button
+                  type="button"
+                  onClick={companion.show}
+                  className="mono text-ink-soft hover:text-ink border border-dashed border-rule rounded-[var(--r-sm)] py-2.5 hover:bg-paper-3 transition"
+                >
+                  رجّع رفيقك
+                </button>
+              ) : (
+                <StudyPet
+                  level={level}
+                  xp={xp}
+                  levelProgressPct={currentLevelProgress}
+                  streak={streak}
+                  daysSinceLastActivity={daysSinceLastActivity}
+                  theme={theme}
+                  stages={companion.stages}
+                  companionName={companion.name}
+                  onDismiss={companion.hide}
+                />
+              )}
+            </div>
           </div>
+
+          <AnalyticsSection
+            analyticsRange={analyticsRange}
+            onChangeRange={setAnalyticsRange}
+            weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+            overallProgress={overallProgress}
+            streak={streak}
+            activeChartData={activeChartData}
+            theme={theme}
+            heatmapCells={heatmapCells}
+            heatmapColors={heatmapColors}
+          />
         </div>
 
-        <AnalyticsSection
-          analyticsRange={analyticsRange}
-          onChangeRange={setAnalyticsRange}
-          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-          overallProgress={overallProgress}
-          streak={streak}
-          activeChartData={activeChartData}
-          theme={theme}
-          heatmapCells={heatmapCells}
-          heatmapColors={heatmapColors}
-        />
+        {/* ═══════════════════════════════════════════════════════
+            GROUP E — العبادات
+            Worship CTA → QuranSection
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6">
+          {/* 📖 بوابة العبادات — تبقى قبل القرآن مباشرة */}
+          <Link href="/worship" className="block">
+            <button
+              type="button"
+              aria-label="عباداتي — Worship Center"
+              className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-gradient-to-l from-[#2DD4BF]/10 to-[#7C5CFF]/10 border border-[#2DD4BF]/20 hover:border-[#7C5CFF]/40 transition-colors text-right"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] text-xl">🕌</span>
+              <div className="min-w-0">
+                <h3 className="font-bold text-white leading-snug">عباداتي — Worship Center</h3>
+                <p className="text-sm text-[#B69CFF]">مواقيت الصلاة · الأذكار · القرآن · التسبيح</p>
+              </div>
+              <ArrowLeft size={18} className="mr-auto text-[#9AA0C0] shrink-0" aria-hidden />
+            </button>
+          </Link>
 
+          {/* 📖 القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط المكتبة.
+              الصوت عايش في AudioProvider فالسورة بتكمّل في أي صفحة. */}
+          <QuranSection
+            themeStyles={themeStyles}
+            onOpenLibrary={() => {
+              setSettingsFocus("sound");
+              setIsMenuOpen(true);
+            }}
+          />
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP F — الثانوي
+            ═══════════════════════════════════════════════════════ */}
         {/* 👥 دعوة الجروب في آخر الصفحة: اللي وصل لحد هنا شاف الموقع
             كله وبقى مؤهّل يدخل. البانر بيخفي نفسه لو مفيش لينك مظبوط. */}
         <CommunityInvite variant="banner" />
