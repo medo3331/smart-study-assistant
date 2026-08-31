@@ -3,7 +3,7 @@
 /* ==========================================================================
    المتجر
 
-   ٩٠ عنصر في ٨ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
+   ٩٣ عنصر (٩٠ تجميلي + ٣ مفيدة) في ٩ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
    يلاقي حاجة في كومة زي دي. الحل تلات طبقات — قسم، وبحث، وترتيب — وكلهم
    بيشتغلوا مع بعض على نفس القايمة.
 
@@ -26,7 +26,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
-import { Search, X } from "lucide-react";
+import { Search, X, Zap } from "lucide-react";
 import { PageShell, EmptyState, LoadingSheets, DataNotice } from "../dashboard/components/PageShell";
 import { useAuthUser } from "../dashboard/components/use-page-data";
 import { CATALOG, slotOf } from "@/lib/shop/catalog";
@@ -382,6 +382,46 @@ export default function ShopPage() {
               }}
             />
           )}
+          {/* المفيدة — Phase E: 3 منتجات تُشترى بـ Coins وتُحفظ (لا AiRouter) */}
+          {(() => {
+            const useful = CATALOG.filter((i) => i.category === "useful");
+            if (useful.length === 0) return null;
+            return (
+              <section className="space-y-3" aria-labelledby="useful-title">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="eyebrow eyebrow-flush mb-1 flex items-center gap-1.5">
+                      <Zap className="w-3 h-3" aria-hidden /> المفيدة
+                    </p>
+                    <h2 id="useful-title" className="h3">ترقية و AI Credits</h2>
+                    <p className="text-[11px] text-ink-soft">تُشترى بـ Coins — تُحفظ في حسابك، لا تُستهلك بعد</p>
+                  </div>
+                </div>
+                <div className="shop-grid">
+                  {useful.map((item) => {
+                    const st = unlockStatus(item, state);
+                    const owned = state.ownedIds.has(item.id);
+                    return (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        avatarEmoji={avatarEmoji}
+                        justBought={justBought === item.id}
+                        onOpen={() => setOpenId(item.id)}
+                        state={{
+                          owned,
+                          equipped: false,
+                          favorite: false,
+                          lockedNeed: owned ? null : st.satisfied ? null : st.need,
+                          affordable: state.balance >= item.price,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })()}
         </>
       )}
 

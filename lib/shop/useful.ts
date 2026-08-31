@@ -1,17 +1,10 @@
 /**
- * UsefulItemEffect — Backend abstraction for future Useful Store products
+ * UsefulItemEffect — Backend abstraction for Useful Store products
  *
- * Phase D = infrastructure فقط — لا منتجات، لا catalog rows، لا أسعار، لا UI
- * الهدف: أن يكون backend قادراً مستقبلاً على تنفيذ:
- *   purchase → grant useful effect (entitlement / ai_credit / consumable)
- * بدون إعادة كتابة architecture.
- *
- * لا تُستخدم هذه الأنواع في أي runtime الآن — AiRouter و Store غير موصولين بها.
+ * Phase E: المنتجات المفيدة أصبحت حقيقية (3 منتجات) — لكن لا AiRouter coupling
+ * الـ effect يُقرأ من catalog.metadata.useful في السيرفر فقط
  */
 
-// ---------------------------------------------------------------------------
-// Effect kinds — الحد الأدنى المفيد
-// ---------------------------------------------------------------------------
 export type UsefulItemEffectKind = "entitlement" | "ai_credit" | "consumable";
 
 export type UsefulItemEffect =
@@ -35,16 +28,12 @@ export type UsefulItemEffect =
       metadata?: Record<string, unknown>;
     };
 
-// Grant descriptor — كيف سيبدو منح منتج Useful مستقبلاً (غير مستخدم الآن)
 export type UsefulItemGrant = {
   userId: string;
-  itemId: string; // ID المنتج المستقبلي (لا يوجد الآن)
+  itemId: string;
   effects: UsefulItemEffect[];
 };
 
-// ---------------------------------------------------------------------------
-// Helpers — للتوثيق والاختبار فقط، لا تُستدعى في runtime حالياً
-// ---------------------------------------------------------------------------
 export function isUsefulItemEffect(v: unknown): v is UsefulItemEffect {
   if (typeof v !== "object" || v === null) return false;
   const o = v as Record<string, unknown>;
@@ -60,8 +49,50 @@ export function isUsefulItemEffect(v: unknown): v is UsefulItemEffect {
   return false;
 }
 
-// ملاحظة Phase D:
-// - لا products حقيقية، لا prices، لا catalog
-// - لا تنفيذ purchase_item → UsefulItemGrant
-// - AiRouter لا يستدعي has_entitlement / ai_credit_balance
-// - كل شيء هنا للـ type safety المستقبلية فقط
+// ---------------------------------------------------------------------------
+// Phase E — helpers لقراءة effect من ShopItem.metadata.useful
+// ---------------------------------------------------------------------------
+export const USEFUL_PRODUCT_IDS = [
+  "useful.study-booster",
+  "useful.ai-starter-pack",
+  "useful.ai-power-pack",
+] as const;
+
+export type UsefulProductId = (typeof USEFUL_PRODUCT_IDS)[number];
+
+export function isUsefulProductId(id: string): id is UsefulProductId {
+  return (USEFUL_PRODUCT_IDS as readonly string[]).includes(id);
+}
+
+type RawUsefulMeta =
+  | { type: "entitlement"; kind: string; value: string }
+  | { type: "ai_credit"; amount: number }
+  | { type: string; [k: string]: unknown };
+
+export function getUsefulMeta(item: { metadata?: Record<string, unknown> }): RawUsefulMeta | null {
+  const raw = (item.metadata as Record<string, unknown> | undefined)?.useful;
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (o.type === "entitlement" && typeof o.kind === "string" && typeof o.value === "string") {
+    return { type: "entitlement", kind: o.kind, value: o.value };
+  }
+  if (o.type === "ai_credit" && typeof o.amount === "number") {
+    return { type: "ai_credit", amount: o.amount };
+  }
+  if (typeof o.type === "string") return o as RawUsefulMeta;
+  return null;
+}
+
+export function usefulEffectLabel(item: { metadata?: Record<string, unknown>; name: string }): string {
+  const m = getUsefulMeta(item);
+  if (!m) return "";
+  if (m.type === "entitlement") return `يمنح: ${m.value}`;
+  if (m.type === "ai_credit") return `يمنح: ${m.amount} AI Credits`;
+  return "";
+}
+
+// ملاحظة Phase E:
+// - 3 منتجات حقيقية في shop_catalog + lib/shop/catalog.ts
+// - الشراء عبر purchase_item (server validates catalog metadata)
+// - AiRouter غير موصول — Credits تُحفظ فقط
+// - entitlement يُستخدم للعرض فقط، لا لفتح موديلات

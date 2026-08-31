@@ -424,6 +424,56 @@ const DAILY_ITEMS: ShopItem[] = DAILY_ONLY.map(
 );
 
 // ============================================================================
+// المفيدة — 3 منتجات Useful (Phase E)
+// ============================================================================
+/**
+ * منتجات Useful تُباع بـ Coins وتُحفظ كـ entitlement/credits.
+ * التسعير مقيس على BANDS و maxDailyCoins ≈ 300-400:
+ *   Study Booster 2200 (legendary 1800-2600) — ميزة دائمة ≈ 5 أيام max / 30 يوم عادي
+ *   AI Starter 650 (rare 450-700) — 6.5 coin/credit
+ *   AI Power 2400 (legendary 1800-2600) — 4.8 coin/credit بخصم bulk ~26%
+ * `metadata.useful` يُقرأ في السيرفر فقط — الكلاينت يرسل item_id فقط.
+ */
+const USEFUL_ITEMS: ShopItem[] = [
+  {
+    id: "useful.study-booster",
+    category: "useful" as Category,
+    name: "Study Booster",
+    desc: "يفتح ميزة الدراسة المتقدمة بشكل دائم",
+    rarity: "legendary",
+    price: 2200,
+    value: "advanced-study",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "advanced-study" } },
+  },
+  {
+    id: "useful.ai-starter-pack",
+    category: "useful" as Category,
+    name: "AI Starter Pack",
+    desc: "100 AI Credits — تُحفظ في رصيدك",
+    rarity: "rare",
+    price: 650,
+    value: "100",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "ai_credit", amount: 100 } },
+  },
+  {
+    id: "useful.ai-power-pack",
+    category: "useful" as Category,
+    name: "AI Power Pack",
+    desc: "500 AI Credits — حزمة كبيرة بخصم",
+    rarity: "legendary",
+    price: 2400,
+    value: "500",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "ai_credit", amount: 500 } },
+  },
+];
+
+// ============================================================================
 // الكتالوج المجمّع
 // ============================================================================
 
@@ -443,6 +493,7 @@ export const CATALOG: readonly ShopItem[] = [
   ...SOUND_ITEMS,
   ...EFFECT_ITEMS,
   ...DAILY_ITEMS,
+  ...USEFUL_ITEMS,
 ];
 
 /**
