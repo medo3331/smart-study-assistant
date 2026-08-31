@@ -9,8 +9,6 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for future use
-import { AIStudyCoach } from "@/components/AIStudyCoach";
 import type { CoachTask } from "@/components/AIStudyCoach";
 import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
@@ -63,8 +61,6 @@ import { CommunityInvite } from "@/components/CommunityInvite";
 // 🐣 الرفيق: الكمبوننت موجود من الأول، والمتجر بيغيّر إيموجيه بس
 import { StudyPet } from "@/components/StudyPet";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for future use
-import { StudyTutorWidget } from "@/components/StudyTutorWidget";
 import { useEquippedCompanion } from "@/lib/shop/use-companion";
 
 // ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل

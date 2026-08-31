@@ -73,6 +73,7 @@ interface SidebarProps {
 
 // 🖍️ الأربع ألوان دي هي أقلام الفسفوري المتاحة. الأسماء الإنجليزية
 // (amber/emerald/...) متسيبة زي ما هي لأنها محفوظة في قاعدة البيانات.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained: PENS kept for legacy DB values (amber/emerald/coral/cyan) even though UI now uses ThemeId
 const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
   { id: "amber", name: "أصفر", swatch: "bg-amber-500" },
   { id: "emerald", name: "أخضر", swatch: "bg-emerald-500" },
@@ -120,8 +121,7 @@ export function Sidebar({
   setNewSubjectInput,
   isChangingSubject,
   handleSubjectChange,
-  theme,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy pen setter, preserved for compatibility
+  theme: _theme,
   setTheme: _legacySetTheme,
   themeStyles,
   notificationsEnabled,
@@ -133,6 +133,8 @@ export function Sidebar({
   onNavigateHome,
   focusSection = null,
 }: SidebarProps) {
+  void _theme;
+  void _legacySetTheme;
   const { theme: activeTheme, setTheme: setAppTheme } = useTheme();
 
   // التراك الشغّال بيتقرا هنا للسطر التعريفي بس. التحكّم كله جوه
@@ -156,9 +158,6 @@ export function Sidebar({
 
   const toggleSection = (id: SettingsSectionId) =>
     setOpenSections((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy profiles.theme bridge, kept for compatibility
-  const penName = PENS.find((p) => p.id === theme)?.name ?? "";
 
   /** السطر تحت عنوان القسم: الحالة الحقيقية لو فيها معلومة، وإلا التعريف.
       ده بيت القصيد من التنظيم — القسم المقفول بيقول إيه جواه وإيه شغّال. */

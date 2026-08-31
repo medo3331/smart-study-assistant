@@ -58,6 +58,17 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   // Load surahs on mount only (resume position is read once at mount)
   const resumeRef = useRef({ surahId: readProgress.surahId, ayahId: readProgress.ayahId });
 
+  const loadAyahs = async (surahId: number) => {
+    try {
+      const data = await getAyahs(surahId);
+      setAyahs(data);
+      setShowAllAyahs(true);
+    } catch (error) {
+      console.error("Failed to load ayahs:", error);
+      setAyahs([]);
+    }
+  };
+
   useEffect(() => {
     async function loadSurahs() {
       setLoading(true);
@@ -75,7 +86,6 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         if (initial) {
           setSelectedSurah(initial);
           setShowAllAyahs(true);
-          // eslint-disable-next-line react-hooks/immutability -- loadAyahs defined below but hoisted
           await loadAyahs(initial.id);
         }
       } catch (error) {
@@ -86,17 +96,6 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     }
     loadSurahs();
     }, [initialSurahId]);
-
-  const loadAyahs = async (surahId: number) => {
-    try {
-      const data = await getAyahs(surahId);
-      setAyahs(data);
-      setShowAllAyahs(true);
-    } catch (error) {
-      console.error("Failed to load ayahs:", error);
-      setAyahs([]);
-    }
-  };
 
   const handleSurahSelect = async (surah: Surah) => {
     setSelectedSurah(surah);
