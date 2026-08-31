@@ -6,7 +6,6 @@ import { MagicOrb } from "./HeroAvatar";
 import {
   Play,
   Sparkles,
-  MoonStar,
   ShoppingBag,
   Flame,
   Clock,
@@ -119,15 +118,13 @@ export function HeroCard({
         <div className="h-px" style={{ backgroundColor: "var(--rule)" }} aria-hidden />
 
         {/* ---- الإجراءات السريعة: ٤ حبات بنفس الطول والوزن ---- */}
+        {/* العبادات pill removed (Phase 4): dedicated Worship banner → QuranSection is primary gateway. */}
         <div className="flex flex-wrap gap-2">
           <ActionPill onClick={onContinue} icon={<Play size={16} aria-hidden />}>
             أكمل التعلّم
           </ActionPill>
           <ActionPill onClick={onOpenAiAssistant} icon={<Sparkles size={16} aria-hidden />}>
             المساعد الذكي
-          </ActionPill>
-          <ActionPill href="/worship" icon={<MoonStar size={16} aria-hidden />}>
-            العبادات
           </ActionPill>
           <ActionPill href="/shop" icon={<ShoppingBag size={16} aria-hidden />}>
             المتجر

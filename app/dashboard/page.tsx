@@ -27,7 +27,6 @@ import type {
   ThemeColor,
 } from "./components/types";
 
-import { StatsSection } from "./components/StatsSection";
 import { HeroSection } from "./components/HeroSection";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
@@ -36,7 +35,6 @@ import { Sidebar, type SettingsSectionId } from "./components/Sidebar";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
 import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components/nav-config";
-import { KpiSection } from "./components/KpiSection";
 import { WeeklyProgress } from "./components/WeeklyProgress";
 import { AchievementsStrip } from "./components/AchievementsStrip";
 import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
@@ -105,6 +103,8 @@ export default function DashboardPage() {
   const xpInCurrentLevel = xp - xpForCurrentLevelStart;
   const currentLevelProgress = Math.round((xpInCurrentLevel / 200) * 100);
   const xpRemaining = xpForNextLevel - xp;
+  // Phase 4: xpRemaining kept for level calculation (previously displayed in removed Kpi/StatsSection, preserved for future use)
+  void xpRemaining;
 
   // 3. الصوت — الحالة كلها في `AudioProvider` على مستوى الموقع.
   //
@@ -675,7 +675,13 @@ export default function DashboardPage() {
       return;
     }
     // القسم لازم يكون اتركّب قبل ما نسكرول له
+    // Phase 4: Analytics is now inside <details id="analytics"> collapsed by default
+    // — if intent targets analytics, open the disclosure first so content is visible.
     requestAnimationFrame(() => {
+      if (intent.target === "analytics") {
+        const details = document.getElementById("analytics") as HTMLDetailsElement | null;
+        if (details && details.tagName.toLowerCase() === "details") details.open = true;
+      }
       document.getElementById(intent.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [authUser]);
@@ -1067,16 +1073,7 @@ export default function DashboardPage() {
 
   const activeChartData = analyticsRange === "weekly" ? weeklyChartData : monthlyChartData;
   const weeklyFocusMinutesTotal = weeklyChartData.reduce((sum, d) => sum + d.minutes, 0);
-  const weeklyTasksTotal = weeklyChartData.reduce((sum, d) => sum + d.tasks, 0);
   const weeklyFocusHoursLabel = `${Math.floor(weeklyFocusMinutesTotal / 60)}س ${weeklyFocusMinutesTotal % 60}د`;
-
-  // الأسبوع اللي قبل الأسبوع الجاري (أيام ٧ لـ ١٣) — عشان كارت التركيز
-  // يعرض فرق حقيقي بدل سهم مكتوب على الفاضي.
-  const prevWeekFocusMinutes = Array.from({ length: 7 }, (_, idx) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (13 - idx));
-    return activityLog[date.toISOString().slice(0, 10)]?.focusMinutes || 0;
-  }).reduce((sum, m) => sum + m, 0);
 
   const heatmapCells = Array.from({ length: 70 }, (_, idx) => {
     const daysAgo = 69 - idx;
@@ -1185,23 +1182,9 @@ export default function DashboardPage() {
             ═══════════════════════════════════════════════════════ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "60ms" }}>
           {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
-          <PersonalAssistant
-                    context={personalAssistantContext}
-                    onContinue={() => {
-                      const el = document.getElementById(`day-${currentDayNumber}`);
-                      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                    }}
-                  />
+          <PersonalAssistant context={personalAssistantContext} />
 
-          <HeroSection
-            displayName={displayName}
-            coachTasks={coachTasks}
-            days={days}
-            currentDayNumber={currentDayNumber}
-            completedCount={completedCount}
-            themeStyles={themeStyles}
-            uiText={uiText}
-          />
+          <HeroSection displayName={displayName} coachTasks={coachTasks} />
         </div>
 
         {/* ═══════════════════════════════════════════════════════
@@ -1262,33 +1245,6 @@ export default function DashboardPage() {
             weeklyFocusMinutes={weeklyFocusMinutesTotal}
           />
 
-          <KpiSection
-            completedCount={completedCount}
-            totalDays={days.length}
-            weeklyTasks={weeklyTasksTotal}
-            xp={xp}
-            level={level}
-            xpRemaining={xpRemaining}
-            weeklyFocusMinutes={weeklyFocusMinutesTotal}
-            prevWeekFocusMinutes={prevWeekFocusMinutes}
-            streak={streak}
-            daysSinceLastActivity={daysSinceLastActivity}
-            themeStyles={themeStyles}
-          />
-
-          <StatsSection
-            level={level}
-            xp={xp}
-            currentLevelProgress={currentLevelProgress}
-            xpRemaining={xpRemaining}
-            streak={streak}
-            uiText={uiText}
-            themeStyles={themeStyles}
-            displayName={displayName}
-            subtitle={headerSubtitle}
-            isEmergencyMode={isEmergencyMode}
-          />
-
           {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
@@ -1328,17 +1284,28 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <AnalyticsSection
-            analyticsRange={analyticsRange}
-            onChangeRange={setAnalyticsRange}
-            weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-            overallProgress={overallProgress}
-            streak={streak}
-            activeChartData={activeChartData}
-            theme={theme}
-            heatmapCells={heatmapCells}
-            heatmapColors={heatmapColors}
-          />
+          {/* Phase 4: Progressive disclosure — collapsed by default, preserves id="analytics" for nav scroll. */}
+          <details id="analytics" className="scroll-mt-6 group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-sm)] border border-rule bg-paper px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden marker:content-none">
+              <span>مزيد من التحليلات</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>
+                ▾
+              </span>
+            </summary>
+            <div className="mt-4">
+              <AnalyticsSection
+                analyticsRange={analyticsRange}
+                onChangeRange={setAnalyticsRange}
+                weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+                overallProgress={overallProgress}
+                streak={streak}
+                activeChartData={activeChartData}
+                theme={theme}
+                heatmapCells={heatmapCells}
+                heatmapColors={heatmapColors}
+              />
+            </div>
+          </details>
         </div>
 
         {/* ═══════════════════════════════════════════════════════
