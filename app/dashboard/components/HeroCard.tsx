@@ -191,7 +191,7 @@ function ActionPill({
     color: "var(--text)",
   };
   const cls =
-    "inline-flex h-10 items-center gap-2 rounded-2xl border px-4 text-sm font-semibold transition-colors hover:brightness-110 active:scale-[0.97]";
+    "inline-flex h-10 items-center gap-2 rounded-2xl border px-4 text-sm font-semibold transition-colors hover:brightness-110 motion-press";
   const inner = (
     <>
       <span className="flex" style={{ color: "var(--accent-highlight)" }} aria-hidden>

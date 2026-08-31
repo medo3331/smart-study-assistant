@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { ThemeStyles } from "./types";
 
 /* ==========================================================================
@@ -62,6 +62,7 @@ export function KpiSection({
   daysSinceLastActivity,
   themeStyles,
 }: KpiSectionProps) {
+  const reduceMotion = useReducedMotion();
   const focusDiff = weeklyFocusMinutes - prevWeekFocusMinutes;
 
   const cards: Kpi[] = [
@@ -111,9 +112,9 @@ export function KpiSection({
       {cards.map((card, idx) => (
         <motion.div
           key={card.id}
-          initial={{ opacity: 0, y: 12 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, delay: idx * 0.06, ease: "easeOut" }}
+          transition={{ duration: reduceMotion ? 0 : 0.38, delay: reduceMotion ? 0 : idx * 0.06, ease: "easeOut" }}
           className={`kpi-card p-4 sm:p-5 ${card.live ? "kpi-card-live" : ""}`}
         >
           <div className="flex items-start justify-between gap-2 mb-3">

@@ -143,7 +143,7 @@ export function CurrentStepCard({
             <button
               type="button"
               onClick={onContinue}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors hover:brightness-110 active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors hover:brightness-110 motion-press focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 backgroundColor: "var(--accent)",
                 color: "var(--on-marker)",
@@ -157,7 +157,7 @@ export function CurrentStepCard({
             {currentDay.id && (
               <Link
                 href={`/lesson/${currentDay.id}`}
-                className="ms-3 inline-flex h-11 items-center rounded-2xl border px-4 text-sm font-semibold transition-colors hover:brightness-110"
+                className="ms-3 inline-flex h-11 items-center rounded-2xl border px-4 text-sm font-semibold transition-colors hover:brightness-110 motion-press"
                 style={{
                   borderColor: "var(--rule)",
                   backgroundColor: "var(--card-secondary)",

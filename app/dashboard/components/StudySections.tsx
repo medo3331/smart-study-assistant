@@ -172,7 +172,7 @@ export function StudySections({
             </div>
             <div className="meter meter-sm">
               <div
-                className={`meter-fill ${themeStyles.accentBg}`}
+                className={`meter-fill meter-fill-shimmer ${themeStyles.accentBg}`}
                 style={{ width: `${overallProgress}%` }}
               />
             </div>
@@ -207,7 +207,7 @@ export function StudySections({
             <div className="flex gap-2">
               <button
                 onClick={onTogglePomoRunning}
-                className={`mono px-4 py-2 rounded-[var(--r-sm)] ${themeStyles.accentBg} text-onmarker hover:opacity-90 transition`}
+                className={`mono px-4 py-2 rounded-[var(--r-sm)] motion-press ${themeStyles.accentBg} text-onmarker hover:opacity-90 transition`}
               >
                 {isPomoRunning ? "إيقاف مؤقّت" : "ابدأ"}
               </button>
@@ -235,7 +235,7 @@ export function StudySections({
               <React.Fragment key={item.day}>
                 <div
                   id={`day-${item.day}`}
-                  className={`sheet-card ${sheetState} p-5 space-y-4 transition-all`}
+                  className={`sheet-card ${sheetState} p-5 space-y-4 transition-all ${!isLocked ? "card-interactive" : ""}`}
                 >
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="flex items-start gap-4 flex-1 min-w-0">
@@ -326,7 +326,7 @@ export function StudySections({
                       {item.id && !isLocked && (
                         <button
                           onClick={() => onOpenFullLesson(item.id!)}
-                          className={`mono px-3.5 py-2 rounded-[var(--r-sm)] transition ${
+                          className={`mono px-3.5 py-2 rounded-[var(--r-sm)] transition motion-press ${
                             isCurrent
                               ? `${themeStyles.accentBg} text-onmarker hover:opacity-90`
                               : "border border-rule-strong text-ink hover:bg-paper-3"

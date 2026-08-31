@@ -480,6 +480,76 @@
 }
 
 /* ==========================================================================
+   Phase 3 — Motion & Micro-interactions
+   ========================================================================== */
+
+@keyframes dash-entrance {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dashboard-entrance {
+  opacity: 0;
+  animation: dash-entrance 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes meter-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.meter { position: relative; overflow: hidden; }
+.meter-fill { will-change: width; }
+.meter-fill-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.meter-fill-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: meter-shimmer 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Button press + subtle hover glow — theme-aware */
+.motion-press {
+  transition: transform 120ms ease, filter 200ms ease, box-shadow 200ms ease;
+  will-change: transform;
+}
+.motion-press:active { transform: scale(0.97); }
+@media (hover: hover) {
+  .motion-press:hover {
+    filter: brightness(1.04);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+
+/* Clickable card lift — only for interactive cards */
+.card-interactive {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease, box-shadow 220ms ease;
+  will-change: transform;
+}
+@media (hover: hover) {
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--rule) 70%, var(--accent-highlight) 18%);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 10%, transparent), 0 4px 12px var(--shade);
+  }
+}
+.card-interactive:active { transform: translateY(-1px) scale(0.998); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-entrance { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .meter-fill-shimmer::after { animation: none !important; display: none !important; }
+  .motion-press, .card-interactive { transition: none !important; }
+  .motion-press:active, .card-interactive:hover, .card-interactive:active { transform: none !important; filter: none !important; box-shadow: none !important; }
+}
+
+/* ==========================================================================
    ربط سلالم Tailwind بتوكنز الملزمة
    الداشبورد وصفحات الدرس/التقييم/المجتمع مكتوبة كلها بـ Tailwind، فبدل
    إعادة كتابة ٥٥٠٠ سطر بالإيد بنعيد تعريف الألوان نفسها من مكان واحد.

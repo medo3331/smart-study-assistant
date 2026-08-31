@@ -66,14 +66,14 @@ export function StatCards({ xp, streak, completedSteps, weeklyFocusMinutes }: St
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      {stats.map((s) => (
-        <StatCard key={s.key} stat={s} />
+      {stats.map((s, idx) => (
+        <StatCard key={s.key} stat={s} index={idx} />
       ))}
     </div>
   );
 }
 
-function StatCard({ stat }: { stat: Stat }) {
+function StatCard({ stat, index }: { stat: Stat; index: number }) {
   const reduceMotion = useReducedMotion();
   const isAccentTone = stat.tone !== "teal";
   const iconStyle: React.CSSProperties = isAccentTone
@@ -84,8 +84,8 @@ function StatCard({ stat }: { stat: Stat }) {
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.22, 0.8, 0.36, 1], delay: 0.05 }}
-      className="rounded-[24px] border backdrop-blur-xl p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5"
+      transition={{ duration: 0.38, ease: [0.22, 0.8, 0.36, 1], delay: reduceMotion ? 0 : 0.06 * index }}
+      className="rounded-[24px] border backdrop-blur-xl p-4"
       style={{
         backgroundColor: "var(--card-primary)",
         borderColor: "var(--rule)",

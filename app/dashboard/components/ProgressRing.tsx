@@ -54,7 +54,7 @@ export function ProgressRing({ pct, size = 150, stroke = 12, subLabel, className
           strokeDasharray={circumference}
           initial={reduceMotion ? false : { strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.1, ease: "easeOut" }}
+          transition={{ duration: reduceMotion ? 0 : 1.3, ease: "easeOut" }}
           style={{ filter: "drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 40%, transparent))" }}
         />
       </svg>
