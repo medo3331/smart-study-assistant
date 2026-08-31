@@ -57,23 +57,35 @@ export function CurrentStepCard({
       initial={reduceMotion ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 0.8, 0.36, 1], delay: 0.08 }}
-      className="relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0D0906]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-5 sm:p-6"
+      className="relative overflow-hidden rounded-[24px] border backdrop-blur-xl p-5 sm:p-6"
+      style={{
+        backgroundColor: "var(--card-primary)",
+        borderColor: "var(--rule)",
+        boxShadow: "0 8px 30px var(--shade)",
+      }}
     >
-      {/* خيط بنفسجي رفيع فوق الكارت — إشارة الأهمية */}
+      {/* خيط رفيع فوق الكارت — إشارة الأهمية بلون الأكسنت */}
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-px"
         style={{
           background:
-            "linear-gradient(to left, transparent, rgba(220,76,76,0.6), transparent)",
+            "linear-gradient(to left, transparent, var(--accent), transparent)",
+          opacity: 0.6,
         }}
       />
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <span className="rounded-full bg-[#DC4C4C]/15 px-3 py-1 text-xs font-semibold text-[#F5A25C]">
+        <span
+          className="rounded-full px-3 py-1 text-xs font-semibold"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)",
+            color: "var(--accent-highlight)",
+          }}
+        >
           {stateBadge}
         </span>
-        <span className="text-xs text-[#9AA0C0]">الخطوة الحالية</span>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>الخطوة الحالية</span>
       </div>
 
       <div className="flex flex-col items-center gap-6 md:flex-row md:gap-8">
@@ -86,30 +98,42 @@ export function CurrentStepCard({
         />
 
         <div className="min-w-0 flex-1 text-center md:text-right">
-          <p className="text-xs text-[#9AA0C0]">{subjectName}</p>
-          <h2 className="mt-0.5 text-xl font-bold text-white leading-relaxed">
+          <p className="text-xs" style={{ color: "var(--muted)" }}>{subjectName}</p>
+          <h2 className="mt-0.5 text-xl font-bold leading-relaxed" style={{ color: "var(--text)" }}>
             {currentDay.title}
           </h2>
           {currentDay.description && (
-            <p className="mt-1 text-sm leading-7 text-[#9AA0C0]">{currentDay.description}</p>
+            <p className="mt-1 text-sm leading-7" style={{ color: "var(--muted)" }}>{currentDay.description}</p>
           )}
 
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:justify-start">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1 text-xs text-[#9AA0C0]">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs"
+              style={{ backgroundColor: "var(--card-secondary)", color: "var(--muted)" }}
+            >
               اليوم{" "}
-              <span className="font-mono font-bold text-[#E7E9F5]" dir="ltr">
+              <span className="font-mono font-bold" style={{ color: "var(--text)" }} dir="ltr">
                 {currentDay.day}
               </span>{" "}
               من{" "}
-              <span className="font-mono font-bold text-[#E7E9F5]" dir="ltr">
+              <span className="font-mono font-bold" style={{ color: "var(--text)" }} dir="ltr">
                 {totalSteps}
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FB923C]/10 px-3 py-1 text-xs font-medium text-[#FB923C]">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                color: "var(--accent)",
+              }}
+            >
               <span dir="ltr">+{currentDay.xpReward} XP</span>
             </span>
             {STYLE_LABELS[currentDay.learningStyle] && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1 text-xs text-[#9AA0C0]">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs"
+                style={{ backgroundColor: "var(--card-secondary)", color: "var(--muted)" }}
+              >
                 {STYLE_LABELS[currentDay.learningStyle]}
               </span>
             )}
@@ -119,7 +143,12 @@ export function CurrentStepCard({
             <button
               type="button"
               onClick={onContinue}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#DC4C4C] px-4 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(220,76,76,0.35)] transition-colors hover:bg-[#F2745C] active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#DC4C4C]"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors hover:brightness-110 motion-press focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{
+                backgroundColor: "var(--accent)",
+                color: "var(--on-marker)",
+                outlineColor: "var(--accent)",
+              }}
             >
               <Play size={18} aria-hidden />
               {ctaLabel}
@@ -128,7 +157,12 @@ export function CurrentStepCard({
             {currentDay.id && (
               <Link
                 href={`/lesson/${currentDay.id}`}
-                className="ms-3 inline-flex h-11 items-center rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm font-semibold text-[#E7E9F5] transition-colors hover:bg-white/[0.08]"
+                className="ms-3 inline-flex h-11 items-center rounded-2xl border px-4 text-sm font-semibold transition-colors hover:brightness-110 motion-press"
+                style={{
+                  borderColor: "var(--rule)",
+                  backgroundColor: "var(--card-secondary)",
+                  color: "var(--text)",
+                }}
               >
                 الدرس الكامل
               </Link>

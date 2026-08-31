@@ -1097,7 +1097,12 @@ export default function DashboardPage() {
 
   return (
     <div
-      className="min-h-screen p-4 sm:p-6 md:p-10 lg:pe-[16.5rem] xl:pe-[18.5rem] font-sans bg-paper text-ink relative pb-24"
+      className="min-h-screen p-4 sm:p-6 md:p-10 lg:pe-[16.5rem] xl:pe-[18.5rem] font-sans relative pb-24"
+      style={{
+        backgroundColor: "var(--app-bg)",
+        backgroundImage: "var(--app-bg-image)",
+        color: "var(--text)",
+      }}
       dir="rtl"
     >
       {/* 🎧 عنصر الـ <audio> والمشغّل العائم بقوا في `AudioProvider` جوه
@@ -1123,7 +1128,7 @@ export default function DashboardPage() {
             GROUP A — الهوية والفعل
             HeroCard → CurrentStepCard → ExamPlanCard (conditional)
             ═══════════════════════════════════════════════════════ */}
-        <div className="space-y-6">
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "0ms" }}>
           {/* ═══ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
                   إجراءات سريعة (أكمل التعلّم · المساعد الذكي · العبادات · المتجر).
                   كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. ═══ */}
@@ -1178,7 +1183,7 @@ export default function DashboardPage() {
             GROUP B — السياق اليومي
             PersonalAssistant → HeroSection / AIStudyCoach
             ═══════════════════════════════════════════════════════ */}
-        <div className="space-y-6">
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "60ms" }}>
           {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
           <PersonalAssistant
                     context={personalAssistantContext}
@@ -1203,7 +1208,8 @@ export default function DashboardPage() {
             GROUP C — العمل الحقيقي
             StudySections — قلب الداشبورد قبل أي أرقام
             ═══════════════════════════════════════════════════════ */}
-        <StudySections
+        <div className="dashboard-entrance" style={{ animationDelay: "120ms" }}>
+          <StudySections
           config={config}
           uiText={uiText}
           themeStyles={themeStyles}
@@ -1238,12 +1244,13 @@ export default function DashboardPage() {
           flashcards={flashcards}
           onUpdateCardStatus={updateCardStatus}
         />
+        </div>
 
         {/* ═══════════════════════════════════════════════════════
             GROUP D — الأرقام والتقدّم
             كل progress/metrics في منطقة واحدة بعد العمل الحقيقي
             ═══════════════════════════════════════════════════════ */}
-        <div className="space-y-6">
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "180ms" }}>
           {/* ═══ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا ═══ */}
 
           {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
@@ -1338,7 +1345,7 @@ export default function DashboardPage() {
             GROUP E — العبادات
             Worship CTA → QuranSection
             ═══════════════════════════════════════════════════════ */}
-        <div className="space-y-6">
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "240ms" }}>
           {/* 📖 بوابة العبادات — تبقى قبل القرآن مباشرة */}
           <Link href="/worship" className="block">
             <button
@@ -1371,7 +1378,9 @@ export default function DashboardPage() {
             ═══════════════════════════════════════════════════════ */}
         {/* 👥 دعوة الجروب في آخر الصفحة: اللي وصل لحد هنا شاف الموقع
             كله وبقى مؤهّل يدخل. البانر بيخفي نفسه لو مفيش لينك مظبوط. */}
-        <CommunityInvite variant="banner" />
+        <div className="dashboard-entrance" style={{ animationDelay: "300ms" }}>
+          <CommunityInvite variant="banner" />
+        </div>
       </div>
 
       {/* زرار ماجيك العايم: نفس أخضر المونوجرام اللي في كارت المدرّب

@@ -125,41 +125,51 @@
    الحدّ (ΔL* = ١٢٫٩، كان ١٣٫٨). التهدئة كانت في سطوع النص والألوان بس، لأن لو
    هدّينا الحدود كمان كانت الصفحة هترجع "ملخبطة" — وهي المشكلة اللي التصميم ده
    اتعمل أصلاً لحلها. */
+/* ==========================================================================
+   Dashboard Premium — 4-theme foundation (Phase 1)
+   Contract: --app-bg / --card-primary / --card-secondary / --accent /
+             --accent-highlight / --text / --muted / --app-bg-image
+   Legacy bridge: --paper/--paper-2/--paper-3/--ink/--ink-soft etc
+                 map to the new vars so existing sheet-card etc adapt.
+   Legacy aliases: "light" → indigo-light, "dark" → warm-dark.
+   PACKS ([data-pack]) are defined later and override these when present.
+   ========================================================================== */
+
+/* ---- THEME 1 — نيلي فاتح (Indigo Light) ---- */
 :root,
+:root[data-theme="indigo-light"],
 :root[data-theme="light"] {
-  --paper: #E4EAF4;
-  --paper-2: #F6F8FC;
-  --paper-3: #DCE4F0;
-  --rule: #C9D4E6;
-  --rule-strong: #AEBACF;
-  --ink: #232D49;
-  --ink-soft: #565F7D;
-  --marker: #F5DE72;
-  --marker-deep: #E2C95C;
+  --app-bg: #F3F5FC;
+  --card-primary: #FFFFFF;
+  --card-secondary: #F6F7FD;
+  --accent: #4338CA;
+  --accent-highlight: #6366F1;
+  --text: #1E2340;
+  --muted: #6B7280;
+  --app-bg-image: none;
+
+  /* legacy bridge — بقيّة المشروع لسه بيقرا --paper/--ink */
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: #D6DDF0;
+  --rule-strong: #BFC9E6;
+  --marker: var(--accent);
+  --marker-deep: #3730A3;
   --redpen: #CE5A6C;
   --redpen-soft: rgba(206, 90, 108, 0.34);
-  --shade: rgba(35, 45, 73, 0.08);
-  --shade-lift: rgba(35, 45, 73, 0.12);
-
-  /* النص اللي بيقع فوق الأحمر الصريح. بيتغير مع الثيم لأن الأحمر نفسه
-     بيفتح في الليل: أبيض على أحمر النهار = ٤.٤، وكحلي على أحمر الليل = ٥.٢.
-     لو ثبّتنا الأبيض في الحالتين كان هيسقط لـ ٣.٢ في الليل. */
+  --shade: rgba(30, 35, 64, 0.07);
+  --shade-lift: rgba(30, 35, 64, 0.11);
   --on-danger: #FFFFFF;
+  --on-marker: #FFFFFF;
 
-  /* ---- أقلام الفسفوري: لكل لون نسختين ----
-     fill  = الحبر الصريح، بيتحط خلفية وتحته نص --on-marker
-     ink   = نسخة غامقة مقروءة كنص فوق الورق الفاتح
-     tint  = ظل خفيف جداً للخلفيات الهادية
-     السبب: الأصفر الفسفوري كنص على ورق أبيض مش بيتقرا خالص، فلازم
-     الخلفية والنص يبقوا قيمتين مختلفتين مش قيمة واحدة. */
   --hl-yellow-fill: #F5DE72;
   --hl-yellow-deep: #E2C95C;
   --hl-yellow-ink: #7A5A00;
   --hl-green-fill: #35C285;
   --hl-green-ink: #0F6B4E;
-  /* ⚠️ الأحمر ده فضل صريح على عكس --redpen اللي هدّيناه: --redpen خط هامش
-     مفيهوش نص، لكن --hl-red-fill بيتحط تحته `text-ondanger` أبيض. لو هدّيناه
-     الأبيض بيسقط لـ ٣٫٩ — فلكل واحد قيمته حسب دوره. */
   --hl-red-fill: #D8455E;
   --hl-red-ink: #B3283F;
   --hl-orange-ink: #9A4B10;
@@ -170,36 +180,42 @@
   --hl-indigo-fill: #4F5BD5;
   --hl-indigo-ink: #3A44B0;
 
-  /* أسماء قديمة، متسيبة كشبكة أمان لأي مكان لسه بيستخدمها */
   --bg: var(--paper);
   --bg-elevated: var(--paper-2);
-  --text: var(--ink);
-  --text-muted: var(--ink-soft);
   --border: var(--rule);
   --emerald: var(--ink);
   --amber: var(--marker);
   --shadow: var(--shade);
 }
 
-/* ---- الباليت: ليل، مكتب بلمبة ---- */
+/* ---- THEME 2 — أسود دافي (Warm Dark) — الحالي ---- */
+:root[data-theme="warm-dark"],
 :root[data-theme="dark"] {
-  /* ⚠️ تم تغيير الخلفية للدافئ (#0D0906 / #120B08 / #16110A) — color-migration 2026-08-27 */
-  --paper: #0D0906;
-  --paper-2: #120B08;
-  --paper-3: #16110A;
-  --rule: rgba(203, 216, 236, 0.15);
-  --rule-strong: rgba(203, 216, 236, 0.3);
-  --ink: #E9EDF8;
-  --ink-soft: #929DBA;
-  --marker: #F0D24A;
-  --marker-deep: #D8B932;
+  --app-bg: #0D0906;
+  --card-primary: #161009;
+  --card-secondary: #1D1510;
+  --accent: #DC4C4C;
+  --accent-highlight: #F2745C;
+  --text: #F3F0EC;
+  --muted: #9A958F;
+  --app-bg-image: none;
+
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(243, 240, 236, 0.08);
+  --rule-strong: rgba(243, 240, 236, 0.16);
+  --marker: var(--accent);
+  --marker-deep: #B91C1C;
   --redpen: #E8697F;
   --redpen-soft: rgba(232, 105, 127, 0.36);
-  --shade: rgba(0, 0, 0, 0.4);
-  --shade-lift: rgba(0, 0, 0, 0.55);
-  --on-danger: #141C33;
+  --shade: rgba(0, 0, 0, 0.45);
+  --shade-lift: rgba(0, 0, 0, 0.6);
+  --on-danger: #1A0A0A;
+  --on-marker: #FFFFFF;
 
-  /* في الليل الحبر الصريح نفسه بيتقرا كنص، فـ ink بتقرب من fill */
   --hl-yellow-fill: #F0D24A;
   --hl-yellow-deep: #D8B932;
   --hl-yellow-ink: #F0D24A;
@@ -214,6 +230,323 @@
   --hl-purple-ink: #C0A0F0;
   --hl-indigo-fill: #6E79E8;
   --hl-indigo-ink: #8F98F0;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* ---- THEME 3 — رمادي (Slate) ---- */
+:root[data-theme="slate"] {
+  --app-bg: #1A1D23;
+  --card-primary: #22262E;
+  --card-secondary: #2A2F38;
+  --accent: #64748B;
+  --accent-highlight: #94A3B8;
+  --text: #E5E7EB;
+  --muted: #8B93A3;
+  --app-bg-image: none;
+
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(229, 231, 235, 0.08);
+  --rule-strong: rgba(229, 231, 235, 0.16);
+  --marker: var(--accent);
+  --marker-deep: #475569;
+  --redpen: #E0697A;
+  --redpen-soft: rgba(224, 105, 122, 0.32);
+  --shade: rgba(0, 0, 0, 0.4);
+  --shade-lift: rgba(0, 0, 0, 0.55);
+  --on-danger: #0F1419;
+  --on-marker: #FFFFFF;
+
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
+  --hl-green-fill: #34D399;
+  --hl-green-ink: #6EE7B7;
+  --hl-red-fill: #E8697F;
+  --hl-red-ink: #F08090;
+  --hl-orange-ink: #F0A868;
+  --hl-blue-fill: #60A5FA;
+  --hl-blue-ink: #93C5FD;
+  --hl-purple-fill: #A78BFA;
+  --hl-purple-ink: #C4B5FD;
+  --hl-indigo-fill: #818CF8;
+  --hl-indigo-ink: #A5B4FC;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* ---- THEME 4 — أخضر داكن (Deep Green) ---- */
+:root[data-theme="deep-green"] {
+  --app-bg: #0B1A14;
+  --card-primary: #10261D;
+  --card-secondary: #163326;
+  --accent: #10B981;
+  --accent-highlight: #34D399;
+  --text: #EAF5EF;
+  --muted: #7FA394;
+  --app-bg-image: none;
+
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(234, 245, 239, 0.08);
+  --rule-strong: rgba(234, 245, 239, 0.16);
+  --marker: var(--accent);
+  --marker-deep: #059669;
+  --redpen: #E8697F;
+  --redpen-soft: rgba(232, 105, 127, 0.32);
+  --shade: rgba(0, 0, 0, 0.45);
+  --shade-lift: rgba(0, 0, 0, 0.6);
+  --on-danger: #0B1A14;
+  --on-marker: #FFFFFF;
+
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
+  --hl-green-fill: #10B981;
+  --hl-green-ink: #6EE7B7;
+  --hl-red-fill: #E8697F;
+  --hl-red-ink: #F08090;
+  --hl-orange-ink: #F0A868;
+  --hl-blue-fill: #38BDF8;
+  --hl-blue-ink: #7DD3FC;
+  --hl-purple-fill: #A78BFA;
+  --hl-purple-ink: #C4B5FD;
+  --hl-indigo-fill: #818CF8;
+  --hl-indigo-ink: #A5B4FC;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* ==========================================================================
+   Phase 2 — Magic Orb (glass sphere + orbit + breathing)
+   ========================================================================== */
+
+@keyframes orb-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orb-breathe-glow {
+  0%, 100% { opacity: 0.82; filter: blur(14px); }
+  50% { opacity: 1; filter: blur(18px); }
+}
+
+@keyframes orb-breathe-core {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent), 0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 30px color-mix(in srgb, var(--accent) 42%, transparent); }
+  50% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 28px color-mix(in srgb, var(--accent) 28%, transparent), 0 0 38px color-mix(in srgb, var(--accent) 56%, transparent); }
+}
+
+.magic-orb-wrap {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  contain: layout paint;
+}
+
+.magic-orb-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92px;
+  height: 92px;
+  transform: translate(-50%, -46%);
+  border-radius: 50%;
+  background: radial-gradient(58% 58% at 50% 50%, color-mix(in srgb, var(--accent) 30%, transparent) 0%, transparent 72%);
+  animation: orb-breathe-glow 3.6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.magic-orb-core {
+  position: relative;
+  z-index: 2;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  overflow: hidden;
+  /* glass sphere: highlight + accent core + deep shade */
+  background:
+    radial-gradient(62% 58% at 34% 30%, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.52) 7%, transparent 18%),
+    radial-gradient(118% 118% at 48% 42%, color-mix(in srgb, var(--accent-highlight) 92%, white) 0%, var(--accent) 38%, color-mix(in srgb, var(--accent) 68%, black) 78%, color-mix(in srgb, var(--accent) 45%, black) 100%);
+  animation: orb-breathe-core 3.6s ease-in-out infinite;
+}
+
+.magic-orb-highlight {
+  position: absolute;
+  left: 18%;
+  top: 14%;
+  width: 26%;
+  height: 22%;
+  border-radius: 50%;
+  background: radial-gradient(100% 100% at 32% 30%, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.74) 34%, rgba(255,255,255,0) 72%);
+  filter: blur(0.35px);
+  opacity: 0.96;
+  pointer-events: none;
+}
+
+.magic-orb-inner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.52), inset 0 -10px 18px rgba(0,0,0,0.22), inset 0 12px 18px rgba(255,255,255,0.11);
+  pointer-events: none;
+}
+
+.magic-orb-orbit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  animation: orb-orbit 24s linear infinite;
+  pointer-events: none;
+}
+
+.magic-orb-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 58%, transparent);
+  opacity: 0.94;
+  transform: rotate(var(--angle)) translateY(-54px);
+}
+
+.magic-orb-dot:nth-child(2) { width: 6px; height: 6px; margin: -3px 0 0 -3px; opacity: 1; }
+.magic-orb-dot:nth-child(3) { width: 4.5px; height: 4.5px; margin: -2.25px 0 0 -2.25px; opacity: 0.88; }
+.magic-orb-dot:nth-child(4) { width: 5.5px; height: 5.5px; margin: -2.75px 0 0 -2.75px; opacity: 0.92; }
+.magic-orb-dot:nth-child(5) { width: 4px; height: 4px; margin: -2px 0 0 -2px; opacity: 0.86; }
+.magic-orb-dot:nth-child(6) { width: 6px; height: 6px; margin: -3px 0 0 -3px; opacity: 0.98; }
+
+.magic-orb-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  background: var(--accent);
+  color: var(--on-marker);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 58%, transparent), 0 2px 8px rgba(0,0,0,0.18);
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--accent) 72%, white 10%);
+}
+
+@media (max-width: 640px) {
+  .magic-orb-wrap { width: 112px; height: 112px; }
+  .magic-orb-core { width: 80px; height: 80px; }
+  .magic-orb-glow { width: 80px; height: 80px; }
+  .magic-orb-dot { transform: rotate(var(--angle)) translateY(-47px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-orb-orbit,
+  .magic-orb-glow,
+  .magic-orb-core { animation: none !important; }
+}
+
+/* ==========================================================================
+   Phase 3 — Motion & Micro-interactions
+   ========================================================================== */
+
+@keyframes dash-entrance {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dashboard-entrance {
+  opacity: 0;
+  animation: dash-entrance 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes meter-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.meter { position: relative; overflow: hidden; }
+.meter-fill { will-change: width; }
+.meter-fill-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.meter-fill-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: meter-shimmer 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Button press + subtle hover glow — theme-aware */
+.motion-press {
+  transition: transform 120ms ease, filter 200ms ease, box-shadow 200ms ease;
+  will-change: transform;
+}
+.motion-press:active { transform: scale(0.97); }
+@media (hover: hover) {
+  .motion-press:hover {
+    filter: brightness(1.04);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+
+/* Clickable card lift — only for interactive cards */
+.card-interactive {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease, box-shadow 220ms ease;
+  will-change: transform;
+}
+@media (hover: hover) {
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--rule) 70%, var(--accent-highlight) 18%);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 10%, transparent), 0 4px 12px var(--shade);
+  }
+}
+.card-interactive:active { transform: translateY(-1px) scale(0.998); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-entrance { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .meter-fill-shimmer::after { animation: none !important; display: none !important; }
+  .motion-press, .card-interactive { transition: none !important; }
+  .motion-press:active, .card-interactive:hover, .card-interactive:active { transform: none !important; filter: none !important; box-shadow: none !important; }
 }
 
 /* ==========================================================================

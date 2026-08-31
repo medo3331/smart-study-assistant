@@ -14,7 +14,7 @@ interface ProgressRingProps {
 }
 
 /**
- * حلقة تقدّم بنفسجية (اللون الأساسي الجديد للإجراءات والتقدّم).
+ * حلقة تقدّم — تتبع accent الثيم النشط.
  * المسح بيحصل مرة واحدة على الماونت — مفيش لوب، ومفيش أرقام مزيفة:
  * الصفر يظهر صفر. بتتحترم prefers-reduced-motion.
  */
@@ -39,7 +39,7 @@ export function ProgressRing({ pct, size = 150, stroke = 12, subLabel, className
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.08)"
+          stroke="var(--rule)"
           strokeWidth={stroke}
         />
         {/* التقدّم */}
@@ -48,25 +48,25 @@ export function ProgressRing({ pct, size = 150, stroke = 12, subLabel, className
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#DC4C4C"
+          stroke="var(--accent)"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={reduceMotion ? false : { strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.1, ease: "easeOut" }}
-          style={{ filter: "drop-shadow(0 0 6px rgba(220,76,76,0.4))" }}
+          transition={{ duration: reduceMotion ? 0 : 1.3, ease: "easeOut" }}
+          style={{ filter: "drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 40%, transparent))" }}
         />
       </svg>
       <div
         className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
         aria-hidden
       >
-        <span className="font-mono text-[27px] font-bold text-white leading-none" dir="ltr">
+        <span className="font-mono text-[27px] font-bold leading-none" style={{ color: "var(--text)" }} dir="ltr">
           {clamped}%
         </span>
         {subLabel && (
-          <span className="mt-1.5 text-xs text-[#9AA0C0]">{subLabel}</span>
+          <span className="mt-1.5 text-xs" style={{ color: "var(--muted)" }}>{subLabel}</span>
         )}
       </div>
     </div>
