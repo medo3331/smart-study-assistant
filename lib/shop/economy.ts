@@ -5,6 +5,12 @@
  * مفيش دالة هنا بتزوّد الرصيد من غير مصدر مذاكرة، والداتابيز بتفرض ده
  * كمان (`db/shop.sql`: الإضافة بتمر من دالة `SECURITY DEFINER` بتقبل
  * مصادر معروفة بس). القاعدة دي مش قابلة للتفاوض.
+ *
+ * Phase A Architecture — فصل العملات (Currency Separation):
+ *   XP   → Progression فقط — profiles.xp — اشتقاق Level/League عبر levelFromXp/leagueFromXp
+ *   COINS → Store فقط — coin_ledger + coin_balance() — مصدر الحقيقة coin_source_rules
+ *   AI_CREDITS / ENTITLEMENT / SUBSCRIPTION → NOT IMPLEMENTED (Future only)
+ * القاعدة: XP ≠ Coins ≠ AI Credits ≠ Entitlements ≠ Subscription
  */
 
 /** ثابت المستويات — نفس القيمة المستخدمة في app/dashboard/achievements */
@@ -207,3 +213,88 @@ export function leagueRank(id: string): number {
 export function hasLeague(xp: number, required: string): boolean {
   return leagueRank(leagueFromXp(xp).id) >= leagueRank(required);
 }
+// Phase A — Economy Architecture : Currency Separation & EconomyContext
+export type EconomyCurrency = "XP" | "COINS";
+export type FutureCurrency = "AI_CREDITS" | "ENTITLEMENT" | "SUBSCRIPTION";
+export type AnyCurrency = EconomyCurrency | FutureCurrency;
+export const CURRENCY_META = {
+  XP: { purpose: "Progression", storage: "profiles.xp", status: "LIVE" as const },
+  COINS: { purpose: "Store economy", storage: "coin_ledger (via coin_balance())", status: "LIVE" as const },
+  AI_CREDITS: { purpose: "AI usage", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+  ENTITLEMENT: { purpose: "Model/feature unlock", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+  SUBSCRIPTION: { purpose: "Paid plan -> Entitlement", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+} as const;
+export interface EconomyContext { userId: string; xp: number; level: number; league: League; streak: number; coins: number; badgeCount: number; sessions: number; }
+export function createEconomyContext(args: { userId: string; xp: number; streak: number; coins: number; badgeCount: number; sessions: number; }): EconomyContext { return { userId: args.userId, xp: args.xp, level: levelFromXp(args.xp), league: leagueFromXp(args.xp), streak: args.streak, coins: args.coins, badgeCount: args.badgeCount, sessions: args.sessions }; }
+export const getLevelFromXp = levelFromXp;
+export const getLeagueFromXp = leagueFromXp;
+export function xpInLevel(xp: number): number { const safe = Math.max(0, xp); return safe % XP_PER_LEVEL; }
+export function xpProgressPercent(xp: number): number { return Math.round((xpInLevel(xp) / XP_PER_LEVEL) * 100); }
+export function xpRemainingToNextLevel(xp: number): number { return XP_PER_LEVEL - xpInLevel(xp); }
+
+// ---------------------------------------------------------------------------
+// Phase B — Economy Hardening notes
+// ---------------------------------------------------------------------------
+// XP write authority انتقلت إلى RPC: increment_xp(p_delta) / award_xp(p_delta)
+//   SECURITY DEFINER + auth.uid() + delta محدود (-500..200)
+//   الكلاينت ممنوع من profiles.update({xp}) عبر trigger + RLS (db/economy-phase-b.sql)
+// Badges: insert المباشر محذوف — الإنشاء عبر grant_badge(...) فقط
+
+// ---------------------------------------------------------------------------
+// Phase C — Reward Sources Consolidation
+// ---------------------------------------------------------------------------
+// المسار الموحد لإنهاء اليوم: complete_study_day(p_day_id)
+//   يتحقق من الملكية + is_completed + يمنح XP (من xp_reward) + Coins (via award_coins) idempotent
+// Badges: grant_badge الآن يتحقق من إثبات دراسة (يوم مكتمل) وحدود الفصل
+// باقي المسارات (daily_missions, break, escape, worship, community_quiz) كانت
+// بالفعل SECURITY DEFINER مع تحقق + idempotency، فتُركت كما هي.
+
+// Lightweight RewardEvent abstraction — للتوثيق وتقليل التكرار، ليست جدولاً
+export type RewardEvent = {
+  source: string; // coin_source_rules.id أو 'study_day' للـ XP
+  refId: string; // stable identity: study_day.id, planner_goal.id, badge config:chapter, etc.
+  userId: string;
+  xp?: number;
+  coins?: number;
+};
+export function rewardEventId(source: string, refId: string): string {
+  return `${source}:${refId}`;
+}
+// XP validation debt المتبقي بعد Phase C:
+// - Boss XP ما زال يُمنح عبر increment_xp من الكلاينت (onWin) — سيُربط بالـ badge في Phase D
+// - profiles.streak/last_study_day ما زال يُكتب من الكلاينت (تسريب 13 كوين/يوم)
+// - XP_PER_LEVEL مكرر في db/shop.sql:200
+
+// ---------------------------------------------------------------------------
+// Phase D — Store Backend for Useful Products (Backend Infrastructure فقط)
+// ---------------------------------------------------------------------------
+// لا منتجات مفعلة، لا UI، لا AI Credits runtime، لا Model Unlocks runtime
+// الجداول: entitlements + ai_credit_ledger — كلاهما Ledger/ grants عبر service_role فقط
+// الرصيد = SUM(delta) مثل coin_ledger، والـ RLS قراءة فقط لصاحبها
+
+export type Entitlement = {
+  id: string;
+  userId: string;
+  kind: string;
+  value: string;
+  grantedAt: string;
+  expiresAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type AiCreditLedgerEntry = {
+  id: string;
+  userId: string;
+  delta: number;
+  reason: string;
+  refId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+// CURRENCY_META يبقى كما هو — AI_CREDITS / ENTITLEMENT ما زالتا FUTURE
+// التخزين الفعلي الآن موجود (entitlements, ai_credit_ledger) لكن غير موصول
+// بالـ Store أو AI Router حتى Phase E/G. هذا مقصود.
+
+

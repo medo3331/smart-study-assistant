@@ -59,12 +59,6 @@ export function CommunityQuiz({ subject, isGuest, onClose, onSubmitted }: Commun
 
   const topic = subject?.trim() || "مراجعة عامة";
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- fetchQuestions is hoisted function declaration
-    fetchQuestions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   async function fetchQuestions() {
     setPhase("loading");
     try {
@@ -116,6 +110,12 @@ export function CommunityQuiz({ subject, isGuest, onClose, onSubmitted }: Commun
       setPhase("error");
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial data fetch on mount sets loading/quiz state
+    fetchQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; fetchQuestions captures topic on mount intentionally
+  }, []);
 
   function handleAnswer(index: number) {
     if (selectedOption !== null) return;

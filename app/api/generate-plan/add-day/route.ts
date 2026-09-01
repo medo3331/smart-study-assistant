@@ -1,17 +1,26 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { checkRateLimit, clampText, requireUser } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 
 const MAX_TEXT = 220;
 
 export async function POST(req: Request) {
+  let guard: any = null;
+  let __hUser: any = null;
+  let __hSupabase: any = null;
   try {
-    const { user, response: authError } = await requireUser("success");
+    const { user, supabase, response: authError } = await requireUser("success");
+    __hUser = user; __hSupabase = supabase;
     if (authError) return authError;
 
     const limited = checkRateLimit(`add-day:${user.id}`, 10, 60_000, "success");
     if (limited) return limited;
+    // Phase H: 1 credit
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
     const subject = clampText(body?.subject, MAX_TEXT).trim();
@@ -22,7 +31,7 @@ export async function POST(req: Request) {
     const apiKey = [process.env.GROQ_API_KEY_1, process.env.GROQ_API_KEY_2, process.env.GROQ_API_KEY_3, process.env.GROQ_API_KEY]
       .map((key) => key?.trim())
       .find((key): key is string => Boolean(key));
-    if (!apiKey) return NextResponse.json({ success: false, error: "الخدمة غير متاحة حالياً." }, { status: 503 });
+    if (!apiKey) { await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? ""); return NextResponse.json({ success: false, error: "الخدمة غير متاحة حالياً." }, { status: 503 }); }
 
     const groq = new Groq({ apiKey });
     const completion = await groq.chat.completions.create({
@@ -48,6 +57,7 @@ export async function POST(req: Request) {
       description: clampText(day.description, MAX_TEXT).trim(),
     } });
   } catch (error) {
+    try { if (guard && (guard as any)?.refId) await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ''), (guard as any).refId); } catch {}
     console.error("add-day generation failed:", error);
     return NextResponse.json({ success: false, error: "تعذر تجهيز الخطوة التالية. حاول مرة أخرى." }, { status: 502 });
   }

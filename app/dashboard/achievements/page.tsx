@@ -30,8 +30,7 @@ import {
    ⚠️ محتاج جدول badges — db/pages.sql (سطر ١٣٦).
    ========================================================================== */
 
-/** نفس حساب الداشبورد: كل ٢٠٠ نقطة مستوى. لو غيّرته هنا غيّره هناك. */
-const XP_PER_LEVEL = 200;
+import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
 
 /* --------------------------------------------------------------------------
    المراحل
@@ -80,7 +79,7 @@ function buildMilestones(stats: ProfileStats, courses: CourseSummary[], badgeCou
     define("fifty-steps", "📚", "نص كتاب", "خلّص ٥٠ مرحلة", completedDays, 50),
     define("week-streak", "🔥", "أسبوع كامل", "ذاكر ٧ أيام ورا بعض", stats.streak, 7),
     define("month-streak", "⚡", "شهر ما فاتكش", "ذاكر ٣٠ يوم ورا بعض", stats.streak, 30),
-    define("level-five", "⭐", "المستوى الخامس", "اوصل للمستوى ٥", Math.floor(stats.xp / XP_PER_LEVEL) + 1, 5),
+    define("level-five", "⭐", "المستوى الخامس", "اوصل للمستوى ٥", levelFromXp(stats.xp), 5),
     define("first-boss", "🐉", "أول بوس", "اكسب أول وسام", badgeCount, 1),
     define("first-course", "🎓", "تراك كامل", "خلّص تراك من أوله لآخره", finishedCourses, 1),
   ];
@@ -208,7 +207,7 @@ export default function AchievementsPage() {
   }, [session, supabase, router]);
 
   /* ---- الأرقام المشتقّة ---- */
-  const level = Math.floor(stats.xp / XP_PER_LEVEL) + 1;
+  const level = levelFromXp(stats.xp);
   const xpInLevel = stats.xp - (level - 1) * XP_PER_LEVEL;
   const levelPercent = Math.round((xpInLevel / XP_PER_LEVEL) * 100);
 

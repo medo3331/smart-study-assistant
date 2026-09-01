@@ -3,6 +3,7 @@ import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { checkRateLimit, clampText, requireUser } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 
 const MAX_PROMPT_CHARS = 1000;
 
@@ -19,11 +20,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: { message: "اكتب وصفًا واضحًا للصورة (٣ أحرف على الأقل)." } }, { status: 400 });
     }
 
+    // Phase H: 1 credit gate for image generation (free model — no entitlement, but credit required)
+    const guard = await guardAiAccessAndReserve(supabase, user.id, "gemini-3.1-flash-image");
+    if (!guard.ok) return guard.response;
     try {
       const image = await aiRouter.generateImage({ prompt });
       void recordAiOperation(supabase, { userId: user.id, provider: image.provider, model: image.model, taskType: "image_generation", status: "completed" });
       return NextResponse.json({ image: `data:${image.mimeType};base64,${image.data}`, provider: image.provider, model: image.model });
     } catch (error) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       void recordAiOperation(supabase, { userId: user.id, provider: "gemini", model: "gemini-image", taskType: "image_generation", status: "failed" });
       const message =

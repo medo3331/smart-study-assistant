@@ -23,8 +23,7 @@ export interface PersonalAssistantProps {
   displayName?: string;
   /** الشخصية — فولباك بس لما مفيش context */
   persona?: Persona | null;
-  /** دالة تسكرول لخطوة اليوم — نفس onContinue في HeroCard */
-  onContinue?: () => void;
+  // onContinue removed Phase 4: CurrentStepCard owns the primary CTA; briefing stays CTA-free.
 }
 
 // ---------------------------------------------------------------------------
@@ -35,7 +34,6 @@ export function PersonalAssistant({
   context,
   displayName = "مستخدم",
   persona,
-  onContinue,
 }: PersonalAssistantProps) {
   // السياق المطبّع: الحقيقي من الداشبورد لو وصل، وإلا فولباك ثابت.
   const ctx: PersonalAssistantContext = useMemo(() => {
@@ -224,20 +222,11 @@ export function PersonalAssistant({
           <RoleLine message={briefing.roleMessage} />
         )}
 
-        {/* التذييل */}
+        {/* التذييل — Phase 4: duplicate CTA removed, briefing only. */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5">
           <span className="mono text-[11px] tracking-wide text-ink-soft">
             قريبًا · بريفينج ذكي بيفهم يومك
           </span>
-          {onContinue && (
-            <button
-              type="button"
-              onClick={onContinue}
-              className="btn btn-marker text-sm"
-            >
-              نبدأ خطوة النهارده
-            </button>
-          )}
         </div>
       </div>
 

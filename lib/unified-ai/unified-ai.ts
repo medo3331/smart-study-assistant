@@ -22,7 +22,11 @@ import { extractTextFromFile } from "../extract-text";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
-async function callGroq(prompt: string, _language: string = "ar"): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
+async function callGroqWithModel(
+  prompt: string,
+  model: string,
+  _language: string = "ar"
+): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
   void _language;
   const key = process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
@@ -31,7 +35,7 @@ async function callGroq(prompt: string, _language: string = "ar"): Promise<{ ok:
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 1200,
@@ -48,11 +52,18 @@ async function callGroq(prompt: string, _language: string = "ar"): Promise<{ ok:
     if (typeof content !== "string" || !content.trim()) {
       return { ok: false, error: "AI returned an empty response. Please try again." };
     }
-    return { ok: true, content };
+    return { ok: true, content, model };
   } catch (e: unknown) {
     console.error("Groq exception:", e instanceof Error ? e.message : String(e));
     return { ok: false, error: "AI request failed. Please try again." };
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy wrapper kept for external callers
+async function callGroq(prompt: string, _language: string = "ar"): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
+  const r = await callGroqWithModel(prompt, GROQ_MODEL, _language);
+  if (!r.ok) return r;
+  return { ok: true, content: r.content };
 }
 
 export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult> {
@@ -95,8 +106,11 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
       : "";
     const combinedPrompt = `${input.prompt}${ocrNote}`;
 
-    // 4. REAL model call (Groq — verified)
-    const providerResult = await callGroq(combinedPrompt, lang);
+    // 4. REAL model call — Phase H: respect explicit model if provided (already entitlement-checked in route)
+    // If input.model is present, route already verified entitlement before reserve — use it.
+    // Otherwise use CURRENT_AI_MODEL (free, always accessible).
+    const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : GROQ_MODEL;
+    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang);
     if (!providerResult.ok) {
       return {
         ok: false,

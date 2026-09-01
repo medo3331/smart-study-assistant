@@ -12,6 +12,9 @@ import {
   type AiUserContext,
 } from "@/lib/ai/router";
 import { recordAiOperation } from "@/lib/ai/operations";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { routeCandidates } from "@/lib/ai/routing";
+import { filterAccessibleModels } from "@/lib/ai/model-access";
 
 /**
  * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
@@ -232,9 +235,25 @@ export async function POST(req: Request) {
 
     /* ---------------- وضع البث (SSE) ---------------- */
     if (stream === true) {
+      // Phase H: credit/entitlement gate even for streaming (same cost)
+      const candidates = routeCandidates(task);
+      const hasEnt = async (k: string, v: string) => {
+        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+        return Boolean(data);
+      };
+      const accessible = await filterAccessibleModels(candidates, hasEnt);
+      if (accessible.length === 0 && candidates.length > 0) {
+        return NextResponse.json(
+          { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
+          { status: 403 }
+        );
+      }
+      const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+      if (!guard.ok) return guard.response;
       const providerName = aiRouter.getProviderName(task);
       const adapter = streamingAdapterFor(providerName);
       if (!adapter) {
+        await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
         return NextResponse.json(
           { success: false, error: { code: "MODEL_UNAVAILABLE", message: "البث غير متاح لهذه المهمة حاليًا.", retryable: false } },
           { status: 502 }
@@ -245,15 +264,18 @@ export async function POST(req: Request) {
       const sseStream = new ReadableStream<Uint8Array>({
         async start(controller) {
           const send = (payload: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          let streamFailed = false;
           try {
             for await (const chunk of adapter.streamChat(input)) {
               send(chunk);
             }
           } catch (error) {
+            streamFailed = true;
             const publicError = toAiPublicError(error);
             console.error("api/ai stream:", error);
             send({ type: "error", error: publicError });
           } finally {
+            if (streamFailed) await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           }
@@ -270,6 +292,22 @@ export async function POST(req: Request) {
     }
 
     /* ---------------- وضع JSON الموحّد ---------------- */
+    // Phase H: entitlement filter + credit reserve before execution
+    const candidates = routeCandidates(task);
+    const hasEnt = async (k: string, v: string) => {
+      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+      return Boolean(data);
+    };
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    if (accessible.length === 0 && candidates.length > 0) {
+      return NextResponse.json(
+        { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
+        { status: 403 }
+      );
+    }
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
+
     const startedAt = Date.now();
     try {
       const result: AiTaskResult = await runAiTask(task, input);
@@ -316,6 +354,7 @@ export async function POST(req: Request) {
         },
       });
     } catch (error) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       const publicError = toAiPublicError(error);
       void recordAiOperation(supabase, {
         userId: user.id,

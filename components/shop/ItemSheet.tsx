@@ -19,11 +19,12 @@
 
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Lock, Check, Coins } from "lucide-react";
+import { Lock, Check, Coins, Zap } from "lucide-react";
 import type { ShopItem } from "@/lib/shop/types";
 import { CATEGORY } from "@/lib/shop/types";
 import { RARITY } from "@/lib/shop/rarity";
 import { ItemVisual, themeSwatch } from "./ItemVisual";
+import { getUsefulMeta } from "@/lib/shop/useful";
 
 export function ItemSheet({
   item,
@@ -197,6 +198,21 @@ export function ItemSheet({
         </div>
 
         <p className="text-[13px] text-ink-soft leading-relaxed">{item.desc}</p>
+
+        {/* المفيدة — وضح الـ effect بدون ادعاء استخدام AI */}
+        {item.category === "useful" && (() => {
+          const m = getUsefulMeta(item);
+          if (!m) return null;
+          return (
+            <p className="text-[12px] text-ink leading-relaxed bg-paper border border-rule rounded-[var(--r-sm)] p-3 flex items-start gap-2">
+              <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5 text-ink" aria-hidden />
+              <span>
+                {m.type === "entitlement" ? <>يمنح: <b>{(m as { value: string }).value}</b> (دائم)</> : null}
+                {m.type === "ai_credit" ? <>يمنح: <b>{(m as { amount: number }).amount} AI Credits</b> — تُحفظ في رصيدك</> : null}
+              </span>
+            </p>
+          );
+        })()}
 
         {locked && !owned && (
           <p className="text-[12px] text-ink leading-relaxed bg-paper border border-rule rounded-[var(--r-sm)] p-3 flex items-start gap-2">

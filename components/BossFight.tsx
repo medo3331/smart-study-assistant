@@ -207,14 +207,27 @@ export function BossFight({ subject, topics, chapterNumber, configId, theme, onC
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from("badges").insert({
-          user_id: user.id,
-          config_id: configId,
-          chapter_number: chapterNumber,
-          title: `منتصر على ${bossName}`,
-          subject,
-          accuracy,
+        // Phase B: Badge عبر RPC محمي بدل insert مباشر (يمنع التزوير)
+        const { error: badgeError } = await supabase.rpc("grant_badge", {
+          p_config_id: configId,
+          p_chapter_number: chapterNumber,
+          p_title: `منتصر على ${bossName}`,
+          p_subject: subject,
+          p_accuracy: accuracy,
         });
+        if (badgeError) {
+          // fallback للتوافق مع DB قديمة لم تُطبق migration بعد
+          console.warn("grant_badge RPC failed — fallback to legacy insert:", badgeError.message);
+          const { error: legacyErr } = await supabase.from("badges").insert({
+            user_id: user.id,
+            config_id: configId,
+            chapter_number: chapterNumber,
+            title: `منتصر على ${bossName}`,
+            subject,
+            accuracy,
+          });
+          if (legacyErr) throw legacyErr;
+        }
 
         /* 🪙 كوينز المتجر على الوسام. جوه `if (user)` عشان الزائر مالوش
            صف يتكتب عليه أصلاً، وبعد الـ insert عشان الوسام يبقى محفوظ

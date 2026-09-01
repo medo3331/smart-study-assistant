@@ -58,7 +58,7 @@ export function AnalyticsSection({
   const barColor = v[BAR_TOKEN[theme]] || "#E2C95C";
 
   return (
-    <div id="analytics" className="sheet-card p-5 space-y-5 scroll-mt-6">
+    <div className="sheet-card p-5 space-y-5 scroll-mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="eyebrow eyebrow-flush">التحليلات</p>
 

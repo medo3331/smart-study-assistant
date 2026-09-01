@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { planShape, MAX_EXAM_DAYS, type DayKind } from "@/lib/exam-intent";
 
@@ -32,15 +34,21 @@ interface DraftDay {
 }
 
 export async function POST(req: Request) {
+  let guard: any = null;
+  let __hUser: any = null;
+  let __hSupabase: any = null;
   try {
     // ١) لازم مسجّل دخول — نفس منطق باقي الراوتات
-    const { user, response: authError } = await requireUser("success");
+    const { user, supabase, response: authError } = await requireUser("success");
+    __hUser = user; __hSupabase = supabase;
     if (authError) return authError;
 
     // ٢) حدّ استخدام. أعلى شوية من generate-plan (٨) لأن ده أرخص
     //    (توكنز أقل بكتير) وبيتعمل في لحظة قلق فالمستخدم بيعيد المحاولة.
     const limited = checkRateLimit(`exam-plan:${user.id}`, 10, 60_000, "success");
     if (limited) return limited;
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
@@ -87,6 +95,7 @@ export async function POST(req: Request) {
 
     if (apiKeys.length === 0) {
       console.error("exam-plan: مفيش أي GROQ_API_KEY معرف");
+      await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? "");
       return NextResponse.json(
         { success: false, error: "الخدمة غير متاحة حالياً." },
         { status: 503 }
@@ -166,6 +175,7 @@ ${roleLines}
     }
 
     if (!rawContent) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       throw lastError || new Error("فشلت جميع المفاتيح المتاحة.");
     }
 

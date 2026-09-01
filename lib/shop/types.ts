@@ -18,6 +18,7 @@ export const CATEGORIES = [
   "sound",
   "effect",
   "box",
+  "useful",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
@@ -106,6 +107,13 @@ export const CATEGORY: Record<Category, CategoryMeta> = {
     icon: "Gift",
     slot: null,
   },
+  useful: {
+    id: "useful",
+    name: "المفيدة",
+    lede: "ترقية و AI Credits — تُشترى وتُحفظ",
+    icon: "Zap",
+    slot: null,
+  },
 };
 
 /**
@@ -161,4 +169,6 @@ export type ShopItem = {
   unlock: Unlock | null;
   /** بيبان في «المميزة» — الاختيار تحريري مش عشوائي */
   featured?: boolean;
+  /** بيانات إضافية للمفيدة — لا تُستخدم للـ cosmetic */
+  metadata?: Record<string, unknown>;
 };

@@ -9,12 +9,11 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for future use
-import { AIStudyCoach } from "@/components/AIStudyCoach";
 import type { CoachTask } from "@/components/AIStudyCoach";
 import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
 import { awardCoins } from "@/lib/shop/shop-data";
+import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
 
 import type {
   ActivityLog,
@@ -27,7 +26,6 @@ import type {
   ThemeColor,
 } from "./components/types";
 
-import { StatsSection } from "./components/StatsSection";
 import { HeroSection } from "./components/HeroSection";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
@@ -36,7 +34,6 @@ import { Sidebar, type SettingsSectionId } from "./components/Sidebar";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
 import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components/nav-config";
-import { KpiSection } from "./components/KpiSection";
 import { WeeklyProgress } from "./components/WeeklyProgress";
 import { AchievementsStrip } from "./components/AchievementsStrip";
 import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
@@ -65,8 +62,6 @@ import { CommunityInvite } from "@/components/CommunityInvite";
 // 🐣 الرفيق: الكمبوننت موجود من الأول، والمتجر بيغيّر إيموجيه بس
 import { StudyPet } from "@/components/StudyPet";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for future use
-import { StudyTutorWidget } from "@/components/StudyTutorWidget";
 import { useEquippedCompanion } from "@/lib/shop/use-companion";
 
 // ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
@@ -99,12 +94,14 @@ export default function DashboardPage() {
      مش داخل في `isInitialized` عن قصد: الصفحة مالهاش تستنى إيموجي. */
   const companion = useEquippedCompanion(supabase, authUser?.id ?? null);
 
-  const level = Math.floor(xp / 200) + 1;
-  const xpForCurrentLevelStart = (level - 1) * 200;
-  const xpForNextLevel = level * 200;
+  const level = levelFromXp(xp);
+  const xpForCurrentLevelStart = (level - 1) * XP_PER_LEVEL;
+  const xpForNextLevel = level * XP_PER_LEVEL;
   const xpInCurrentLevel = xp - xpForCurrentLevelStart;
-  const currentLevelProgress = Math.round((xpInCurrentLevel / 200) * 100);
+  const currentLevelProgress = Math.round((xpInCurrentLevel / XP_PER_LEVEL) * 100);
   const xpRemaining = xpForNextLevel - xp;
+  // Phase 4: xpRemaining kept for level calculation (previously displayed in removed Kpi/StatsSection, preserved for future use)
+  void xpRemaining;
 
   // 3. الصوت — الحالة كلها في `AudioProvider` على مستوى الموقع.
   //
@@ -504,12 +501,13 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
-  // 🔴 حفظ XP / الستريك / الثيم في قاعدة البيانات عند أي تغيير
+  // Phase B: XP محمي — لا تحديث مباشر لـ profiles.xp (يمر عبر increment_xp RPC فقط)
+  // هذا الـ effect يحفظ streak/theme فقط. الـ XP يُحفظ عبر increment_xp عند كسبه.
   useEffect(() => {
     if (isInitialized && authUser) {
-      supabase.from("profiles").update({ xp, streak, theme }).eq("id", authUser.id).then();
+      supabase.from("profiles").update({ streak, theme }).eq("id", authUser.id).then();
     }
-  }, [xp, streak, theme, isInitialized, authUser]);
+  }, [streak, theme, isInitialized, authUser]);
 
   /* 📖 تصفير الفتحة الموجّهة عند قفل الدرج.
      كارت القرآن بيقول «افتح على الصوت»، والدرج بيفتح القسم ده. لو القيمة
@@ -675,7 +673,13 @@ export default function DashboardPage() {
       return;
     }
     // القسم لازم يكون اتركّب قبل ما نسكرول له
+    // Phase 4: Analytics is now inside <details id="analytics"> collapsed by default
+    // — if intent targets analytics, open the disclosure first so content is visible.
     requestAnimationFrame(() => {
+      if (intent.target === "analytics") {
+        const details = document.getElementById("analytics") as HTMLDetailsElement | null;
+        if (details && details.tagName.toLowerCase() === "details") details.open = true;
+      }
       document.getElementById(intent.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [authUser]);
@@ -856,18 +860,44 @@ export default function DashboardPage() {
   const toggleDayCompletion = (dayNumber: number) => {
     if (dayNumber > currentDayNumber && !earlyUnlockedDays.includes(dayNumber)) return;
 
-    setDays((prev) =>
-      prev.map((d) => {
-        if (d.day === dayNumber) {
-          const nextState = !d.isCompleted;
-          setXp((prevXp) => Math.max(0, prevXp + (nextState ? d.xpReward : -d.xpReward)));
-          if (nextState) setCelebration({ topic: d.topic, xp: d.xpReward });
-          logActivity({ tasksCompleted: nextState ? 1 : -1 });
-          return { ...d, isCompleted: nextState };
+    const target = days.find((d) => d.day === dayNumber);
+    if (!target) return;
+    const nextState = !target.isCompleted;
+
+    // Phase C: لا رجوع للـ XP عند إلغاء الإكمال — XP غير قابل للسحب بعد المنح
+    // الإكمال فقط يمر عبر complete_study_day (server-validated + idempotent)
+    if (!nextState) {
+      setDays((prev) => prev.map((d) => (d.day === dayNumber ? { ...d, isCompleted: false } : d)));
+      logActivity({ tasksCompleted: -1 });
+      return;
+    }
+
+    // تفاؤلي: حدّث الواجهة فوراً ثم أكد عبر السيرفر
+    setDays((prev) => prev.map((d) => (d.day === dayNumber ? { ...d, isCompleted: true } : d)));
+    setCelebration({ topic: target.topic, xp: target.xpReward });
+    logActivity({ tasksCompleted: 1 });
+
+    if (!target.id) {
+      // يوم محلي لم يُحفظ بعد في DB — fallback محلي فقط
+      setXp((prev) => prev + target.xpReward);
+      return;
+    }
+
+    supabase
+      .rpc("complete_study_day", { p_day_id: target.id })
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn("complete_study_day failed:", error.message);
+          // تراجع تفاؤلي
+          setDays((prev) => prev.map((d) => (d.day === dayNumber ? { ...d, isCompleted: false } : d)));
+          return;
         }
-        return d;
-      })
-    );
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          if (row.xp_awarded > 0) setXp((prev) => prev + row.xp_awarded);
+          // الكوينز تُقرأ من coin_balance عبر الهوك الحالي — لا حاجة لتحديث يدوي
+        }
+      });
   };
 
   useEffect(() => {
@@ -880,6 +910,10 @@ export default function DashboardPage() {
   const handleBuyStreakFreeze = () => {
     if (xp >= 200) {
       setXp((prev) => prev - 200);
+      // Phase B: خصم XP عبر RPC محمي
+      supabase.rpc("increment_xp", { p_delta: -200 }).then(({ error }) => {
+        if (error) console.warn("increment_xp (-200) failed:", error.message);
+      });
       alert("تم شراء تجميد الستريك بنجاح! 🎉 تم خصم 200 XP.");
       setShowShopModal(false);
     } else {
@@ -1067,16 +1101,7 @@ export default function DashboardPage() {
 
   const activeChartData = analyticsRange === "weekly" ? weeklyChartData : monthlyChartData;
   const weeklyFocusMinutesTotal = weeklyChartData.reduce((sum, d) => sum + d.minutes, 0);
-  const weeklyTasksTotal = weeklyChartData.reduce((sum, d) => sum + d.tasks, 0);
   const weeklyFocusHoursLabel = `${Math.floor(weeklyFocusMinutesTotal / 60)}س ${weeklyFocusMinutesTotal % 60}د`;
-
-  // الأسبوع اللي قبل الأسبوع الجاري (أيام ٧ لـ ١٣) — عشان كارت التركيز
-  // يعرض فرق حقيقي بدل سهم مكتوب على الفاضي.
-  const prevWeekFocusMinutes = Array.from({ length: 7 }, (_, idx) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (13 - idx));
-    return activityLog[date.toISOString().slice(0, 10)]?.focusMinutes || 0;
-  }).reduce((sum, m) => sum + m, 0);
 
   const heatmapCells = Array.from({ length: 70 }, (_, idx) => {
     const daysAgo = 69 - idx;
@@ -1185,23 +1210,9 @@ export default function DashboardPage() {
             ═══════════════════════════════════════════════════════ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "60ms" }}>
           {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
-          <PersonalAssistant
-                    context={personalAssistantContext}
-                    onContinue={() => {
-                      const el = document.getElementById(`day-${currentDayNumber}`);
-                      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                    }}
-                  />
+          <PersonalAssistant context={personalAssistantContext} />
 
-          <HeroSection
-            displayName={displayName}
-            coachTasks={coachTasks}
-            days={days}
-            currentDayNumber={currentDayNumber}
-            completedCount={completedCount}
-            themeStyles={themeStyles}
-            uiText={uiText}
-          />
+          <HeroSection displayName={displayName} coachTasks={coachTasks} />
         </div>
 
         {/* ═══════════════════════════════════════════════════════
@@ -1262,33 +1273,6 @@ export default function DashboardPage() {
             weeklyFocusMinutes={weeklyFocusMinutesTotal}
           />
 
-          <KpiSection
-            completedCount={completedCount}
-            totalDays={days.length}
-            weeklyTasks={weeklyTasksTotal}
-            xp={xp}
-            level={level}
-            xpRemaining={xpRemaining}
-            weeklyFocusMinutes={weeklyFocusMinutesTotal}
-            prevWeekFocusMinutes={prevWeekFocusMinutes}
-            streak={streak}
-            daysSinceLastActivity={daysSinceLastActivity}
-            themeStyles={themeStyles}
-          />
-
-          <StatsSection
-            level={level}
-            xp={xp}
-            currentLevelProgress={currentLevelProgress}
-            xpRemaining={xpRemaining}
-            streak={streak}
-            uiText={uiText}
-            themeStyles={themeStyles}
-            displayName={displayName}
-            subtitle={headerSubtitle}
-            isEmergencyMode={isEmergencyMode}
-          />
-
           {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
@@ -1328,17 +1312,28 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <AnalyticsSection
-            analyticsRange={analyticsRange}
-            onChangeRange={setAnalyticsRange}
-            weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-            overallProgress={overallProgress}
-            streak={streak}
-            activeChartData={activeChartData}
-            theme={theme}
-            heatmapCells={heatmapCells}
-            heatmapColors={heatmapColors}
-          />
+          {/* Phase 4: Progressive disclosure — collapsed by default, preserves id="analytics" for nav scroll. */}
+          <details id="analytics" className="scroll-mt-6 group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-sm)] border border-rule bg-paper px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden marker:content-none">
+              <span>مزيد من التحليلات</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>
+                ▾
+              </span>
+            </summary>
+            <div className="mt-4">
+              <AnalyticsSection
+                analyticsRange={analyticsRange}
+                onChangeRange={setAnalyticsRange}
+                weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+                overallProgress={overallProgress}
+                streak={streak}
+                activeChartData={activeChartData}
+                theme={theme}
+                heatmapCells={heatmapCells}
+                heatmapColors={heatmapColors}
+              />
+            </div>
+          </details>
         </div>
 
         {/* ═══════════════════════════════════════════════════════
@@ -1509,6 +1504,10 @@ export default function DashboardPage() {
           onClose={() => setActiveBossChapter(null)}
           onWin={(xpEarned) => {
             setXp((prev) => prev + xpEarned);
+            // Phase C: ثبّت XP الفوز عبر RPC (مع idempotency عبر badge لاحقاً)
+            supabase.rpc("increment_xp", { p_delta: xpEarned }).then(({ error }) => {
+              if (error) console.warn("increment_xp boss failed:", error.message);
+            });
             logActivity({ tasksCompleted: 1 });
             // BossFight هو اللي بيعمل insert في جدول badges، فبنزوّد العدد
             // محلياً بدل ما نستعلم تاني — الشريط يتحرك في نفس اللحظة.

@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 
 /* ==========================================================================
@@ -77,13 +79,19 @@ function coerceSlide(raw: unknown): Slide | null {
 }
 
 export async function POST(req: Request) {
+  let guard: any = null;
+  let __hUser: any = null;
+  let __hSupabase: any = null;
   try {
-    const { user, response: authError } = await requireUser("success");
+    const { user, supabase, response: authError } = await requireUser("success");
+    __hUser = user; __hSupabase = supabase;
     if (authError) return authError;
 
     // نفس حد توليد الخطة — الطلب ده بيطلع توكنز كتير في نداء واحد
     const limited = checkRateLimit(`slides:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
@@ -112,6 +120,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.GROQ_API_KEY?.trim();
     if (!apiKey) {
       console.error("generate-slides: GROQ_API_KEY غير معرف");
+      await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? "");
       return NextResponse.json(
         { success: false, error: "الخدمة غير متاحة حالياً." },
         { status: 503 }
@@ -150,6 +159,7 @@ export async function POST(req: Request) {
 
     const rawContent = completion.choices[0]?.message?.content ?? "";
     if (!rawContent) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       return NextResponse.json(
         { success: false, error: "مرجعش أي محتوى. حاول تاني." },
         { status: 502 }
@@ -190,6 +200,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, data: { topic, slides } });
   } catch (error: unknown) {
+    try { if (guard && (guard as any)?.refId) await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ''), (guard as any).refId); } catch {}
     console.error("generate-slides error:", error);
     const status = (error as { status?: number })?.status;
     const isRate = status === 429 || status === 413;
