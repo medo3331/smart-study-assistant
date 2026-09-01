@@ -97,14 +97,25 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // Server-side log only — never expose agentId to UI display
     console.log("[UnifiedAI Router] selectedAgent=", decision.agentId, "reason=", decision.reason, "ocr=", decision.requiresOcr, "conf=", decision.confidence);
 
-    // 3. Build combined prompt (user + OCR note if any)
+    // 3. Build combined prompt (user + OCR note if any) + lesson context injection (مخفي)
     const lang = input.language || (String(input.context?.language || "").toLowerCase().startsWith("ar") ? "ar" : "en");
+    // حقن سياق الدرس الحقيقي إذا متوفر — hidden system prompt (المستخدم لا يراه)
+    let lessonPrefix = "";
+    const lesson = (input.context as Record<string, unknown> | undefined)?.lesson as
+      | { title?: string; subject?: string; content?: string; description?: string }
+      | undefined;
+    if (lesson && (lesson.title || lesson.content || lesson.description)) {
+      const t = String(lesson.title || "").slice(0, 200);
+      const s = String(lesson.subject || "").slice(0, 100);
+      const c = String(lesson.content || lesson.description || "").slice(0, 4000);
+      lessonPrefix = `أنت المساعد التعليمي الذكي للدرس الحالي.\nعنوان الدرس: ${t}\nالمادة: ${s}\nمحتوى الدرس: ${c}\n\nأجب على أسئلة الطالب بناءً على محتوى هذا الدرس فقط وبأسلوب مبسط، مع الإبقاء على المصطلحات التقنية بالإنجليزية كما هي.\n\n---\n\n`;
+    }
     const ocrNote = extractedText
       ? (lang === "ar"
           ? `\n\nملاحظة من الصورة/الملف المرفق (تم استخراج النص عبر OCR):\n${extractedText.slice(0, 1200)}${extractedText.length > 1200 ? "..." : ""}`
           : `\n\nNote from attached file (OCR extracted):\n${extractedText.slice(0, 1200)}${extractedText.length > 1200 ? "..." : ""}`)
       : "";
-    const combinedPrompt = `${input.prompt}${ocrNote}`;
+    const combinedPrompt = `${lessonPrefix}${input.prompt}${ocrNote}`;
 
     // 4. REAL model call — Phase H: respect explicit model if provided (already entitlement-checked in route)
     // If input.model is present, route already verified entitlement before reserve — use it.

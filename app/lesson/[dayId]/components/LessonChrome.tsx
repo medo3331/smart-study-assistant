@@ -5,56 +5,53 @@ import { motion, useReducedMotion } from "framer-motion";
 
 /* ==========================================================================
    عناصر الهيكل المشتركة لصفحة الدرس — نفس نظام الداشبورد المنفَّذ حرفيًا:
-   خلفية ‎#0A0806 · كروت زجاجية ‎#0D0906@70% · حدود white/[0.06]
-   دخول متتابع مرة واحدة مع احترام prefers-reduced-motion.
+   خلفية var(--app-bg) · كروت var(--card-primary) · حدود var(--border) · أكسنت var(--accent)
+   ثيم متزامن مع الداشبورد (يقرأ data-theme من :root) + دخول متتابع مرة واحدة
    ========================================================================== */
-
-/** الطبقة الخلفية الثابتة + غلاف الصفحة + طبقة توافق مظلمة للأنماط الورقية القديمة. */
+/** الطبقة الخلفية الثابتة + غلاف الصفحة + طبقة توافق — ثيم موحّد مع الداشبورد. */
 export function LessonShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative min-h-screen" dir="rtl">
-      {/* الخلفية: لون صلب + هالتان خفيفتان ثابتتان (بدون أنيميشن) */}
-      <div aria-hidden className="fixed inset-0 -z-10 bg-[#0A0806]" />
+      {/* الخلفية: var(--app-bg) + هالتان بالأكسنت (ثيم-aware — تتغير مع اختيار المستخدم) */}
+      <div aria-hidden className="fixed inset-0 -z-10 bg-[var(--app-bg)]" />
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(52% 42% at 85% -4%, rgba(220,76,76,0.13) 0%, transparent 62%), radial-gradient(40% 34% at 6% 100%, rgba(45,212,191,0.07) 0%, transparent 60%)",
+            "radial-gradient(52% 42% at 85% -4%, color-mix(in srgb, var(--accent) 13%, transparent) 0%, transparent 62%), radial-gradient(40% 34% at 6% 100%, color-mix(in srgb, var(--accent-highlight) 7%, transparent) 0%, transparent 60%)",
         }}
       />
-      {/* طبقة التوافق: نفس كلاسات الورقة القديمة (sheet-card/btn/field/tag...)
-          بتترسم بألوان النظام الداكن جوّه صفحة الدرس بس — عشان الأقسام
-          المحفوظة (شات/مصادر/اختبار/احتفال) تفضل شغالة كما هي بدون إعادة كتابة. */}
+      {/* طبقة التوافق: كلاسات الورقة القديمة (sheet-card/btn/field/tag...) بتترسم بمتغيرات الثيم الموحدة — نفس الداشبورد */}
       <style>{LESSON_DARK_COMPAT}</style>
       <div className="magicly-lesson">{children}</div>
     </div>
   );
 }
 
-/* أنماط التوافق — نطاقها مغلق داخل .magicly-lesson فقط */
+/* أنماط التوافق — نطاقها مغلق داخل .magicly-lesson فقط — ثيم موحّد مع الداشبورد */
 const LESSON_DARK_COMPAT = `
-.magicly-lesson .sheet-card{background:rgba(13,9,6,.7);border:1px solid rgba(255,255,255,.06);backdrop-filter:blur(20px);box-shadow:0 8px 30px rgba(0,0,0,.35)}
-.magicly-lesson .sheet-card-live{border-top:1px solid rgba(220,76,76,.25)}
-.magicly-lesson .eyebrow{color:#F5A25C}
-.magicly-lesson .h1,.magicly-lesson .h2,.magicly-lesson .h3{color:#fff}
-.magicly-lesson .tag{background:rgba(255,255,255,.05);color:#9AA0C0;border:1px solid rgba(255,255,255,.07)}
+.magicly-lesson .sheet-card{background:color-mix(in srgb, var(--card-primary) 85%, transparent);border:1px solid var(--border);backdrop-filter:blur(20px);box-shadow:0 8px 30px var(--shadow)}
+.magicly-lesson .sheet-card-live{border-top:1px solid color-mix(in srgb, var(--accent) 25%, transparent)}
+.magicly-lesson .eyebrow{color:var(--accent-highlight)}
+.magicly-lesson .h1,.magicly-lesson .h2,.magicly-lesson .h3{color:var(--text)}
+.magicly-lesson .tag{background:var(--card-secondary);color:var(--muted);border:1px solid var(--border)}
 .magicly-lesson .tag-quiet{background:transparent}
-.magicly-lesson .text-ink{color:#E7E9F5}
-.magicly-lesson .text-ink-soft{color:#9AA0C0}
-.magicly-lesson .bg-paper,.magicly-lesson .bg-paper-2,.magicly-lesson .bg-paper-3{background:rgba(255,255,255,.03)!important;border-color:rgba(255,255,255,.08)}
-.magicly-lesson .border-rule{border-color:rgba(255,255,255,.08)}
-.magicly-lesson .field{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#E7E9F5}
-.magicly-lesson .field::placeholder{color:#9AA0C0}
+.magicly-lesson .text-ink{color:var(--text)}
+.magicly-lesson .text-ink-soft{color:var(--muted)}
+.magicly-lesson .bg-paper,.magicly-lesson .bg-paper-2,.magicly-lesson .bg-paper-3{background:var(--card-primary)!important;border-color:var(--border)}
+.magicly-lesson .border-rule{border-color:var(--border)}
+.magicly-lesson .field{background:var(--card-secondary);border:1px solid var(--border);color:var(--text)}
+.magicly-lesson .field::placeholder{color:var(--muted)}
 .magicly-lesson .btn{border-radius:14px;font-weight:600}
-.magicly-lesson .btn-quiet{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#9AA0C0}
-.magicly-lesson .btn-quiet:hover{background:rgba(255,255,255,.08);color:#E7E9F5}
-.magicly-lesson .btn-marker{background:#DC4C4C;border-color:#DC4C4C;color:#fff;box-shadow:0 6px 20px rgba(220,76,76,.35)}
-.magicly-lesson .btn-marker:hover{background:#F2745C}
-.magicly-lesson .meter{background:rgba(255,255,255,.07)}
-.magicly-lesson .meter-fill{background:linear-gradient(to left,#F5A25C,#DC4C4C)}
-.magicly-lesson .notice-ok{background:rgba(45,212,191,.1);border:1px solid rgba(45,212,191,.3)}
-.magicly-lesson .notice-error{background:rgba(206,90,108,.1);border:1px solid rgba(206,90,108,.35)}
+.magicly-lesson .btn-quiet{background:var(--card-secondary);border:1px solid var(--border);color:var(--muted)}
+.magicly-lesson .btn-quiet:hover{background:color-mix(in srgb, var(--card-secondary) 85%, var(--text) 8%);color:var(--text)}
+.magicly-lesson .btn-marker{background:var(--accent);border-color:var(--accent);color:var(--on-marker);box-shadow:0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent)}
+.magicly-lesson .btn-marker:hover{filter:brightness(1.08)}
+.magicly-lesson .meter{background:var(--border)}
+.magicly-lesson .meter-fill{background:linear-gradient(to left,var(--accent-highlight),var(--accent))}
+.magicly-lesson .notice-ok{background:color-mix(in srgb, var(--accent) 10%, transparent);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent)}
+.magicly-lesson .notice-error{background:color-mix(in srgb, var(--redpen) 10%, transparent);border:1px solid color-mix(in srgb, var(--redpen) 35%, transparent)}
 .magicly-lesson .stamp{border-radius:16px}
 `;
 
@@ -65,12 +62,12 @@ interface GlassCardProps {
   glow?: boolean;
 }
 
-/** الكارت الزجاجي الموحّد — نفس معاملة كروت الداشبورد. */
+/** الكارت الزجاجي الموحّد — نفس معاملة كروت الداشبورد — ثيم-aware. */
 export function GlassCard({ children, className, glow }: GlassCardProps) {
   return (
     <div
       className={
-        "relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0D0906]/70 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)]" +
+        "relative overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--card-primary)]/70 backdrop-blur-xl shadow-[0_8px_30px_var(--shadow)]" +
         (className ? ` ${className}` : "")
       }
     >
@@ -80,7 +77,7 @@ export function GlassCard({ children, className, glow }: GlassCardProps) {
           className="pointer-events-none absolute inset-x-0 top-0 h-px"
           style={{
             background:
-              "linear-gradient(to left, transparent, rgba(220,76,76,0.55), transparent)",
+              "linear-gradient(to left, transparent, color-mix(in srgb, var(--accent) 55%, transparent), transparent)",
           }}
         />
       )}

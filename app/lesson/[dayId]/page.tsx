@@ -623,7 +623,7 @@ export default function LessonDetailPage() {
     return (
       <LessonShell>
         <div className="flex min-h-screen items-center justify-center" dir="rtl">
-          <p className="text-sm text-[#9AA0C0]">بيحمّل الدرس…</p>
+          <p className="text-sm text-[var(--muted)]">بيحمّل الدرس…</p>
         </div>
       </LessonShell>
     );
@@ -635,15 +635,15 @@ export default function LessonDetailPage() {
         <div className="flex min-h-screen items-center justify-center p-4" dir="rtl">
           <GlassCard className="w-full max-w-sm space-y-4 p-6">
             <div>
-              <p className="mb-1.5 text-xs font-bold tracking-wide text-[#F5A25C]">مش موجود</p>
-              <h1 className="text-lg font-bold text-white">الدرس ده مش متاح</h1>
+              <p className="mb-1.5 text-xs font-bold tracking-wide text-[var(--accent-highlight)]">مش موجود</p>
+              <h1 className="text-lg font-bold text-[var(--text)]">الدرس ده مش متاح</h1>
             </div>
-            <p className="text-xs leading-relaxed text-[#9AA0C0]">
+            <p className="text-xs leading-relaxed text-[var(--muted)]">
               الدرس ده مش موجود، أو معندكش صلاحية توصله من الحساب ده.
             </p>
             <button
               onClick={() => router.push("/dashboard")}
-              className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[#DC4C4C] text-sm font-semibold text-white transition-colors hover:bg-[#F2745C]"
+              className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-semibold transition-colors hover:brightness-110"
             >
               الرجوع للداشبورد
             </button>
@@ -671,7 +671,7 @@ export default function LessonDetailPage() {
 
   return (
     <LessonShell>
-    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans text-[#E7E9F5]" dir="rtl">
+    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans text-[var(--text)]" dir="rtl">
       <div className="max-w-3xl mx-auto space-y-5">
         {/* ─── فاتحة الصفحة: مسار التنقل (المادة + عنوان الدرس الحقيقي) ─── */}
         <Reveal index={0}>
@@ -715,10 +715,18 @@ export default function LessonDetailPage() {
           />
         </Reveal>
 
-        {/* Unified AI — single interface (upload + chat) on lesson page */}
+        {/* Unified AI — single interface (upload + chat) on lesson page — مربوط بمحتوى الدرس الحقيقي */}
         <Reveal index={4}>
           <section aria-label="مساعد Magic الموحد" className="max-w-3xl mx-auto px-4 py-5 mt-4">
-            <UnifiedChat initialContext={{ language: "ar", preferences: { language: "ar", field: typeof config!=="undefined" ? config?.subject : "study" } }} />
+            <UnifiedChat
+              initialContext={{ language: "ar", preferences: { language: "ar", field: config?.subject ?? "study" } }}
+              lesson={{
+                title: dayRow.topic,
+                subject: config?.subject ?? "",
+                content: dayRow.description,
+                description: dayRow.description,
+              }}
+            />
           </section>
         </Reveal>
 

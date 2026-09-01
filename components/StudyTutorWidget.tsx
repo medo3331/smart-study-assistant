@@ -82,17 +82,16 @@ export function StudyTutorWidget(props: StudyTutorWidgetProps) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleAsk()}
-          placeholder={isAr ? "اشرح لي الجزء ده / اختبرني / مش فاهم النقطة دي" : "Explain this / Test me / I don\'t get this point"}
-          className="flex-1 rounded-md px-3 py-2 text-sm bg-[#0D0906]/60 border border-white/[0.10] text-[#F3F0EC] placeholder:text-[#9AA0C0]/70 focus:outline-none focus:border-[#F5DE72]/60 transition-colors"
+          placeholder={isAr ? "اشرح لي الجزء ده / اختبرني / مش فاهم النقطة دي" : "Explain this / Test me / I don\\'t get this point"}
+          className="flex-1 rounded-md px-3 py-2 text-sm bg-paper border border-rule text-ink placeholder:text-ink-soft focus:outline-none focus:border-[var(--accent)]/60 transition-colors"
         />
-        <button onClick={handleAsk} disabled={loading} className="rounded-md px-4 py-2 text-sm font-bold text-white bg-gradient-to-b" style={{ background: "linear-gradient(180deg,#F5DE72,#E2C95C)" }}>
+        <button onClick={handleAsk} disabled={loading} className="rounded-md px-4 py-2 text-sm font-bold bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-50 transition">
           {loading ? (isAr ? "جارٍ..." : "...") : (isAr ? "اسأل" : "Ask")}
         </button>
       </div>
       {result && (
         <div className="rounded-lg p-3 bg-paper-3 text-sm leading-relaxed text-ink whitespace-pre-line">{result.ok ? (result.content ?? (isAr ? "تم الرد." : "Answered.")) : (result.message ?? (isAr ? "حدث خطأ — جرب مرة أخرى." : "Error — retry."))}</div>
       )}
-      <div className="mt-2 text-[11px] text-ink-soft font-mono">agent: study_tutor · provider: {result?.provider ?? "router"}</div>
     </div>
   );
 }

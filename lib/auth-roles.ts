@@ -9,6 +9,8 @@
  *     على مساره الخاص (/dashboard/<role>) لحد ما النسخ المتخصصة تجهز.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 /** قيم persona كما هي في قاعدة البيانات (نفس قيم isPersona في user-persona.ts). */
 export type DbPersona = "student" | "grad" | "freelancer";
 
@@ -65,4 +67,40 @@ export function roleHome(role: unknown): string {
 export function safeNext(raw: string | null | undefined, fallback = "/dashboard"): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return fallback;
   return raw;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔐 Admin / Owner Roles — امتداد لنفس الملف (لا يكسر الاستيرادات القديمة)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AdminRole = "owner" | "admin" | null;
+
+/**
+ * دالة فحص مستوى صلاحية الأدمن (Owner vs Admin)
+ * - الـ Owner يُحدد عبر env (NEXT_PUBLIC_OWNER_EMAIL أو ADMIN_EMAILS)
+ * - غير ذلك يُفحص من جدول site_admins
+ */
+export async function getAdminRole(
+  supabase: SupabaseClient,
+  userId: string | null,
+  userEmail?: string | null
+): Promise<AdminRole> {
+  if (!userId) return null;
+
+  const primaryOwnerEmail = process.env.NEXT_PUBLIC_OWNER_EMAIL || process.env.ADMIN_EMAILS;
+  if (userEmail && primaryOwnerEmail?.toLowerCase().includes(userEmail.toLowerCase())) {
+    return "owner";
+  }
+
+  try {
+    const { data } = await supabase
+      .from("site_admins")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    return (data?.role as AdminRole) || null;
+  } catch {
+    return null;
+  }
 }

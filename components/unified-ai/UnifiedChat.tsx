@@ -22,7 +22,14 @@ type Attachment = {
   kind: "image" | "pdf" | "text";
 };
 
-export function UnifiedChat({ initialContext }: { initialContext?: any }) {
+type LessonContext = {
+  title?: string;
+  subject?: string;
+  content?: string;
+  description?: string;
+};
+
+export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([
     { role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك. لا تحتاج لاختيار وكيل." },
@@ -75,12 +82,23 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
           formData.append("imageInput", attachment.file, attachment.file.name);
         }
       }
-      // Pass context language
-      if (initialContext && initialContext.language) {
-        formData.append("language", initialContext.language);
-      } else {
-        formData.append("language", "ar");
+      // Pass context language + lesson context (مخفي عن المستخدم)
+      const ctx: Record<string, unknown> = {};
+      if (initialContext && typeof initialContext === "object") {
+        Object.assign(ctx, initialContext);
       }
+      if (!ctx.language) ctx.language = "ar";
+      // حقن سياق الدرس الحقيقي إذا متوفر — يبعت للـ API كـ hidden system prompt
+      if (lesson && (lesson.title || lesson.content || lesson.description)) {
+        ctx.lesson = {
+          title: lesson.title || "",
+          subject: lesson.subject || "",
+          content: lesson.content || lesson.description || "",
+          description: lesson.description || "",
+        };
+      }
+      formData.append("context", JSON.stringify(ctx));
+      formData.append("language", (ctx.language as string) || "ar");
 
       const res = await fetch("/api/unified-ai", {
         method: "POST",
@@ -117,13 +135,12 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
       // نجح — امسح حالة الـ rate limit السابقة
       setRateLimitInfo(null);
 
-      // Show assistant response
+      // Show assistant response — نظيف بدون أي ذكر للوكيل
       const assistantText = data?.answer || "تم المعالجة عبر Unified AI.";
-      const hiddenReason = `(تم اختيار الوكيل الأنسب تلقائيًا خلف الكواليس — لا تحتاج لتحديده)`;
 
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: assistantText + "\n\n" + hiddenReason },
+        { role: "assistant", content: assistantText },
       ]);
       removeAttachment();
     } catch {
@@ -135,7 +152,7 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
   return (
     <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
       <div className="flex items-center gap-2 mb-3">
-        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--red)] transition flex items-center gap-1" aria-label="الرجوع للوحة التحكم">
+        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="الرجوع للوحة التحكم">
           ← لوحة التحكم
         </button>
       </div>
@@ -144,7 +161,7 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
       <div className="space-y-3 mb-4 min-h-[240px]">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--red)] text-white"}`}>
+            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--accent)] text-[var(--on-marker)]"}`}>
               <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
@@ -154,7 +171,7 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
         ))}
         {loading && (
           <div className="flex justify-end">
-            <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--red)] text-white text-sm flex items-center gap-2">
+            <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
               <LoaderCircle className="w-4 h-4 animate-spin" /> جارى المعالجة...
             </div>
           </div>
@@ -230,16 +247,16 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
           onClick={send}
           disabled={loading || (!input.trim() && !attachment)}
           aria-label="إرسال"
-          className="p-2.5 rounded-xl bg-[var(--red)] text-white hover:brightness-110 disabled:opacity-40 transition"
+          className="p-2.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-40 transition"
         >
           <Send size={18} />
         </button>
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-        <p className="text-[11px] text-ink-soft">Magic — مساعد واحد. بلا اختيار وكيل.</p>
+        <p className="text-[11px] text-ink-soft">Magic — مساعدك الذكي</p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
-          <Sparkles size={12} /> <span>المساعد يعمل</span>
+          <Sparkles size={12} /> <span>Magic</span>
         </div>
       </div>
 
@@ -264,14 +281,14 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
               <div className="flex flex-wrap gap-2 mt-3">
                 <Link
                   href={rateLimitInfo.actions?.[0]?.href || "/pricing"}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--red)] text-white text-xs font-bold px-4 py-2 hover:brightness-110 transition"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
                 >
                   <Crown size={14} />
                   {rateLimitInfo.actions?.[0]?.label || "الاشتراك في الخطة المدفوعة"}
                 </Link>
                 <Link
                   href={rateLimitInfo.actions?.[1]?.href || "/store"}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white dark:bg-transparent text-amber-900 dark:text-amber-100 text-xs font-bold px-4 py-2 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rule bg-paper text-ink text-xs font-bold px-4 py-2 hover:bg-paper-3 transition"
                 >
                   <ShoppingBag size={14} />
                   {rateLimitInfo.actions?.[1]?.label || "شراء حزمة رصيد"}
