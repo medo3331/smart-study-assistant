@@ -9,7 +9,8 @@
  */
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -29,6 +30,15 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{
+    error: string;
+    message?: string;
+    actions?: { label: string; href: string }[];
+    retryAfterHours?: number;
+    retryAfter?: number;
+    limit?: number;
+    used?: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,9 +91,31 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
       setLoading(false);
 
       if (!res.ok || !data?.ok) {
+        // ── Rate Limit توجيهي (429) ──
+        if (res.status === 429 || data?.code === "RATE_LIMIT_EXCEEDED") {
+          const info = {
+            error: data?.error || (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ."),
+            message: data?.message || "يمكنك الانتظار لحين تجدد الرصيد المجاني، أو الاشتراك في الخطة المدفوعة للحصول على استخدام غير محدود!",
+            actions: (data?.actions as { label: string; href: string }[]) || [
+              { label: "الاشتراك في الخطة المدفوعة", href: "/pricing" },
+              { label: "شراء حزمة رصيد", href: "/store" },
+            ],
+            retryAfterHours: data?.retryAfterHours as number | undefined,
+            retryAfter: data?.retryAfter as number | undefined,
+            limit: data?.limit as number | undefined,
+            used: data?.used as number | undefined,
+          };
+          setRateLimitInfo(info);
+          // أيضاً أضف رسالة في سجل المحادثة للتوضيح
+          setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
+          return;
+        }
         setMessages((m) => [...m, { role: "assistant", content: "حدث خطأ أثناء المعالجة. جرب مرة أخرى." }]);
         return;
       }
+
+      // نجح — امسح حالة الـ rate limit السابقة
+      setRateLimitInfo(null);
 
       // Show assistant response
       const assistantText = data?.answer || "تم المعالجة عبر Unified AI.";
@@ -210,6 +242,52 @@ export function UnifiedChat({ initialContext }: { initialContext?: any }) {
           <Sparkles size={12} /> <span>المساعد يعمل</span>
         </div>
       </div>
+
+      {rateLimitInfo && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 p-4 shadow-sm" role="alert" dir="rtl">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 mt-0.5 rounded-full bg-amber-100 dark:bg-amber-900 p-2">
+              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-900 dark:text-amber-100 leading-relaxed">{rateLimitInfo.error}</p>
+              {rateLimitInfo.message && (
+                <p className="text-xs text-amber-800 dark:text-amber-200 mt-1.5 leading-relaxed">{rateLimitInfo.message}</p>
+              )}
+              {rateLimitInfo.retryAfterHours && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2 flex items-center gap-1">
+                  <Clock size={12} />
+                  سيتم تجديد رصيدك المجاني بعد {rateLimitInfo.retryAfterHours} ساعات
+                  {rateLimitInfo.retryAfter ? ` (حوالي ${Math.ceil(rateLimitInfo.retryAfter / 60)} دقيقة)` : ""}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Link
+                  href={rateLimitInfo.actions?.[0]?.href || "/pricing"}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--red)] text-white text-xs font-bold px-4 py-2 hover:brightness-110 transition"
+                >
+                  <Crown size={14} />
+                  {rateLimitInfo.actions?.[0]?.label || "الاشتراك في الخطة المدفوعة"}
+                </Link>
+                <Link
+                  href={rateLimitInfo.actions?.[1]?.href || "/store"}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white dark:bg-transparent text-amber-900 dark:text-amber-100 text-xs font-bold px-4 py-2 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition"
+                >
+                  <ShoppingBag size={14} />
+                  {rateLimitInfo.actions?.[1]?.label || "شراء حزمة رصيد"}
+                </Link>
+              </div>
+            </div>
+            <button
+              onClick={() => setRateLimitInfo(null)}
+              className="shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-amber-700 dark:text-amber-300"
+              aria-label="إغلاق"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import { createClient } from "@/lib/supabase/server";
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import type { UnifiedAIInput, UnifiedAIResult } from "@/lib/unified-ai/types";
 import { getModelAccessPolicy, CURRENT_AI_MODEL, filterAccessibleModels } from "@/lib/ai/model-access";
+import { checkAiRateLimit, buildRateLimitBody } from "@/lib/ai/rate-limit";
 import { findModel } from "@/lib/ai/models";
 import { routeCandidates } from "@/lib/ai/routing";
 import type { AiTaskType } from "@/lib/ai/types";
@@ -285,18 +286,52 @@ export async function POST(req: Request) {
     // Log routing decision server-side only (never expose to UI)
     console.log(`[PhaseH unified-ai] resolved=${resolvedVia} model=${modelToUse} task=${requestedTask ?? "chat"} user=${userId ? "auth" : "anon"}`);
 
-    // ---- Phase F: Reserve 1 credit atomically for authenticated users (server requestId) ----
-    // Anonymous: يسمح مجانًا للـ free models فقط (already passed entitlement check which blocks gated for anon)
+    // Determine bucket: vision/file → 6/5h, text → 10/3h
+    const isVisionOrFile = Boolean(imageInput || fileInput);
+
+    // ---- Phase H.2: Rate Limit gate (BEFORE reserve) — 429, 0 credit consumed ----
+    if (userId && supabase) {
+      const rate = await checkAiRateLimit(supabase, userId, { isVisionOrFile });
+      if (!rate.allowed) {
+        const body = buildRateLimitBody(rate);
+        return NextResponse.json(body, { status: 429, headers: { "Retry-After": String(rate.retryAfter) } });
+      }
+    }
+
+    // ---- Phase F: Reserve 1 credit atomically (with free overdraft up to window limit) ----
+    // Free models: allowed via overdraft even if balance 0 (windowed)
+    // Gated models: same, but additionally require entitlement (checked above)
     if (userId && supabase) {
       const refId = `ai_req:${serverRequestId()}`;
       reserveRef = refId;
-      const { error: reserveErr } = await supabase.rpc("reserve_ai_credit", {
-        p_user_id: userId,
-        p_ref_id: refId,
-      });
+      const reserveKind = isVisionOrFile ? "vision" : "text";
+      // Try new signature with p_kind, fallback to old 2-arg if not yet migrated
+      let reserveErr: { message?: string } | null = null;
+      try {
+        const res = await supabase.rpc("reserve_ai_credit", {
+          p_user_id: userId,
+          p_ref_id: refId,
+          p_kind: reserveKind,
+        } as unknown as { p_user_id: string; p_ref_id: string });
+        reserveErr = (res as { error?: { message?: string } }).error ?? null;
+        const msg0 = reserveErr?.message || "";
+        if (msg0.includes("p_kind") || (msg0.includes("function") && msg0.includes("reserve_ai_credit"))) {
+          const retry = await supabase.rpc("reserve_ai_credit", {
+            p_user_id: userId,
+            p_ref_id: refId,
+          });
+          reserveErr = (retry as { error?: { message?: string } }).error ?? null;
+        }
+      } catch (e) {
+        reserveErr = e as { message?: string };
+      }
       if (reserveErr) {
         const msg = reserveErr.message || "";
+        // After 20 (free) / 100 (premium) or true insufficient beyond overdraft, we surface correctly
         if (msg.includes("insufficient credits") || msg.includes("Insufficient")) {
+          // Distinguish rate limit vs true insufficient: if daily count >= limit, it's rate limit (429), else 402
+          // But reserve now includes daily check, so we map insufficient inside limit to 402, beyond to 429 via guard
+          // Here in unified-ai, rate limit already checked above, so this 402 is true insufficient beyond overdraft
           return NextResponse.json(
             { ok: false, error: "رصيد AI Credits لا يكفي. اشترِ حزمة من المتجر.", code: "INSUFFICIENT_CREDITS" },
             { status: 402 }

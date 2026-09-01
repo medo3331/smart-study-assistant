@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getModelAccessPolicy } from "./model-access";
+import { checkAiRateLimit, buildRateLimitBody } from "./rate-limit";
 
 export type GuardResult =
   | { ok: true; refId: string }
@@ -36,9 +37,30 @@ function serverRequestId(): string {
 export async function guardAiAccessAndReserve(
   supabase: SupabaseClient,
   userId: string | null,
-  modelId: string
+  modelId: string,
+  opts?: { isVisionOrFile?: boolean }
 ): Promise<GuardResult> {
   const policy = getModelAccessPolicy(modelId);
+
+  // ---- Rate Limit gate (BEFORE entitlement/credit) — 429, 0 credit consumed ----
+  // Free: 10 text / 3h, 6 vision / 5h — windowed sliding
+  // Premium: unlimited (bypass)
+  if (userId) {
+    const rate = await checkAiRateLimit(supabase, userId, { isVisionOrFile: opts?.isVisionOrFile ?? false });
+    if (!rate.allowed) {
+      const body = buildRateLimitBody(rate);
+      return {
+        ok: false,
+        response: new Response(JSON.stringify(body), {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(rate.retryAfter),
+          },
+        }),
+      };
+    }
+  }
 
   // ---- Entitlement gate (BEFORE reserve) — 0 credit consumed on 403 ----
   if (policy.access === "entitlement" && policy.entitlement) {
@@ -95,13 +117,35 @@ export async function guardAiAccessAndReserve(
   }
 
   // ---- Reserve 1 credit atomically (server requestId) ----
+  // Free models: allowed via overdraft up to window limit even if balance 0
+  // Gated models: same, but additionally require entitlement (checked above)
+  // isVisionOrFile determines vision bucket (6/5h) vs text (10/3h)
+  // Store kind in metadata for windowed counting
   const refId = `ai_req:${serverRequestId()}`;
-  const { error: reserveErr } = await supabase.rpc("reserve_ai_credit", {
-    p_user_id: userId,
-    p_ref_id: refId,
-  });
+  const reserveKind = opts?.isVisionOrFile ? "vision" : "text";
+  // Try new signature with p_kind, fallback to old 2-arg if function not yet migrated
+  let reserveErr: unknown = null;
+  try {
+    const res = await supabase.rpc("reserve_ai_credit", {
+      p_user_id: userId,
+      p_ref_id: refId,
+      p_kind: reserveKind,
+    } as unknown as { p_user_id: string; p_ref_id: string });
+    reserveErr = (res as { error?: unknown }).error ?? null;
+    // If error is "function not found" or missing p_kind, retry without p_kind
+    const msg0 = (reserveErr as { message?: string })?.message || "";
+    if (msg0.includes("p_kind") || msg0.includes("function") && msg0.includes("reserve_ai_credit")) {
+      const retry = await supabase.rpc("reserve_ai_credit", {
+        p_user_id: userId,
+        p_ref_id: refId,
+      });
+      reserveErr = (retry as { error?: unknown }).error ?? null;
+    }
+  } catch (e) {
+    reserveErr = e;
+  }
   if (reserveErr) {
-    const msg = reserveErr.message || "";
+    const msg = (reserveErr as { message?: string })?.message || "";
     if (msg.includes("insufficient credits") || msg.includes("Insufficient")) {
       return {
         ok: false,

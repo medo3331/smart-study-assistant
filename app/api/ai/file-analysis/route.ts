@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     const hasEnt = async (k: string, v: string) => { const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v }); return Boolean(data); };
     const accessible = await filterAccessibleModels(candidates, hasEnt);
     if (accessible.length === 0 && candidates.length > 0) return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
-    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b", { isVisionOrFile: true });
     if (!guard.ok) return guard.response;
     let completion;
     try {

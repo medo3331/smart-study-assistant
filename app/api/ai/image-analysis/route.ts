@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: { message: "ارفع صورة صالحة حتى 5 ميجا." } }, { status: 400 });
     }
     // Phase H: 1 credit gate
-    const guard = await guardAiAccessAndReserve(supabase, user.id, "gemini-3.1-flash-image");
+    const guard = await guardAiAccessAndReserve(supabase, user.id, "gemini-3.1-flash-image", { isVisionOrFile: true });
     if (!guard.ok) return guard.response;
     let completion;
     try {
