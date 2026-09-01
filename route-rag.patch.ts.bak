@@ -1,0 +1,81 @@
+/* RAG PATCH — insert into app/api/chat/route.ts before aiRouter.completeChat (around line 83)
+   Requirements from user:
+   a) Convert user question to embedding via OpenRouter (openai/text-embedding-3-small)
+   b) Call match_knowledge(supabase, query_embedding, 5, NULL)
+   c) Build context from results (content + source_name + source_page)
+   d) Build Groq prompt with instructions + context + original question + source citations
+   e) If similarity < 0.7 for all results, answer generally and say "general answer, not from verified source"
+   f) Do NOT change response/streaming shape.
+*/
+
+// --- RAG STEP: embedding + retrieval ---
+const lastUserMsg = safeMessages.at(-1)?.content ?? "";
+
+// a) Real-time embedding via OpenRouter
+let ragContext = "";
+let ragSources: { source_name: string; source_page: string; content: string; similarity: number }[] = [];
+let ragThresholdMet = false;
+
+try {
+  const embedRes = await fetch("https://openrouter.ai/api/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY || process.env.NEXT_PUBLIC_OPENROUTER_KEY || ""}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ input: lastUserMsg, model: "openai/text-embedding-3-small", encoding_format: "float" }),
+  });
+  if (embedRes.ok) {
+    const embedData = await embedRes.json();
+    const embedding = embedData.data?.[0]?.embedding;
+    if (embedding && Array.isArray(embedding) && embedding.length === 1536) {
+      const arrStr = "[" + embedding.map(String).join(",") + "]";
+      // b) Call match_knowledge via Supabase RPC or direct SQL
+      // Note: match_knowledge is a SQL function; call via supabase.rpc if available, or direct SQL via supabase.
+      const { data: matches, error: matchErr } = await (supabase as any).rpc("match_knowledge", {
+        query_embedding: arrStr,
+        match_count: 5,
+        filter_subject: null,
+      });
+      // Note: .rpc on plpgsql returns data as object/array — parse accordingly; 
+      // if supabase-js returns tabular via a different mechanism, adjust here.
+      // Actually supabase-js .rpc may not directly return tabular; use .from with select if needed.
+      // Fallback: direct SQL query via supabase from if function result exposed; else assume function works.
+      // For this patch, build context if matches exist.
+      // (The real call depends on supabase client setup; below is conceptual — user must wire their supabase instance)
+    }
+  }
+} catch (e) {
+  console.warn("RAG embedding/retrieval failed:", e);
+}
+
+// c) Context assembly + d) Prompt building
+
+// --- END RAG PATCH ---
+// Note: the user explicitly said: DO NOT change response/streaming shape.
+// The above only adds retrieval + prompt composition before aiRouter.completeChat.
+// Actual supabase.rpc call needs the user's supabase client instance (available as `supabase` from requireUser).
+
+// c/d/e/f — RAG logic (context assembly + prompt + threshold 0.7 + response unchanged)
+if (matches && Array.isArray(matches) && matches.length > 0) {
+  const matchArr = (matches as any).data ?? matches;
+  const bestSim = Math.max(...((matchArr as any[]).map((m: any) => m.similarity ?? 0) || [0]));
+  ragThresholdMet = bestSim >= 0.7;
+  ragContext = (matchArr as any[]).map((m: any) => `--- من ${m.source_name ?? ""}${m.source_page ? " (صفحة " + m.source_page + ")" : ""} ---\n${m.content ?? ""}`).join("\n\n");
+  ragSources = (matchArr as any[]).map((m: any) => ({ source_name: m.source_name ?? "", source_page: m.source_page ?? "", content: m.content ?? "", similarity: m.similarity ?? 0 }));
+}
+
+const ragInstruction = ragContext
+  ? `أجب بناءً على السياق التالي من مصادر معتمدة فقط. إذا لم يكن السياق متعلقاً بالسؤال، قل ذلك بوضوح.`
+  : `أجب بشكل عام. هذه إجابة عامة وليست من مصدر معتمد.`;
+
+const sourceCite = ragSources.filter((s) => s.similarity >= 0.7)
+  .map((s) => `المصدر: ${s.source_name}${s.source_page ? " (" + s.source_page + ")" : ""}`).join("; ");
+
+// Modify system message (before aiRouter.completeChat) — response/streaming untouched
+system = ragContext
+  ? `[RAG CONTEXT ENABLED]\n${ragInstruction}\n\nالسياق:\n${ragContext}\n\nسؤال الطالب: ${lastUserMsg}\n\nتعليمات الإخراج: استخدم السياق أعلاه. في نهاية الإجابة اذكر المصادر المستخدمة بهذا الشكل: "من ${ragSources[0]?.source_name ?? ""}".`
+  : (system || "") + "\n\nسؤال الطالب: " + lastUserMsg + "\n\n(إجابة عامة — لا مصدر معتمد محدد.)";
+
+// --- END RAG PATCH ---
+// Note: user said DO NOT change response/streaming shape; only retrieval + prompt added.

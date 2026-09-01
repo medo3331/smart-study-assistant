@@ -1,0 +1,18 @@
+-- ============================================================================
+-- Phase E — BLOCKED Migration: Signup Reward 20 Coins + Daily Login 10 Coins
+-- التاريخ: ٢ سبتمبر ٢٠٢٦
+-- الحالة: BLOCKED — لا تُشغّل تلقائياً. يتطلب موافقة صريحة ومراجعة تسعير.
+--
+-- المطلوب:
+--   1) مصدر جديد signup_reward = 20 كوين، مرة واحدة في العمر (daily_cap=1 لكن
+--      ref_id = user_id يضمن مرة واحدة عبر الفهرس الفريد)
+--   2) تصحيح daily_login من 5 → 10 حسب spec Phase E
+--
+-- لماذا BLOCKER وليس تطبيق تلقائي:
+--   - economy.ts و coin_source_rules هما مصدر الحقيقة للمبالغ. تغيير المبلغ
+--     يؤثر على maxDailyCoins واقتصاد المتجر كله (BANDS في catalog.ts).
+--   - signup_reward يحتاج trigger/hook عند التسجيل (profiles insert أو onboarding)
+--     وآلية idempotent — لا ننشئ جدول جديد تلقائياً.
+--
+-- بعد الموافقة: شغّل هذا الملف مرة واحدة في Supabase SQL Editor، ثم أعد توليد
+-- السييد لو لزم (node scripts/shop-seed.mjs) وحدّث lib/shop/econom...[truncated]

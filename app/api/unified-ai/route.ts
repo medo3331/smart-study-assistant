@@ -31,7 +31,17 @@ import { createClient } from "@/lib/supabase/server";
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import type { UnifiedAIInput, UnifiedAIResult } from "@/lib/unified-ai/types";
 import { getModelAccessPolicy, CURRENT_AI_MODEL, filterAccessibleModels } from "@/lib/ai/model-access";
-import { checkAiRateLimit, buildRateLimitBody } from "@/lib/ai/rate-limit";
+import {
+  checkAiRateLimit,
+  buildRateLimitBody,
+  checkModelRateLimit,
+  buildModelRateLimitBody,
+  checkAgentRateLimit,
+  buildAgentRateLimitBody,
+  checkGuestRateLimit,
+  buildGuestRateLimitBody,
+  isKnownAgentLimit,
+} from "@/lib/ai/rate-limit";
 import { findModel } from "@/lib/ai/models";
 import { routeCandidates } from "@/lib/ai/routing";
 import type { AiTaskType } from "@/lib/ai/types";
@@ -144,14 +154,17 @@ export async function POST(req: Request) {
     }
 
     // ---- Auth ----
+    let isAnonymous = false;
     try {
       supabase = await createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       userId = user?.id ?? null;
+      isAnonymous = Boolean(user?.is_anonymous);
     } catch {
       userId = null;
+      isAnonymous = false;
     }
 
     // ---- Phase H: Model resolution + Access Policy (BEFORE reserve) ----
@@ -289,8 +302,17 @@ export async function POST(req: Request) {
     // Determine bucket: vision/file → 6/5h, text → 10/3h
     const isVisionOrFile = Boolean(imageInput || fileInput);
 
+    // ---- Phase C: Guest Rate Limit (Anonymous 5/24h) — BEFORE Phase A, 0 credit ----
+    if (isAnonymous && userId && supabase) {
+      const guestRate = await checkGuestRateLimit(supabase, userId);
+      if (!guestRate.allowed) {
+        const body = buildGuestRateLimitBody(guestRate);
+        return NextResponse.json(body, { status: 429, headers: { "Retry-After": String(guestRate.retryAfter) } });
+      }
+    }
+
     // ---- Phase H.2: Rate Limit gate (BEFORE reserve) — 429, 0 credit consumed ----
-    if (userId && supabase) {
+    if (userId && supabase && !isAnonymous) {
       const rate = await checkAiRateLimit(supabase, userId, { isVisionOrFile });
       if (!rate.allowed) {
         const body = buildRateLimitBody(rate);
@@ -298,40 +320,136 @@ export async function POST(req: Request) {
       }
     }
 
+    // ---- Phase B: Per-Model Rate Limit (BEFORE reserve) — 429, 0 credit ----
+    if (userId && supabase && !isAnonymous) {
+      const modelRate = await checkModelRateLimit(supabase, userId, modelToUse);
+      if (!modelRate.allowed) {
+        const body = buildModelRateLimitBody(modelRate);
+        return NextResponse.json(body, { status: 429, headers: { "Retry-After": String(modelRate.retryAfter) } });
+      }
+    }
+
+    // ---- Phase B: Per-Agent Rate Limit (abstraction آمنة) — 429, 0 credit ----
+    // فقط إذا كان هناك agent identity حقيقي في الطلب (context.agentId) ومعروف في AGENT_LIMITS
+    // لا نخترع agent من task عادي — Stub = لا فحص
+    const requestedAgentId = (() => {
+      const raw = (context as Record<string, unknown>)?.agentId;
+      if (typeof raw === "string" && raw.trim().length > 0 && isKnownAgentLimit(raw.trim())) return raw.trim();
+      // أيضاً لو task === agent و context.agentId موجود — لا نستنتج من prompt
+      return null;
+    })();
+    if (requestedAgentId && userId && supabase && !isAnonymous) {
+      const agentRate = await checkAgentRateLimit(supabase, userId, requestedAgentId);
+      if (!agentRate.allowed) {
+        const body = buildAgentRateLimitBody(agentRate);
+        return NextResponse.json(body, { status: 429, headers: { "Retry-After": String(agentRate.retryAfter) } });
+      }
+    }
+
     // ---- Phase F: Reserve 1 credit atomically (with free overdraft up to window limit) ----
     // Free models: allowed via overdraft even if balance 0 (windowed)
     // Gated models: same, but additionally require entitlement (checked above)
+    // Logged-in users: full reserve with model/agent metadata
+    // Anonymous guests: also reserve for tracking (Guest 5/24h) — same ledger, same window logic
+    let guestReserveDone = false;
     if (userId && supabase) {
+      // For anon: we already checked Guest limit above, now track usage via same ledger
+      // For logged-in: full Phase B enriched reserve
+      const isTrackingGuest = isAnonymous;
       const refId = `ai_req:${serverRequestId()}`;
       reserveRef = refId;
       const reserveKind = isVisionOrFile ? "vision" : "text";
-      // Try new signature with p_kind, fallback to old 2-arg if not yet migrated
       let reserveErr: { message?: string } | null = null;
+      const agentForMeta = (() => {
+        const raw = (context as Record<string, unknown>)?.agentId;
+        if (typeof raw === "string" && raw.trim().length > 0) return raw.trim().slice(0, 80);
+        return null;
+      })();
       try {
-        const res = await supabase.rpc("reserve_ai_credit", {
-          p_user_id: userId,
-          p_ref_id: refId,
-          p_kind: reserveKind,
-        } as unknown as { p_user_id: string; p_ref_id: string });
-        reserveErr = (res as { error?: { message?: string } }).error ?? null;
-        const msg0 = reserveErr?.message || "";
-        if (msg0.includes("p_kind") || (msg0.includes("function") && msg0.includes("reserve_ai_credit"))) {
-          const retry = await supabase.rpc("reserve_ai_credit", {
+        if (!isTrackingGuest) {
+          // Logged-in: Attempt Phase B extended RPC (p_model, p_agent) — requires migration db/economy-phase-bc-rate-limits.sql
+          const resExt = await supabase.rpc("reserve_ai_credit", {
             p_user_id: userId,
             p_ref_id: refId,
-          });
-          reserveErr = (retry as { error?: { message?: string } }).error ?? null;
+            p_kind: reserveKind,
+            p_model: modelToUse,
+            p_agent: agentForMeta,
+          } as unknown as { p_user_id: string; p_ref_id: string });
+          reserveErr = (resExt as { error?: { message?: string } }).error ?? null;
+          const msgExt = reserveErr?.message || "";
+          const needsFallback = msgExt.includes("p_model") || msgExt.includes("p_agent") || (msgExt.includes("function") && msgExt.includes("reserve_ai_credit"));
+          if (needsFallback) {
+            const res = await supabase.rpc("reserve_ai_credit", {
+              p_user_id: userId,
+              p_ref_id: refId,
+              p_kind: reserveKind,
+            } as unknown as { p_user_id: string; p_ref_id: string });
+            reserveErr = (res as { error?: { message?: string } }).error ?? null;
+            const msg0 = reserveErr?.message || "";
+            if (msg0.includes("p_kind") || (msg0.includes("function") && msg0.includes("reserve_ai_credit"))) {
+              const retry = await supabase.rpc("reserve_ai_credit", {
+                p_user_id: userId,
+                p_ref_id: refId,
+              });
+              reserveErr = (retry as { error?: { message?: string } }).error ?? null;
+            }
+          }
+          if (!reserveErr) {
+            try {
+              if (agentForMeta || modelToUse) {
+                await supabase.rpc("update_ai_ledger_metadata" as unknown as string, {
+                  p_user_id: userId,
+                  p_ref_id: refId,
+                  p_model: modelToUse,
+                  p_agent: agentForMeta,
+                } as unknown as Record<string, unknown>);
+              }
+            } catch {
+              // ignore — metadata enrichment is best-effort
+            }
+          }
+        } else {
+          // Anonymous guest: simple reserve for tracking (no model/agent needed, just kind)
+          // Reuse same reserve — it will overdraft within Guest window (5/24h already checked above)
+          // and also within text/vision window (10/3h or 6/5h). If it fails, map to GUEST limit.
+          const res = await supabase.rpc("reserve_ai_credit", {
+            p_user_id: userId,
+            p_ref_id: refId,
+            p_kind: reserveKind,
+          } as unknown as { p_user_id: string; p_ref_id: string });
+          reserveErr = (res as { error?: { message?: string } }).error ?? null;
+          const msg0 = reserveErr?.message || "";
+          if (msg0.includes("p_kind") || (msg0.includes("function") && msg0.includes("reserve_ai_credit"))) {
+            const retry = await supabase.rpc("reserve_ai_credit", {
+              p_user_id: userId,
+              p_ref_id: refId,
+            });
+            reserveErr = (retry as { error?: { message?: string } }).error ?? null;
+          }
+          if (!reserveErr) guestReserveDone = true;
         }
       } catch (e) {
         reserveErr = e as { message?: string };
       }
       if (reserveErr) {
         const msg = reserveErr.message || "";
-        // After 20 (free) / 100 (premium) or true insufficient beyond overdraft, we surface correctly
         if (msg.includes("insufficient credits") || msg.includes("Insufficient")) {
-          // Distinguish rate limit vs true insufficient: if daily count >= limit, it's rate limit (429), else 402
-          // But reserve now includes daily check, so we map insufficient inside limit to 402, beyond to 429 via guard
-          // Here in unified-ai, rate limit already checked above, so this 402 is true insufficient beyond overdraft
+          // For guest: map to GUEST_RATE_LIMIT (429), for logged-in: check if it's window limit vs true insufficient
+          if (isTrackingGuest) {
+            // Guest already checked via checkGuestRateLimit, but reserve window check may also trigger
+            // Return GUEST_RATE_LIMIT to keep UX consistent
+            return NextResponse.json(
+              {
+                ok: false,
+                error: `وصلت للحد الأقصى للتجربة المجانية كزائر (5 طلبات كل 24 ساعة). سجّل حساب مجاني للحصول على حد أكبر!`,
+                code: "GUEST_RATE_LIMIT",
+                retryAfterHours: 24,
+                retryAfter: 24 * 3600,
+                limit: 5,
+              },
+              { status: 429, headers: { "Retry-After": String(24 * 3600) } }
+            );
+          }
           return NextResponse.json(
             { ok: false, error: "رصيد AI Credits لا يكفي. اشترِ حزمة من المتجر.", code: "INSUFFICIENT_CREDITS" },
             { status: 402 }

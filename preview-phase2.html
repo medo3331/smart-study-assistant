@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Phase 2 — Magic Orb Preview</title>
+<link rel="stylesheet" href="./app/globals.css"/>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-alexandria),system-ui;background:#0f0f0f;color:#fff}
+  .wrap{max-width:1280px;margin:0 auto;padding:24px}
+  .top{padding:14px 16px;background:#111;color:#eee;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .top small{opacity:.6;font-size:11px}
+  .h1{font-size:22px;font-weight:800;margin:0 0 6px;color:#fff}
+  .sub{font-size:13px;opacity:.7;margin:0 0 18px;line-height:1.6;color:#ccc}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:1100px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .theme-col{border-radius:20px;overflow:hidden;border:1px solid rgba(0,0,0,.12)}
+  .theme-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+  .theme-head h3{margin:0;font-size:14px;font-weight:800}
+  .theme-head span{font-size:11px;opacity:.65;font-family:monospace}
+  .canvas{padding:16px;display:flex;flex-direction:column;gap:14px;align-items:center;min-height:380px}
+  .card-mock{width:100%;border-radius:20px;padding:16px;display:flex;gap:14px;align-items:center;border:1px solid var(--rule);background:var(--card-primary);color:var(--text)}
+  .info{flex:1;min-width:0}
+  .info h4{margin:0;font-size:15px;font-weight:800;color:var(--text)}
+  .info p{margin:4px 0 0;font-size:12px;color:var(--muted)}
+  .pill{margin-top:8px;display:inline-flex;gap:6px;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--rule);background:var(--card-secondary);color:var(--muted)}
+  .note{font-size:11px;line-height:1.5;color:var(--muted);background:var(--card-secondary);border:1px dashed var(--rule);border-radius:10px;padding:8px;width:100%}
+  .swatch-row{display:flex;gap:8px;justify-content:center}
+  .sw{width:32px;height:32px;border-radius:999px;border:2px solid var(--card-secondary);display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff}
+  .label{font-size:11px;color:var(--muted);text-align:center}
+  .mobile-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+  @media(max-width:640px){.mobile-strip{grid-template-columns:1fr}}
+  .phone{border:1px solid var(--rule);border-radius:16px;overflow:hidden;background:var(--card-primary)}
+  .phone-head{padding:10px 12px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center}
+  .phone-head b{font-size:12px}
+  .phone-head span{font-size:10px;opacity:.6}
+  .phone-body{padding:14px;display:grid;place-items:center;gap:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><div style="font-weight:800">Phase 2 — Magic Orb</div><small>glass sphere · 6 particles (24s) · breathing 3.6s · LV badge · theme-aware · reduced-motion</small></div>
+    <small>branch: dashboard-premium-redesign-2026-09-01</small>
+  </div>
+  <h1 class="h1">معاينة Magic Orb — نفس المكوّن في 4 ثيمات</h1>
+  <p class="sub">كل عمود يطبّق <code>data-theme</code> الحقيقي ويستهلك <code>var(--accent)</code> / <code>var(--accent-highlight)</code> فقط — بدون hard-coded. الحركة: مدار 24s linear + تنفس 3.6s. يحترم <code>prefers-reduced-motion</code>.</p>
+
+  <div class="grid">
+
+    <!-- indigo-light -->
+    <div class="theme-col" data-theme="indigo-light" style="background:var(--app-bg);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule);color:var(--text)"><h3>نيلي فاتح</h3><span>indigo-light</span></div>
+      <div class="canvas">
+        <div class="card-mock">
+          <div class="magic-orb-wrap" role="img" aria-label="LV 7">
+            <span aria-hidden class="magic-orb-glow"></span>
+            <span aria-hidden class="magic-orb-orbit">
+              <span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span>
+            </span>
+            <div class="magic-orb-core" aria-hidden><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div>
+            <span class="magic-orb-badge" dir="ltr">LV 7</span>
+          </div>
+          <div class="info"><h4>أهلاً بك، أحمد 👋</h4><p>مستواك 7 · 1,240 XP</p><span class="pill">● أكمل التعلّم</span></div>
+        </div>
+        <div class="label">accent #4338CA · highlight #6366F1 · 6 نقاط تدور</div>
+      </div>
+    </div>
+
+    <!-- warm-dark -->
+    <div class="theme-col" data-theme="warm-dark" style="background:var(--app-bg);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule);color:var(--text)"><h3>أسود دافي</h3><span>warm-dark</span></div>
+      <div class="canvas">
+        <div class="card-mock">
+          <div class="magic-orb-wrap" role="img" aria-label="LV 7">
+            <span aria-hidden class="magic-orb-glow"></span>
+            <span aria-hidden class="magic-orb-orbit">
+              <span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span>
+            </span>
+            <div class="magic-orb-core" aria-hidden><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div>
+            <span class="magic-orb-badge" dir="ltr">LV 7</span>
+          </div>
+          <div class="info"><h4>أهلاً بك، أحمد 👋</h4><p>مستواك 7 · 1,240 XP</p><span class="pill">● أكمل التعلّم</span></div>
+        </div>
+        <div class="label">accent #DC4C4C · highlight #F2745C</div>
+      </div>
+    </div>
+
+    <!-- slate -->
+    <div class="theme-col" data-theme="slate" style="background:var(--app-bg);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule);color:var(--text)"><h3>رمادي</h3><span>slate</span></div>
+      <div class="canvas">
+        <div class="card-mock">
+          <div class="magic-orb-wrap" role="img" aria-label="LV 12">
+            <span aria-hidden class="magic-orb-glow"></span>
+            <span aria-hidden class="magic-orb-orbit">
+              <span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span>
+            </span>
+            <div class="magic-orb-core" aria-hidden><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div>
+            <span class="magic-orb-badge" dir="ltr">LV 12</span>
+          </div>
+          <div class="info"><h4>أهلاً بك، أحمد 👋</h4><p>مستواك 12 · 2,040 XP</p><span class="pill">● أكمل التعلّم</span></div>
+        </div>
+        <div class="label">accent #64748B · highlight #94A3B8</div>
+      </div>
+    </div>
+
+    <!-- deep-green -->
+    <div class="theme-col" data-theme="deep-green" style="background:var(--app-bg);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule);color:var(--text)"><h3>أخضر داكن</h3><span>deep-green</span></div>
+      <div class="canvas">
+        <div class="card-mock">
+          <div class="magic-orb-wrap" role="img" aria-label="LV 3">
+            <span aria-hidden class="magic-orb-glow"></span>
+            <span aria-hidden class="magic-orb-orbit">
+              <span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span>
+            </span>
+            <div class="magic-orb-core" aria-hidden><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div>
+            <span class="magic-orb-badge" dir="ltr">LV 3</span>
+          </div>
+          <div class="info"><h4>أهلاً بك، أحمد 👋</h4><p>مستواك 3 · 420 XP</p><span class="pill">● أكمل التعلّم</span></div>
+        </div>
+        <div class="label">accent #10B981 · highlight #34D399</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="note" data-theme="warm-dark" style="background:var(--card-primary);color:var(--text);border-color:var(--rule)"><b>حركة:</b> مدار 24s linear infinite + تنفس Glow/Core 3.6s ease-in-out. مع <code>prefers-reduced-motion: reduce</code> تتوقف كل الحركات ويبقى Orb ثابتاً.</div>
+    <div class="note" data-theme="warm-dark" style="background:var(--card-primary);color:var(--text);border-color:var(--rule)"><b>تحقق:</b> لا يوجد حرف داخل الدائرة · الكرة زجاجية (highlight + عمق) · 6 نقاط مضيئة · badge أسفل الكرة · responsive 375/390/430 دون overflow.</div>
+  </div>
+
+  <h3 class="h1" style="margin-top:22px;font-size:16px">اختبار أحجام الهاتف (375/390/430)</h3>
+  <div class="mobile-strip" data-theme="warm-dark">
+    <div class="phone" style="max-width:375px"><div class="phone-head"><b>375px</b><span>iPhone SE</span></div><div class="phone-body"><div class="magic-orb-wrap" role="img" aria-label="LV 7"><span aria-hidden class="magic-orb-glow"></span><span aria-hidden class="magic-orb-orbit"><span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span></span><div class="magic-orb-core"><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div><span class="magic-orb-badge">LV 7</span></div><small class="label">لا overflow · badge واضح</small></div></div>
+    <div class="phone" style="max-width:390px"><div class="phone-head"><b>390px</b><span>iPhone 12</span></div><div class="phone-body"><div class="magic-orb-wrap" role="img" aria-label="LV 7"><span aria-hidden class="magic-orb-glow"></span><span aria-hidden class="magic-orb-orbit"><span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span></span><div class="magic-orb-core"><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div><span class="magic-orb-badge">LV 7</span></div><small class="label">112→ يتم تصغير تلقائي</small></div></div>
+    <div class="phone" style="max-width:430px"><div class="phone-head"><b>430px</b><span>iPhone 14 Pro Max</span></div><div class="phone-body"><div class="magic-orb-wrap" role="img" aria-label="LV 7"><span aria-hidden class="magic-orb-glow"></span><span aria-hidden class="magic-orb-orbit"><span class="magic-orb-dot" style="--angle:0deg"></span><span class="magic-orb-dot" style="--angle:60deg"></span><span class="magic-orb-dot" style="--angle:120deg"></span><span class="magic-orb-dot" style="--angle:180deg"></span><span class="magic-orb-dot" style="--angle:240deg"></span><span class="magic-orb-dot" style="--angle:300deg"></span></span><div class="magic-orb-core"><span class="magic-orb-highlight"></span><span class="magic-orb-inner"></span></div><span class="magic-orb-badge">LV 7</span></div><small class="label">RTL محفوظ</small></div></div>
+  </div>
+</div>
+</body>
+</html>

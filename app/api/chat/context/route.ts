@@ -7,7 +7,8 @@ import { requireUser } from "@/lib/api-guard";
  */
 export async function GET() {
   const { user, supabase, response: authError } = await requireUser("message");
-  if (authError || !user) return authError;
+  if (authError) return authError;
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const [profileResult, configResult] = await Promise.all([
     supabase.from("profiles").select("subject").eq("id", user.id).maybeSingle(),

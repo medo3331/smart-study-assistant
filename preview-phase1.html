@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Phase 1 — Theme Foundation Preview</title>
+<link rel="stylesheet" href="./app/globals.css"/>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-alexandria),system-ui;background:#0f0f0f;color:#fff}
+  .wrap{max-width:1280px;margin:0 auto;padding:24px}
+  .h1{font-size:22px;font-weight:800;margin:0 0 6px}
+  .sub{font-size:13px;opacity:.7;margin:0 0 18px;line-height:1.6}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:1100px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .theme-col{border-radius:20px;overflow:hidden;border:1px solid rgba(0,0,0,.12)}
+  .theme-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+  .theme-head h3{margin:0;font-size:15px;font-weight:800}
+  .theme-head span{font-size:11px;opacity:.65;font-family:monospace}
+  .canvas{padding:16px;display:flex;flex-direction:column;gap:12px;min-height:560px}
+  /* card mocks reuse vars of the column's data-theme */
+  .card-primary{border-radius:16px;padding:14px;border:1px solid var(--rule);background:var(--card-primary);color:var(--text)}
+  .card-secondary{border-radius:14px;padding:12px;border:1px solid var(--rule);background:var(--card-secondary);color:var(--text)}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid color-mix(in srgb, var(--accent) 22%, transparent)}
+  .muted{color:var(--muted);font-size:12px}
+  .swatch-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .sw{width:36px;height:36px;border-radius:999px;border:2px solid var(--card-secondary);display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff}
+  .layer-row{display:flex;gap:8px}
+  .layer{min-height:44px;flex:1;border-radius:10px;border:1px solid var(--rule);display:grid;place-items:center;font-size:11px;font-weight:700}
+  .accent-bar{height:8px;border-radius:999px;background:var(--accent)}
+  .hl{height:8px;border-radius:999px;background:var(--accent-highlight)}
+  .hero-mock{display:flex;gap:12px;align-items:center}
+  .orb{width:52px;height:52px;border-radius:999px;flex-shrink:0;display:grid;place-items:center;color:#fff;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--accent-highlight));box-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent)}
+  .kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .kpi{border-radius:12px;padding:10px;background:var(--card-secondary);border:1px solid var(--rule)}
+  .badge{position:absolute;inset:0;display:none}
+  .note{font-size:11px;line-height:1.5;color:var(--muted);background:var(--card-secondary);border:1px dashed var(--rule);border-radius:10px;padding:8px}
+  .top{padding:14px 16px;background:#111;color:#eee;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .top small{opacity:.6;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div style="font-weight:800">Phase 1 — Theme Foundation</div>
+      <small>4 ثيمات · App → Primary → Secondary → Accent · حفَظ تلقائي · خلفية تدعم صورة مستقبلاً (--app-bg-image)</small>
+    </div>
+    <small>branch: dashboard-premium-redesign-2026-09-01</small>
+  </div>
+  <h1 class="h1">معاينة الثيمات الأربعة — wiring حقيقي من <code>globals.css</code></h1>
+  <p class="sub">كل عمود يطبّق <code>data-theme</code> الفعلي ويستهلك نفس متغيرات الداشبورد: <code>--app-bg</code> / <code>--card-primary</code> / <code>--card-secondary</code> / <code>--accent</code> / <code>--accent-highlight</code> / <code>--text</code> / <code>--muted</code> / <code>--app-bg-image</code>. الفروق بين الطبقات الثلاث واضحة في جميع الثيمات. السويتشات دائرية بعلامة واضحة وfocus-visible وaria-pressed.</p>
+
+  <div class="grid">
+
+    <!-- Indigo Light -->
+    <div class="theme-col" data-theme="indigo-light" style="background:var(--app-bg);background-image:var(--app-bg-image);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule)">
+        <h3>نيلي فاتح — Indigo Light</h3><span>#F3F5FC · #FFFFFF · #F6F7FD</span>
+      </div>
+      <div class="canvas">
+        <div class="layer-row"><div class="layer" style="background:var(--app-bg)">App</div><div class="layer" style="background:var(--card-primary)">Primary</div><div class="layer" style="background:var(--card-secondary)">Secondary</div></div>
+        <div class="accent-bar"></div><div class="hl"></div>
+        <div class="card-primary">
+          <div class="hero-mock"><div class="orb">م</div><div><div style="font-weight:800">أهلاً بك مجددًا، أحمد 👋</div><div class="muted">مستوى ٧ · 1,240 XP</div></div></div>
+          <div style="height:1px;background:var(--rule);margin:10px 0"></div>
+          <div class="pill" style="background:color-mix(in srgb, var(--accent) 14%, var(--card-primary));color:var(--accent)">● أكشن أساسي</div>
+        </div>
+        <div class="kpi-row"><div class="kpi"><div class="muted">ستريك</div><div style="font-weight:800;color:var(--accent)">١٢ يوم</div></div><div class="kpi"><div class="muted">تقدم</div><div style="font-weight:800">٦٨٪</div></div></div>
+        <div class="card-secondary"><div style="font-weight:700">الخطوة الحالية</div><div class="muted">درس ٣ — التفاضل</div></div>
+        <div><div class="muted" style="margin-bottom:6px">اختيار الثيم (السويتشات الدائرية)</div><div class="swatch-row">
+          <span class="sw" style="background:#4338CA;border-color:var(--accent);box-shadow:0 0 0 3px var(--card-secondary)">✓</span>
+          <span class="sw" style="background:#DC4C4C"></span>
+          <span class="sw" style="background:#64748B"></span>
+          <span class="sw" style="background:#10B981"></span>
+        </div></div>
+        <div class="note">نص ثانوي muted على secondary — يبقى مقروء على الفاتح.</div>
+      </div>
+    </div>
+
+    <!-- Warm Dark -->
+    <div class="theme-col" data-theme="warm-dark" style="background:var(--app-bg);background-image:var(--app-bg-image);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule)">
+        <h3>أسود دافي — Warm Dark</h3><span>#0D0906 · #161009 · #1D1510</span>
+      </div>
+      <div class="canvas">
+        <div class="layer-row"><div class="layer" style="background:var(--app-bg)">App</div><div class="layer" style="background:var(--card-primary)">Primary</div><div class="layer" style="background:var(--card-secondary)">Secondary</div></div>
+        <div class="accent-bar"></div><div class="hl"></div>
+        <div class="card-primary">
+          <div class="hero-mock"><div class="orb">م</div><div><div style="font-weight:800">أهلاً بك مجددًا، أحمد 👋</div><div class="muted">مستوى ٧ · 1,240 XP</div></div></div>
+          <div style="height:1px;background:var(--rule);margin:10px 0"></div>
+          <div class="pill" style="background:color-mix(in srgb, var(--accent) 14%, var(--card-primary));color:var(--accent)">● أكشن أساسي</div>
+        </div>
+        <div class="kpi-row"><div class="kpi"><div class="muted">ستريك</div><div style="font-weight:800;color:var(--accent)">١٢ يوم</div></div><div class="kpi"><div class="muted">تقدم</div><div style="font-weight:800">٦٨٪</div></div></div>
+        <div class="card-secondary"><div style="font-weight:700">الخطوة الحالية</div><div class="muted">درس ٣ — التفاضل</div></div>
+        <div><div class="muted" style="margin-bottom:6px">السويتشات</div><div class="swatch-row">
+          <span class="sw" style="background:#4338CA"></span>
+          <span class="sw" style="background:#DC4C4C;border-color:var(--accent);box-shadow:0 0 0 3px var(--card-secondary)">✓</span>
+          <span class="sw" style="background:#64748B"></span>
+          <span class="sw" style="background:#10B981"></span>
+        </div></div>
+        <div class="note">هذا هو الـ warm dark الحالي — محافظ عليه كما هو.</div>
+      </div>
+    </div>
+
+    <!-- Slate -->
+    <div class="theme-col" data-theme="slate" style="background:var(--app-bg);background-image:var(--app-bg-image);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule)">
+        <h3>رمادي — Slate</h3><span>#1A1D23 · #22262E · #2A2F38</span>
+      </div>
+      <div class="canvas">
+        <div class="layer-row"><div class="layer" style="background:var(--app-bg)">App</div><div class="layer" style="background:var(--card-primary)">Primary</div><div class="layer" style="background:var(--card-secondary)">Secondary</div></div>
+        <div class="accent-bar"></div><div class="hl" style="background:var(--accent-highlight)"></div>
+        <div class="card-primary">
+          <div class="hero-mock"><div class="orb">م</div><div><div style="font-weight:800">أهلاً بك مجددًا، أحمد 👋</div><div class="muted">مستوى ٧ · 1,240 XP</div></div></div>
+          <div style="height:1px;background:var(--rule);margin:10px 0"></div>
+          <div class="pill" style="background:color-mix(in srgb, var(--accent) 14%, var(--card-primary));color:var(--accent)">● أكشن أساسي</div>
+        </div>
+        <div class="kpi-row"><div class="kpi"><div class="muted">ستريك</div><div style="font-weight:800;color:var(--accent)">١٢ يوم</div></div><div class="kpi"><div class="muted">تقدم</div><div style="font-weight:800">٦٨٪</div></div></div>
+        <div class="card-secondary"><div style="font-weight:700">الخطوة الحالية</div><div class="muted">درس ٣ — التفاضل</div></div>
+        <div><div class="muted" style="margin-bottom:6px">السويتشات</div><div class="swatch-row">
+          <span class="sw" style="background:#4338CA"></span>
+          <span class="sw" style="background:#DC4C4C"></span>
+          <span class="sw" style="background:#64748B;border-color:var(--accent);box-shadow:0 0 0 3px var(--card-secondary)">✓</span>
+          <span class="sw" style="background:#10B981"></span>
+        </div></div>
+        <div class="note">Slate هادي — highlight #94A3B8 للـ hover.</div>
+      </div>
+    </div>
+
+    <!-- Deep Green -->
+    <div class="theme-col" data-theme="deep-green" style="background:var(--app-bg);background-image:var(--app-bg-image);color:var(--text)">
+      <div class="theme-head" style="background:var(--card-primary);border-bottom:1px solid var(--rule)">
+        <h3>أخضر داكن — Deep Green</h3><span>#0B1A14 · #10261D · #163326</span>
+      </div>
+      <div class="canvas">
+        <div class="layer-row"><div class="layer" style="background:var(--app-bg)">App</div><div class="layer" style="background:var(--card-primary)">Primary</div><div class="layer" style="background:var(--card-secondary)">Secondary</div></div>
+        <div class="accent-bar"></div><div class="hl"></div>
+        <div class="card-primary">
+          <div class="hero-mock"><div class="orb">م</div><div><div style="font-weight:800">أهلاً بك مجددًا، أحمد 👋</div><div class="muted">مستوى ٧ · 1,240 XP</div></div></div>
+          <div style="height:1px;background:var(--rule);margin:10px 0"></div>
+          <div class="pill" style="background:color-mix(in srgb, var(--accent) 14%, var(--card-primary));color:var(--accent)">● أكشن أساسي</div>
+        </div>
+        <div class="kpi-row"><div class="kpi"><div class="muted">ستريك</div><div style="font-weight:800;color:var(--accent)">١٢ يوم</div></div><div class="kpi"><div class="muted">تقدم</div><div style="font-weight:800">٦٨٪</div></div></div>
+        <div class="card-secondary"><div style="font-weight:700">الخطوة الحالية</div><div class="muted">درس ٣ — التفاضل</div></div>
+        <div><div class="muted" style="margin-bottom:6px">السويتشات</div><div class="swatch-row">
+          <span class="sw" style="background:#4338CA"></span>
+          <span class="sw" style="background:#DC4C4C"></span>
+          <span class="sw" style="background:#64748B"></span>
+          <span class="sw" style="background:#10B981;border-color:var(--accent);box-shadow:0 0 0 3px var(--card-secondary)">✓</span>
+        </div></div>
+        <div class="note">Deep Green — accent زُمردي واضح ومقروء.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="note">✓ الحفظ: localStorage key = <code>theme</code> — القيم: indigo-light / warm-dark / slate / deep-green — legacy light/dark تُهاجر تلقائياً. الـ no-flash script يطبّق الثيم قبل الرسم.</div>
+    <div class="note">✓ الخلفية: <code>background-color: var(--app-bg); background-image: var(--app-bg-image);</code> — اليوم <code>none</code>، مستقبلاً <code>url(...)</code> أو gradient بدون تغيير المكونات.</div>
+  </div>
+</div>
+</body>
+</html>
