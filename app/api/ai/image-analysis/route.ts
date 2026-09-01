@@ -3,6 +3,7 @@ import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { checkRateLimit, clampText, requireUser } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -18,7 +19,13 @@ export async function POST(req: Request) {
     if (!(file instanceof File) || !file.type.startsWith("image/") || file.size === 0 || file.size > MAX_IMAGE_BYTES) {
       return NextResponse.json({ error: { message: "ارفع صورة صالحة حتى 5 ميجا." } }, { status: 400 });
     }
-    const completion = await aiRouter.analyzeMedia("image_analysis", { data: Buffer.from(await file.arrayBuffer()).toString("base64"), mimeType: file.type, prompt: question });
+    // Phase H: 1 credit gate
+    const guard = await guardAiAccessAndReserve(supabase, user.id, "gemini-3.1-flash-image");
+    if (!guard.ok) return guard.response;
+    let completion;
+    try {
+    completion = await aiRouter.analyzeMedia("image_analysis", { data: Buffer.from(await file.arrayBuffer()).toString("base64"), mimeType: file.type, prompt: question });
+    } catch (e) { await refundAiCreditIfNeeded(supabase, user.id, guard.refId); throw e; }
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "image_analysis", status: "completed", usage: completion.usage, contentLength: completion.content.length });
     return NextResponse.json({ result: completion.content, provider: completion.provider });
   } catch (error) {

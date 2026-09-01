@@ -4,6 +4,9 @@ import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { checkRateLimit, requireUser } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { routeCandidates } from "@/lib/ai/routing";
+import { filterAccessibleModels } from "@/lib/ai/model-access";
 
 export async function POST(req: Request) {
   try {
@@ -20,6 +23,19 @@ export async function POST(req: Request) {
 
     const prompt = buildAgentPrompt(input);
     const taskType = taskForAgent(input);
+    // Phase H: entitlement filter + credit reserve (1 credit per request, 403 before reserve)
+    const candidates = routeCandidates(taskType);
+    const hasEnt = async (k: string, v: string) => {
+      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+      return Boolean(data);
+    };
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    if (accessible.length === 0 && candidates.length > 0) {
+      return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+    }
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
+
     let completion;
     try {
       completion = await aiRouter.completeChat(taskType, {
@@ -30,6 +46,7 @@ export async function POST(req: Request) {
         temperature: input.agent === "research" ? 0.25 : 0.65,
       });
     } catch (error) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       const status = error.status === 429 ? 429 : error.status === 503 ? 503 : 502;
       return NextResponse.json(

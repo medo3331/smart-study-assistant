@@ -16,6 +16,9 @@ export interface UnifiedAIInput {
   fileInput?: File | unknown;      // PDF / docx / text
   context?: Record<string, unknown>; // profile, role, field, level, progress
   language?: "ar" | "en" | "mixed";
+  // Phase H: explicit task/model — server validates; client cannot bypass policy
+  task?: string;  // optional AiTaskType for routing; if omitted defaults to "chat"
+  model?: string; // optional model id; if provided server checks entitlement BEFORE reserve
 }
 
 export interface UnifiedAIResult {

@@ -3,6 +3,9 @@ import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { checkRateLimit, clampText, requireUser } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { routeCandidates } from "@/lib/ai/routing";
+import { filterAccessibleModels } from "@/lib/ai/model-access";
 
 const ACTIONS = ["summarize", "extract", "analyze", "question"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -42,6 +45,13 @@ export async function POST(req: Request) {
       question: `أجب عن هذا السؤال من الملف فقط: ${question}`,
     };
     const taskType = "file_analysis" as const;
+    // Phase H: credit gate
+    const candidates = routeCandidates(taskType);
+    const hasEnt = async (k: string, v: string) => { const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v }); return Boolean(data); };
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    if (accessible.length === 0 && candidates.length > 0) return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
     let completion;
     try {
       completion = await aiRouter.completeChat(taskType, {
@@ -52,6 +62,7 @@ export async function POST(req: Request) {
         temperature: 0.2,
       });
     } catch (error) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       return NextResponse.json({ error: { message: error.status === 429 ? "Gemini مشغول حاليًا. حاول تاني بعد شوية." : "تعذّر تحليل الملف حاليًا." } }, { status: error.status === 429 ? 429 : 502 });
     }

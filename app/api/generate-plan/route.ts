@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 
 /** أقصى طول لأي حقل نصي جاي من الكلاينت. */
@@ -19,14 +21,21 @@ function errorDetails(error: unknown) {
 }
 
 export async function POST(req: Request) {
+  let guard: any = null;
+  let __hUser: any = null;
+  let __hSupabase: any = null;
   try {
     // ١) لازم مستخدم مسجّل — الراوت ده كان مفتوح وبيستهلك توكنز لأي حد
-    const { user, response: authError } = await requireUser("success");
+    const { user, supabase, response: authError } = await requireUser("success");
+    __hUser = user; __hSupabase = supabase;
     if (authError) return authError;
 
     // ٢) حدّ استخدام: توليد الخطة أغلى طلب عندنا
     const limited = checkRateLimit(`plan:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
+    // Phase H: 1 credit gate (free model, but still costs 1 credit)
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
@@ -75,6 +84,7 @@ export async function POST(req: Request) {
 
     if (apiKeys.length === 0) {
       console.error("generate-plan: مفيش أي GROQ_API_KEY معرف");
+      await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? "");
       return NextResponse.json(
         { success: false, error: "الخدمة غير متاحة حالياً." },
         { status: 503 }
@@ -131,6 +141,7 @@ export async function POST(req: Request) {
     }
 
     if (!rawContent) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       throw lastError || new Error("فشلت جميع المفاتيح المتاحة في الاتصال بالخدمة.");
     }
 
@@ -176,6 +187,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
+    try { if (guard && (guard as any)?.refId) await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ''), (guard as any).refId); } catch {}
     console.error("Groq API Error:", error);
 
     // ٥) رسايل عامة للكلاينت — تفاصيل الخطأ بتفضل في اللوج بس

@@ -3,6 +3,9 @@ import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError, type AiTaskType } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { checkRateLimit, clampText, requireUser } from "@/lib/api-guard";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { routeCandidates } from "@/lib/ai/routing";
+import { filterAccessibleModels } from "@/lib/ai/model-access";
 
 const PLAN_TYPES = ["marketing_plan", "business_plan", "planning", "roadmap"] as const;
 
@@ -19,13 +22,23 @@ export async function POST(req: Request) {
     if (!PLAN_TYPES.includes(taskType as (typeof PLAN_TYPES)[number]) || goal.length < 4) {
       return NextResponse.json({ error: { message: "اختَر نوع خطة واكتب هدفًا واضحًا." } }, { status: 400 });
     }
-    const completion = await aiRouter.completeChat(taskType as AiTaskType, {
+    // Phase H: 1 credit + entitlement gate
+    const candidates = routeCandidates(taskType as AiTaskType);
+    const hasEnt = async (k: string, v: string) => { const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v }); return Boolean(data); };
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    if (accessible.length === 0 && candidates.length > 0) return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
+    let completion;
+    try {
+    completion = await aiRouter.completeChat(taskType as AiTaskType, {
       messages: [
         { role: "system", content: "أنت مخطط عملي. أنشئ خطة قابلة للتنفيذ بالعربية: الهدف، الافتراضات، المراحل، خطوات واضحة، جدول زمني، مؤشرات نجاح، ومخاطر أو معلومات ناقصة. لا تخترع أرقامًا أو حقائق خارج السياق." },
         { role: "user", content: `نوع الخطة: ${taskType}\nالهدف: ${goal}${context ? `\nالسياق: ${context}` : ""}` },
       ],
       temperature: 0.3,
-    }).catch((error) => { throw error; });
+    });
+    } catch (e) { await refundAiCreditIfNeeded(supabase, user.id, guard.refId); throw e; }
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: taskType as AiTaskType, status: "completed", usage: completion.usage, contentLength: completion.content.length });
     return NextResponse.json({ result: completion.content, provider: completion.provider, taskType });
   } catch (error) {

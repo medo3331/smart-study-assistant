@@ -5,6 +5,9 @@ import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { routeCandidates } from "@/lib/ai/routing";
+import { filterAccessibleModels } from "@/lib/ai/model-access";
 
 /** أقصى عدد رسايل بنمررها للموديل (الأحدث بس). */
 const MAX_MESSAGES = 30;
@@ -78,6 +81,19 @@ export async function POST(req: Request) {
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
+    // Phase H: entitlement filter + 1 credit gate (403 before reserve)
+    const candidates = routeCandidates("chat");
+    const hasEnt = async (k: string, v: string) => {
+      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+      return Boolean(data);
+    };
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    if (accessible.length === 0 && candidates.length > 0) {
+      return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+    }
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    if (!guard.ok) return guard.response;
+
     let completion;
     try {
       completion = await aiRouter.completeChat("chat", {
@@ -85,6 +101,7 @@ export async function POST(req: Request) {
         temperature: 0.7,
       });
     } catch (error) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       const isRate = error.status === 429;
       return NextResponse.json(
