@@ -41,6 +41,23 @@ export type CoinSource = {
 };
 
 export const COIN_SOURCES = {
+  // ── Phase 4.0 Foundation — Signup + Daily Login ───────────────────────
+  /** مكافأة التسجيل — مرة واحدة في العمر (ref = user_id عبر unique index) */
+  signup_bonus: {
+    id: "signup_bonus",
+    label: "مكافأة التسجيل",
+    amount: 20,
+    live: true,
+    dailyCap: 1,
+  },
+  daily_login: {
+    id: "daily_login",
+    label: "دخول اليوم",
+    amount: 10,
+    live: true,
+    dailyCap: 1,
+  },
+  // ── Study & Activity ────────────────────────────────────────────────
   day_done: {
     id: "day_done",
     label: "خلّصت يوم من الخطة",
@@ -54,13 +71,6 @@ export const COIN_SOURCES = {
     amount: 10,
     live: true,
     dailyCap: 5,
-  },
-  daily_login: {
-    id: "daily_login",
-    label: "دخول اليوم",
-    amount: 5,
-    live: true,
-    dailyCap: 1,
   },
   streak_day: {
     id: "streak_day",
@@ -297,4 +307,12 @@ export type AiCreditLedgerEntry = {
 // التخزين الفعلي الآن موجود (entitlements, ai_credit_ledger) لكن غير موصول
 // بالـ Store أو AI Router حتى Phase E/G. هذا مقصود.
 
-
+// ---------------------------------------------------------------------------
+// Phase 4.0 — Economy Foundation: Signup + Daily Login + Study Rewards
+// ---------------------------------------------------------------------------
+// Signup: +20 مرة واحدة (ref=user_id, unique index يمنع التكرار)
+// Daily Login: +10 مرة/يوم (ref=UTC date, idempotent via unique index + daily cap)
+// Study: day_done/goal_done/badge عبر complete_study_day / award_coins — موجودة ومثبتة
+// Wheel eligibility: Successful Study Activity (complete_study_day success) → wheel_status.can_spin
+//   لا يُحتسب مجرد فتح صفحة الدرس؛ الشرط هو ledger row لـ day_done/goal_done اليوم.
+// Future: wheel/spin/weekly/store/AI — لا تُنفذ الآن، الموجود هو الأساس فقط.

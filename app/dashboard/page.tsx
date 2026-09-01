@@ -282,6 +282,12 @@ export default function DashboardPage() {
             .select()
             .maybeSingle();
           profile = newProfile;
+          // 🪙 Phase 4.0 — مكافأة التسجيل +20 (مرة/عمر عبر trigger + fallback idempotent).
+          // الـ trigger trg_signup_bonus يمنحها server-side عند insert، وهذا fallback يغطي
+          // حسابات قديمة قبل الـ trigger أو لو الـ trigger لم يُشغل بعد.
+          if (profile) {
+            void awardCoins(supabase, "signup_bonus").catch(() => {});
+          }
         }
 
         // 👤 الشخصية بتحدد نصوص الواجهة (وحدة التقدم، اسم النقاط، نبرة الزراير).
