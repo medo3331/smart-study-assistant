@@ -29,6 +29,10 @@ function isAccountPath(pathname: string): boolean {
   return ACCOUNT_PATHS.has(pathname);
 }
 
+function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 /** وجهة الدور — نفس خريطة lib/auth-roles.ts (منسوخة عمدًا، شوف التعليق فوق). */
 function roleHome(role: unknown): string {
   if (role === "student") return "/dashboard/student";
@@ -46,7 +50,7 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   // مفيش شغلانة هنا؟ عدّي على طول — الباقي من التطبيق مش متأثر أبدًا.
-  if (!isProtected(pathname) && !isAccountPath(pathname)) return NextResponse.next();
+  if (!isProtected(pathname) && !isAccountPath(pathname) && !isAdminPath(pathname)) return NextResponse.next();
 
   let supabaseResponse = NextResponse.next({ request });
 
@@ -80,6 +84,31 @@ export async function proxy(request: NextRequest) {
      جلسة تلقائيًا — سلوك موجود ومش هنكسره)، لكن داشبوردات الأدوار محجوبة
      عليه لأن مالوش حساب أصلًا. */
   const isGuest = !user || user.is_anonymous;
+
+  // ── Admin protection (OWNER-ONLY) — قبل أي منطق آخر
+  // لا import لموديول مشترك هنا (توصية Next للـproxy) — نكرر نفس منطق isOwnerEmail
+  // Server-only: OWNER_EMAIL لا يصل للـclient bundle أبدًا
+  if (isAdminPath(pathname)) {
+    if (!user || user.is_anonymous) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = "";
+      url.searchParams.set("next", pathname + search);
+      return redirectWith(url, request);
+    }
+    const ownerRaw = process.env.OWNER_EMAIL || process.env.ADMIN_EMAILS || "";
+    const emailNorm = (user.email || "").trim().toLowerCase();
+    const allowed = ownerRaw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const isOwner = emailNorm.length > 0 && allowed.includes(emailNorm);
+    if (!isOwner) {
+      // مسجل لكن ليس Owner → Dashboard (لا 403 حتى لا نكشف وجود الصفحة)
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      url.search = "";
+      return redirectWith(url, request);
+    }
+    return supabaseResponse;
+  }
 
   if (isProtected(pathname)) {
     // داشبورد دور محدد؟ للزائر: دخول. لحساب حقيقي: الفحص تحت.
@@ -144,5 +173,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*", "/welcome", "/login", "/register", "/onboarding"],
+  matcher: ["/dashboard", "/dashboard/:path*", "/welcome", "/login", "/register", "/onboarding", "/admin", "/admin/:path*"],
 };

@@ -86,6 +86,24 @@ function useSelfAccount(enabled: boolean): RailAccount | null {
   return account;
 }
 
+/** Owner-only: هل المستخدم الحالي هو الـOwner؟ Server-only check وبدون تسريب Email */
+function useIsOwner(): boolean {
+  const [isOwner, setIsOwner] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/admin/is-owner", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { isOwner: false }))
+      .then((j) => {
+        if (alive) setIsOwner(Boolean(j?.isOwner));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return isOwner;
+}
+
 export function NavRail({
   themeStyles,
   onSignal,
@@ -106,8 +124,10 @@ export function NavRail({
 
   const selfAccount = useSelfAccount(account === undefined);
   const acct = account ?? selfAccount;
+  const isOwner = useIsOwner();
 
-  const routeId = activeNavId(pathname ?? "");
+  const routeIdRaw = activeNavId(pathname ?? "");
+  const routeId = pathname?.startsWith("/admin") ? "admin" : routeIdRaw;
   const onDashboard = pathname === "/dashboard";
   const activeId = onDashboard ? clickedId ?? routeId : routeId;
 
@@ -289,6 +309,8 @@ export function NavRail({
   };
 
   /* ---- جسم القايمة: نفس المحتوى بالظبط في الشريط الثابت وفي درج الموبايل ---- */
+  // تعريف Admin owner-only — لا يظهر في NAV_GROUPS الأصلية عشان لا يكون hardcoded للكل
+  const adminItem: NavItemDef = { id: "admin", icon: "🛡️", label: "لوحة الإدارة", latin: "Admin", href: "/admin" };
   const navBody = (
     <div className="p-3 space-y-5">
       {NAV_GROUPS.map((group) => (
@@ -303,6 +325,17 @@ export function NavRail({
           </ul>
         </div>
       ))}
+      {/* Admin — يظهر للـOwner فقط عبر Server check بدون تسريب Email */}
+      {isOwner && (
+        <div>
+          <p className="tag px-3 mb-1.5" aria-hidden>
+            الإدارة
+          </p>
+          <ul aria-label="الإدارة" className="space-y-0.5 list-none m-0 p-0">
+            {renderItem(adminItem)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 

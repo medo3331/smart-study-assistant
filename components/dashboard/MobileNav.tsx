@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import type { NavItem } from "@/lib/types";
@@ -10,6 +11,7 @@ import {
   BookOpen,
   Landmark,
   Settings,
+  Shield,
 } from "lucide-react";
 
 /**
@@ -23,6 +25,23 @@ export const mobileNavItems: NavItem[] = [
   { label: "الأذكار", href: "/worship/adhkar", icon: BookOpen },
   { label: "الإعدادات", href: "/worship/settings", icon: Settings },
 ];
+
+function useIsOwner(): boolean {
+  const [isOwner, setIsOwner] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/admin/is-owner", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { isOwner: false }))
+      .then((j) => {
+        if (alive) setIsOwner(Boolean(j?.isOwner));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return isOwner;
+}
 
 interface MobileNavProps {
   /** Active href to highlight. */
@@ -39,6 +58,12 @@ interface MobileNavProps {
 export function MobileNav({ activeHref }: MobileNavProps) {
   const reduceMotion = useReducedMotion();
   const pathname = usePathname();
+  const isOwner = useIsOwner();
+
+  // Admin item يُضاف فقط للـOwner — لا يظهر للعادي
+  const navItems: NavItem[] = isOwner
+    ? [...mobileNavItems, { label: "الإدارة", href: "/admin", icon: Shield }]
+    : mobileNavItems;
 
   const isActive = (href: string) => {
     if (activeHref) return activeHref === href;
@@ -59,7 +84,7 @@ export function MobileNav({ activeHref }: MobileNavProps) {
     >
       <div className="mx-2 mb-2 rounded-[28px] border border-white/[0.08] bg-[#0D1029]/80 backdrop-blur-xl">
         <div className="flex items-center justify-around h-14 px-2">
-          {mobileNavItems.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (

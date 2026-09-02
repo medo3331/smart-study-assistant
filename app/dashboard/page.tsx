@@ -43,6 +43,7 @@ import { HeroCard } from "./components/HeroCard";
 import { StatCards } from "./components/StatCards";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
+import { EconomyStrip } from "./components/EconomyVisibility";
 // 🧩 سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
@@ -1177,7 +1178,8 @@ export default function DashboardPage() {
             }}
             onOpenAiAssistant={handleOpenAiAssistant}
           />
-
+          {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
+          <EconomyStrip />
           {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
                   (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
           <CurrentStepCard

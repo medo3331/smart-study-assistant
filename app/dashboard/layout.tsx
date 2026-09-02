@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import FoundationRewardsBootstrap from './components/FoundationRewardsBootstrap';
+import RewardToastHost from './components/RewardToastHost';
 /* كل صفحات الداشبورد ورا تسجيل دخول ومحتواها شخصي بالكامل (خطة المستخدم،
    تقدّمه، ملفاته). الميتاداتا هنا بتتوّرث لكل الراوتس تحت `/dashboard`،
    فالـ `noIndex` بيغطّيهم كلهم من مكان واحد بدل ما كل صفحة تفتكر تحطه.
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
   return (
     <>
       <FoundationRewardsBootstrap />
+      <RewardToastHost />
       {children}
     </>
   );

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAdminRole } from "@/lib/auth-roles";
+import { getAdminRole, isOwnerEmail } from "@/lib/auth-roles";
 import { MODEL_REGISTRY } from "@/lib/ai/models";
 import { GATED_MODELS } from "@/lib/ai/model-access";
 import { ALL_AGENTS } from "@/lib/ai/agents/registry";
@@ -34,9 +34,15 @@ export default async function AdminControlCenter({
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const role = await getAdminRole(supabase, user?.id || null, user?.email);
 
-  if (!role) redirect("/dashboard");
+  // ── OWNER-ONLY: Server-side email allowlist — لا NEXT_PUBLIC، لا client check
+  // 1) غير مسجل → /login (pattern موجود في المشروع)
+  if (!user || user.is_anonymous) redirect("/login");
+  // 2) مسجل لكن ليس Owner (مطابقة دقيقة عبر OWNER_EMAIL) → /dashboard
+  // isOwnerEmail يقرأ OWNER_EMAIL Server-only فقط — لا يظهر في bundle/HTML
+  if (!isOwnerEmail(user.email ?? null)) redirect("/dashboard");
+
+  const role = await getAdminRole(supabase, user?.id || null, user?.email);
   const isOwner = role === "owner";
 
   // ── Existing stats ──

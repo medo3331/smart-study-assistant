@@ -72,13 +72,34 @@ export function safeNext(raw: string | null | undefined, fallback = "/dashboard"
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔐 Admin / Owner Roles — امتداد لنفس الملف (لا يكسر الاستيرادات القديمة)
 // ─────────────────────────────────────────────────────────────────────────────
+// ⚠️ OWNER_EMAIL هو متغيّر Server-only — لا تستخدم NEXT_PUBLIC_*. أي استخدام
+// لهذا الملف في Client Component سيُرجع null للـowner (آمن بالتصميم).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * تحقق هل email هو الـOwner المصرّح له. Server-only — يقرأ OWNER_EMAIL فقط.
+ * مقارنة دقيقة (trim + lower) وليس includes لتفادي ثغرة "gmail.com يحتوي gmail".
+ */
+export function isOwnerEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const raw = process.env.OWNER_EMAIL || process.env.ADMIN_EMAILS || "";
+  if (!raw) return false;
+  const normalized = email.trim().toLowerCase();
+  // يدعم قيمة واحدة أو قائمة مفصولة بفواصل (ADMIN_EMAILS legacy)
+  const allowed = raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.includes(normalized);
+}
 
 export type AdminRole = "owner" | "admin" | null;
 
 /**
  * دالة فحص مستوى صلاحية الأدمن (Owner vs Admin)
- * - الـ Owner يُحدد عبر env (NEXT_PUBLIC_OWNER_EMAIL أو ADMIN_EMAILS)
+ * - الـ Owner يُحدد عبر env Server-only (OWNER_EMAIL)
  * - غير ذلك يُفحص من جدول site_admins
+ * - هذه الدالة Server-only بالتصميم — لا تستدعها من Client Component
  */
 export async function getAdminRole(
   supabase: SupabaseClient,
@@ -87,8 +108,8 @@ export async function getAdminRole(
 ): Promise<AdminRole> {
   if (!userId) return null;
 
-  const primaryOwnerEmail = process.env.NEXT_PUBLIC_OWNER_EMAIL || process.env.ADMIN_EMAILS;
-  if (userEmail && primaryOwnerEmail?.toLowerCase().includes(userEmail.toLowerCase())) {
+  // 1) Owner allowlist — Server-only، مقارنة دقيقة
+  if (isOwnerEmail(userEmail ?? null)) {
     return "owner";
   }
 
