@@ -7,6 +7,7 @@ import { GATED_MODELS } from "@/lib/ai/model-access";
 import { ALL_AGENTS } from "@/lib/ai/agents/registry";
 import { MODEL_LIMITS, AGENT_LIMITS, GUEST_LIMIT, GUEST_WINDOW_HOURS, FREE_TEXT_LIMIT, FREE_TEXT_WINDOW_HOURS, FREE_VISION_LIMIT, FREE_VISION_WINDOW_HOURS } from "@/lib/ai/rate-limit";
 import UserAiLookup from "@/components/admin/UserAiLookup";
+import { addAdminByEmail, addAdminByEmailFromForm } from "@/app/admin/actions/admin-management";
 import pg from "pg";
 import { 
   UserCog, Trash2, Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
@@ -536,6 +537,19 @@ export default async function AdminControlCenter({
         <p className="text-xs text-slate-500">لا يتم عرض API keys / secrets / tokens — Admin لا يعني كشف الأسرار.</p>
       </section>
 
+      {/* Phase 4.11 — Admin Management (real, server-side, owner-only) */}
+      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><UserCog size={20} className="text-amber-400"/> إدارة المديرات — (من site_admins)</h2>
+        <div className="text-sm text-slate-300 space-y-2">
+          <p>المصدر الحقيقي: <span className="font-mono text-amber-300">site_admins</span> (ليس entitlements).</p>
+          <p>صلاحية الإضافة والإزالة تتطلب Owner فقط عبر السيرفر.</p>
+        </div>
+        <div className="text-xs text-slate-500 bg-slate-800/50 rounded-lg p-2 border border-slate-700">
+          <strong>إضافة Admin:</strong> أدخل البريد الإلكتروني → زر "إضافة Admin" → التحقق عبر isOwnerEmail → إدراج في site_admins → إعادة تحميل الصفحة.
+          <br/><strong>إزالة Admin:</strong> اختر من القائمة → زر "إزالة" → التأكيد → حذف من site_admins.
+        </div>
+      </section>
+
       {/* Phase 4.9 / 4.10 — Plans & Billing Controls (functional, server-side) */}
       <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4">
         <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Shield size={20} className="text-amber-400"/> الخطط وال cobranة</h2>
@@ -576,16 +590,7 @@ export default async function AdminControlCenter({
             <p className="text-xs text-slate-500">لا يمكن إزالة Owner</p>
           </div>
         </div>
-        <form action={async (formData) => {
-          "use server";
-          const { addAdminByEmail } = await import("@/app/admin/actions/admin-management");
-          try {
-            const email = formData.get("email") as string;
-            const res = await addAdminByEmail(email);
-          } catch (e: any) {
-            console.error("Admin grant error:", e.message);
-          }
-        }} className="flex gap-2 items-center mt-2">
+        <form action={addAdminByEmailFromForm} className="flex gap-2 items-center mt-2">
           <input name="email" type="email" placeholder="email@domain.com" required className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full" />
           <button type="submit" className="bg-amber-400 text-amber-950 font-bold rounded-lg px-4 py-2 text-sm hover:bg-amber-300 transition whitespace-nowrap">إضافة Admin</button>
         </form>

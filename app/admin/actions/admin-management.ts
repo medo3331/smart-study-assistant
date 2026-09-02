@@ -65,6 +65,5 @@ export async function removeAdminById(userId: string) {
 
 export async function addAdminByEmailFromForm(formData: FormData) {
   const email = formData.get("email") as string;
-  await addAdminByEmail(email);
-  // Server action for form: no return required; redirect or refresh handled by page
+  await addAdminByEmail(email); // void for form action
 }
