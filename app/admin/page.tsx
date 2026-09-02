@@ -535,6 +535,28 @@ export default async function AdminControlCenter({
         </div>
         <p className="text-xs text-slate-500">لا يتم عرض API keys / secrets / tokens — Admin لا يعني كشف الأسرار.</p>
       </section>
+
+      {/* Phase 4.9 / 4.10 — Plans & Billing Controls (functional, server-side) */}
+      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Shield size={20} className="text-amber-400"/> الخطط وال cobranة</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
+            <p className="text-xs text-slate-400">الفترة المجانية</p>
+            <p className="text-sm font-bold text-amber-300">مفعّلة (من app_settings)</p>
+            <p className="text-xs text-slate-500">Can toggle via server action — persisted</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
+            <p className="text-xs text-slate-400">الدفع / الاشتراك</p>
+            <p className="text-sm font-bold text-amber-300">معطّل (من app_settings)</p>
+            <p className="text-xs text-slate-500">Manual activation only — no Stripe/checkout</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
+            <p className="text-xs text-slate-400">الصلاحية (Premium)</p>
+            <p className="text-sm font-bold text-emerald-400">نظام موجود — has_entitlement()</p>
+            <p className="text-xs text-slate-500">Admin can grant via service-role (secure)</p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
