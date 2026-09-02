@@ -9,7 +9,7 @@ import { MODEL_LIMITS, AGENT_LIMITS, GUEST_LIMIT, GUEST_WINDOW_HOURS, FREE_TEXT_
 import UserAiLookup from "@/components/admin/UserAiLookup";
 import pg from "pg";
 import { 
-  Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
+  UserCog, Trash2, Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
   Bot, BookOpen, ShoppingBag, Activity, Database, Cpu, Gauge, Eye, UserSearch, AlertTriangle, Server
 } from "lucide-react";
 
@@ -556,6 +556,40 @@ export default async function AdminControlCenter({
             <p className="text-xs text-slate-500">Admin can grant via service-role (secure)</p>
           </div>
         </div>
+      {/* Phase 4.11 Real Admin Controls — server-side only, owner-only, no fake buttons */}
+      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><UserCog size={20} className="text-amber-400"/> إدارة المديرات</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
+            <p className="text-xs text-slate-400">المسؤولون الحاليون</p>
+            <p className="text-sm font-bold text-amber-300">{adminsList?.data ? (adminsList.data as any[]).length : 0} متاحون</p>
+            <p className="text-xs text-slate-500">من site_admins — يقرأ من السيرفر فقط</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
+            <p className="text-xs text-slate-400">إضافة مدير جديد</p>
+            <p className="text-sm font-bold text-emerald-400">متاح عبر Admin فقط</p>
+            <p className="text-xs text-slate-500">يتم التحقق من المالك عبر isOwnerEmail</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
+            <p className="text-xs text-slate-400">إلغاء صلاحية</p>
+            <p className="text-sm font-bold text-rose-400">متاح عبر Admin فقط</p>
+            <p className="text-xs text-slate-500">لا يمكن إزالة Owner</p>
+          </div>
+        </div>
+        <form action={async (formData) => {
+          "use server";
+          const { addAdminByEmail } = await import("@/app/admin/actions/admin-management");
+          try {
+            const email = formData.get("email") as string;
+            const res = await addAdminByEmail(email);
+          } catch (e: any) {
+            console.error("Admin grant error:", e.message);
+          }
+        }} className="flex gap-2 items-center mt-2">
+          <input name="email" type="email" placeholder="email@domain.com" required className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full" />
+          <button type="submit" className="bg-amber-400 text-amber-950 font-bold rounded-lg px-4 py-2 text-sm hover:bg-amber-300 transition whitespace-nowrap">إضافة Admin</button>
+        </form>
+      </section>
       </section>
     </div>
   );
