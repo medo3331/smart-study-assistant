@@ -34,6 +34,8 @@ export default async function AdminControlCenter({
   );
 
   const { data: { user } } = await supabase.auth.getUser();
+  // DEBUG server-only: auth/user presence for audit (no email/secret leaked)
+  console.log("[admin-debug] user present:", !!user, "id present:", !!user?.id, "env OWNER present:", !!process.env.OWNER_EMAIL);
 
   // ── OWNER-ONLY: Server-side email allowlist — لا NEXT_PUBLIC، لا client check
   // 1) غير مسجل → /login (pattern موجود في المشروع)
