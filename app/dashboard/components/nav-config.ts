@@ -95,6 +95,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب
       // بالمذاكرة، فالمكان الطبيعي ليهم جنب الإنجازات والتحليلات.
       { id: "shop", icon: "🛍️", label: "المتجر", latin: "Shop", href: "/shop" },
+      { id: "plans", icon: "📋", label: "الخطط", latin: "Plans", href: "/plans" },
       // ⚠️ ده مش المتجر. المتجر بيصرف كوينز، وده بيصرف XP على تجميد
       // السلسلة وفتح اليوم اللي بعده بدري. عملتين مختلفتين خالص.
       { id: "xpShop", icon: "✨", label: "اصرف نقاطك", latin: "XP Rewards", signal: "xpShop" },
