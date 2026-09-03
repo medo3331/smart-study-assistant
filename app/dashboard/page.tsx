@@ -44,6 +44,9 @@ import { StatCards } from "./components/StatCards";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
 import { EconomyStrip } from "./components/EconomyVisibility";
+import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
+import { ContextualNotification } from "@/components/ContextualNotification";
+import { LightSocialComparison } from "@/components/LightSocialComparison";
 // 🧩 سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
@@ -1195,6 +1198,15 @@ export default function DashboardPage() {
               el?.scrollIntoView({ behavior: "smooth", block: "center" });
             }}
           />
+
+          {/* Phase 0.1 — Daily Micro-Challenge */}
+          <DailyMicroChallenge />
+
+          {/* Phase 0.2 — Smart Contextual Notification (in-app only; zero DB; no push/cron) */}
+          <ContextualNotification />
+
+          {/* Phase 0.4 — Light Social Comparison (reuses weekly_quiz_leaderboard; no new DB) */}
+          <LightSocialComparison />
 
           {/* 🚨 خطة الامتحان القريب — أهم deadline إذا وُجد.
               مكانها بعد CTA مباشرة عن قصد: اللي عنده امتحان بعد ٣ أيام لازم يشوف

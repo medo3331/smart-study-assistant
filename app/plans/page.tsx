@@ -1,5 +1,6 @@
 import { getPlanSettings } from "@/lib/plans/settings";
 import { createClient } from "@/lib/supabase/server";
+import PremiumTrialCard from "@/components/plans/PremiumTrialCard";
 import PlansPaymentInfo from "@/components/plans/PaymentInfo";
 
 export default async function PlansPageServer() {
@@ -83,6 +84,8 @@ export default async function PlansPageServer() {
             </tbody>
           </table>
         </section>
+
+        <PremiumTrialCard />
 
         <PlansPaymentInfo />
 
