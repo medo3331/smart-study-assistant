@@ -40,7 +40,7 @@ export default function UserAiLookup() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="bg-slate-900 rounded-xl p-3 border border-slate-700">
-              <p className="text-xs text-slate-400">Phase A — Text 10/3h</p>
+              <p className="text-xs text-slate-400">Phase A — Text 30/2h</p>
               <p className="text-lg font-bold">{result.rateLimits.phaseA.text.used} / {result.rateLimits.phaseA.text.limit} <span className="text-xs font-normal text-slate-400">متبقي {result.rateLimits.phaseA.text.remaining}</span></p>
             </div>
             <div className="bg-slate-900 rounded-xl p-3 border border-slate-700">

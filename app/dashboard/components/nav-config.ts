@@ -77,6 +77,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       // 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
       // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
       { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
+      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
       { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },

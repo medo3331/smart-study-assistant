@@ -25,8 +25,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ── حدود الخطة المجانية — Phase A ──
-export const FREE_TEXT_LIMIT = 10;
-export const FREE_TEXT_WINDOW_HOURS = 3;
+export const FREE_TEXT_LIMIT = 30;
+export const FREE_TEXT_WINDOW_HOURS = 2;
 export const FREE_TEXT_WINDOW_SECONDS = FREE_TEXT_WINDOW_HOURS * 3600;
 
 export const FREE_VISION_LIMIT = 6;
