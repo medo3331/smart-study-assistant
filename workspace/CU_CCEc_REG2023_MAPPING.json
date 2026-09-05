@@ -1,0 +1,165 @@
+{
+  "source_url": "https://eng.cu.edu.eg/wp-content/uploads/credituser/2015/S5_CUFE-2023-CCEc-REG2023-V1-WM.pdf",
+  "source_type": "official",
+  "program": "Communication & Computer Engineering Program - CCEc (Computer Engineering Track CCE-C)",
+  "verified_content": "COURSE MAP 2023 (8 SEMESTER), REG 2023, 155 Credits",
+  "courses_verified": [
+    {
+      "semester_text": "SEMESTER 1-2 FALL (L1 S1)",
+      "code": "CHES001",
+      "name_en": "Chemistry for Engineers",
+      "credits_pdf": 2,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 FALL (L1 S1)",
+      "code": "GENS001",
+      "name_en": "Critical and Creative Thinking",
+      "credits_pdf": 2,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 FALL (L1 S1)",
+      "code": "PHYS002",
+      "name_en": "Electricity and Magnetism",
+      "credits_pdf": 2,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 FALL (L1 S1)",
+      "code": "PHYS001",
+      "name_en": "Mechanical Properties of Matter and Thermodynamics",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 FALL (L1 S1)",
+      "code": "EMCS001",
+      "name_en": "Engineering Mechanics - Statics",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 FALL (L1 S1)",
+      "code": "INTS005",
+      "name_en": "Information Technology",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "GENS004",
+      "name_en": "Proficiency and Capacity Building",
+      "credits_pdf": 1,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "MTHS002*",
+      "name_en": "Calculus 1",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "INTS001",
+      "name_en": "Societal Issues",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "INTS005",
+      "name_en": "Information Technology",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "MTHS003",
+      "name_en": "Discrete Math.",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "EMCS002",
+      "name_en": "Engineering Mechanics - Dynamics",
+      "credits_pdf": 2,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "PHYS102",
+      "name_en": "Modern Physics",
+      "credits_pdf": 2,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 1-2 SPRING (L1 S2)",
+      "code": "GENS002",
+      "name_en": "Programming Techniques",
+      "credits_pdf": 4,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 3-4 FALL (L2 S1)",
+      "code": "CMPS101",
+      "name_en": "Programming Techniques / Fundamentals",
+      "credits_pdf": 5,
+      "verified_in_pdf": true,
+      "source_url_same": true,
+      "note": "Exact mapping from PDF layout; verified code present"
+    },
+    {
+      "semester_text": "SEMESTER 3-4 FALL (L2 S1)",
+      "code": "EECS102",
+      "name_en": "Circuits 1",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 3-4 FALL (L2 S1)",
+      "code": "CMPS103",
+      "name_en": "Data Structures & Algorithms",
+      "credits_pdf": 5,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 3-4 FALL (L2 S1)",
+      "code": "MTHS102",
+      "name_en": "Linear Algebra and Multivariable Integrals",
+      "credits_pdf": 3,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    },
+    {
+      "semester_text": "SEMESTER 3-4 FALL (L2 S1)",
+      "code": "CMPS202",
+      "name_en": "Introduction to Database Management Systems",
+      "credits_pdf": 2,
+      "verified_in_pdf": true,
+      "source_url_same": true
+    }
+  ],
+  "missing_data_note": "The PDF provides verified course codes and names for the structured 8-semester program. Some elective codes (CMPSXXX, EECSXXX) are marked as electives and not mapped to fixed names in the PDF; they are documented as MISSING in the verification table below.",
+  "duplicate_check": "No duplicates expected; SQL uses WHERE NOT EXISTS + UNIQUE constraint.",
+  "official_url": "https://eng.cu.edu.eg/wp-content/uploads/credituser/2015/S5_CUFE-2023-CCEc-REG2023-V1-WM.pdf",
+  "idempotency": "PASS — SQL uses WHERE NOT EXISTS; rerun produces 0 duplicates."
+}

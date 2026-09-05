@@ -1,0 +1,541 @@
+19
+28
+19
+28
+19
+28
+19
+28
+19
+28
+19
+28
+19
+28
+19
+28
+152
+224
+28
+CREDITS
+CONTACTS
+ELECTIVES
+CCES281
+SUMMER
+Industrial Training-1
+1
+0
+1
+0
+0
+CCES381
+SUMMER
+Industrial Training-2
+2
+0
+2
+0
+0
+CCES281
+MTHS002
+1
+2
+0
+2
+0
+0
+2
+0
+4
+2
+4
+3
+4
+0
+3
+SEMESTER 1-2
+FALL
+CHES001
+GENS001
+PHYS002
+PHYS001
+EMCS001
+INTS005
+SPRING
+2
+ CAIRO UNIVERSITY- FACULTY OF ENGINEERING-SPECIALIZED-Communication and Computer Engineering Program-CCEc COURSE MAP 2023 (8 SEMESTER)
+GENS004
+CREDIT HOURS
+CONTACT HOURS
+Chemistry for Engineers
+Critical and Creative 
+Thinking
+Electricity and Magnetism
+Mechanical Properties of 
+Matter and Thermodynamics
+Engineering Mechanics - 
+Statics
+Information Technology
+Calculus 1
+Proficiency and Capacity 
+Building
+2
+3
+2
+2
+3
+5
+3
+5
+1
+1
+2
+0
+0
+2
+0
+3
+1
+0
+0
+INTS005
+MTHS002*
+PHYS002
+MTHS002
+0
+1
+0
+3
+2
+2
+3
+2
+0
+3
+2
+INTS001
+MTHS003
+CREDIT HOURS
+CONTACT HOURS
+Societal Issues
+Programming 
+Techniques
+Discrete Math.
+Engineering Mechanics - 
+Dynamics
+Modern Physics
+Engineering Graphics
+Calculus 2
+GENS002
+CMPS102
+MTHS004
+EMCS002
+PHYS102
+3
+3
+5
+2
+2
+3
+5
+3
+4
+2
+3
+5
+3
+4
+2
+0
+PHYS002
+CMPS102
+MTHS003
+CMPS102
+MTHS004
+PHYS002 + MTHS003
+0
+3
+2
+0
+3
+2
+2
+0
+1
+2
+0
+2
+2
+CMPS101
+EECS102
+E-A (GENS005)
+CREDIT HOURS
+CONTACT HOURS
+Elective E-A (Fundamental 
+of Management, Risk and 
+Environment)
+Data Structures & 
+Algorithms
+Linear Algebra and 
+Multivariable Integrals
+Introduction to Database 
+Management Systems 
+Logic Design 
+E-A (GENS110)
+CMPS103
+MTHS102
+CMPS202
+5
+3
+5
+3
+5
+2
+2
+Circuits 1 
+Elective E-A (Writing and 
+Presentation Skills)
+2
+2
+3
+5
+3
+4
+3
+2
+0
+3
+2
+0
+3
+2
+0
+3
+2
+2
+0
+EECS102
+CMPS102
+MTHS102/EECS102
+2
+0
+3
+2
+0
+0
+CMPS211
+EECS203
+CREDIT HOURS
+CONTACT HOURS
+Elective E-A (Fund. of 
+Ecconomics and 
+Accounting)
+Differential Equations
+Circuits 2
+Advanced Probability and 
+Statistics
+Electrical Power 
+Engineering 
+Advanced Programming 
+Techniques
+E-A (GENS120)
+MTHS104
+EECS112
+MTHS204
+EPES125
+3
+4
+2
+0
+MTHS102
+5
+2
+0
+0
+Signals Analysis 
+2
+2
+3
+4
+3
+5
+2
+0
+3
+2
+2
+2
+0
+2
+2
+2
+3
+3
+3
+4
+70 credits 
+0
+3
+4
+2
+2
+Lab
+Computer Consultation
+EECS100
+CMPS425
+CMPS101/EECS102
+3
+1
+0
+CMPS303
+5
+2
+2
+0
+MTHS102/MTHS104
+CMPS103
+CMPS101
+Control-1
+3
+2
+0
+3
+3
+5
+2
+1
+0
+3
+2
+0
+0
+2
+MTHS004/CMPS102
+MTHS003
+EECS102 + MTHS102
+CREDIT HOURS
+CONTACT HOURS
+Numerical Analysis 
+Algorithms Design & 
+Analysis 
+Microprocessor Systems
+Operating Systems
+2
+0
+2
+2
+2
+0
+SEMESTER 5-6
+FALL
+MTHS114
+CMPS302
+CMPS201
+EECS203
+0
+SPRING
+SEMESTER 3-4
+FALL
+2
+0
+0
+3
+4
+3
+4
+3
+5
+3
+EECS304
+2
+0
+MTHS004/CMPS201
+CMPS103/CMPS201
+CMPS103
+CMPS201
+PHYS102/ EECS102
+SPRING
+CMPS301
+CMPS405
+CMPS203
+CMPSXXX
+CMPS445
+GENS208
+EECS101
+CREDIT HOURS
+CONTACT HOURS
+Computer Architecture 
+Computer Networks 
+Software Engineering 
+Elective - 1
+Embedded Systems 
+Marketing
+Electronics-1: Basic 
+Electronic Circuits
+3
+4
+3
+4
+3
+5
+2
+4
+2
+0
+2
+2
+0
+2
+2
+3
+4
+3
+5
+2
+2
+3
+2
+0
+0
+2
+2
+0
+2
+0
+2
+2
+3
+EECS203/MTHS204
+CMPS202/CMPS405
+EECS101/EECS304
+MTHS114 /MTHS204
+SEMESTER 7-8
+FALL
+CMPSXXX
+EECS306
+CMPS426
+EECS201
+CCES481
+CMPSXXX
+3
+4
+3
+5
+3
+2
+0
+2
+2
+2
+1
+2
+5
+1
+1
+CMPS402
+CREDIT HOURS
+CONTACT HOURS
+Elective - 7
+Communications-1: 
+Analogue Communications
+Security of Computer 
+Systems and Networks  
+Electronics-2: Analog and 
+Digital Electronics
+Graduation Project - 1
+Elective - 2
+Machine Intelligence
+4
+3
+5
+4
+3
+4
+1
+2
+3
+0
+3
+CMPS303
+SPRING
+EECSXXX
+CCES280
+CMPSXXX
+CMPSXXX
+CMPSXXX
+CMPS403
+0
+0
+2
+2
+0
+2
+0
+3
+2
+2
+0
+2
+3
+CCES482
+CREDIT HOURS
+CONTACT HOURS
+E- Elective 6 
+Seminar - 1
+Elective - 3
+Elective - 4
+Elective - 5
+Language and Compilers
+Graduation Project - 2
+4
+3
+5
+4
+3
+5
+3
+2
+0
+3
+1
+0
+0
+2
+4
+3
+3
+SWL is calculated according to TOR 2022
+COURSE MAP LEGEND
+COURSE CODE
+A Relaxed Plan for Below-Average Students can be applied on all 
+Specialised Programs allowing students to graduate in 10 semesters
+COURSE NAME
+CR
+CNTC
+TSWL
+0
+3
+2
+0
+2
+2
+0
+3
+2
+0
+3
+2
+LEC
+TUT(2)
+TUT/LAB/STU
+D(3)+OFF 
+TUT(1)
+UNIVERSITY REQ (U
+FACULTY REQ. (FR)
+DISCIPLINE REQ. (D
+PROGRAM REQ. (P
+ELECTIVE
+BASIC SCIENCE 
+(BS)
+0
+3
