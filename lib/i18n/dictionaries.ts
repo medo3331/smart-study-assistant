@@ -223,6 +223,13 @@ export type Dictionary = {
   picker_track_placeholder: string;
   picker_cta: string;
   picker_cta_hint: string;
+  picker_student_type: string;
+  picker_university_type: string;
+  picker_university: string;
+  picker_faculty: string;
+  picker_department: string;
+  picker_level: string;
+  picker_semester: string;
 
   /* ❓ الأسئلة الشائعة — عشر أسئلة.
      الترقيم مقصود زي الميزات والآراء: السؤال ممكن يتبدّل نصه من غير ما
@@ -596,6 +603,13 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     fieldSchool: 'مناهج دراسية',
     fieldDesign: 'تصميم وإبداع',
     picker_step3: 'عايز تتعلم إيه؟',
+    picker_student_type: 'طالب مدرسة',
+    picker_university_type: 'طالب جامعي',
+    picker_university: 'جامعة',
+    picker_faculty: 'كلية',
+    picker_department: 'قسم',
+    picker_level: 'المستوى الدراسي',
+    picker_semester: 'الترم',
     picker_track_hint: 'اختار اقتراح جاهز، أو اكتب اللي في دماغك.',
     picker_track_placeholder: 'اكتب أي موضوع، حتى لو مش في الاقتراحات...',
     picker_cta: 'ابني خطتي',
@@ -961,6 +975,13 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     picker_track_placeholder: 'Type any topic, even if it is not listed…',
     picker_cta: 'Build my plan',
     picker_cta_hint: 'Finish the choices above so we can tailor your plan.',
+    picker_student_type: 'School Student',
+    picker_university_type: 'University Student',
+    picker_university: 'University',
+    picker_faculty: 'Faculty',
+    picker_department: 'Department',
+    picker_level: 'Academic Level',
+    picker_semester: 'Semester',
 
     faq_eyebrow: 'FAQ',
     faq_title: 'What people ask before they start',

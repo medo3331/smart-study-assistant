@@ -21,7 +21,7 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
 import {
   FIELDS,
@@ -35,17 +35,57 @@ import type { FieldId, Persona, StudentLevel } from '@/lib/user-persona';
 
 export function PersonaPicker() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
 
   const [persona, setPersona] = useState<Persona | null>(null);
+  const [studentType, setStudentType] = useState<"school" | "university" | null>(null);
   const [studentLevel, setStudentLevel] = useState<StudentLevel | null>(null);
   const [field, setField] = useState<FieldId | null>(null);
   const [subject, setSubject] = useState('');
 
   // المستوى سؤال للطالب بس. الخريج والفري لانسر بيتخطّوه تماماً.
   const needsLevel = persona === 'student';
-  const choice = { persona: persona ?? undefined, studentLevel, field: field ?? undefined, subject };
+  const needsStudentType = persona === 'student';
+  const choice = { persona: persona ?? undefined, studentLevel, studentType, field: field ?? undefined, subject };
   const ready = isChoiceComplete(choice);
+  const studentTypeReady = needsStudentType ? !!studentType : true;
+
+  // University taxonomy from DB (loaded once when needed)
+  const [uniData, setUniData] = useState<{ universities: any[]; faculties: any[]; departments: any[]; levels: any[]; semesters: any[] }>({ universities: [], faculties: [], departments: [], levels: [], semesters: [] });
+  const [uniLoading, setUniLoading] = useState(false);
+
+  useEffect(() => {
+    if (studentType !== 'university' || uniData.universities.length > 0) return;
+    void (async () => {
+      setUniLoading(true);
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient();
+        const [{ data: univ }, { data: fac }, { data: dept }, { data: lvl }, { data: sem }] = await Promise.all([
+          supabase.from('universities').select('id,name,code').order('name'),
+          supabase.from('university_faculties').select('id,name,code,university_id').order('name'),
+          supabase.from('university_departments').select('id,name,code,faculty_id').order('name'),
+          supabase.from('university_levels').select('id,name,code,order_index').order('order_index'),
+          supabase.from('university_semesters').select('id,name,code').order('name'),
+        ]);
+        setUniData({
+          universities: univ || [],
+          faculties: fac || [],
+          departments: dept || [],
+          levels: lvl || [],
+          semesters: sem || [],
+        });
+      } catch { /* silent — university selection will show empty; not blocking */ }
+      setUniLoading(false);
+    })();
+  }, [studentType, uniData.universities.length]);
+
+  const [selectedUni, setSelectedUni] = useState<string | null>(null);
+  const [selectedFaculty, setSelectedFaculty] = useState<string | null>(null);
+  const [selectedDept, setSelectedDept] = useState<string | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
+  const universityReady = (studentType === 'university') ? !!(selectedUni && selectedFaculty && selectedDept && selectedLevel && selectedSemester) : true;
 
   // الاقتراحات المعروضة دلوقتي — بتتغير مع أي تغيير في المجال أو الشخصية
   const tracks = field && persona ? getTracks(field, persona) : [];
@@ -67,7 +107,7 @@ export function PersonaPicker() {
     clearSubjectIfSuggested(field, persona);
     setPersona(next);
     // لو رجع من طالب لغيره، المستوى المخزّن مبيبقاش له معنى
-    if (next !== 'student') setStudentLevel(null);
+    if (next !== 'student') { setStudentLevel(null); setStudentType(null); }
   }
 
   function handleField(next: FieldId) {
@@ -77,8 +117,19 @@ export function PersonaPicker() {
   }
 
   function handleSubmit() {
-    if (!persona || !field || !ready) return;
+    if (!persona || !field || !ready || !studentTypeReady || !universityReady) return;
     savePendingChoice({ persona, studentLevel, field, subject: subject.trim() });
+    // Save student type separately (not in PendingChoice contract) for onboarding
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('pendingStudentType', studentType || '');
+      if (studentType === 'university') {
+        window.localStorage.setItem('pendingUniversityId', selectedUni || '');
+        window.localStorage.setItem('pendingFacultyId', selectedFaculty || '');
+        window.localStorage.setItem('pendingDepartmentId', selectedDept || '');
+        window.localStorage.setItem('pendingAcademicLevelId', selectedLevel || '');
+        window.localStorage.setItem('pendingSemesterId', selectedSemester || '');
+      }
+    }
     router.push('/login?next=/assessment');
   }
 
@@ -111,8 +162,34 @@ export function PersonaPicker() {
           </div>
         </div>
 
+        {/* ٢-أ — نوع الطالب (مدرسة / جامعة) — يظهر فقط لما يختار طالب */}
+        {needsStudentType && (
+          <div>
+            <span className="picker-step-num">02</span>
+            <h3 className="h3">{t.picker_student_type ? (studentType === 'school' ? t.picker_student_type : t.picker_university_type) : ''}</h3>
+            <div className="chip-row" role="group" aria-label={t.picker_student_type ? (studentType === 'school' ? t.picker_student_type : t.picker_university_type) : ''}>
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={studentType === 'school'}
+                onClick={() => setStudentType('school')}
+              >
+                {t.picker_student_type}
+              </button>
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={studentType === 'university'}
+                onClick={() => setStudentType('university')}
+              >
+                {t.picker_university_type}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ٢ — المستوى: بيظهر جوه نفس السكشن لما يختار طالب */}
-        {needsLevel && (
+        {needsLevel && studentType !== 'university' && (
           <div>
             <span className="picker-step-num">02</span>
             <h3 className="h3">{t.picker_step2}</h3>
@@ -129,6 +206,68 @@ export function PersonaPicker() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ٢-ب — الجامعة / الكلية / القسم / المستوى / الترم: للطالب الجامعي فقط */}
+        {needsStudentType && studentType === 'university' && (
+          <div>
+            <span className="picker-step-num">02</span>
+            <h3 className="h3">{t.picker_university}</h3>
+            {uniLoading ? <p className="mono muted">{t.login_loading}</p> : (
+              <>
+                <div className="stack" style={{ gap: "8px" }}>
+                  <div>
+                    <span className="small muted">{t.picker_university}: </span>
+                    <div className="chip-row" role="group" aria-label={t.picker_university}>
+                      {uniData.universities.map((u: any) => (
+                        <button key={u.id} type="button" className="chip" aria-pressed={selectedUni === u.id} onClick={() => { setSelectedUni(u.id); setSelectedFaculty(null); setSelectedDept(null); setSelectedLevel(null); setSelectedSemester(null); }}>{u.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedUni && (
+                    <div>
+                      <span className="small muted">{t.picker_faculty}: </span>
+                      <div className="chip-row" role="group" aria-label={t.picker_faculty}>
+                        {uniData.faculties.filter((f: any) => f.university_id === selectedUni).map((f: any) => (
+                          <button key={f.id} type="button" className="chip" aria-pressed={selectedFaculty === f.id} onClick={() => { setSelectedFaculty(f.id); setSelectedDept(null); setSelectedLevel(null); setSelectedSemester(null); }}>{f.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedFaculty && (
+                    <div>
+                      <span className="small muted">{t.picker_department}: </span>
+                      <div className="chip-row" role="group" aria-label={t.picker_department}>
+                        {uniData.departments.filter((d: any) => d.faculty_id === selectedFaculty).map((d: any) => (
+                          <button key={d.id} type="button" className="chip" aria-pressed={selectedDept === d.id} onClick={() => { setSelectedDept(d.id); setSelectedLevel(null); setSelectedSemester(null); }}>{d.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedDept && (
+                    <div>
+                      <span className="small muted">{t.picker_level}: </span>
+                      <div className="chip-row" role="group" aria-label={t.picker_level}>
+                        {uniData.levels.map((l: any) => (
+                          <button key={l.id} type="button" className="chip" aria-pressed={selectedLevel === l.id} onClick={() => { setSelectedLevel(l.id); setSelectedSemester(null); }}>{l.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedLevel && (
+                    <div>
+                      <span className="small muted">{t.picker_semester}: </span>
+                      <div className="chip-row" role="group" aria-label={t.picker_semester}>
+                        {uniData.semesters.map((s: any) => (
+                          <button key={s.id} type="button" className="chip" aria-pressed={selectedSemester === s.id} onClick={() => setSelectedSemester(s.id)}>{s.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 

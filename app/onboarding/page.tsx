@@ -49,6 +49,55 @@ export default function OnboardingPage() {
 
   const [loadingTax, setLoadingTax] = useState(false);
 
+  /* University student sub-type (from PersonaPicker) */
+  const [studentType, setStudentType] = useState<"school" | "university" | null>(null);
+  const [universityId, setUniversityId] = useState<string | null>(null);
+  const [facultyId, setFacultyId] = useState<string | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const [academicLevelId, setAcademicLevelId] = useState<string | null>(null);
+  const [semesterId, setSemesterId] = useState<string | null>(null);
+  const [uniData, setUniData] = useState<{ universities: any[]; faculties: any[]; departments: any[]; levels: any[]; semesters: any[] }>({ universities: [], faculties: [], departments: [], levels: [], semesters: [] });
+  const [uniLoading, setUniLoading] = useState(false);
+
+  /* ---- Read pending student type from PersonaPicker ---- */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem('pendingStudentType');
+    if (raw === 'university') setStudentType('university');
+    else if (raw === 'school') setStudentType('school');
+    if (raw === 'university') {
+      setUniversityId(window.localStorage.getItem('pendingUniversityId') || null);
+      setFacultyId(window.localStorage.getItem('pendingFacultyId') || null);
+      setDepartmentId(window.localStorage.getItem('pendingDepartmentId') || null);
+      setAcademicLevelId(window.localStorage.getItem('pendingAcademicLevelId') || null);
+      setSemesterId(window.localStorage.getItem('pendingSemesterId') || null);
+    }
+  }, []);
+
+  /* ---- Load university taxonomy (once, when university student) ---- */
+  useEffect(() => {
+    if (studentType !== 'university' || universityId) return;
+    void (async () => {
+      try {
+        if (!supabaseRef.current) supabaseRef.current = createClient();
+        const supabase = supabaseRef.current;
+        const [{ data: univ }, { data: fac }, { data: dept }, { data: lvl }, { data: sem }] = await Promise.all([
+          supabase.from('universities').select('id, name, code').order('name'),
+          supabase.from('university_faculties').select('id, name, code, university_id').order('name'),
+          supabase.from('university_departments').select('id, name, code, faculty_id').order('name'),
+          supabase.from('university_levels').select('id, name, code, order_index').order('order_index'),
+          supabase.from('university_semesters').select('id, name, code').order('name'),
+        ]);
+        const uData = { universities: univ || [], faculties: fac || [], departments: dept || [], levels: lvl || [], semesters: sem || [] };
+        setUniData(uData);
+        // If there's a pre-selected university from localStorage, use it; else default to first
+        const preUni = typeof window !== 'undefined' ? window.localStorage.getItem('pendingUniversityId') || null : null;
+        const firstUniId = (univ && univ[0]) ? univ[0].id : null;
+        setUniversityId(preUni || firstUniId);
+      } catch { /* silent */ }
+    })();
+  }, [studentType]);
+
   /* ---- Auth guard + existing profile read ---- */
   useEffect(() => {
     let cancelled = false;
@@ -168,9 +217,15 @@ export default function OnboardingPage() {
   /* ---- Persist (server-side) ---- */
   async function persist(data: {
     persona: "student" | "grad" | "freelancer";
+    studentType?: "school" | "university" | null;
     stageId?: string | null;
     gradeId?: string | null;
     trackId?: string | null;
+    universityId?: string | null;
+    facultyId?: string | null;
+    departmentId?: string | null;
+    academicLevelId?: string | null;
+    semesterId?: string | null;
     onboardedAtIso: string;
   }): Promise<{ ok: boolean; error?: string }> {
     if (!supabaseRef.current) supabaseRef.current = createClient();
@@ -183,8 +238,32 @@ export default function OnboardingPage() {
     const allowedPersona: string[] = ["student", "grad", "freelancer"];
     if (!allowedPersona.includes(data.persona)) return { ok: false, error: locale === "ar" ? "دور غير صالح." : "Invalid role." };
 
+    /* If university student: verify university taxonomy IDs */
+    if (data.persona === "student" && data.studentType === 'university') {
+      if (data.universityId) {
+        const { data: uRow } = await supabase.from("universities").select("id, code").eq("id", data.universityId).maybeSingle();
+        if (!uRow) return { ok: false, error: locale === "ar" ? "جامعة غير صالحة." : "Invalid university." };
+      }
+      if (data.facultyId) {
+        const { data: fRow } = await supabase.from("university_faculties").select("id, university_id").eq("id", data.facultyId).maybeSingle();
+        if (!fRow || (data.universityId && fRow.university_id !== data.universityId)) return { ok: false, error: locale === "ar" ? "كلية لا تتوافق." : "Faculty does not match." };
+      }
+      if (data.departmentId) {
+        const { data: dRow } = await supabase.from("university_departments").select("id, faculty_id").eq("id", data.departmentId).maybeSingle();
+        if (!dRow || (data.facultyId && dRow.faculty_id !== data.facultyId)) return { ok: false, error: locale === "ar" ? "قسم لا يتوافق." : "Department does not match." };
+      }
+      if (data.academicLevelId) {
+        const { data: lRow } = await supabase.from("university_levels").select("id, code").eq("id", data.academicLevelId).maybeSingle();
+        if (!lRow) return { ok: false, error: locale === "ar" ? "مستوى غير صالح." : "Invalid level." };
+      }
+      if (data.semesterId) {
+        const { data: sRow } = await supabase.from("university_semesters").select("id, code").eq("id", data.semesterId).maybeSingle();
+        if (!sRow) return { ok: false, error: locale === "ar" ? "ترم غير صالح." : "Invalid semester." };
+      }
+    }
+
     /* If student and stage selected, verify IDs belong to valid taxonomy relations */
-    if (data.persona === "student" && data.stageId) {
+    if (data.persona === "student" && data.studentType !== 'university' && data.stageId) {
       /* Read stage row to confirm code is valid taxonomy record */
       const { data: sRow } = await supabase.from("education_stages").select("id, code").eq("id", data.stageId).maybeSingle();
       if (!sRow) return { ok: false, error: locale === "ar" ? "مرحلة غير صالحة." : "Invalid stage." };
@@ -205,15 +284,40 @@ export default function OnboardingPage() {
     const fields: Record<string, unknown> = {
       persona: data.persona,
       onboarded_at: data.onboardedAtIso,
-      education_stage_id: data.stageId ?? null,
-      education_grade_id: data.gradeId ?? null,
-      education_track_id: data.trackId ?? null,
     };
-    // Graduate / freelancer don't get education fields forced; keep existing if set (backward compat)
+    // School student: existing taxonomy
+    if (data.persona === "student" && data.studentType !== 'university') {
+      fields.education_stage_id = data.stageId ?? null;
+      fields.education_grade_id = data.gradeId ?? null;
+      fields.education_track_id = data.trackId ?? null;
+      fields.university_id = null;
+      fields.faculty_id = null;
+      fields.department_id = null;
+      fields.academic_level_id = null;
+      fields.semester_id = null;
+    }
+    // University student: university taxonomy (new in 2.6B)
+    if (data.persona === "student" && data.studentType === 'university') {
+      fields.university_id = data.universityId ?? null;
+      fields.faculty_id = data.facultyId ?? null;
+      fields.department_id = data.departmentId ?? null;
+      fields.academic_level_id = data.academicLevelId ?? null;
+      fields.semester_id = data.semesterId ?? null;
+      // Keep old fields null for university students to avoid cross-contamination
+      fields.education_stage_id = null;
+      fields.education_grade_id = null;
+      fields.education_track_id = null;
+    }
+    // Graduate / freelancer: clear both
     if (data.persona !== "student") {
       fields.education_stage_id = null;
       fields.education_grade_id = null;
       fields.education_track_id = null;
+      fields.university_id = null;
+      fields.faculty_id = null;
+      fields.department_id = null;
+      fields.academic_level_id = null;
+      fields.semester_id = null;
     }
 
     const { error: upErr } = await supabase
@@ -231,15 +335,29 @@ export default function OnboardingPage() {
 
   async function finish(): Promise<void> {
     setSaving(true); setError(null);
-    if (role === "student" && !stageId) { setError(locale === "ar" ? "اختر المرحلة." : "Select stage."); setSaving(false); return; }
-    if (role === "student" && stageId && !gradeId) { setError(locale === "ar" ? "اختر الصف." : "Select grade."); setSaving(false); return; }
+    const studentTypeFromStorage = typeof window !== 'undefined' ? (window.localStorage.getItem('pendingStudentType') || null) : null;
+    const studentTypeParam = studentTypeFromStorage === 'university' ? 'university' : (studentTypeFromStorage === 'school' ? 'school' : null);
+    if (role === "student" && studentTypeParam !== 'university' && !stageId) { setError(locale === "ar" ? "اختر المرحلة." : "Select stage."); setSaving(false); return; }
+    if (role === "student" && studentTypeParam !== 'university' && stageId && !gradeId) { setError(locale === "ar" ? "اختر الصف." : "Select grade."); setSaving(false); return; }
+    if (role === "student" && studentTypeParam === 'university' && !(universityId || (studentTypeFromStorage === 'university' ? (typeof window !== 'undefined' ? window.localStorage.getItem('pendingUniversityId') || null : null) : null))) { setError(locale === "ar" ? "اختر الجامعة." : "Select university."); setSaving(false); return; }
     const iso = new Date().toISOString();
     const persona: "student" | "grad" | "freelancer" = role === "graduate" ? "grad" : role;
+    const universityIdFromStorage = studentTypeParam === 'university' ? (typeof window !== 'undefined' ? window.localStorage.getItem('pendingUniversityId') || null : null) : null;
+    const facultyIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingFacultyId') || null) : null;
+    const departmentIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingDepartmentId') || null) : null;
+    const academicLevelIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingAcademicLevelId') || null) : null;
+    const semesterIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingSemesterId') || null) : null;
     const { ok, error: err } = await persist({
       persona,
-      stageId: role === "student" ? stageId : null,
-      gradeId: role === "student" ? gradeId : null,
-      trackId: (role === "student" && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
+      studentType: studentTypeParam,
+      stageId: (role === "student" && studentTypeParam !== 'university') ? stageId : null,
+      gradeId: (role === "student" && studentTypeParam !== 'university') ? gradeId : null,
+      trackId: (role === "student" && studentTypeParam !== 'university' && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
+      universityId: studentTypeParam === 'university' ? universityIdFromStorage : null,
+      facultyId: studentTypeParam === 'university' ? facultyIdFromStorage : null,
+      departmentId: studentTypeParam === 'university' ? departmentIdFromStorage : null,
+      academicLevelId: studentTypeParam === 'university' ? academicLevelIdFromStorage : null,
+      semesterId: studentTypeParam === 'university' ? semesterIdFromStorage : null,
       onboardedAtIso: iso,
     });
     if (!ok) {
@@ -256,7 +374,7 @@ export default function OnboardingPage() {
   }
 
   function skip(): void {
-    // Default: student without education — allowed but not ideal; saves with null fields
+    // Default: save with null fields; university student reads from localStorage in finish
     void finish();
   }
 
@@ -265,7 +383,7 @@ export default function OnboardingPage() {
     if (step === "stage") { setStep("role"); setStageId(null); }
     else if (step === "grade") { setStep("stage"); setGradeId(null); }
     else if (step === "track") { setStep("grade"); setTrackId(null); }
-    else if (step === "done") { setStep(role === "student" ? "track" : "role"); }
+    else if (step === "done") { setStep(role === "student" ? (studentType === 'university' ? "stage" : (stages.find(s => s.id === stageId)?.code === "BACCALAUREATE" ? "track" : "grade")) : "role"); }
   }
 
   /* ---- Progress indicator (only relevant steps shown) ---- */
@@ -448,6 +566,79 @@ export default function OnboardingPage() {
               )}
               <div className="row" style={{ gap: "10px" }}>
                 <button type="button" className="btn btn-marker btn-block" onClick={() => { if (stageId) { setStep("grade"); } else { setError(locale === "ar" ? "اختر مرحلة." : "Select stage."); } }} disabled={saving || !stageId}>
+                  {locale === "ar" ? "استمر" : "Continue"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
+              </div>
+            </>
+          )}
+
+          {/* STEP 2B — UNIVERSITY (student university only) */}
+          {step === "stage" && isStudent && studentType === 'university' && (
+            <>
+              <h2 className="h3" style={{ margin: 0 }}>
+                {locale === "ar" ? "بيانات الجامعة" : "University details"}
+              </h2>
+              <p className="small muted" style={{ margin: 0 }}>
+                {locale === "ar" ? "من قاعدة البيانات — لا تعتمد على أسماء ثابتة." : "From the database — verified taxonomy."}
+              </p>
+              <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "الجامعة" : "University"}>
+                {/* University */}
+                <div>
+                  <b className="small">{locale === "ar" ? "الجامعة" : "University"}</b>
+                  <div className="row" style={{ gap: "8px", flexWrap: "wrap" }}>
+                    {uniData.universities.map((u: any) => (
+                      <button key={u.id} type="button" className="chip" aria-pressed={universityId === u.id} onClick={() => setUniversityId(u.id)} style={{ padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${universityId === u.id ? "var(--ink)" : "var(--rule-strong)"}`, background: universityId === u.id ? "var(--ink)" : "var(--paper)", color: universityId === u.id ? "var(--paper-2)" : "var(--ink)", fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>{u.name}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* Faculty */}
+                {universityId && (
+                  <div>
+                    <b className="small">{locale === "ar" ? "الكلية" : "Faculty"}</b>
+                    <div className="row" style={{ gap: "8px", flexWrap: "wrap" }}>
+                      {uniData.faculties.filter((f: any) => f.university_id === universityId).map((f: any) => (
+                        <button key={f.id} type="button" className="chip" aria-pressed={facultyId === f.id} onClick={() => setFacultyId(f.id)} style={{ padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${facultyId === f.id ? "var(--ink)" : "var(--rule-strong)"}`, background: facultyId === f.id ? "var(--ink)" : "var(--paper)", color: facultyId === f.id ? "var(--paper-2)" : "var(--ink)", fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>{f.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Department */}
+                {facultyId && (
+                  <div>
+                    <b className="small">{locale === "ar" ? "القسم" : "Department"}</b>
+                    <div className="row" style={{ gap: "8px", flexWrap: "wrap" }}>
+                      {uniData.departments.filter((d: any) => d.faculty_id === facultyId).map((d: any) => (
+                        <button key={d.id} type="button" className="chip" aria-pressed={departmentId === d.id} onClick={() => setDepartmentId(d.id)} style={{ padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${departmentId === d.id ? "var(--ink)" : "var(--rule-strong)"}`, background: departmentId === d.id ? "var(--ink)" : "var(--paper)", color: departmentId === d.id ? "var(--paper-2)" : "var(--ink)", fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>{d.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Level */}
+                {departmentId && (
+                  <div>
+                    <b className="small">{locale === "ar" ? "المستوى" : "Academic Level"}</b>
+                    <div className="row" style={{ gap: "8px", flexWrap: "wrap" }}>
+                      {uniData.levels.map((l: any) => (
+                        <button key={l.id} type="button" className="chip" aria-pressed={academicLevelId === l.id} onClick={() => setAcademicLevelId(l.id)} style={{ padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${academicLevelId === l.id ? "var(--ink)" : "var(--rule-strong)"}`, background: academicLevelId === l.id ? "var(--ink)" : "var(--paper)", color: academicLevelId === l.id ? "var(--paper-2)" : "var(--ink)", fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>{l.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Semester */}
+                {academicLevelId && (
+                  <div>
+                    <b className="small">{locale === "ar" ? "الترم" : "Semester"}</b>
+                    <div className="row" style={{ gap: "8px", flexWrap: "wrap" }}>
+                      {uniData.semesters.map((s: any) => (
+                        <button key={s.id} type="button" className="chip" aria-pressed={semesterId === s.id} onClick={() => setSemesterId(s.id)} style={{ padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${semesterId === s.id ? "var(--ink)" : "var(--rule-strong)"}`, background: semesterId === s.id ? "var(--ink)" : "var(--paper)", color: semesterId === s.id ? "var(--paper-2)" : "var(--ink)", fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>{s.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (universityId && facultyId && departmentId && academicLevelId && semesterId) { setStep("done"); } else { setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details."); } }} disabled={saving || !(universityId && facultyId && departmentId && academicLevelId && semesterId)}>
                   {locale === "ar" ? "استمر" : "Continue"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
