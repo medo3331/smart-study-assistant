@@ -50,7 +50,7 @@ export async function generatePracticeBatch(
     ok: false,
     message: "Requires AgentRouter/runAgent (not invented)",
     batch: {
-      source_type: "ai_generated",
+      source_type: "ai_generated" as const,
       source_name: "",
       country: input.country,
       stage: input.stage,
@@ -60,7 +60,7 @@ export async function generatePracticeBatch(
       questions: [],
       batch_id: input.batch_id || "",
       generated_at: new Date().toISOString(),
-    } as GeneratedQuestionBatch,
+    },
   };
 }
 
