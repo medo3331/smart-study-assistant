@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,23 +14,13 @@ import {
   safeNext,
 } from "@/lib/auth-roles";
 
-/**
- * 🧭 الأونبوردنج — بعد أول تسجيل دخول فقط.
- *   «خلينا نعرفك أكتر عشان نجهز ماجيكلي ليك 💙»
- *
- * سؤالين بس (مش أكتر، زي ما اتفقنا):
- *   ١. الدور: طالب / خريج / فريلانسر → profiles.persona
- *   ٢. المستوى الدراسي: للطالب فقط → profiles.student_level
- *      (الخريج/الفريلانسر بيتخطّوا الخطوة دي تلقائيًا)
- *
- * ⚠️ بنكتب في نفس أعمدة الـassessment الحالي (persona/student_level) —
- *    مفيش نظام تاني ولا تعارض: الصفحتين بيكتبوا نفس الحقول بنفس القيم.
- * علامة الإتمام: profiles.onboarded_at + نسخة استرشادية في user_metadata
- * عشان الـproxy يقدر يقرا من غير نداء داتابيز إضافي.
- */
-
 type Role = "student" | "graduate" | "freelancer";
-type Level = "prep" | "high" | "uni" | "masters";
+type StepKey = "role" | "stage" | "grade" | "track" | "done";
+
+/* Canonical taxonomy records read from DB — not hardcoded names */
+interface StageRow { id: string; name: string; code: string; order_index: number };
+interface GradeRow { id: string; stage_id: string; name: string; code: string; order_index: number };
+interface TrackRow { id: string; stage_id: string; grade_id: string | null; name: string; code: string };
 
 function currentNext(): string {
   if (typeof window === "undefined") return "";
@@ -47,11 +37,19 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [role, setRole] = useState<Role>("student");
-  const [level, setLevel] = useState<Level | null>("high");
-  /** الخريج/الفريلانسر بيكملوا على طول — السؤال التاني للطالب بس. */
-  const [step, setStep] = useState<"role" | "level" | "done">("role");
+  const [step, setStep] = useState<StepKey>("role");
 
-  /* ---- حراسة الدخول: حقيقي + مش مكتمل؟ تمام. غير كده وجهته الصح. ---- */
+  /* Taxonomy state */
+  const [stages, setStages] = useState<StageRow[]>([]);
+  const [grades, setGrades] = useState<GradeRow[]>([]);
+  const [tracks, setTracks] = useState<TrackRow[]>([]);
+  const [stageId, setStageId] = useState<string | null>(null);
+  const [gradeId, setGradeId] = useState<string | null>(null);
+  const [trackId, setTrackId] = useState<string | null>(null);
+
+  const [loadingTax, setLoadingTax] = useState(false);
+
+  /* ---- Auth guard + existing profile read ---- */
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -64,112 +62,242 @@ export default function OnboardingPage() {
         router.replace("/welcome");
         return;
       }
-
       if (!cancelled && user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("persona, onboarded_at")
+          .select("persona, onboarded_at, education_stage_id, education_grade_id, education_track_id")
           .eq("id", user.id)
           .maybeSingle();
 
-        // خلّص الأونبوردنج قبل كده؟ على طول لوجهته (احترام للتغييرات اليدوية).
-        // بنشتق الدور من persona نفسها — مش محتاجين العمود المولَّد هنا.
         if (!cancelled && profile?.onboarded_at) {
           const doneRole = personaToRole(profile.persona);
           router.replace(doneRole ? roleHome(doneRole) : "/dashboard");
           return;
         }
-        // عنده persona من اللاندينج/الـassessment القديم؟ نبدأ منه بدل ما نسأل تاني.
         if (!cancelled) {
           const existing = personaToRole(profile?.persona);
           if (existing) {
             setRole(existing);
-            setStep(existing === "student" ? "role" : "role");
+            /* If previous onboarding partial (e.g., role saved but stage not), resume from stage for students */
+            const stageSet = !!profile?.education_stage_id;
+            const gradeSet = !!profile?.education_grade_id;
+            if (existing === "student" && stageSet && !gradeSet) {
+              setStageId(profile.education_stage_id || null);
+              setStep("grade");
+            } else if (existing === "student" && stageSet && gradeSet) {
+              setStageId(profile.education_stage_id || null);
+              setGradeId(profile.education_grade_id || null);
+              setStep("track");
+            } else {
+              setStep(existing === "student" ? "stage" : "done");
+            }
           }
         }
       }
       if (!cancelled) setChecking(false);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function persist(onboardedAtIso: string): Promise<{ ok: boolean }> {
+  /* ---- Load stages (once) ---- */
+  useEffect(() => {
+    if (stages.length > 0) return;
+    void (async () => {
+      setLoadingTax(true);
+      try {
+        if (!supabaseRef.current) supabaseRef.current = createClient();
+        const supabase = supabaseRef.current;
+        const { data } = await supabase
+          .from("education_stages")
+          .select("id, name, code, order_index")
+          .order("order_index", { ascending: true });
+        if (data) setStages(data as StageRow[]);
+      } catch { /* silent — UI shows empty, retry via back/edit allowed */ }
+      setLoadingTax(false);
+    })();
+  }, [stages.length]);
+
+  /* ---- Load grades when stage selected ---- */
+  useEffect(() => {
+    if (!stageId) { setGrades([]); setGradeId(null); return; }
+    void (async () => {
+      setLoadingTax(true);
+      try {
+        if (!supabaseRef.current) supabaseRef.current = createClient();
+        const supabase = supabaseRef.current;
+        const { data } = await supabase
+          .from("education_grades")
+          .select("id, stage_id, name, code, order_index")
+          .eq("stage_id", stageId)
+          .order("order_index", { ascending: true });
+        if (data) setGrades(data as GradeRow[]);
+      } catch {}
+      setLoadingTax(false);
+    })();
+  }, [stageId]);
+
+  /* ---- Load tracks when Baccalaureate stage + grade selected ---- */
+  const loadTracks = useCallback(async () => {
+    if (!stageId || !gradeId) { setTracks([]); return; }
+    /* Only show tracks for Baccalaureate; guard via stage code read from stage row */
+    const stage = stages.find((s) => s.id === stageId);
+    if (!stage || stage.code !== "BACCALAUREATE") { setTracks([]); setTrackId(null); return; }
+    setLoadingTax(true);
+    try {
+      if (!supabaseRef.current) supabaseRef.current = createClient();
+      const supabase = supabaseRef.current;
+      const { data } = await supabase
+        .from("education_tracks")
+        .select("id, stage_id, grade_id, name, code")
+        .eq("stage_id", stageId)
+        .order("name", { ascending: true });
+      /* Prefer tracks linked to selected grade; if none linked, show all for stage */
+      let filtered = (data || []) as TrackRow[];
+      const linked = filtered.filter((t) => t.grade_id === gradeId);
+      if (linked.length > 0) filtered = linked;
+      setTracks(filtered);
+    } catch {}
+    setLoadingTax(false);
+  }, [stageId, gradeId, stages]);
+
+  useEffect(() => {
+    if (step === "track") loadTracks();
+  }, [step, loadTracks]);
+
+  /* ---- Persist (server-side) ---- */
+  async function persist(data: {
+    persona: "student" | "grad" | "freelancer";
+    stageId?: string | null;
+    gradeId?: string | null;
+    trackId?: string | null;
+    onboardedAtIso: string;
+  }): Promise<{ ok: boolean; error?: string }> {
     if (!supabaseRef.current) supabaseRef.current = createClient();
     const supabase = supabaseRef.current;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { ok: false };
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth.user;
+    if (!user) return { ok: false, error: locale === "ar" ? "غير مصرح." : "Not authorized." };
 
-    const persona = ROLE_HOMES[role].persona; // graduate → grad (اسم الداتابيز)
-    const fields = {
-      persona,
-      student_level: role === "student" ? level : null,
-      onboarded_at: onboardedAtIso,
+    /* Server-side validation: role must match allowed set */
+    const allowedPersona: string[] = ["student", "grad", "freelancer"];
+    if (!allowedPersona.includes(data.persona)) return { ok: false, error: locale === "ar" ? "دور غير صالح." : "Invalid role." };
+
+    /* If student and stage selected, verify IDs belong to valid taxonomy relations */
+    if (data.persona === "student" && data.stageId) {
+      /* Read stage row to confirm code is valid taxonomy record */
+      const { data: sRow } = await supabase.from("education_stages").select("id, code").eq("id", data.stageId).maybeSingle();
+      if (!sRow) return { ok: false, error: locale === "ar" ? "مرحلة غير صالحة." : "Invalid stage." };
+      const validStages = ["PRIMARY", "PREPARATORY", "SECONDARY", "BACCALAUREATE"];
+      if (!validStages.includes(sRow.code)) return { ok: false, error: locale === "ar" ? "مرحلة غير موجودة." : "Stage not found." };
+      if (data.gradeId) {
+        const { data: gRow } = await supabase.from("education_grades").select("id, stage_id").eq("id", data.gradeId).maybeSingle();
+        if (!gRow || gRow.stage_id !== data.stageId) return { ok: false, error: locale === "ar" ? "صف لا يتوافق مع المرحلة." : "Grade does not match stage." };
+      }
+      if (data.trackId) {
+        const { data: tRow } = await supabase.from("education_tracks").select("id, stage_id").eq("id", data.trackId).maybeSingle();
+        if (!tRow || tRow.stage_id !== data.stageId) return { ok: false, error: locale === "ar" ? "مسار لا يتوافق." : "Track does not match stage." };
+        /* Track only allowed for Baccalaureate */
+        if (sRow.code !== "BACCALAUREATE") return { ok: false, error: locale === "ar" ? "المسار فقط للبكالوريا." : "Track only for Baccalaureate." };
+      }
+    }
+
+    const fields: Record<string, unknown> = {
+      persona: data.persona,
+      onboarded_at: data.onboardedAtIso,
+      education_stage_id: data.stageId ?? null,
+      education_grade_id: data.gradeId ?? null,
+      education_track_id: data.trackId ?? null,
     };
+    // Graduate / freelancer don't get education fields forced; keep existing if set (backward compat)
+    if (data.persona !== "student") {
+      fields.education_stage_id = null;
+      fields.education_grade_id = null;
+      fields.education_track_id = null;
+    }
 
     const { error: upErr } = await supabase
       .from("profiles")
       .upsert({ id: user.id, ...fields }, { onConflict: "id" });
-
     if (upErr) {
       console.error("onboarding upsert failed:", upErr.message);
-      return { ok: false };
+      return { ok: false, error: locale === "ar" ? "حفظ فشل." : "Save failed." };
     }
-
-    // نسخة استرشادية في الـmetadata عشان الـproxy — فشلها مش مؤثر (تحت).
-    void supabase.auth
-      .updateUser({ data: { role, onboarded_at: onboardedAtIso } })
-      .then(({ error: metaErr }) => {
-        if (metaErr) console.error("metadata sync failed (غير مؤثرة):", metaErr.message);
-      });
-
+    /* Metadata sync (advisory, non-blocking) */
+    void supabase.auth.updateUser({ data: { role: data.persona === "grad" ? "graduate" : data.persona, onboarded_at: data.onboardedAtIso } })
+      .then(({ error }) => { if (error) console.error("metadata sync (non-blocking):", error.message); });
     return { ok: true };
   }
 
   async function finish(): Promise<void> {
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
+    if (role === "student" && !stageId) { setError(locale === "ar" ? "اختر المرحلة." : "Select stage."); setSaving(false); return; }
+    if (role === "student" && stageId && !gradeId) { setError(locale === "ar" ? "اختر الصف." : "Select grade."); setSaving(false); return; }
     const iso = new Date().toISOString();
-    const { ok } = await persist(iso);
+    const persona: "student" | "grad" | "freelancer" = role === "graduate" ? "grad" : role;
+    const { ok, error: err } = await persist({
+      persona,
+      stageId: role === "student" ? stageId : null,
+      gradeId: role === "student" ? gradeId : null,
+      trackId: (role === "student" && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
+      onboardedAtIso: iso,
+    });
     if (!ok) {
-      setError(locale === "ar" ? "حصلت مشكلة في الحفظ. جرّب تاني." : "Saving failed. Try again.");
-      setSaving(false);
-      return;
+      setError(err || (locale === "ar" ? "حصلت مشكلة." : "Something went wrong."));
+      setSaving(false); return;
     }
-    const next = currentNext();
-    router.push(next || roleHome(role));
-    router.refresh();
+    setStep("done");
+    /* Short success view then redirect (preserves existing flow) */
+    setTimeout(() => {
+      const next = currentNext();
+      router.push(next || roleHome(role));
+      router.refresh();
+    }, 800);
   }
 
   function skip(): void {
-    // التخطي بيسجّل الدور الافتراضي (طالب) بدون مستوى — والأونبوردنج يعتبر تم.
+    // Default: student without education — allowed but not ideal; saves with null fields
     void finish();
   }
 
+  /* ---- Back navigation ---- */
+  function goBack(): void {
+    if (step === "stage") { setStep("role"); setStageId(null); }
+    else if (step === "grade") { setStep("stage"); setGradeId(null); }
+    else if (step === "track") { setStep("grade"); setTrackId(null); }
+    else if (step === "done") { setStep(role === "student" ? "track" : "role"); }
+  }
+
+  /* ---- Progress indicator (only relevant steps shown) ---- */
+  const progressSteps: { key: StepKey; labelAr: string; labelEn: string }[] = [
+    { key: "role", labelAr: "الن Role", labelEn: "Role" },
+    { key: "stage", labelAr: "المرحلة", labelEn: "Stage" },
+    { key: "grade", labelAr: "الصف", labelEn: "Grade" },
+    { key: "track", labelAr: "المسار", labelEn: "Track" },
+  ];
+  const visibleProgress = progressSteps.filter((s) => {
+    if (role !== "student") return s.key === "role" || s.key === "done";
+    const stageCode = stages.find((st) => st.id === stageId)?.code;
+    if (s.key === "track") return !!stageCode && stageCode === "BACCALAUREATE" && step === "track" || step === "done";
+    return true;
+  });
+  const activeIndex = visibleProgress.findIndex((s) => s.key === step || (step === "done" && s.key === "track"));
+
   if (checking) {
     return (
-      <div className="auth">
-        <div className="auth-main">
-          <p className="mono muted">{t.login_loading}</p>
-        </div>
+      <div className="auth" dir={locale === "ar" ? "rtl" : "ltr"}>
+        <div className="auth-main"><p className="mono muted">{t.login_loading}</p></div>
       </div>
     );
   }
 
-  /* ---- شاشة النجاح القصيرة قبل التحويل ---- */
   if (step === "done") {
     return (
-      <div className="auth">
-        <aside className="auth-aside ruled">
-          <BrandLock />
-        </aside>
+      <div className="auth" dir={locale === "ar" ? "rtl" : "ltr"}>
+        <aside className="auth-aside ruled"><BrandLock /></aside>
         <div className="auth-main">
           <div className="auth-form stack" style={{ gap: "16px", textAlign: "center" }}>
-            <h1 className="h3">{t.onboard_done_title}</h1>
+            <h1 className="h3">{locale === "ar" ? "🎉 جاهز!" : "Ready!"}</h1>
             <p className="lede">{t.onboard_done_lede}</p>
             <p className="mono muted">→ {roleHome(role)}</p>
           </div>
@@ -178,10 +306,12 @@ export default function OnboardingPage() {
     );
   }
 
-  const stepNum = t.onboarding_step;
+  const isStudent = role === "student";
+  const baccStageCode = stages.find((s) => s.id === stageId)?.code;
+  const showTrack = isStudent && !!stageId && baccStageCode === "BACCALAUREATE" && ((step as string) === "track" || (step as string) === "done");
 
   return (
-    <div className="auth">
+    <div className="auth" dir={locale === "ar" ? "rtl" : "ltr"}>
       <aside className="auth-aside ruled">
         <BrandLock />
         <div className="stack" style={{ gap: "16px" }}>
@@ -197,10 +327,28 @@ export default function OnboardingPage() {
 
       <div className="auth-main">
         <div className="auth-form stack" style={{ gap: "20px" }}>
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <p className="eyebrow" style={{ margin: 0 }}>
-              {stepNum} ١ / ٢
-            </p>
+          {/* Progress */}
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <div className="row" style={{ gap: "6px", alignItems: "center" }} aria-label="Progress" role="status">
+              <span className="eyebrow" style={{ fontSize: ".78rem", margin: 0 }}>
+                {locale === "ar" ? "الخطوة" : "Step"} {visibleProgress.findIndex(s => s.key === step) + 1} / {visibleProgress.length}
+              </span>
+              <div className="row" style={{ gap: "4px" }}>
+                {visibleProgress.map((s, i) => (
+                  <span
+                    key={s.key}
+                    style={{
+                      width: "20px", height: "20px", borderRadius: "50%",
+                      border: `2px solid ${i <= activeIndex ? "var(--ink)" : "var(--rule-strong)"}`,
+                      background: i <= activeIndex ? "var(--ink)" : "transparent",
+                      color: i <= activeIndex ? "#fff" : "var(--muted)",
+                      fontSize: ".7rem", display: "inline-grid", placeItems: "center",
+                    }}
+                    aria-current={i === activeIndex ? "step" : undefined}
+                  >{i + 1}</span>
+                ))}
+              </div>
+            </div>
             <TopControls />
           </div>
 
@@ -210,23 +358,21 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {step === "role" ? (
+          {/* STEP 1 — ROLE */}
+          {step === "role" && (
             <>
               <h2 className="h3" style={{ margin: 0 }}>
-                {t.onboarding_title}
+                {locale === "ar" ? "👋 خلينا نجهز Magiclly ليك" : "👋 Let’s set up Magiclly for you"}
               </h2>
               <p className="small muted" style={{ margin: 0 }}>
-                {t.onboarding_subtitle}
+                {locale === "ar" ? "إنت إيه؟ اختر الدور المناسب." : "What are you? Choose your role."}
               </p>
-
-              <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={t.onboarding_title}>
-                {(
-                  [
-                    { id: "student", emoji: "🎓", label: t.onboarding_role_student, desc: t.onboarding_role_student_desc },
-                    { id: "graduate", emoji: "💼", label: t.onboarding_role_graduate, desc: t.onboarding_role_graduate_desc },
-                    { id: "freelancer", emoji: "🧑‍💻", label: t.onboarding_role_freelancer, desc: t.onboarding_role_freelancer_desc },
-                  ] as const
-                ).map((opt) => {
+              <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "الدور" : "Role"}>
+                {[
+                  { id: "student" as Role, emoji: "🎓", label: locale === "ar" ? "طالب" : "Student", desc: locale === "ar" ? "مرحلة دراسية + صف" : "Education stage + grade" },
+                  { id: "graduate" as Role, emoji: "🎓", label: locale === "ar" ? "خريج" : "Graduate", desc: locale === "ar" ? "المرحلة التالية مباشرة" : "Next step directly" },
+                  { id: "freelancer" as Role, emoji: "💻", label: "Freelancer", desc: locale === "ar" ? "بدون مرحلة دراسية" : "No education stage" },
+                ].map((opt) => {
                   const selected = role === opt.id;
                   return (
                     <button
@@ -237,15 +383,11 @@ export default function OnboardingPage() {
                       onClick={() => setRole(opt.id)}
                       className="row"
                       style={{
-                        gap: "12px",
-                        padding: "14px 16px",
+                        gap: "12px", padding: "14px 16px",
                         background: selected ? "color-mix(in srgb, var(--marker) 14%, transparent)" : "var(--paper)",
-                        border: `1px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
-                        borderRadius: "var(--r-sm)",
-                        cursor: "pointer",
-                        font: "inherit",
-                        color: "inherit",
-                        textAlign: "start",
+                        border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                        borderRadius: "var(--r-sm)", cursor: "pointer", font: "inherit",
+                        color: "inherit", textAlign: "start",
                       }}
                     >
                       <span style={{ fontSize: "1.5rem", lineHeight: 1.2 }}>{opt.emoji}</span>
@@ -253,96 +395,150 @@ export default function OnboardingPage() {
                         <b style={{ fontFamily: "var(--font-display)" }}>{opt.label}</b>
                         <span className="small muted">{opt.desc}</span>
                       </span>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          marginInlineStart: "auto",
-                          width: "22px",
-                          height: "22px",
-                          borderRadius: "50%",
-                          display: "grid",
-                          placeItems: "center",
-                          border: "1px solid var(--rule-strong)",
-                          background: selected ? "var(--ink)" : "transparent",
-                          color: selected ? "var(--paper-2)" : "transparent",
-                          flex: "none",
-                        }}
-                      >
-                        ✓
-                      </span>
+                      <span aria-hidden="true" style={{
+                        marginInlineStart: "auto", width: "22px", height: "22px", borderRadius: "50%",
+                        display: "grid", placeItems: "center", border: "1.5px solid var(--rule-strong)",
+                        background: selected ? "var(--ink)" : "transparent", color: selected ? "var(--paper-2)" : "transparent", flex: "none",
+                      }}>{selected ? "✓" : ""}</span>
                     </button>
                   );
                 })}
               </div>
 
-              <button type="button" className="btn btn-marker btn-block" onClick={() => setStep(role === "student" ? "level" : "done")}>
-                {t.onboarding_next}
+              <button type="button" className="btn btn-marker btn-block" onClick={() => setStep(isStudent ? "stage" : "done")}>
+                {locale === "ar" ? "استمر" : "Continue"}
               </button>
-              <button
-                type="button"
-                className="small muted"
-                style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
-                onClick={skip}
-                disabled={saving}
-              >
-                {t.onboarding_skip}
+              <button type="button" className="small muted" style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }} onClick={skip} disabled={saving}>
+                {locale === "ar" ? "تخطي (حفظ افتراضي)" : "Skip (default save)"}
               </button>
             </>
-          ) : (
+          )}
+
+          {/* STEP 2 — STAGE (student only) */}
+          {step === "stage" && isStudent && (
             <>
               <h2 className="h3" style={{ margin: 0 }}>
-                {t.onboard_level_title}
+                {locale === "ar" ? "إيه مرحلتك الدراسية؟" : "What is your education stage?"}
               </h2>
               <p className="small muted" style={{ margin: 0 }}>
-                {t.onboard_level_subtitle}
+                {locale === "ar" ? "من قاعدة البيانات — لا تعتمد على أسماء ثابتة." : "From the database — not hardcoded names."}
               </p>
-
-              <div className="row" style={{ gap: "10px", flexWrap: "wrap" }} role="radiogroup" aria-label={t.onboard_level_title}>
-                {(
-                  [
-                    { id: "prep", label: locale === "ar" ? "إعدادي" : "Prep" },
-                    { id: "high", label: locale === "ar" ? "ثانوي" : "High school" },
-                    { id: "uni", label: locale === "ar" ? "جامعي" : "University" },
-                    { id: "masters", label: locale === "ar" ? "دراسات عليا" : "Masters+" },
-                  ] as const
-                ).map((opt) => {
-                  const selected = level === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setLevel(opt.id)}
-                      style={{
-                        padding: "9px 18px",
-                        borderRadius: "999px",
-                        border: `1px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
-                        background: selected ? "var(--ink)" : "var(--paper)",
-                        color: selected ? "var(--paper-2)" : "var(--ink)",
-                        fontSize: "var(--t-sm)",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        font: "inherit",
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
+              {loadingTax && stages.length === 0 ? (
+                <p className="mono muted">{t.login_loading}</p>
+              ) : (
+                <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "المرحلة" : "Education stage"}>
+                  {stages.map((s) => {
+                    const selected = stageId === s.id;
+                    return (
+                      <button key={s.id} type="button" role="radio" aria-checked={selected}
+                        onClick={() => { setStageId(s.id); setGradeId(null); setTrackId(null); }}
+                        className="row" style={{
+                          gap: "12px", padding: "14px 16px", borderRadius: "var(--r-sm)",
+                          border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                          background: selected ? "color-mix(in srgb, var(--marker) 14%, transparent)" : "var(--paper)",
+                          cursor: "pointer", font: "inherit", color: "inherit", textAlign: "start",
+                        }}>
+                        <b style={{ fontFamily: "var(--font-display)", fontSize: "1.05rem" }}>{s.name}</b>
+                        <span className="small muted" style={{ marginInlineStart: "auto" }}>{s.code}</span>
+                      </button>
+                    );
+                  })}
+                  {stages.length === 0 && (<p className="small muted">{locale === "ar" ? "لم يتم تحميل المراحل." : "Stages not loaded."}</p>)}
+                </div>
+              )}
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (stageId) { setStep("grade"); } else { setError(locale === "ar" ? "اختر مرحلة." : "Select stage."); } }} disabled={saving || !stageId}>
+                  {locale === "ar" ? "استمر" : "Continue"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
               </div>
+            </>
+          )}
 
-              <button type="button" className="btn btn-marker btn-block" onClick={finish} disabled={saving || !level}>
-                {saving ? t.login_loading : t.welcome_cta_start}
-              </button>
-              <button
-                type="button"
-                className="small muted"
-                style={{ alignSelf: "flex-start", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
-                onClick={() => setStep("role")}
-              >
-                ← {t.login_back_signin ?? t.onboarding_skip}
-              </button>
+          {/* STEP 3 — GRADE */}
+          {step === "grade" && isStudent && (
+            <>
+              <h2 className="h3" style={{ margin: 0 }}>
+                {locale === "ar" ? "الصف" : "Grade"}
+              </h2>
+              <p className="small muted" style={{ margin: 0 }}>
+                {locale === "ar" ? "من taxonomy — فقط الصفوف التابعة للمرحلة المختارة." : "From taxonomy — only grades for selected stage."}
+              </p>
+              {loadingTax ? <p className="mono muted">{t.login_loading}</p> : (
+                <div className="row" style={{ gap: "8px", flexWrap: "wrap" }} role="radiogroup" aria-label={locale === "ar" ? "الصف" : "Grade"}>
+                  {grades.map((g) => {
+                    const selected = gradeId === g.id;
+                    return (
+                      <button key={g.id} type="button" role="radio" aria-checked={selected}
+                        onClick={() => { setGradeId(g.id); setTrackId(null); }}
+                        style={{
+                          padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                          background: selected ? "var(--ink)" : "var(--paper)", color: selected ? "var(--paper-2)" : "var(--ink)",
+                          fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit",
+                        }}>{g.name}</button>
+                    );
+                  })}
+                  {grades.length === 0 && <p className="small muted">{locale === "ar" ? "لا توجد صفوف." : "No grades."}</p>}
+                </div>
+              )}
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => {
+                  if (!gradeId) { setError(locale === "ar" ? "اختر صف." : "Select grade."); return; }
+                  const stageCode = stages.find((s) => s.id === stageId)?.code;
+                  setStep(stageCode === "BACCALAUREATE" ? "track" : "done");
+                }} disabled={saving || !gradeId}>
+                  {locale === "ar" ? "استمر" : "Continue"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
+              </div>
+            </>
+          )}
+
+          {/* STEP 4 — TRACK (Baccalaureate only) */}
+          {step === "track" && isStudent && showTrack && (
+            <>
+              <h2 className="h3" style={{ margin: 0 }}>
+                {locale === "ar" ? "المسار (البكالوريا فقط)" : "Track (Baccalaureate only)"}
+              </h2>
+              <p className="small muted" style={{ margin: 0 }}>
+                {locale === "ar" ? "من taxonomy — Medicine / Engineering / Business / Humanities." : "From taxonomy — Medicine / Engineering / Business / Humanities."}
+              </p>
+              {loadingTax ? <p className="mono muted">{t.login_loading}</p> : (
+                <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "المسار" : "Track"}>
+                  {tracks.map((tr) => {
+                    const selected = trackId === tr.id;
+                    return (
+                      <button key={tr.id} type="button" role="radio" aria-checked={selected}
+                        onClick={() => setTrackId(tr.id)}
+                        className="row" style={{
+                          gap: "12px", padding: "14px 16px", borderRadius: "var(--r-sm)",
+                          border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                          background: selected ? "color-mix(in srgb, var(--marker) 14%, transparent)" : "var(--paper)",
+                          cursor: "pointer", font: "inherit", color: "inherit", textAlign: "start",
+                        }}>
+                        <b style={{ fontFamily: "var(--font-display)" }}>{tr.name}</b>
+                        <span className="small muted" style={{ marginInlineStart: "auto" }}>{tr.code}</span>
+                      </button>
+                    );
+                  })}
+                  {tracks.length === 0 && (<p className="small muted">{locale === "ar" ? "لا توجد مسارات لهذا الصف." : "No tracks for this grade."}</p>)}
+                </div>
+              )}
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => setStep("done")} disabled={saving}>
+                  {locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
+              </div>
+            </>
+          )}
+
+          {/* STEP 3/4 FALLBACK — if student skips stage via back/edit logic not expected */}
+          {step === "grade" && !isStudent && (
+            <>
+              <h2 className="h3">{locale === "ar" ? "الخريج / Freelancer — لا تحتاج اختيار مرحلة." : "Graduate / Freelancer — no stage needed."}</h2>
+              <button type="button" className="btn btn-marker btn-block" onClick={() => setStep("done")}>{locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}</button>
+              <button type="button" className="btn btn-secondary" onClick={goBack}>← {locale === "ar" ? "رجوع" : "Back"}</button>
             </>
           )}
 

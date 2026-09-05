@@ -1,5 +1,24 @@
-"use client"; // 1.2E Diagnostic Result — reuse existing design; no AI; Arabic/RTL
-import React from "react";
-export interface DiagnosticResultData { score:number; total:number; percentage:number; correct_count:number; wrong_count:number; weak_topics:{topic:string;accuracy:number;questions_attempted:number}[]; strong_topics:{topic:string;accuracy:number}[]; insufficient_data_topics:{topic:string;questions_attempted:number}[]; recommendations:{weak_topic:string;accuracy:number;content_available:boolean;study_suggestion:string;priority:string}[]; }
-interface Props { result: DiagnosticResultData; onRetry?: () => void; }
-export default function DiagnosticResult({ result, onRetry }: Props) { return (<div dir="rtl" className="w-full max-w-2xl mx-auto p-6 space-y-6" style={{ color: "var(--foreground)" }}><h2 className="text-2xl font-bold text-center">نتيجتك التشخيصية</h2><div className="grid grid-cols-3 gap-4 text-center"><div className="p-4 rounded-xl bg-[var(--card)] border"><div className="text-3xl font-bold text-[var(--accent)]">{result.score}</div><div className="text-sm text-[var(--muted-foreground)]">الدرجة</div></div><div className="p-4 rounded-xl bg-[var(--card)] border"><div className="text-3xl font-bold">{result.total}</div><div className="text-sm text-[var(--muted-foreground)]">الإجمالي</div></div><div className="p-4 rounded-xl bg-[var(--card)] border"><div className="text-3xl font-bold">{Math.round(result.percentage)}%</div><div className="text-sm text-[var(--muted-foreground)]">النسبة</div></div></div><div className="p-4 rounded-xl bg-[var(--card)] border"><h3 className="font-bold mb-3">أداء حسب الموضوع</h3><div className="space-y-2">{result.weak_topics.map(t => (<div key={t.topic} className="flex justify-between p-2 rounded bg-red-50 dark:bg-red-900/20"><span>{t.topic}</span><span className="font-bold">{Math.round(t.accuracy*100)}% ({t.questions_attempted})</span></div>))}{result.strong_topics.map(t => (<div key={t.topic} className="flex justify-between p-2 rounded bg-green-50 dark:bg-green-900/20"><span>{t.topic}</span><span className="font-bold">{Math.round(t.accuracy*100)}%</span></div>))}{result.insufficient_data_topics.map(t => (<div key={t.topic} className="flex justify-between p-2 rounded bg-amber-50 dark:bg-amber-900/20"><span>{t.topic}</span><span className="font-bold text-sm">بيانات غير كافية ({t.questions_attempted})</span></div>))}</div></div><div className="p-4 rounded-xl bg-[var(--card)] border"><h3 className="font-bold mb-3">توصيات المراجعة</h3>{result.recommendations.length === 0 && (<p className="text-[var(--muted-foreground)]">لا توجد توصيات حالية (المحتوى غير متوفر أو البيانات غير كافية).</p>)}{result.recommendations.map(r => (<div key={r.weak_topic} className="p-3 mb-2 rounded border"><div className="font-bold">{r.weak_topic}</div><div className="text-sm text-[var(--muted-foreground)]">الأداء: {Math.round(r.accuracy*100)}% — {r.content_available ? "محتوى متوفر" : "المحتوى غير متوفر بعد"}</div>{r.content_available && (<div className="mt-2 text-sm">{r.study_suggestion}</div>)}</div>))}</div>{onRetry && (<div className="text-center pt-4"><button onClick={onRetry} className="px-6 py-3 rounded-lg bg-[var(--accent)] text-white font-bold">إعادة الاختبار</button></div>)} </div>); }
+import React, { useState, useEffect } from "react";
+export interface ExamQuestion { id: string; question_text: string; options: string[]; correct_option_index: number; difficulty: string; source_reference: string; }
+export default function ExamQuestionBank({ subjectId }: { subjectId: string }) {
+  const [qs,setQs]=useState<ExamQuestion[]>([]); const [ld,setLd]=useState(true);
+  useEffect(()=>{ setLd(true); (async()=>{ try { const s=await (await fetch("/api/diagnostic/questions?subject_id="+subjectId)).json(); setQs(s||[]); } catch{setQs([]);} setLd(false); })(); },[subjectId]);
+  if(ld)return <div dir="rtl">جارٍ التحميل...</div>;
+  if(qs.length===0)return <div dir="rtl">لا توجد أسئلة منشورة حالياً.</div>;
+  return (
+    <div dir="rtl" className="w-full max-w-2xl mx-auto p-6 space-y-4">
+      <h2 className="text-xl font-bold">بنك الأسئلة — الرياضيات</h2>
+      {qs.map((q,i)=>(
+        <div key={q.id} className="p-4 rounded-xl bg-[var(--card)] border">
+          <div className="font-bold">{i+1}. {q.question_text}</div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {q.options.map((opt,j)=>(
+              <button key={j} className="p-2 rounded border text-right hover:bg-[var(--accent)]">{String.fromCharCode(65+j)}. {opt}</button>
+            ))}
+          </div>
+          <div className="text-xs text-[var(--muted-foreground)]">المصدر: {q.source_reference||"MOE"} • صعوبة: {q.difficulty}</div>
+        </div>
+      ))}
+    </div>
+  );
+}

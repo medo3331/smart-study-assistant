@@ -67,6 +67,7 @@ import { CommunityInvite } from "@/components/CommunityInvite";
 import { StudyPet } from "@/components/StudyPet";
 
 import { useEquippedCompanion } from "@/lib/shop/use-companion";
+import { getAvailableSubjects, getEducationContext } from "@/lib/education/context";
 
 // ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
 // ✅ ملحوظة: نفس القيمة دي متعرّفة جوه StudySections.tsx كمان (بيستخدمها في عرض زرار البوس) -
@@ -76,6 +77,32 @@ const CHAPTER_SIZE = 5;
 export default function DashboardPage() {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
+  const [eduSubjects, setEduSubjects] = useState<any[]>([]);
+  const [eduLoading, setEduLoading] = useState(false);
+  const [eduError, setEduError] = useState<string|null>(null);
+  const [eduContext, setEduContext] = useState<any>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    void (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: prof } = await supabase.from("profiles").select("persona,education_stage_id,education_grade_id,education_track_id,subject").eq("id",user.id).maybeSingle();
+        const ctx = getEducationContext(prof || {});
+        setEduContext(ctx);
+        if (ctx.stageId) {
+          setEduLoading(true); setEduError(null);
+          const list = await getAvailableSubjects(supabase, ctx);
+          setEduSubjects(list);
+          setEduLoading(false);
+        } else {
+          setEduSubjects([]); setEduLoading(false);
+        }
+      } catch { setEduError("تعذر تحميل المواد"); setEduLoading(false); }
+    })();
+  }, [supabase]);
+
 
   // 1. البيانات الأساسية والمستخدم
   const [config, setConfig] = useState<StudyConfig | null>(null);
@@ -1556,6 +1583,25 @@ export default function DashboardPage() {
           !isMenuOpen
         }
       />
+
+          {eduContext && eduContext.stageId && (
+            <div className="w-full max-w-3xl mx-auto mt-6 p-4 rounded-xl bg-paper border border-rule">
+              <h3 className="font-display text-lg mb-3">{eduContext.stageId ? (eduContext.stageId === "BACCALAUREATE" ? (eduContext.trackId ? "البكالوريا — " : "البكالوريا") : "موادك") : "موادك"}</h3>
+              {eduLoading ? <div className="mono text-xs text-ink-soft">جارٍ التحميل…</div> : eduError ? <div className="text-sm text-red-600">{eduError}</div> : eduSubjects.length === 0 ? <div className="text-sm text-ink-soft">لا توجد مواد مرتبطة بهذا السياق حالياً.</div> : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {eduSubjects.map((s: any) => (
+                    <div key={s.id} className="p-3 rounded-lg border border-rule bg-paper-2 hover:border-ink-soft transition">
+                      <div className="font-semibold text-sm">{s.name}</div>
+                      <div className="text-xs text-ink-soft">من المنهج</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {(!eduContext || !eduContext.stageId) && (
+            <div className="w-full max-w-3xl mx-auto mt-6 p-4 rounded-xl bg-paper border border-rule text-sm text-ink-soft">أكمل إعداد ملفك التعليمي لعرض المواد المخصصة.</div>
+          )}
     </div>
   );
 }

@@ -21,6 +21,8 @@ import { LessonBreadcrumb, LessonUnitProgress } from "./components/LessonBreadcr
 import { LessonHero } from "./components/LessonHero";
 import { LessonModeTabs } from "./components/LessonModeTabs";
 import { LessonProgressPanel } from "./components/LessonProgressPanel";
+import LessonVideoPlayer from "@/components/lesson/LessonVideoPlayer";
+import { VideoCandidate } from "@/lib/lesson/video-server";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -273,6 +275,41 @@ export default function LessonDetailPage() {
   // ✅ إضافة: إظهار فورم إضافة مورد جديد بدل ما يكون ظاهر طول الوقت (شكل Google Drive)
   const [showAddResourceForm, setShowAddResourceForm] = useState(false);
 
+  // Phase 1.4 — Smart Video Foundation variables (must come before useEffect using them)
+  const [videoCandidates, setVideoCandidates] = useState<VideoCandidate[]>([]);
+  const [videoLoading, setVideoLoading] = useState(false);
+
+  // Phase 1.4 — Independent video load (never blocks page render)
+  useEffect(() => {
+    if (!dayRow || !config) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- independent async video load (not render-cascade)
+    setVideoLoading(true);
+    fetch("/api/lesson/video", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject: config?.subject || dayRow.topic || "",
+        lesson: dayRow.topic || dayRow.title || "",
+        grade: dayRow.learning_style || "",
+        curriculum: config?.category || "",
+        unit: dayRow.topic || "",
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d.ok && Array.isArray(d.candidates)) setVideoCandidates(d.candidates);
+      })
+      .catch(() => {
+        // Video failure must not break page (rule 12 / 15)
+      })
+      .finally(() => {
+        if (!cancelled) setVideoLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [dayRow?.id, config?.subject, config?.category, dayRow?.topic, dayRow?.title, dayRow?.learning_style]);
+
   // 🧠 الاختبار الذكي
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizLoading, setQuizLoading] = useState(false);
@@ -408,7 +445,6 @@ export default function LessonDetailPage() {
     const query = encodeURIComponent(`${topic} ${subject}`);
     if (style === "visual") {
       return [
-        { title: "فيديو شرح", icon: "🎥", url: `https://www.youtube.com/results?search_query=${query}` },
         { title: "خرائط ذهنية", icon: "🖼️", url: `https://www.google.com/search?tbm=isch&q=${query}+diagram` },
       ];
     } else if (style === "academic") {
@@ -419,7 +455,6 @@ export default function LessonDetailPage() {
     }
     return [
       { title: "تمارين وتطبيقات", icon: "🖥️", url: `https://www.google.com/search?q=${query}+practical+exercises` },
-      { title: "تطبيق عملي", icon: "🚀", url: `https://www.youtube.com/results?search_query=${query}+tutorial` },
     ];
   };
 
@@ -730,6 +765,14 @@ export default function LessonDetailPage() {
           </section>
         </Reveal>
 
+        {/* Phase 1.4 — Smart Video Player inside Lesson Page (independent load) */}
+        <Reveal delay={0.05}>
+          <LessonVideoPlayer
+            candidates={videoCandidates}
+            loading={videoLoading}
+            context={{ subject: config?.subject || dayRow?.topic || "", lesson: dayRow?.topic || "", grade: dayRow?.learning_style || "" }}
+          />
+        </Reveal>
 
         {/* ─── التبويبات الموحّدة: نفس learning_style الموجود ─── */}
         <div className="flex justify-center sm:justify-start">

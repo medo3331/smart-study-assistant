@@ -1,0 +1,13 @@
+{
+  "question_text": "Clear question in Arabic",
+  "options_json": [
+    "option1",
+    "option2",
+    "option3",
+    "option4"
+  ],
+  "correct_option_index": 0,
+  "explanation": "Brief clear explanation in Arabic",
+  "difficulty": "medium",
+  "topic": "الجبر"
+}

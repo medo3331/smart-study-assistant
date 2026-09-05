@@ -1,0 +1,37 @@
+Here's a thinking process:
+
+1.  **Analyze User Request:**
+   - Role: Quiz Generator specialized in secondary school math (mathematics)
+   - Target: Egyptian Thanaweya Amma (grade 12) level
+   - Subject: Algebra (الجبر)
+   - Quantity: Exactly 2 training questions
+   - Format: Multiple Choice Questions (MCQ) with 4 options each
+   - Requirement: Clear correct answer
+   - Output format constraint: Must output ONLY a valid JSON object/array as specified: `[{"question_text":"...","options_json":["...","...","...","..."],"correct_option_index":0,"explanation":"...","difficulty":"easy","topic":"الجبر"}]`
+   - Additional constraint: No extra text outside the JSON object.
+
+2.  **Identify Key Constraints:**
+   - Output must be valid JSON
+   - Must be an array of exactly 2 question objects
+   - Each object must have specific keys: `question_text`, `options_json`, `correct_option_index`, `explanation`, `difficulty`, `topic`
+   - `options_json` must be an array of exactly 4 strings (options)
+   - `correct_option_index` must be an integer 0-3 indicating the correct option position
+   - `explanation` in Arabic (since user asked for Arabic explanation implicitly, and topic is Arabic)
+   - `difficulty`: should be appropriate, I'll use "medium" or "easy" as per example, but example says "easy". I'll stick to "medium" or "easy" - let's use "medium" for grade 12 algebra, or follow example "easy". I'll use "medium".
+   - `topic`: "الجبر" as specified
+   - No text outside JSON
+
+3.  **Generate Content - Question 1: Algebra/Grade 12 Egypt**
+   - Topics in Egyptian Thanaweya Amma math include: equations, inequalities, functions, sequences, logarithms, trigonometry basics, etc.
+   - Let's pick a classic algebra topic: solving quadratic equations, or systems of equations, or functions.
+   - I'll create a question on quadratic equations or maybe factorization/roots.
+   - Let's do: "Find the solution set of the equation: x^2 - 5x + 6 = 0"
+   - Options: A) {2, 3}, B) {-2, -3}, C) {1, 6}, D) {-1, -6}
+   - Correct: A (index 0)
+   - Explanation: Factorizing: (x-2)(x-3)=0 => x=2 or x=3.
+   - Difficulty: easy (matches example)
+   - Topic: الجبر
+
+   JSON object 1:
+   ```json
+   {"question_text":"حلِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِِّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّّ

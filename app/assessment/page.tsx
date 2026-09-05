@@ -102,7 +102,7 @@ interface GeneratedDay {
 
 export default function AssessmentPage() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [supabase] = useState(() => createClient());
 
   const [step, setStep] = useState<"identity" | "subject" | "quiz" | "building" | "result">("identity");
@@ -116,11 +116,51 @@ export default function AssessmentPage() {
   const [startingSteps, setStartingSteps] = useState<1 | 3 | 5>(3);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [result, setResult] = useState<{ level: SkillLevel; style: LearningStyle; days: number } | null>(null);
+  // Education context (student only) — minimal addition to existing Assessment
+  const [eduStageId, setEduStageId] = useState<string | null>(null);
+  const [eduGradeId, setEduGradeId] = useState<string | null>(null);
+  const [stagesDB, setStagesDB] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [gradesDB, setGradesDB] = useState<{ id: string; stage_id: string; name: string; code: string }[]>([]);
 
   // الاختيار الجاهز من اللاندينج. localStorage مش موجود في السيرفر، فالقراءة
   // في effect — وبكده أول رندر بيطابق الـ SSR ومفيش hydration mismatch.
   // ⚠️ مش بنمسح الاختيار هنا: لو المستخدم عمل ريفريش قبل ما الخطة تتحفظ،
   // المسح المبكر كان هيرجّعه لخطوة المادة تاني. المسح بعد الحفظ بنجاح.
+  // Read existing profile context to reuse / skip duplicates (sec 14: choose once → save → reuse)
+  useEffect(() => {
+    if (!supabase) return;
+    void (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, subject").eq("id", user.id).maybeSingle();
+        if (p) {
+          if (p.persona && ["student","grad","freelancer"].includes(p.persona)) setPersona(p.persona as Persona);
+          if (p.student_level) setStudentLevel(p.student_level as StudentLevel);
+          if (p.education_stage_id) { setEduStageId(p.education_stage_id); }
+          if (p.education_grade_id) { setEduGradeId(p.education_grade_id); }
+          if (p.subject) { setSubject(p.subject); setStep("quiz"); } // sec 6: skip subject if already set
+        }
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase]);
+
+  // Load education taxonomy for students (DB-driven, IDs canonical; labels localized at render)
+  useEffect(() => {
+    if (stagesDB.length > 0) return;
+    void (async () => {
+      try { const { data } = await supabase.from("education_stages").select("id, name, code, order_index").order("order_index", { ascending: true }); if (data) setStagesDB(data as typeof stagesDB); } catch {}
+    })();
+  }, [stagesDB.length, supabase]);
+
+  useEffect(() => {
+    if (!eduStageId || persona !== "student") { setGradesDB([]); setEduGradeId(null); return; }
+    void (async () => {
+      try { const { data } = await supabase.from("education_grades").select("id, stage_id, name, code, order_index").eq("stage_id", eduStageId).order("order_index", { ascending: true }); if (data) setGradesDB(data as typeof gradesDB); } catch {}
+    })();
+  }, [eduStageId, persona, supabase]);
+
   useEffect(() => {
     const pending = readPendingChoice();
     if (!pending) return;
@@ -138,7 +178,7 @@ export default function AssessmentPage() {
     setPersona(nextPersona);
     // المستوى خاص بالطالب؛ إبقاؤه بعد اختيار شخصية تانية يخلّي بيانات
     // الحساب تقول حاجتين متناقضتين.
-    if (nextPersona !== "student") setStudentLevel(null);
+    if (nextPersona !== "student") { setStudentLevel(null); setEduStageId(null); setEduGradeId(null); }
   }
 
   const handleSelectOption = (option: QuizOption) => {
@@ -263,11 +303,14 @@ export default function AssessmentPage() {
 
       // 👤 الشخصية والمجال صفات المستخدم مش صفات الدرس، فمكانهم profiles.
       // upsert مش insert: اليوزر الموجود بالفعل لازم ياخد الاختيار الجديد كمان.
-      const personaFields = {
+      const personaFields: Record<string, unknown> = {
         persona,
         student_level: persona === "student" ? studentLevel : null,
         field,
         subject,
+        education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
+        education_grade_id: persona === "student" ? (eduGradeId ?? null) : null,
+        education_track_id: null,
       };
       if (existingProfile) {
         const { error: profileError } = await supabase.from("profiles").update(personaFields).eq("id", currentUser.id);
@@ -373,7 +416,8 @@ export default function AssessmentPage() {
                 </div>
               </div>
 
-              {needsStudentLevel && (
+              {/* OLD studentLevel — hidden from student UI per fix, preserved internally for AI context / compatibility */}
+              {false && needsStudentLevel && (
                 <div>
                   <p className="field-label">مستواك الدراسي</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -396,10 +440,47 @@ export default function AssessmentPage() {
                 </div>
               )}
 
+              {/* Education Stage + Grade — student only; DB-driven */}
+              {persona === "student" && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="field-label">{locale === "ar" ? "المرحلة التعليمية" : "Education Stage"}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {stagesDB.map((s) => {
+                        // Localization per sec 12/13: DB codes canonical; UI localized by locale
+                        const label = locale === "ar"
+                          ? (s.code === "PRIMARY" ? "ابتدائي" : s.code === "PREPARATORY" ? "إعدادي" : s.code === "SECONDARY" ? "ثانوي" : s.code === "BACCALAUREATE" ? "بكالوريا" : s.name)
+                          : (s.code === "PRIMARY" ? "Primary" : s.code === "PREPARATORY" ? "Preparatory" : s.code === "SECONDARY" ? "Secondary" : s.code === "BACCALAUREATE" ? "Baccalaureate" : s.name);
+                        return (
+                          <button key={s.id} type="button" onClick={() => { setEduStageId(s.id); setEduGradeId(null); }} aria-pressed={eduStageId === s.id} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${eduStageId === s.id ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{label}</button>
+                        );
+                      })}
+                      {stagesDB.length === 0 && <span className="mono text-xs text-ink-soft">جارٍ التحميل…</span>}
+                    </div>
+                  </div>
+                  {eduStageId && (
+                    <div>
+                      <p className="field-label">{locale === "ar" ? "الصف" : "Grade"}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {gradesDB.map((g) => {
+                          const label = locale === "ar"
+                            ? (g.code === "P1" ? "الصف الأول" : g.code === "P2" ? "الصف الثاني" : g.code === "P3" ? "الصف الثالث" : g.code === "P4" ? "الصف الرابع" : g.code === "P5" ? "الصف الخامس" : g.code === "P6" ? "الصف السادس" : g.code === "PREP1" ? "الصف الأول الإعدادي" : g.code === "PREP2" ? "الصف الثاني الإعدادي" : g.code === "PREP3" ? "الصف الثالث الإعدادي" : g.code === "SEC_GEN_1" ? "الصف الأول الثانوي" : g.code === "SEC_GEN_2" ? "الصف الثاني الثانوي" : g.code === "SEC_GEN_3" ? "الصف الثالث الثانوي" : g.code === "BACC_1" ? "الصف الأول" : g.code === "BACC_2" ? "الصف الثاني" : g.code === "BACC_3" ? "الصف الثالث" : g.name)
+                            : (g.code === "P1" ? "Grade 1" : g.code === "P2" ? "Grade 2" : g.code === "P3" ? "Grade 3" : g.code === "P4" ? "Grade 4" : g.code === "P5" ? "Grade 5" : g.code === "P6" ? "Grade 6" : g.code === "PREP1" ? "Preparatory Grade 1" : g.code === "PREP2" ? "Preparatory Grade 2" : g.code === "PREP3" ? "Preparatory Grade 3" : g.code === "SEC_GEN_1" ? "Secondary Grade 1" : g.code === "SEC_GEN_2" ? "Secondary Grade 2" : g.code === "SEC_GEN_3" ? "Secondary Grade 3" : g.code === "BACC_1" ? "Grade 1" : g.code === "BACC_2" ? "Grade 2" : g.code === "BACC_3" ? "Grade 3" : g.name);
+                          return (
+                            <button key={g.id} type="button" onClick={() => setEduGradeId(g.id)} aria-pressed={eduGradeId === g.id} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${eduGradeId === g.id ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{label}</button>
+                          );
+                        })}
+                        {gradesDB.length === 0 && <span className="mono text-xs text-ink-soft">لا توجد صفوف</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setStep("subject")}
-                disabled={needsStudentLevel && !studentLevel}
+                disabled={persona === "student" ? (!eduStageId || !eduGradeId) : (needsStudentLevel && !studentLevel)}
                 className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 كمّل اختيار هدفك
