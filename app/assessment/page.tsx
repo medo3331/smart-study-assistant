@@ -506,6 +506,27 @@ export default function AssessmentPage() {
                 </div>
               )}
 
+              {/* Grad / Freelancer — المجال/الصناعة في نفس الكارت (preview parity — يخطّي المرحلة التعليمية تماماً) */}
+              {persona !== "student" && (
+                <div>
+                  <p className="field-label">{locale === "ar" ? "المجال / الصناعة" : "Field / Industry"}</p>
+                  <p className="text-xs text-ink-soft -mt-1 mb-2">{locale === "ar" ? "سؤال المرحلة التعليمية مش منطقي ليك — اختر مجالك بدلها." : "Education stage doesn't apply — pick your field instead."}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FIELDS.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setField(f.id)}
+                        aria-pressed={field === f.id}
+                        className={`mono p-3 rounded-[var(--r-sm)] border transition text-xs font-semibold ${field === f.id ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:text-ink hover:border-ink-soft"}`}
+                      >
+                        <span aria-hidden="true">{f.emoji}</span> {t[f.labelKey]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Education Stage + Grade — student only; DB-driven */}
               {persona === "student" && (
                 <div className="space-y-4">

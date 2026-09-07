@@ -8,6 +8,8 @@ export async function POST(req: NextRequest) {
       country: body.country,
       stage: body.stage,
       grade: body.grade,
+      track: body.track,
+      faculty: body.faculty,
       curriculum: body.curriculum,
       subject: body.subject,
       unit: body.unit,

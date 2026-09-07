@@ -278,6 +278,8 @@ export default function LessonDetailPage() {
   // Phase 1.4 — Smart Video Foundation variables (must come before useEffect using them)
   const [videoCandidates, setVideoCandidates] = useState<VideoCandidate[]>([]);
   const [videoLoading, setVideoLoading] = useState(false);
+  // Step 3 — education context for smart video (stage + grade + track/faculty → query = مادة + شعبة/مسار + درس)
+  const [eduVideoCtx, setEduVideoCtx] = useState<{ stage?: string; grade?: string; track?: string; faculty?: string }>({});
 
   // Phase 1.4 — Independent video load (never blocks page render)
   useEffect(() => {
@@ -285,17 +287,24 @@ export default function LessonDetailPage() {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- independent async video load (not render-cascade)
     setVideoLoading(true);
+    const payload = {
+      subject: config?.subject || dayRow.topic || "",
+      lesson: dayRow.topic || dayRow.title || "",
+      topic: dayRow.topic || "",
+      stage: eduVideoCtx.stage || "",
+      grade: eduVideoCtx.grade || config?.category || "",
+      track: eduVideoCtx.track || "",
+      faculty: eduVideoCtx.faculty || "",
+      curriculum: config?.category || "",
+      unit: dayRow.topic || "",
+      country: "Egypt",
+      language: "arabic",
+    };
     fetch("/api/lesson/video", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subject: config?.subject || dayRow.topic || "",
-        lesson: dayRow.topic || dayRow.title || "",
-        grade: dayRow.learning_style || "",
-        curriculum: config?.category || "",
-        unit: dayRow.topic || "",
-      }),
-    })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
@@ -308,7 +317,7 @@ export default function LessonDetailPage() {
         if (!cancelled) setVideoLoading(false);
       });
     return () => { cancelled = true; };
-  }, [dayRow?.id, config?.subject, config?.category, dayRow?.topic, dayRow?.title, dayRow?.learning_style]);
+  }, [dayRow?.id, config?.subject, config?.category, dayRow?.topic, dayRow?.title, dayRow?.learning_style, eduVideoCtx.stage, eduVideoCtx.grade, eduVideoCtx.track, eduVideoCtx.faculty]);
 
   // 🧠 الاختبار الذكي
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
@@ -372,8 +381,32 @@ export default function LessonDetailPage() {
         .maybeSingle();
       if (cfg) setConfig(cfg as ConfigRow);
 
-      const { data: profile } = await supabase.from("profiles").select("xp").eq("id", user.id).maybeSingle();
-      setProfileXp(profile?.xp || 0);
+      const { data: profile } = await supabase.from("profiles").select("xp, education_stage_id, education_grade_id, education_track_id, faculty_name, edu_year, field").eq("id", user.id).maybeSingle();
+      setProfileXp((profile as { xp?: number } | null)?.xp || 0);
+      // Step 3 — resolve education labels for smart video (مادة + شعبة/مسار + درس)
+      try {
+        const p = profile as { education_stage_id?: string | null; education_grade_id?: string | null; education_track_id?: string | null; faculty_name?: string | null; edu_year?: number | null } | null;
+        const nextCtx: { stage?: string; grade?: string; track?: string; faculty?: string } = {};
+        if (p?.faculty_name) nextCtx.faculty = p.faculty_name;
+        if (p?.education_stage_id) {
+          const { data: s } = await supabase.from("education_stages").select("code").eq("id", p.education_stage_id).maybeSingle();
+          if (s) nextCtx.stage = (s as { code: string }).code;
+          if (nextCtx.stage === "UNIVERSITY" && p?.edu_year) nextCtx.grade = String(p.edu_year);
+        }
+        if (p?.education_grade_id && nextCtx.stage !== "UNIVERSITY") {
+          const { data: g } = await supabase.from("education_grades").select("name, code").eq("id", p.education_grade_id).maybeSingle();
+          if (g) nextCtx.grade = (g as { name: string }).name;
+        }
+        if (p?.education_track_id) {
+          const { data: t } = await supabase.from("education_tracks").select("name, code").eq("id", p.education_track_id).maybeSingle();
+          if (t) {
+            const code = (t as { code: string }).code;
+            const label = code === "SEC_SCI" ? "علمي علوم" : code === "SEC_MATH" ? "علمي رياضة" : code === "SEC_LIT" ? "أدبي" : code.startsWith("MED") ? "طب وعلوم حياة" : code.startsWith("ENG") ? "هندسة وعلوم حاسب" : code.startsWith("BUS") ? "قطاع أعمال" : code.startsWith("HUM") ? "آداب وفنون" : (t as { name: string }).name;
+            nextCtx.track = label;
+          }
+        }
+        if (Object.keys(nextCtx).length > 0) setEduVideoCtx(nextCtx);
+      } catch {}
 
       // ✅ إضافة: جلب كل أيام الخطة عشان نحسب التقدم الكلي (Progress Bar فوق الصفحة)
       // ونحدد id الدرس التالي (لزر "الدرس التالي" في شاشة الاحتفال)
