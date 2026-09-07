@@ -233,7 +233,7 @@ export default function AssessmentPage() {
     setStep("quiz");
   }, []);
 
-  const suggestedTracks = getTracks(field, persona);
+  const suggestedTracks = persona === "student" && subjectsAuto.length > 0 ? subjectsAuto : getTracks(field, persona);
   const needsStudentLevel = persona === "student";
 
   function choosePersona(nextPersona: Persona) {
@@ -669,9 +669,8 @@ export default function AssessmentPage() {
                 />
               </div>
 
-              {/* 🌍 المجال — نفس محور FIELDS بتاع اللاندينج. الخطوة دي بتظهر
-                  للي دخل /assessment على طول من غير ما يعدّي على المختار،
-                  وبتحدّد نبرة الشرح والموارد بعدين. */}
+              {/* 🌍 المجال — يظهر لغير الطالب فقط؛ الطالب المنهجي واخد تخصصه من المرحلة/الشعبة */}
+              {!(persona === "student" && subjectsAuto.length > 0) && (
               <div>
                 <p className="field-label">مجالك</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -691,9 +690,10 @@ export default function AssessmentPage() {
                   ))}
                 </div>
               </div>
+              )}
 
               <div>
-                <p className="field-label">اقتراحات مناسبة ليك</p>
+                <p className="field-label">{persona === "student" && subjectsAuto.length > 0 ? (locale === "ar" ? "موادك المقترحة (من منهجك)" : "Your subjects (from curriculum)") : "اقتراحات مناسبة ليك"}</p>
                 <div className="chip-row" role="list">
                   {suggestedTracks.map((track) => (
                     <button
@@ -701,12 +701,13 @@ export default function AssessmentPage() {
                       type="button"
                       onClick={() => setSubject(track)}
                       aria-pressed={subject === track}
-                      className="chip"
+                      className={`chip transition ${subject === track ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
                     >
                       {track}
                     </button>
                   ))}
                 </div>
+                {persona === "student" && subjectsAuto.length > 0 && <p className="text-[11px] text-ink-soft mt-1.5">من قاعدة البيانات — تُعدَّل عبر SQL بدون كود.</p>}
               </div>
 
               {/* نوع الخطة — محور قديم موروث، بيأثر على نصوص الواجهة
