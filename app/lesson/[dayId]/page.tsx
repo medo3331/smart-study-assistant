@@ -135,11 +135,23 @@ function renderMarkdownLite(text: string) {
 }
 
 
-function SmartContentViewer({ topic, subject }: { topic: string; subject: string }) {
+function SmartContentViewer({ topic, subject, edu }: { topic: string; subject: string; edu?: { stage?: string; grade?: string; track?: string; faculty?: string } }) {
   const router = useRouter();
   const [activeMode, setActiveMode] = useState<SmartViewMode>(null);
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState<string | null>(null);
+
+  const eduLine = (() => {
+    const parts: string[] = [];
+    if (edu?.stage) {
+      const m: Record<string,string> = {PRIMARY:"ابتدائي",PREPARATORY:"إعدادي",SECONDARY:"ثانوي",BACCALAUREATE:"بكالوريا",UNIVERSITY:"جامعة"};
+      parts.push(m[edu.stage] || edu.stage);
+    }
+    if (edu?.grade) parts.push(edu.grade);
+    if (edu?.track) parts.push(edu.track);
+    if (edu?.faculty) parts.push(edu.faculty);
+    return parts.length ? `سياق الطالب: ${parts.join(" — ")}.` : "";
+  })();
 
   const handleModeClick = async (mode: SmartViewMode) => {
     setActiveMode(mode);
@@ -147,10 +159,10 @@ function SmartContentViewer({ topic, subject }: { topic: string; subject: string
     setContent(null);
 
     const modePrompt = {
-      simple: `اشرح مفهوم "${topic}" (جزء من مادة ${subject}) بشكل مبسط في نقاط واضحة، مع مثال بسيط يوضح الفكرة. اكتب الشرح بالعربي، لكن حافظ على المصطلحات التقنية بالإنجليزية بين قوسين أو مباشرة (زي: Signal, System, Frequency) لأنها المصطلحات المستخدمة في المراجع والامتحانات.`,
-      academic: `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب أكاديمي متعمق: عرّف المفهوم بدقة، اذكر القوانين/المعادلات الأساسية لو موجودة، وضّح الفروق بين الأنواع المختلفة لو فيه، واختم بملخص سريع. اكتب بالعربي مع الإبقاء على المصطلحات التقنية والرموز بالإنجليزية زي المراجع الأكاديمية القياسية.`,
-      visual: `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب مرئي وتخيلي: استخدم تشبيهات من الحياة اليومية، وارسم بالكلمات مخططات نصية بسيطة (زي رسم موجة أو رسم بياني في شكل نصي) توضح الفكرة بصريًا. اكتب بالعربي مع إبقاء المصطلحات التقنية بالإنجليزية.`,
-      practical: `اديني مثال تطبيقي حقيقي أو تمرين محلول خطوة بخطوة على "${topic}" (جزء من مادة ${subject})، زي مسألة أو سيناريو عملي بيوضح إزاي المفهوم بيتطبق فعليًا. اكتب بالعربي مع إبقاء المصطلحات والمعادلات بالإنجليزية.`,
+      simple: `اشرح مفهوم "${topic}" (جزء من مادة ${subject}) بشكل مبسط في نقاط واضحة، مع مثال بسيط يوضح الفكرة. ${eduLine} اكتب الشرح بالعربي، لكن حافظ على المصطلحات التقنية بالإنجليزية بين قوسين أو مباشرة (زي: Signal, System, Frequency) لأنها المصطلحات المستخدمة في المراجع والامتحانات.`,
+      academic: `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب أكاديمي متعمق: عرّف المفهوم بدقة، اذكر القوانين/المعادلات الأساسية لو موجودة، وضّح الفروق بين الأنواع المختلفة لو فيه، واختم بملخص سريع. ${eduLine} اكتب بالعربي مع الإبقاء على المصطلحات التقنية والرموز بالإنجليزية زي المراجع الأكاديمية القياسية.`,
+      visual: `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب مرئي وتخيلي: استخدم تشبيهات من الحياة اليومية، وارسم بالكلمات مخططات نصية بسيطة (زي رسم موجة أو رسم بياني في شكل نصي) توضح الفكرة بصريًا. ${eduLine} اكتب بالعربي مع إبقاء المصطلحات التقنية بالإنجليزية.`,
+      practical: `اديني مثال تطبيقي حقيقي أو تمرين محلول خطوة بخطوة على "${topic}" (جزء من مادة ${subject})، زي مسألة أو سيناريو عملي بيوضح إزاي المفهوم بيتطبق فعليًا. ${eduLine} اكتب بالعربي مع إبقاء المصطلحات والمعادلات بالإنجليزية.`,
     }[mode as "simple" | "academic" | "visual" | "practical"];
 
     try {
@@ -548,7 +560,14 @@ export default function LessonDetailPage() {
         academic: "اشرح بالتعاريف العلمية والدقيقة مع تفكيك المفاهيم.",
       }[dayRow.learning_style];
 
-      const systemInstruction = `أنت أستاذ جامعي خبير، بترد على أسئلة الطالب بشكل تفاعلي ومتعمق. المادة/المشروع: "${config.subject}" | الدرس الحالي: "${dayRow.topic}" (${dayRow.description}). النمط المطلوب: ${styleGuide} اكتب بالعربية مع الإبقاء على المصطلحات والمعادلات التقنية بالإنجليزية زي المراجع العلمية. استخدم **نص عريض** وقوائم نقطية لو الإجابة فيها أكتر من نقطة، وكن دقيقًا ومفيدًا فعليًا مش سطحي.`;
+      const eduParts: string[] = [];
+      if (eduVideoCtx.stage) { const m: Record<string,string>={PRIMARY:"ابتدائي",PREPARATORY:"إعدادي",SECONDARY:"ثانوي",BACCALAUREATE:"بكالوريا",UNIVERSITY:"جامعة"}; eduParts.push(m[eduVideoCtx.stage]||eduVideoCtx.stage); }
+      if (eduVideoCtx.grade) eduParts.push(eduVideoCtx.grade);
+      if (eduVideoCtx.track) eduParts.push(eduVideoCtx.track);
+      if (eduVideoCtx.faculty) eduParts.push(eduVideoCtx.faculty);
+      const eduCtx = eduParts.length ? ` | سياق الطالب: ${eduParts.join(" — ")}` : "";
+
+      const systemInstruction = `أنت أستاذ جامعي خبير، بترد على أسئلة الطالب بشكل تفاعلي ومتعمق. المادة/المشروع: "${config.subject}" | الدرس الحالي: "${dayRow.topic}" (${dayRow.description})${eduCtx}. النمط المطلوب: ${styleGuide} اكتب بالعربية مع الإبقاء على المصطلحات والمعادلات التقنية بالإنجليزية زي المراجع العلمية. استخدم **نص عريض** وقوائم نقطية لو الإجابة فيها أكتر من نقطة، وكن دقيقًا ومفيدًا فعليًا مش سطحي.`;
 
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -831,7 +850,7 @@ export default function LessonDetailPage() {
                 <p className="eyebrow eyebrow-flush mb-1.5">الشرح</p>
                 <h2 className="h3">اقرا الدرس بالطريقة اللي تعجبك</h2>
               </div>
-              <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} />
+              <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} edu={eduVideoCtx} />
             </div>
           </Reveal>
 

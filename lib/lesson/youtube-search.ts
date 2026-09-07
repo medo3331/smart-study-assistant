@@ -27,6 +27,11 @@ export async function searchYouTubeVideos(
 ): Promise<VideoSearchResult> {
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {
+    console.warn("[YouTube Search] YOUTUBE_API_KEY missing — returning empty (add AIza... key to .env.local and Vercel)");
+    return { candidates: [], totalResults: 0, queryUsed: query };
+  }
+  if (apiKey.startsWith("apify_api_")) {
+    console.warn("[YouTube Search] YOUTUBE_API_KEY looks like an Apify key, not a YouTube Data API key (should start with AIza...) — see .env.example");
     return { candidates: [], totalResults: 0, queryUsed: query };
   }
 
