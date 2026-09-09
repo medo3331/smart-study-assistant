@@ -71,6 +71,7 @@ import { getAvailableSubjects, getEducationContext } from "@/lib/education/conte
 import { PrimaryDashboard } from "@/components/dashboard/primary/PrimaryDashboard";
 import { PrimaryErrorBoundary } from "@/components/dashboard/primary/PrimaryErrorBoundary";
 import { PreparatoryDashboard } from "@/components/dashboard/preparatory/PreparatoryDashboard";
+import { SecondaryDashboard } from "@/components/dashboard/secondary/SecondaryDashboard";
 import { isPrimaryExperience } from "@/lib/education/experience";
 
 // ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
@@ -87,10 +88,11 @@ export default function DashboardPage() {
   const [eduContext, setEduContext] = useState<any>(null);
   const [primaryStageCode, setPrimaryStageCode] = useState<string | null>(null);
   const [primaryGradeName, setPrimaryGradeName] = useState<string | null>(null);
+  const [trackName, setTrackName] = useState<string | null>(null);
 
-  // Fetch stage code + grade name for primary resolver (lightweight, single row)
+  // Fetch stage code + grade/track names for experience resolver
   useEffect(() => {
-    if (!supabase || !eduContext?.stageId) { setPrimaryStageCode(null); setPrimaryGradeName(null); return; }
+    if (!supabase || !eduContext?.stageId) { setPrimaryStageCode(null); setPrimaryGradeName(null); setTrackName(null); return; }
     void (async () => {
       try {
         const { data: stageRow } = await supabase.from("education_stages").select("code").eq("id", eduContext.stageId).maybeSingle();
@@ -99,9 +101,13 @@ export default function DashboardPage() {
           const { data: gradeRow } = await supabase.from("education_grades").select("name").eq("id", eduContext.gradeId).maybeSingle();
           setPrimaryGradeName(gradeRow?.name ?? null);
         } else setPrimaryGradeName(null);
+        if (eduContext.trackId) {
+          const { data: trackRow } = await supabase.from("education_tracks").select("name").eq("id", eduContext.trackId).maybeSingle();
+          setTrackName(trackRow?.name ?? null);
+        } else setTrackName(null);
       } catch { setPrimaryStageCode(null); }
     })();
-  }, [supabase, eduContext?.stageId, eduContext?.gradeId]);
+  }, [supabase, eduContext?.stageId, eduContext?.gradeId, eduContext?.trackId]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -1281,6 +1287,37 @@ export default function DashboardPage() {
     </PrimaryErrorBoundary>
   );
 
+  const isSecondary = (() => {
+    try {
+      const ctx = eduContext ?? {};
+      if (persona !== "student") return false;
+      if (!primaryStageCode) return false;
+      return primaryStageCode === "SECONDARY";
+    } catch { return false; }
+  })();
+
+  const secondaryDashboardSafe = !isSecondary ? null : (
+    <PrimaryErrorBoundary>
+      <SecondaryDashboard
+        displayName={displayName}
+        personalContext={personalAssistantContext}
+        subjects={eduSubjects}
+        subjectsLoading={eduLoading}
+        subjectsError={eduError}
+        gradeName={primaryGradeName}
+        trackName={trackName}
+        completed={completedCount}
+        total={days.length}
+        progressPct={overallProgress}
+        currentDay={currentDayNumber}
+        days={days}
+        config={config}
+        onOpenAi={handlePrimarySubjectAi}
+        onOpenLesson={handlePrimaryOpenLesson}
+      />
+    </PrimaryErrorBoundary>
+  );
+
   return (
     <div
       className="min-h-screen p-4 sm:p-6 md:p-10 lg:pe-[16.5rem] xl:pe-[18.5rem] font-sans relative pb-24"
@@ -1334,6 +1371,19 @@ export default function DashboardPage() {
               </summary>
               <div className="border-t border-rule p-4">
                 <p className="text-xs text-ink-soft">أدوات إضافية ستظهر هنا حسب تقدمك — ركز الآن على خطة اليوم والمراجعة</p>
+              </div>
+            </details>
+          </div>
+        ) : isSecondary && secondaryDashboardSafe ? (
+          <div className="space-y-6">
+            {secondaryDashboardSafe}
+            <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
+                <span>المزيد من أدواتك</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+              </summary>
+              <div className="border-t border-rule p-4">
+                <p className="text-xs text-ink-soft">أدوات إضافية — ركز على خطة الثانوي ومراجعة المسار</p>
               </div>
             </details>
           </div>
