@@ -127,6 +127,46 @@ export default function UniversityHubPage() {
 
         {!loading && !error && isUniversity && (
           <div className="sheet-card p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="h3">{t("المكتبة الأكاديمية", "Academic Library")}</h2>
+              <span className="mono text-xs text-ink-soft">{t("مصادر حقيقية فقط", "Real sources only")}</span>
+            </div>
+            <div className="text-xs text-ink-soft mono">
+              {t("الموارد مرتبطة بموادك فقط. لا موارد وهمية. المصادر الرسمية تُعرض فقط عند إضافتها.", "Resources tied to your subjects only. No fake resources. Official sources shown only when added.")}
+            </div>
+            <div className="border border-rule rounded-xl p-4 bg-paper-2 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span>📚</span>
+                <span>{t("المصادر حسب المادة", "Resources by Subject")}</span>
+              </div>
+              {subjectsLoading ? (
+                <div className="mono muted text-xs">{t("جارٍ التحميل…", "Loading…")}</div>
+              ) : subjects.length === 0 ? (
+                <div className="text-xs text-ink-soft">{t("لا توجد مواد لهذا المستوى بعد.", "No subjects for this level yet.")}</div>
+              ) : (
+                <div className="space-y-2">
+                  {subjects.map((s: any) => (
+                    <Link key={s.id} href={`/university/${encodeURIComponent(s.id)}`} className="flex items-center justify-between rounded-lg border border-rule/50 hover:border-ink-soft hover:bg-paper px-3 py-2.5 transition">
+                      <div>
+                        <div className="text-sm font-medium">{s.name || s.name_en || s.code}</div>
+                        <div className="text-[11px] text-ink-soft mono">{s.code} • {s.type || "core"}</div>
+                      </div>
+                      <div className="text-xs mono text-ink-soft whitespace-nowrap">{t("فتح المصادر →", "View resources →")}</div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              <div className="pt-2 mt-2 border-t border-rule text-[10px] text-ink-soft mono leading-relaxed">
+                <p className="font-semibold mb-0.5">{t("ملاحظات", "Notes")}</p>
+                <p>• {t("لا توجد مصادر مضافة بعد. سيتم عرض المصادر الموثوقة فقط عند إضافتها.", "No resources added yet. Only verified sources will appear when added.")}</p>
+                <p>• {t("المصدر الرسمي المتاح حالياً: CU CCEc REG 2023 (PDF).", "Verified official source available: CU CCEc REG 2023 (PDF).")}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && isUniversity && (
+          <div className="sheet-card p-6 space-y-4">
             <h2 className="text-lg font-display">{locale === "ar" ? "التقدم الأكاديمي" : "Academic Progress"}</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
               <div className="p-3 rounded-lg border border-rule bg-paper-2"><div className="text-xs mono text-ink-soft">{locale === "ar" ? "المستوى" : "Level"}</div><div className="font-semibold">{context.academicLevelId ? (context.academicLevelId === "L1" ? (locale === "ar" ? "المستوى الأول" : "Year 1") : context.academicLevelId === "L2" ? (locale === "ar" ? "المستوى الثاني" : "Year 2") : context.academicLevelId === "L3" ? (locale === "ar" ? "المستوى الثالث" : "Year 3") : context.academicLevelId === "L4" ? (locale === "ar" ? "المستوى الرابع" : "Year 4") : context.academicLevelId) : "—"}</div></div>

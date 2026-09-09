@@ -304,7 +304,7 @@ export default function LessonDetailPage() {
       lesson: dayRow.topic || dayRow.title || "",
       topic: dayRow.topic || "",
       stage: eduVideoCtx.stage || "",
-      grade: eduVideoCtx.grade || config?.category || "",
+      grade: eduVideoCtx.grade || "",
       track: eduVideoCtx.track || "",
       faculty: eduVideoCtx.faculty || "",
       curriculum: config?.category || "",
