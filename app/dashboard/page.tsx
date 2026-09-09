@@ -72,6 +72,7 @@ import { PrimaryDashboard } from "@/components/dashboard/primary/PrimaryDashboar
 import { PrimaryErrorBoundary } from "@/components/dashboard/primary/PrimaryErrorBoundary";
 import { PreparatoryDashboard } from "@/components/dashboard/preparatory/PreparatoryDashboard";
 import { SecondaryDashboard } from "@/components/dashboard/secondary/SecondaryDashboard";
+import { BaccalaureateDashboard } from "@/components/dashboard/baccalaureate/BaccalaureateDashboard";
 import { isPrimaryExperience } from "@/lib/education/experience";
 
 // ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
@@ -1318,6 +1319,37 @@ export default function DashboardPage() {
     </PrimaryErrorBoundary>
   );
 
+  const isBaccalaureate = (() => {
+    try {
+      const ctx = eduContext ?? {};
+      if (persona !== "student") return false;
+      if (!primaryStageCode) return false;
+      return primaryStageCode === "BACCALAUREATE";
+    } catch { return false; }
+  })();
+
+  const baccalaureateDashboardSafe = !isBaccalaureate ? null : (
+    <PrimaryErrorBoundary>
+      <BaccalaureateDashboard
+        displayName={displayName}
+        personalContext={personalAssistantContext}
+        subjects={eduSubjects}
+        subjectsLoading={eduLoading}
+        subjectsError={eduError}
+        gradeName={primaryGradeName}
+        trackName={trackName}
+        completed={completedCount}
+        total={days.length}
+        progressPct={overallProgress}
+        currentDay={currentDayNumber}
+        days={days}
+        config={config}
+        onOpenAi={handlePrimarySubjectAi}
+        onOpenLesson={handlePrimaryOpenLesson}
+      />
+    </PrimaryErrorBoundary>
+  );
+
   return (
     <div
       className="min-h-screen p-4 sm:p-6 md:p-10 lg:pe-[16.5rem] xl:pe-[18.5rem] font-sans relative pb-24"
@@ -1384,6 +1416,19 @@ export default function DashboardPage() {
               </summary>
               <div className="border-t border-rule p-4">
                 <p className="text-xs text-ink-soft">أدوات إضافية — ركز على خطة الثانوي ومراجعة المسار</p>
+              </div>
+            </details>
+          </div>
+        ) : isBaccalaureate && baccalaureateDashboardSafe ? (
+          <div className="space-y-6">
+            {baccalaureateDashboardSafe}
+            <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
+                <span>المزيد من أدواتك</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+              </summary>
+              <div className="border-t border-rule p-4">
+                <p className="text-xs text-ink-soft">أدوات البكالوريا الإضافية — ركز على مسارك وخطة الجامعة</p>
               </div>
             </details>
           </div>
