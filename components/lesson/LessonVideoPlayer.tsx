@@ -8,10 +8,11 @@
  * - No redirect to YouTube on Play (primary experience inside page)
  * - Secondary watch link only (explicit, not primary action)
  * - Skeleton loading + graceful empty / error states
+ * - Alternative video switching without window.open
  */
 
 import React, { useState, useMemo } from "react";
-import { VideoCandidate } from "@/lib/lesson/video-server";
+import type { VideoCandidate } from "@/lib/lesson/video-server";
 
 interface LessonVideoPlayerProps {
   candidates?: VideoCandidate[];
@@ -30,13 +31,20 @@ export default function LessonVideoPlayer({
 }: LessonVideoPlayerProps) {
   const [error, setError] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<VideoCandidate | null>(null);
 
-  // Pick best: recommended explicit > first from candidates > none
-  const best = recommended || (candidates.length > 0 ? candidates[0] : null);
+  // Pick best: recommended explicit > selected alt > first from candidates > none
+  const best = recommended || selectedVideo || (candidates.length > 0 ? candidates[0] : null);
   const alternatives = useMemo(() => {
     if (!best) return candidates || [];
     return (candidates || []).filter((c) => c.id !== best.id).slice(0, 2);
   }, [best, candidates]);
+
+  const handleSelectAlt = (alt: VideoCandidate) => {
+    setSelectedVideo(alt);
+    setError(false);
+    setIframeLoaded(false);
+  };
 
   // Error state: missing video id or invalid
   const hasError = error || !best || !best.id || best.id.length < 5;
@@ -59,18 +67,13 @@ export default function LessonVideoPlayer({
         <p className="text-sm text-muted-foreground leading-relaxed">
           سنضيف فيديو تعليمي مناسب قريبًا. يمكنك الرجوع للمراجع المكتوبة في الصفحة.
         </p>
-        {/* Secondary fallback — only shown when no embedded video; not primary action */}
-        <div className="mt-4 text-xs text-muted-foreground/70">
-          {context?.subject ? `المادة: ${context.subject}` : ""}
-          {context?.lesson ? ` · الدرس: ${context.lesson}` : ""}
-        </div>
+        {context?.subject ? <div className="mt-4 text-xs text-muted-foreground/70">المادة: {context.subject}</div> : null}
       </section>
     );
   }
 
   return (
     <section dir="rtl" aria-label="فيديو الدرس" className={`space-y-4 ${className}`}>
-      {/* Header — clean, paper design, no heavy decoration */}
       <div className="flex items-start gap-3">
         <div className="mt-1 shrink-0 rounded-xl bg-gradient-to-br from-violet-600/20 to-teal-500/20 dark:from-violet-400/10 dark:to-teal-300/10 px-2.5 py-2 shadow-sm border border-violet-200/40 dark:border-violet-300/10">
           <span className="text-lg" aria-hidden="true">🎬</span>
@@ -97,9 +100,7 @@ export default function LessonVideoPlayer({
         </div>
       </div>
 
-      {/* Player container — responsive 16:9, no layout shift */}
       <div className="relative w-full overflow-hidden rounded-2xl shadow-lg shadow-violet-900/10 dark:shadow-black/20 border border-stone-200/60 dark:border-white/10 bg-black">
-        {/* Skeleton shown until iframe signals load */}
         {!iframeLoaded && !error && (
           <div className="absolute inset-0 z-10 bg-gradient-to-br from-stone-900/80 to-[#181428]/90 flex items-center justify-center">
             <div className="text-center space-y-2">
@@ -121,7 +122,6 @@ export default function LessonVideoPlayer({
         </div>
       </div>
 
-      {/* Metadata + secondary links — minimal, not overwhelming */}
       <div className="rounded-2xl border border-stone-200/60 dark:border-white/10 bg-white/60 dark:bg-[#181428]/60 backdrop-blur-md p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm leading-relaxed text-ink">
@@ -153,11 +153,7 @@ export default function LessonVideoPlayer({
               {alternatives.map((alt) => (
                 <button
                   key={alt.id}
-                  onClick={() => {
-                    // In a real interaction this would swap the player; for Phase 1.4, keep UI simple
-                    // The component will re-render if parent passes new recommended.
-                    window.open(alt.watchUrl, "_blank", "noopener,noreferrer");
-                  }}
+                  onClick={() => handleSelectAlt(alt)}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100 dark:bg-white/5 hover:bg-violet-50 dark:hover:bg-violet-400/10 border border-stone-200/60 dark:border-white/10 px-2.5 py-1.5 text-xs font-medium text-ink transition-colors"
                   aria-label={`بديل: ${alt.title}`}
                 >

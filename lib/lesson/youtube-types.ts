@@ -16,9 +16,10 @@ export interface VideoSearchResult {
   candidates: YouTubeVideo[];
   totalResults: number;
   queryUsed: string;
+  error?: "missing_api_key" | "api_error" | "quota_exceeded" | "no_results" | "no_videos_found" | "apify_fallback_failed";
 }
 
-/** Build a YouTube search query from education context. */
+/** Build a concise YouTube search query from education context. */
 export function buildYouTubeQuery(ctx: {
   country?: string;
   stage?: string;
@@ -34,7 +35,6 @@ export function buildYouTubeQuery(ctx: {
   if (ctx.subject) parts.push(ctx.subject);
   if (ctx.lesson && ctx.lesson !== ctx.subject) parts.push(ctx.lesson);
   else if (ctx.topic && ctx.topic !== ctx.subject) parts.push(ctx.topic);
-  // Track / شعبة / مسار — the discriminator that turns a generic lesson into a stage-specific one
   if (ctx.track) parts.push(ctx.track);
   if (ctx.faculty) parts.push(ctx.faculty);
   if (ctx.stage && ctx.stage !== "university") {
@@ -49,9 +49,8 @@ export function buildYouTubeQuery(ctx: {
   }
   const lang = (ctx.language || "").toLowerCase();
   if (lang.includes("arabic") || lang.includes("عربية")) {
-    parts.push("عربي", "تعليمي");
+    parts.push("عربي");
   }
-  parts.push("شرح", "تعليمي", "lesson");
   return [...new Set(parts)].join(" ");
 }
 
@@ -70,15 +69,23 @@ const EDUCATION_SIGNALS = [
   "course", "مقرر", "curriculum", "revision", "مراجعة",
 ];
 
-/** Duration filter: reject videos longer than 45 minutes or shorter than 2 minutes. */
+/** Parse ISO 8601 duration to total seconds. */
+function parseDurationSeconds(duration: string): number {
+  if (!duration) return 0;
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const h = parseInt(match[1] || "0", 10);
+  const m = parseInt(match[2] || "0", 10);
+  const s = parseInt(match[3] || "0", 10);
+  return h * 3600 + m * 60 + s;
+}
+
+/** Duration filter: 1 minute minimum, 45 minutes maximum. */
 export function isValidDuration(duration: string): boolean {
   if (!duration) return true;
-  const match = duration.match(/PT(\d+)M(\d+)S/);
-  if (!match) return true;
-  const minutes = parseInt(match[1], 10);
-  const seconds = parseInt(match[2], 10);
-  const totalMinutes = minutes + seconds / 60;
-  return totalMinutes >= 1 && totalMinutes <= 45;
+  const totalSeconds = parseDurationSeconds(duration);
+  if (totalSeconds === 0) return true;
+  return totalSeconds >= 60 && totalSeconds <= 2700;
 }
 
 /** Filter and rank YouTube candidates. */

@@ -16,11 +16,17 @@ export async function POST(req: NextRequest) {
       chapter: body.chapter,
       lesson: body.lesson,
       topic: body.topic,
+      language: body.language || "arabic",
     };
-    const candidates = await getLessonVideoCandidates(ctx);
-    return NextResponse.json({ candidates, ok: true });
+    const result = await getLessonVideoCandidates(ctx);
+    return NextResponse.json({
+      ok: true,
+      candidates: result.candidates,
+      count: result.candidates.length,
+      error: result.error,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, candidates: [], count: 0, error: msg }, { status: 500 });
   }
 }
