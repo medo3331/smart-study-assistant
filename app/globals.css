@@ -339,6 +339,171 @@
   --shadow: var(--shade);
 }
 
+/* ---- MAGIC WHEEL PREVIEW THEMES — additional ThemeProvider IDs ---- */
+:root[data-theme="magic-color"] {
+  color-scheme: dark;
+  --app-bg: #11162A;
+  --card-primary: #181E38;
+  --card-secondary: #222A4D;
+  --accent: #7B7EF4;
+  --accent-highlight: #A6A8FF;
+  --text: #F5F7FF;
+  --muted: #AEB8D1;
+  --app-bg-image: radial-gradient(circle at 85% 0%, rgba(123, 126, 244, 0.14), transparent 34%);
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(245, 247, 255, 0.1);
+  --rule-strong: rgba(245, 247, 255, 0.2);
+  --marker: var(--accent);
+  --marker-deep: #5E61D8;
+  --redpen: #F26FA1;
+  --redpen-soft: rgba(242, 111, 161, 0.34);
+  --shade: rgba(3, 6, 18, 0.4);
+  --shade-lift: rgba(3, 6, 18, 0.62);
+  --on-danger: #FFFFFF;
+  --on-marker: #FFFFFF;
+  --hl-yellow-fill: #F2C94C;
+  --hl-yellow-deep: #D7AB24;
+  --hl-yellow-ink: #F7D979;
+  --hl-green-fill: #6FCF97;
+  --hl-green-ink: #8EE2B0;
+  --hl-red-fill: #E8342F;
+  --hl-red-ink: #FF7B73;
+  --hl-orange-ink: #F2994A;
+  --hl-blue-fill: #4FA9F5;
+  --hl-blue-ink: #7CC2FF;
+  --hl-purple-fill: #B57BF4;
+  --hl-purple-ink: #C9A6FF;
+  --hl-indigo-fill: #7B7EF4;
+  --hl-indigo-ink: #A6A8FF;
+}
+
+:root[data-theme="magic-noir"] {
+  color-scheme: dark;
+  --app-bg: #0A0A0C;
+  --card-primary: #151519;
+  --card-secondary: #202026;
+  --accent: #E8342F;
+  --accent-highlight: #FF7B6F;
+  --text: #F6F6F8;
+  --muted: #A6A6AF;
+  --app-bg-image: radial-gradient(circle at 80% 0%, rgba(232, 52, 47, 0.13), transparent 36%);
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(246, 246, 248, 0.1);
+  --rule-strong: rgba(246, 246, 248, 0.2);
+  --marker: var(--accent);
+  --marker-deep: #B92925;
+  --redpen: #FF6FA0;
+  --redpen-soft: rgba(255, 111, 160, 0.34);
+  --shade: rgba(0, 0, 0, 0.5);
+  --shade-lift: rgba(0, 0, 0, 0.72);
+  --on-danger: #FFFFFF;
+  --on-marker: #FFFFFF;
+  --hl-yellow-fill: #F2C94C;
+  --hl-yellow-deep: #D7AB24;
+  --hl-yellow-ink: #F7D979;
+  --hl-green-fill: #6FCF97;
+  --hl-green-ink: #8EE2B0;
+  --hl-red-fill: #E8342F;
+  --hl-red-ink: #FF7B73;
+  --hl-orange-ink: #F2994A;
+  --hl-blue-fill: #4FA9F5;
+  --hl-blue-ink: #7CC2FF;
+  --hl-purple-fill: #B57BF4;
+  --hl-purple-ink: #C9A6FF;
+  --hl-indigo-fill: #7B7EF4;
+  --hl-indigo-ink: #A6A8FF;
+}
+
+:root[data-theme="magic-blue"] {
+  color-scheme: dark;
+  --app-bg: #081525;
+  --card-primary: #10233B;
+  --card-secondary: #173354;
+  --accent: #3B82F6;
+  --accent-highlight: #7DB3FF;
+  --text: #F1F7FF;
+  --muted: #9FB6D4;
+  --app-bg-image: radial-gradient(circle at 82% 0%, rgba(59, 130, 246, 0.16), transparent 36%);
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(241, 247, 255, 0.1);
+  --rule-strong: rgba(241, 247, 255, 0.2);
+  --marker: var(--accent);
+  --marker-deep: #2563C4;
+  --redpen: #F26F88;
+  --redpen-soft: rgba(242, 111, 136, 0.34);
+  --shade: rgba(3, 14, 29, 0.44);
+  --shade-lift: rgba(3, 14, 29, 0.64);
+  --on-danger: #FFFFFF;
+  --on-marker: #FFFFFF;
+  --hl-yellow-fill: #F2C94C;
+  --hl-yellow-deep: #D7AB24;
+  --hl-yellow-ink: #F7D979;
+  --hl-green-fill: #6FCF97;
+  --hl-green-ink: #8EE2B0;
+  --hl-red-fill: #E8342F;
+  --hl-red-ink: #FF7B73;
+  --hl-orange-ink: #F2994A;
+  --hl-blue-fill: #3B82F6;
+  --hl-blue-ink: #7DB3FF;
+  --hl-purple-fill: #B57BF4;
+  --hl-purple-ink: #C9A6FF;
+  --hl-indigo-fill: #7B7EF4;
+  --hl-indigo-ink: #A6A8FF;
+}
+
+:root[data-theme="magic-paper"] {
+  color-scheme: light;
+  --app-bg: #F2F4F7;
+  --card-primary: #FFFFFF;
+  --card-secondary: #E8ECF1;
+  --accent: #64748B;
+  --accent-highlight: #334155;
+  --text: #1F2937;
+  --muted: #64748B;
+  --app-bg-image: radial-gradient(circle at 88% 0%, rgba(100, 116, 139, 0.13), transparent 36%);
+  --paper: var(--app-bg);
+  --paper-2: var(--card-primary);
+  --paper-3: var(--card-secondary);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: rgba(31, 41, 55, 0.12);
+  --rule-strong: rgba(31, 41, 55, 0.22);
+  --marker: var(--accent);
+  --marker-deep: #475569;
+  --redpen: #C2415A;
+  --redpen-soft: rgba(194, 65, 90, 0.3);
+  --shade: rgba(31, 41, 55, 0.08);
+  --shade-lift: rgba(31, 41, 55, 0.16);
+  --on-danger: #FFFFFF;
+  --on-marker: #FFFFFF;
+  --hl-yellow-fill: #D7AB24;
+  --hl-yellow-deep: #B98B14;
+  --hl-yellow-ink: #785D0A;
+  --hl-green-fill: #24A96D;
+  --hl-green-ink: #087044;
+  --hl-red-fill: #C7354C;
+  --hl-red-ink: #AA2038;
+  --hl-orange-ink: #A85A16;
+  --hl-blue-fill: #2B72C8;
+  --hl-blue-ink: #1D579F;
+  --hl-purple-fill: #8656C7;
+  --hl-purple-ink: #6837A8;
+  --hl-indigo-fill: #4F57C9;
+  --hl-indigo-ink: #353CA7;
+}
+
 /* ==========================================================================
    Phase 2 — Magic Orb (glass sphere + orbit + breathing)
    ========================================================================== */

@@ -1439,6 +1439,7 @@ export default function DashboardPage() {
       <div className="relative -mt-4 mb-6 md:mb-8">
         <MagicWheelDashboard
           currentDay={currentDayNumber}
+          currentDayId={days.find((day) => day.day === currentDayNumber)?.id ?? null}
           totalDays={days.length}
           subject={config?.subject ?? ""}
           completedSteps={completedCount}
@@ -1853,7 +1854,7 @@ export default function DashboardPage() {
         setReminderTime={setReminderTime}
         notifPermission={notifPermission}
         handleEnableWebPush={handleEnableWebPush}
-        onNavigateHome={() => router.push("/")}
+        onNavigateHome={() => router.push("/dashboard")}
         focusSection={settingsFocus}
       />
 

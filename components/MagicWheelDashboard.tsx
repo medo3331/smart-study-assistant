@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- MatchMedia is an intentional external-system sync. */
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
@@ -70,12 +71,12 @@ export interface WheelBranchDef {
 }
 
 export const WHEEL_BRANCHES: WheelBranchDef[] = [
-  { id: "home", label: "الرئيسية", latin: "Home", href: "/", icon: <Home size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
+  { id: "home", label: "الرئيسية", latin: "Home", href: "/dashboard", icon: <Home size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
   { id: "courses", label: "الكورسات", latin: "Courses", href: "/dashboard/courses", icon: <BookOpen size={18} strokeWidth={2} aria-hidden />, exists: true, note: "صفحة موجودة", kind: "page" },
   { id: "lesson", label: "الدرس", latin: "Lesson", href: "/lesson", icon: <GraduationCap size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
   { id: "workspace", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace", icon: <FolderOpen size={18} strokeWidth={2} aria-hidden />, exists: true, note: "صفحة موجودة", kind: "page" },
   { id: "worship", label: "عباداتي", latin: "Worship", href: "/worship", icon: <Landmark size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
-  { id: "ai", label: "المساعد الذكي", latin: "AI Assistant", href: "/dashboard", icon: <Sparkles size={18} strokeWidth={2} aria-hidden />, exists: true, note: "إشارة signal: ai داخل /dashboard", kind: "signal" },
+  { id: "ai", label: "المساعد الذكي", latin: "AI Assistant", href: "/chat", icon: <Sparkles size={18} strokeWidth={2} aria-hidden />, exists: true, note: "صفحة المحادثة", kind: "page" },
   { id: "shop", label: "المتجر", latin: "Shop", href: "/shop", icon: <ShoppingBag size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
   { id: "analytics", label: "التحليلات", latin: "Analytics", href: "/dashboard#analytics", icon: <BarChart3 size={18} strokeWidth={2} aria-hidden />, exists: true, note: "قسم scrollTo داخل /dashboard", kind: "scroll" },
   { id: "settings", label: "الإعدادات", latin: "Settings", href: "/dashboard", icon: <Settings size={18} strokeWidth={2} aria-hidden />, exists: true, note: "إشارة signal: settings داخل /dashboard", kind: "signal" },
@@ -88,6 +89,7 @@ const ANGLES_DEG = [270, 230, 190, 150, 110, 70, 30, -10, -50];
    -------------------------------------------------------------------------- */
 export interface MagicWheelProps {
   currentDay?: number;
+  currentDayId?: string | null;
   totalDays?: number;
   subject?: string;
   completedSteps?: number;
@@ -99,7 +101,7 @@ export interface MagicWheelProps {
    المكون الرئيسي
    =========================================================================== */
 export default function MagicWheelDashboard({
-  currentDay, totalDays, subject, completedSteps, progressPct, currentChapter,
+  currentDay, currentDayId = null, totalDays, subject, completedSteps, progressPct, currentChapter,
 }: MagicWheelProps = {}) {
   const router = useRouter();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -130,13 +132,13 @@ export default function MagicWheelDashboard({
         router.push(branch.href);
         return;
       }
-      if (branch.id === "lesson" && currentDay !== undefined && currentDay !== null) {
-        router.push(`/lesson/${currentDay}`);
+      if (branch.id === "lesson") {
+        router.push(currentDayId ? `/lesson/${currentDayId}` : "/dashboard");
         return;
       }
       router.push(branch.href);
     },
-    [router, currentDay]
+    [router, currentDayId]
   );
 
   /* Responsive */
@@ -252,7 +254,7 @@ export default function MagicWheelDashboard({
                 المركز — البكرة الحمراء + شعار Magicly (M + نجمة)
                 ═══════════════════════════════════════════════════════ */}
             <Link
-              href="/"
+              href="/dashboard"
               className="absolute z-20 flex flex-col items-center justify-center rounded-full bg-[#E8342F] border-[2.5px] border-[#E8342F]/40 shadow-[0_0_80px_rgba(232,52,47,0.45),inset_0_0_40px_rgba(255,255,255,0.08)] hover:scale-105 transition-transform duration-300 outline-none focus-visible:ring-[3px] focus-visible:ring-[#FFB13B] focus-visible:ring-offset-4"
               style={{ width: 170, height: 170, animation: "pulseInner 5s ease-in-out infinite" }}
               aria-label="Magic — العودة للرئيسية"
@@ -275,7 +277,7 @@ export default function MagicWheelDashboard({
               return (
                 <a
                   key={b.id}
-                  href={b.exists ? b.href : undefined}
+                  href={b.exists ? (b.id === "lesson" ? (currentDayId ? `/lesson/${currentDayId}` : "/dashboard") : b.href) : undefined}
                   onClick={(e) => {
                     if (!b.exists) {
                       e.preventDefault();
@@ -351,7 +353,7 @@ export default function MagicWheelDashboard({
               return (
                 <a
                   key={b.id}
-                  href={b.exists ? b.href : undefined}
+                  href={b.exists ? (b.id === "lesson" ? (currentDayId ? `/lesson/${currentDayId}` : "/dashboard") : b.href) : undefined}
                   onClick={(e) => {
                     if (!b.exists) { e.preventDefault(); handleNavigate(b); return; }
                     handleNavigate(b);

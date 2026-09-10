@@ -3,24 +3,45 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 
 // ---------------------------------------------------------------------------
-// 4-theme foundation — Dashboard Premium Redesign Phase 1
+// Theme foundation — four legacy dashboard IDs plus four Magic Wheel IDs.
 // IDs are the single source of truth; they appear on <html data-theme="...">.
 // Legacy values "light"/"dark" are accepted and mapped (indigo-light/warm-dark)
 // so stored preferences from before Phase 1 do not break.
 // ---------------------------------------------------------------------------
 
-export type ThemeId = 'indigo-light' | 'warm-dark' | 'slate' | 'deep-green';
+export type ThemeId =
+  | 'indigo-light'
+  | 'warm-dark'
+  | 'slate'
+  | 'deep-green'
+  | 'magic-color'
+  | 'magic-noir'
+  | 'magic-blue'
+  | 'magic-paper';
 /** Back-compat: old provider used 'light'|'dark' — still recognised on read. */
 type LegacyTheme = 'light' | 'dark';
 export type Theme = ThemeId | LegacyTheme;
 
-export const THEME_IDS: ThemeId[] = ['indigo-light', 'warm-dark', 'slate', 'deep-green'];
+export const THEME_IDS: ThemeId[] = [
+  'indigo-light',
+  'warm-dark',
+  'slate',
+  'deep-green',
+  'magic-color',
+  'magic-noir',
+  'magic-blue',
+  'magic-paper',
+];
 
 export const THEME_META: Record<ThemeId, { label: string; labelEn: string }> = {
   'indigo-light': { label: 'نيلي فاتح', labelEn: 'Indigo Light' },
   'warm-dark': { label: 'أسود دافي', labelEn: 'Warm Dark' },
   slate: { label: 'رمادي', labelEn: 'Slate' },
   'deep-green': { label: 'أخضر داكن', labelEn: 'Deep Green' },
+  'magic-color': { label: 'ماجيك ملوّن', labelEn: 'Magic Color' },
+  'magic-noir': { label: 'ماجيك أسود', labelEn: 'Magic Noir' },
+  'magic-blue': { label: 'ماجيك أزرق', labelEn: 'Magic Blue' },
+  'magic-paper': { label: 'ماجيك ورق', labelEn: 'Magic Paper' },
 };
 
 const STORAGE_KEY = 'theme';
