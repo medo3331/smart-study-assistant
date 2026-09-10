@@ -1,15 +1,200 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+/* ==========================================================================
+   🎡 عجلة ماجيك — بوّابة التنقل الدائرية للداشبورد
+   --------------------------------------------------------------------------
+   النسخة المنفِّذة لتصميم magiclly-design-final المعتمد:
+   • 9 أفرع، كل واحد يودي على مسار حقيقي من المشروع (لا placeholder).
+   • الألوان كلها من توكينز data-theme → الثيمات الأربعة (ملوّن/أسود-أحمر/
+     أزرق/أبيض-رمادي) تشتغل عليها فورًا، والحفظ في localStorage.theme عبر
+     ThemeProvider الموجود (مفيش نظام متوازي).
+   • الإحصاءات والرسوم موصولة ببيانات حقيقية من الداشبورد (props من
+     app/dashboard/page.tsx): كورسات من study_configs، تقدم من study_days،
+     streak من profiles، نشاط من activity_log. مفيش أي mock.
+   • الحركة محترمة لـ prefers-reduced-motion، وكل فرع Link حقيقي (كي بورد +
+     focus ring + aria-label).
+   ملاحظة: كلاسات `.wheel-*` في globals.css بتاعة عجلة حظ المتجر — دي `.mw-*`.
+   ========================================================================== */
+
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+
+/* ميديا-كوئيري بدون setState جوه effect — النمط الموصى بيه في React 19
+   (بيتفادى تحذير react-hooks/set-state-in-effect وبيتحدّث لحظيًا).
+   SSR بيرندر الوضع الدائري، والعميل بيصوب أول حاجة لو الشاشة صغيرة. */
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    useCallback(
+      (onStoreChange) => {
+        const mql = window.matchMedia(query);
+        mql.addEventListener("change", onStoreChange);
+        return () => mql.removeEventListener("change", onStoreChange);
+      },
+      [query],
+    ),
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Home, BookOpen, FolderOpen, Landmark, Sparkles,
-  ShoppingBag, BarChart3, Settings, GraduationCap,
+  ShoppingBag, BarChart3, Settings, GraduationCap, Bell, Flame,
 } from "lucide-react";
+import {
+  useTheme,
+  MAGIC_THEME_CYCLE,
+  COLORFUL_WHEEL_THEMES,
+  THEME_META,
+  type ThemeId,
+} from "@/theme/ThemeProvider";
+import { useReducedMotion } from "@/lib/useReducedMotion";
+import {
+  Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
+
+/* --------------------------------------------------------------------------
+   ألوان الأفرع — وضع «الملون» بس (في باقي الثيمات الفرع بياخد لون الأكسنت).
+   -------------------------------------------------------------------------- */
+const BRANCH_COLORS = [
+  "#E8342F", // الرئيسية — أحمر
+  "#F2994A", // الكورسات — برتقالي
+  "#F2C94C", // الدرس — أصفر
+  "#6FCF97", // مساحة العمل — أخضر
+  "#2FD4C4", // العبادات — تركواز
+  "#4FA9F5", // المساعد الذكي — أزرق
+  "#7B7EF4", // المتجر — بنفسجي فاتح
+  "#B57BF4", // التحليلات — بنفسجي
+  "#F26FA1", // الإعدادات — وردي
+] as const;
+
+/* مواضع الأفرع التسعة على الدائرة (نفس هندسة البريف المعتمد). */
+const ANGLES_DEG = [270, 230, 190, 150, 110, 70, 30, -10, -50];
+
+/* ==========================================================================
+   تعريفات الأفرع — المسارات مستخرجة من app/ فعليًا (انضبطت يوم التنفيذ):
+     /  ·  /dashboard/courses  ·  /lesson/[dayId]  ·  /dashboard/workspace
+     /worship  ·  /chat  ·  /shop  ·  /dashboard/progress
+     والإعدادات إجراء (openSettings) مش صفحة — درج الإعدادات جوه الداشبورد.
+   ========================================================================== */
+export type WheelBranchId =
+  | "home" | "courses" | "lesson" | "workspace" | "worship"
+  | "ai" | "shop" | "analytics" | "settings";
+
+export interface WheelBranchDef {
+  id: WheelBranchId;
+  label: string;
+  latin: string;
+  icon: React.ReactNode;
+  /** "link" = Next Link لمسار حقيقي · "action" = إجراء داخل الصفحة */
+  kind: "link" | "action";
+  href?: string;
+  /** ملاحظة للجدول المرجعي في صفحة /magic-wheel */
+  note: string;
+}
+
+export function buildWheelBranches(opts: { currentDay?: number | null } = {}): WheelBranchDef[] {
+  const { currentDay } = opts;
+  return [
+    { id: "home", label: "الرئيسية", latin: "Home", icon: <Home size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/", note: "صفحة الهبوط الرئيسية" },
+    { id: "courses", label: "الكورسات", latin: "Courses", icon: <BookOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/courses", note: "قايمة التراكات (study_configs)" },
+    {
+      id: "lesson",
+      label: currentDay ? `الدرس — يوم ${currentDay}` : "ابدأ درسك",
+      latin: "Lesson",
+      icon: <GraduationCap size={18} strokeWidth={2} aria-hidden />,
+      kind: "link",
+      // ⚠️ مفيش /lesson index — المسار الحقيقي /lesson/[dayId]. من غير خطة: بوابة التوليد.
+      href: currentDay ? `/lesson/${currentDay}` : "/dashboard/create",
+      note: currentDay ? `/lesson/${currentDay} (يوم الخطة الحالي)` : "مفيش خطة بعد → /dashboard/create",
+    },
+    { id: "workspace", label: "مساحة العمل", latin: "Workspace", icon: <FolderOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/workspace", note: "الملفات والمذاكرة" },
+    { id: "worship", label: "عباداتي", latin: "Worship", icon: <Landmark size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/worship", note: "الصلوات + الأذكار + القرآن" },
+    { id: "ai", label: "المساعد الذكي", latin: "AI Assistant", icon: <Sparkles size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/chat", note: "الشات الحقيقي (/chat) — بقرار من المستخدم" },
+    { id: "shop", label: "المتجر", latin: "Shop", icon: <ShoppingBag size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/shop", note: "نقاطك والرفيق والبالتات" },
+    { id: "analytics", label: "التحليلات", latin: "Analytics", icon: <BarChart3 size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/progress", note: "تقدم المنهج — صفحة فعلية" },
+    { id: "settings", label: "الإعدادات", latin: "Settings", icon: <Settings size={18} strokeWidth={2} aria-hidden />, kind: "action", note: "مفيش صفحة إعدادات — بيفتح درج الإعدادات جوه /dashboard" },
+  ];
+}
+
+/** للنسخ المرجعي (جدول الربط في صفحة /magic-wheel المستقلة). */
+export const WHEEL_BRANCHES = buildWheelBranches();
+
+/* --------------------------------------------------------------------------
+   بيانات الداشبورد الحقيقية اللي بتنزل للعجلة كـ props
+   -------------------------------------------------------------------------- */
+export interface WheelSubjectDatum {
+  name: string;
+  /** إجمالي أيام الخطة للمادة دي */
+  value: number;
+  completed: number;
+}
+
+export interface WheelChartPoint {
+  label: string;
+  minutes: number;
+  tasks: number;
+}
+
+export interface MagicWheelProps {
+  /* التراك الحالي (من صفحة الداشبورد) */
+  currentDay?: number;
+  totalDays?: number;
+  subject?: string;
+  completedSteps?: number;
+  progressPct?: number;
+  currentChapter?: number;
+  /* إحصاءات حقيقية */
+  streak?: number;
+  coursesCount?: number | null;
+  subjectBreakdown?: WheelSubjectDatum[];
+  /* رسم النشاط (نفس داتا activity_log اللي بتغذي AnalyticsSection) */
+  activeChartData?: WheelChartPoint[];
+  analyticsRange?: "weekly" | "monthly";
+  onChangeRange?: (r: "weekly" | "monthly") => void;
+  weeklyFocusHoursLabel?: string;
+  notificationsEnabled?: boolean;
+  /* فتح درج الإعدادات بدون تنقّل — الداشبورد بيمرّر setIsMenuOpen(true) */
+  onOpenSettings?: () => void;
+}
+
+/* --------------------------------------------------------------------------
+   قراية توكينز الثيم كألوان صريحة — recharts بيرسم SVG وvar() جوه
+   presentation attributes مش مضمونة. نفس نمط app/dashboard/components/
+   use-css-vars.ts، بس النسخة هنا مصغّرة عشان الكومبوننت يفضل مستقل.
+   -------------------------------------------------------------------------- */
+function useThemeColors() {
+  const [colors, setColors] = useState({
+    accent: "#E23A3A",
+    highlight: "#FF6B5B",
+    muted: "#8A8F98",
+    rule: "rgba(128,128,128,0.25)",
+    card: "#111113",
+    text: "#f1f1f4",
+  });
+  useEffect(() => {
+    const read = () => {
+      const cs = getComputedStyle(document.documentElement);
+      const v = (n: string, fb: string) => cs.getPropertyValue(n).trim() || fb;
+      setColors({
+        accent: v("--accent", "#E23A3A"),
+        highlight: v("--accent-highlight", "#FF6B5B"),
+        muted: v("--muted", "#8A8F98"),
+        rule: v("--rule", "rgba(128,128,128,0.25)"),
+        card: v("--card-primary", "#111113"),
+        text: v("--text", "#f1f1f4"),
+      });
+    };
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
+  return colors;
+}
 
 /* ===========================================================================
-   شعار ماجيكلي — حرف M + نجمة رباعية (من public/logo-mark.svg و BrandLogo)
+   شعار ماجيكلي — حرف M + نجمة رباعية (public/logo-mark.svg)
    =========================================================================== */
 function MagiclyGlyph({ className }: { className?: string }) {
   return (
@@ -23,204 +208,219 @@ function MagiclyGlyph({ className }: { className?: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {/* M stroke — يتم رسمه تدريجياً عبر CSS animation على stroke-dasharray */}
       <path
         d="M4.15 40.8L4.15 5.8L23.67 22.55L39.47 5.6"
         strokeDasharray="120"
         strokeDashoffset="120"
-        className="m-stroke"
+        className="mw-glyph-m"
       />
-      {/* النجمة الرباعية — تظهر بنبضة */}
       <path
         d="M48.17 0Q48.17 8.65 56.87 8.65Q48.17 8.65 48.17 17.3Q48.17 8.65 39.47 8.65Q48.17 8.65 48.17 0Z"
         fill="currentColor"
-        className="star-fill"
+        className="mw-glyph-star"
       />
     </svg>
   );
 }
 
 /* --------------------------------------------------------------------------
-   ألوان الحدود للـ 9 أفرع (كل فرع لون مختلف حسب البرومبت)
+   كارت الفرع (أيقونة + اسم عربي + لافتة لاتينية) — مستخدّم في الوضعيين
    -------------------------------------------------------------------------- */
-const BRANCH_COLORS = [
-  { border: "#E8342F", glow: "#E8342F", bgHover: "rgba(232,52,47,0.12)" }, // الرئيسية — أحمر
-  { border: "#F2994A", glow: "#F2994A", bgHover: "rgba(242,153,74,0.12)" }, // الكورسات — برتقالي
-  { border: "#F2C94C", glow: "#F2C94C", bgHover: "rgba(242,201,76,0.12)" }, // الدرس — أصفر
-  { border: "#6FCF97", glow: "#6FCF97", bgHover: "rgba(111,207,151,0.12)" }, // مساحة العمل — أخضر
-  { border: "#2FD4C4", glow: "#2FD4C4", bgHover: "rgba(47,212,196,0.12)" }, // العبادات — تركواز
-  { border: "#4FA9F5", glow: "#4FA9F5", bgHover: "rgba(79,169,245,0.12)" }, // AI — أزرق
-  { border: "#7B7EF4", glow: "#7B7EF4", bgHover: "rgba(123,126,244,0.12)" }, // المتجر — بنفسجي فاتح
-  { border: "#B57BF4", glow: "#B57BF4", bgHover: "rgba(181,123,244,0.12)" }, // التحليلات — بنفسجي
-  { border: "#F26FA1", glow: "#F26FA1", bgHover: "rgba(242,111,161,0.12)" }, // الإعدادات — وردي
-];
-
-/* --------------------------------------------------------------------------
-   المسارات الحقيقية من المشروع
-   -------------------------------------------------------------------------- */
-export interface WheelBranchDef {
-  id: string;
-  label: string;
-  latin: string;
-  href: string;
-  icon: React.ReactNode;
-  exists: boolean;
-  note?: string;
-  kind: "page" | "signal" | "scroll" | "todo";
-}
-
-export const WHEEL_BRANCHES: WheelBranchDef[] = [
-  { id: "home", label: "الرئيسية", latin: "Home", href: "/", icon: <Home size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
-  { id: "courses", label: "الكورسات", latin: "Courses", href: "/dashboard/courses", icon: <BookOpen size={18} strokeWidth={2} aria-hidden />, exists: true, note: "صفحة موجودة", kind: "page" },
-  { id: "lesson", label: "الدرس", latin: "Lesson", href: "/lesson", icon: <GraduationCap size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
-  { id: "workspace", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace", icon: <FolderOpen size={18} strokeWidth={2} aria-hidden />, exists: true, note: "صفحة موجودة", kind: "page" },
-  { id: "worship", label: "عباداتي", latin: "Worship", href: "/worship", icon: <Landmark size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
-  { id: "ai", label: "المساعد الذكي", latin: "AI Assistant", href: "/dashboard", icon: <Sparkles size={18} strokeWidth={2} aria-hidden />, exists: true, note: "إشارة signal: ai داخل /dashboard", kind: "signal" },
-  { id: "shop", label: "المتجر", latin: "Shop", href: "/shop", icon: <ShoppingBag size={18} strokeWidth={2} aria-hidden />, exists: true, kind: "page" },
-  { id: "analytics", label: "التحليلات", latin: "Analytics", href: "/dashboard#analytics", icon: <BarChart3 size={18} strokeWidth={2} aria-hidden />, exists: true, note: "قسم scrollTo داخل /dashboard", kind: "scroll" },
-  { id: "settings", label: "الإعدادات", latin: "Settings", href: "/dashboard", icon: <Settings size={18} strokeWidth={2} aria-hidden />, exists: true, note: "إشارة signal: settings داخل /dashboard", kind: "signal" },
-];
-
-const ANGLES_DEG = [270, 230, 190, 150, 110, 70, 30, -10, -50];
-
-/* --------------------------------------------------------------------------
-   Props للربط بالخطة
-   -------------------------------------------------------------------------- */
-export interface MagicWheelProps {
-  currentDay?: number;
-  totalDays?: number;
-  subject?: string;
-  completedSteps?: number;
-  progressPct?: number;
-  currentChapter?: number;
+function BranchFace({
+  branch, color, badge,
+}: {
+  branch: WheelBranchDef;
+  color: string;
+  badge?: string;
+}) {
+  return (
+    <span className="relative flex h-full w-full flex-col items-center justify-center gap-1">
+      <span style={{ color }} className="transition-transform duration-300">
+        {branch.icon}
+      </span>
+      <span
+        className="px-1 text-center text-[0.56rem] font-extrabold leading-tight tracking-wide md:text-[0.62rem]"
+        style={{ color }}
+      >
+        {branch.label}
+      </span>
+      <span
+        className="font-mono text-[0.42rem] uppercase tracking-[0.15em] md:text-[0.45rem]"
+        style={{ color: `color-mix(in srgb, ${color} 70%, white 8%)` }}
+      >
+        {branch.latin}
+      </span>
+      {badge && (
+        <span
+          className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[0.45rem] font-bold text-[#0d0d0d] shadow-md"
+          style={{ backgroundColor: color }}
+        >
+          {badge}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /* ===========================================================================
-   المكون الرئيسي
+   المكوّن الرئيسي
    =========================================================================== */
-export default function MagicWheelDashboard({
-  currentDay, totalDays, subject, completedSteps, progressPct, currentChapter,
-}: MagicWheelProps = {}) {
+export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
+  const {
+    currentDay, totalDays, subject, completedSteps, progressPct, currentChapter,
+    streak, coursesCount, subjectBreakdown,
+    activeChartData, analyticsRange, onChangeRange, weeklyFocusHoursLabel,
+    notificationsEnabled, onOpenSettings,
+  } = props;
+
+  const { theme, setTheme } = useTheme();
+  const themeId = theme as ThemeId;
+  const colorful = COLORFUL_WHEEL_THEMES.has(themeId);
+  const reduced = useReducedMotion();
+  const colors = useThemeColors();
   const router = useRouter();
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [isVertical, setIsVertical] = useState(false);
 
-  /* التنقل */
-  const handleNavigate = useCallback(
-    (branch: WheelBranchDef) => {
-      if (!branch.exists) {
-        console.warn(`[MagicWheel] المسار غير موجود فعليًا: ${branch.href}`);
-        return;
-      }
-      if (branch.kind === "signal") {
-        try {
-          if (typeof window !== "undefined") {
-            const intent = branch.id === "ai"
-              ? JSON.stringify({ kind: "modal", target: "ai" })
-              : branch.id === "settings"
-                ? JSON.stringify({ kind: "modal", target: "settings" })
-                : null;
-            if (intent) window.sessionStorage.setItem("nav_intent", intent);
-          }
-        } catch { /* ignore */ }
-        router.push(branch.href);
-        return;
-      }
-      if (branch.kind === "scroll") {
-        router.push(branch.href);
-        return;
-      }
-      if (branch.id === "lesson" && currentDay !== undefined && currentDay !== null) {
-        router.push(`/lesson/${currentDay}`);
-        return;
-      }
-      router.push(branch.href);
-    },
-    [router, currentDay]
-  );
+  /* أقل من 640px (زي ما البريف بيعمل) → شبكة عمودية بدل الدائرة */
+  const isVertical = useMediaQuery("(max-width: 640px)");
 
-  /* Responsive */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(max-width: 480px)");
-    setIsVertical(mql.matches);
-    const handler = (e: MediaQueryListEvent) => setIsVertical(e.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
+  const branches = buildWheelBranches({ currentDay });
+
+  /* الإعدادات: إجراء مش مسار. من جوه الداشبورد بنفتح الدرج على طول؛ من أي
+     صفحة تانية بنكتب النية في sessionStorage وننقل — نفس مفتاح/فورمات
+     nav-config.ts (التكرار هنا مقصود زي ما الـ proxy بيكرر منطق الدور). */
+  const openSettings = useCallback(() => {
+    if (onOpenSettings) {
+      onOpenSettings();
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(
+        "nav_intent",
+        JSON.stringify({ kind: "modal", target: "settings" }),
+      );
+    } catch {
+      /* خاصية تصفح مقفلة — مجرد تنقّل للداشبورد كفاية */
+    }
+    router.push("/dashboard");
+  }, [onOpenSettings, router]);
+
+  /* 🎨 زرار الثيمات الأربعة — بيدور على MAGIC_THEME_CYCLE ويحفظ عبر
+     ThemeProvider (localStorage.theme + data-theme) زي التصميم بالظبط. */
+  const cycleIdx = MAGIC_THEME_CYCLE.indexOf(themeId);
+  const nextTheme =
+    cycleIdx === -1 ? MAGIC_THEME_CYCLE[0] : MAGIC_THEME_CYCLE[(cycleIdx + 1) % MAGIC_THEME_CYCLE.length];
+  const currentLabel =
+    THEME_META[themeId]?.label ?? (cycleIdx === -1 ? "ملوّن (حالي)" : themeId);
+  const SWATCH_DOTS: { id: ThemeId; color: string }[] = [
+    { id: "colorful", color: "#F0D24A" },
+    { id: "crimson", color: "#E23A3A" },
+    { id: "azure", color: "#4FA9F5" },
+    { id: "mono", color: "#9CA3AF" },
+  ];
+
+  const colorFor = (i: number) => (colorful ? BRANCH_COLORS[i % BRANCH_COLORS.length] : colors.accent);
+
+  /* داتا الخطة على الفروع — زي ما التصميم بيعرض، بس من props حقيقية */
+  const badgeFor = (id: WheelBranchId): string | undefined => {
+    if (id === "home" && subject && currentDay) return `${subject} · يوم ${currentDay}${totalDays ? `/${totalDays}` : ""}`;
+    if (id === "courses" && subject) return subject;
+    if (id === "lesson" && currentDay) return `يوم ${currentDay}`;
+    if (id === "workspace" && currentChapter) return `فصل ${currentChapter}`;
+    return undefined;
+  };
 
   return (
-    <section
-      className="relative w-full overflow-hidden"
-      style={{ backgroundColor: "#000000", minHeight: "100vh", direction: "rtl" }}
-      aria-label="عجلة ماجيك — التنقل الدائري للداشبورد"
-    >
-      {/* خلفية توهّج خفيف أحمر */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(circle at 50% 42%, rgba(232,52,47,0.10) 0%, transparent 60%)",
-          zIndex: 0,
-        }}
-        aria-hidden
-      />
+    <section className="mw-root" aria-label="عجلة ماجيك — التنقل واللمحة السريعة">
+      <div className="mw-glow" aria-hidden />
 
-      {/* زر تبديل العرض (موبايل) */}
-      <button
-        onClick={() => setIsVertical((v) => !v)}
-        className="fixed top-4 left-4 z-50 md:hidden flex items-center gap-2 px-3 py-2 rounded-xl border border-[#1c1c1c] bg-[#0d0d0d]/90 text-[#f1f1f4] text-xs font-semibold shadow-lg backdrop-blur-sm hover:border-[#E8342F] transition"
-        aria-label={isVertical ? "تبديل للعرض الدائري" : "تبديل للعرض العمودي"}
-        tabIndex={0}
-      >
-        <span className="text-[#E8342F]">↻</span>
-        <span>{isVertical ? "دائري" : "عمودي"}</span>
-      </button>
+      <div className="relative z-10 mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-4 py-6 md:px-8 md:py-8">
 
-      <div className="relative z-10 max-w-[1100px] mx-auto px-4 md:px-8 py-8 md:py-16 flex flex-col items-center justify-center gap-8 md:gap-12">
+        {/* ═════ الهيدر + زرار الثيم (سلوك التصميم: دورة على الأربعة + حفظ) ═════ */}
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{ background: `color-mix(in srgb, ${colors.accent} 16%, transparent)`, color: colors.accent }}
+              aria-hidden
+            >
+              <Sparkles size={16} strokeWidth={2.2} />
+            </span>
+            <div>
+              <h2 className="text-base font-extrabold leading-none md:text-lg" style={{ color: "var(--text)" }}>
+                عجلة التنقل
+              </h2>
+              <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>
+                Magic Wheel
+              </p>
+            </div>
+          </div>
 
-        {/* العنوان */}
-        <header className="text-center space-y-2">
-          <h1
-            className="text-4xl md:text-6xl lg:text-7xl font-[900] tracking-tight leading-[0.95] text-[#f1f1f4]"
-            style={{ fontFamily: "'Cinzel Decorative', Georgia, serif", textShadow: "0 0 40px rgba(232,52,47,0.30)" }}
+          <button
+            type="button"
+            onClick={() => setTheme(nextTheme)}
+            className="mw-theme-btn"
+            aria-label={`تبديل الثيم — الحالي ${currentLabel}. الضغط يحوّل لـ ${THEME_META[nextTheme]?.label}. الثيمات: ملوّن، أسود وأحمر، أزرق، أبيض ورمادي.`}
           >
-            Magic
-          </h1>
-          <p className="text-[#a0a0a8] text-sm md:text-base font-medium tracking-[0.18em] uppercase">Wheel — عجلة التنقل</p>
+            <span className="flex items-center gap-1" aria-hidden>
+              {SWATCH_DOTS.map((s) => (
+                <span
+                  key={s.id}
+                  className="h-2.5 w-2.5 rounded-full border"
+                  style={{
+                    backgroundColor: s.color,
+                    borderColor: s.id === themeId ? "var(--text)" : "transparent",
+                    outline: s.id === themeId ? `1px solid ${s.color}` : "none",
+                    outlineOffset: 1,
+                  }}
+                />
+              ))}
+            </span>
+            <span>{currentLabel}</span>
+          </button>
         </header>
 
-        {/* ═══════════════════════════════════════════════════════
-            العرض الدائري
-            ═══════════════════════════════════════════════════════ */}
-        {!isVertical && (
-          <div className="relative w-full max-w-[720px] aspect-square flex items-center justify-center">
-
-            {/* الحلقة الخارجية — dashed أحمر */}
+        {/* ═════ أفرع العجلة — شبكة عمودية على الموبايل ═════ */}
+        {isVertical ? (
+          <nav
+            aria-label="تنقل العجلة — عرض شبكي"
+            className="grid w-full grid-cols-2 gap-3 md:grid-cols-3"
+          >
+            {branches.map((b, i) => (
+              <WheelBranch
+                key={b.id}
+                branch={b}
+                color={colorFor(i)}
+                badge={badgeFor(b.id)}
+                onOpenSettings={openSettings}
+                layout="grid"
+              />
+            ))}
+          </nav>
+        ) : (
+          /* ═════ العرض الدائري ═════ */
+          <div className="relative mx-auto flex aspect-square w-full max-w-[720px] items-center justify-center">
             <div
-              className="absolute rounded-full border-2 border-dashed border-[#E8342F]/30"
-              style={{ width: "clamp(320px, 64vw, 480px)", height: "clamp(320px, 64vw, 480px)", animation: "rotateDashed 28s linear infinite" }}
+              className="mw-ring mw-ring-dash"
+              style={{ width: "clamp(320px, 62vw, 470px)", height: "clamp(320px, 62vw, 470px)" }}
               aria-hidden
             />
-            {/* الحلقة الوسطى — dotted بلون أفتح */}
             <div
-              className="absolute rounded-full border-[1.5px] border-dotted border-[#E8342F]/25"
-              style={{ width: "clamp(270px, 54vw, 400px)", height: "clamp(270px, 54vw, 400px)", animation: "rotateDotted 40s linear infinite reverse" }}
+              className="mw-ring mw-ring-dot"
+              style={{ width: "clamp(270px, 52vw, 390px)", height: "clamp(270px, 52vw, 390px)" }}
               aria-hidden
             />
 
-            {/* الخطوط بين المركز والأفرع + النقاط المتحركة */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-[5]" aria-hidden>
-              <defs>
-                {WHEEL_BRANCHES.map((_, i) => (
-                  <linearGradient key={i} id={`line-grad-${i}`} x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="transparent" />
-                    <stop offset="35%" stopColor="#E8342F" stopOpacity="0.45" />
-                    <stop offset="60%" stopColor="#E8342F" stopOpacity="0.70" />
-                    <stop offset="100%" stopColor="transparent" />
-                  </linearGradient>
-                ))}
-              </defs>
-              {WHEEL_BRANCHES.map((b, i) => {
+            {/* الخطوط من المركز للفروع — لونها التوكين فبتتبع الثيم.
+                الحاضن square فالـ viewBox هنا بيضمن إن الإحداثيات والمُتحرّك
+                يعيشوا في نفس نظام 0–100 (في النسخة القديمة كانت الخطوط %
+                والنقاط px فتتضارب). */}
+            <svg
+              className="pointer-events-none absolute inset-0 z-[5] h-full w-full overflow-visible"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden
+            >
+              {branches.map((b, i) => {
                 const a = ANGLES_DEG[i];
                 const r = 42;
                 const rad = ((a - 90) * Math.PI) / 180;
@@ -229,189 +429,374 @@ export default function MagicWheelDashboard({
                 return (
                   <g key={b.id}>
                     <line
-                      x1="50%" y1="50%"
-                      x2={`${cx}%`} y2={`${cy}%`}
-                      stroke={`url(#line-grad-${i})`}
-                      strokeWidth="1.5" strokeLinecap="round"
-                      strokeDasharray="300" strokeDashoffset="300"
-                      style={{ animation: `drawLine 1.1s ease-out ${i * 160}ms forwards` }}
+                      x1="50" y1="50" x2={cx} y2={cy}
+                      stroke={colors.accent}
+                      strokeOpacity="0.4"
+                      strokeWidth="0.4"
+                      strokeLinecap="round"
+                      className={reduced ? undefined : "mw-line"}
+                      style={{ ["--mw-delay" as string]: `${i * 160}ms` }}
                     />
-                    <circle r="3.5" fill="#E8342F" filter="drop-shadow(0 0 6px #E8342F)">
-                      <animateMotion
-                        dur="2.6s" begin={`${i * 160 + 900}ms`}
-                        repeatCount="indefinite" calcMode="linear"
-                        path={`M50 50 L${cx} ${cy}`}
-                      />
-                    </circle>
+                    {!reduced && (
+                      <circle r="1.1" fill={colors.highlight} style={{ filter: `drop-shadow(0 0 4px ${colors.highlight})` }}>
+                        <animateMotion
+                          dur="2.6s"
+                          begin={`${i * 160 + 900}ms`}
+                          repeatCount="indefinite"
+                          calcMode="linear"
+                          path={`M50 50 L${cx} ${cy}`}
+                        />
+                      </circle>
+                    )}
                   </g>
                 );
               })}
             </svg>
 
-            {/* ═══════════════════════════════════════════════════════
-                المركز — البكرة الحمراء + شعار Magicly (M + نجمة)
-                ═══════════════════════════════════════════════════════ */}
+            {/* المركز — لوجو Magicly، رجوع للرئيسية */}
             <Link
               href="/"
-              className="absolute z-20 flex flex-col items-center justify-center rounded-full bg-[#E8342F] border-[2.5px] border-[#E8342F]/40 shadow-[0_0_80px_rgba(232,52,47,0.45),inset_0_0_40px_rgba(255,255,255,0.08)] hover:scale-105 transition-transform duration-300 outline-none focus-visible:ring-[3px] focus-visible:ring-[#FFB13B] focus-visible:ring-offset-4"
-              style={{ width: 170, height: 170, animation: "pulseInner 5s ease-in-out infinite" }}
+              className="mw-center"
+              style={{ width: 160, height: 160 }}
               aria-label="Magic — العودة للرئيسية"
             >
-              {/* شعار Magicly — حرف M + نجمة رباعية مع أنيميشن رسم */}
-              <MagiclyGlyph className="w-14 h-11 text-[#FFB13B] drop-shadow-[0_0_12px_#FFB13B]" />
+              <MagiclyGlyph className="h-10 w-12 text-[#FFB13B] drop-shadow-[0_0_12px_rgba(255,177,59,0.75)]" />
+              <span className="mt-1 font-mono text-[0.55rem] uppercase tracking-[0.22em] text-white/80">
+                Magicly
+              </span>
             </Link>
 
-            {/* ═══════════════════════════════════════════════════════
-                الـ 9 أفرع — دوائر كاملة بلون مختلف لكل فرع
-                ═══════════════════════════════════════════════════════ */}
-            {WHEEL_BRANCHES.map((b, i) => {
-              const a = ANGLES_DEG[i];
-              const r = 36;
-              const rad = ((a - 90) * Math.PI) / 180;
-              const cx = 50 + Math.sin(rad) * r;
-              const cy = 50 + Math.cos(rad) * r;
-              const color = BRANCH_COLORS[i];
-              const delayMs = i * 130;
-              return (
-                <a
-                  key={b.id}
-                  href={b.exists ? b.href : undefined}
-                  onClick={(e) => {
-                    if (!b.exists) {
-                      e.preventDefault();
-                      handleNavigate(b);
-                      return;
-                    }
-                    handleNavigate(b);
-                  }}
-                  className="absolute block outline-none select-none focus-visible:ring-[3px] focus-visible:ring-offset-4 rounded-full transition-all duration-300 hover:scale-110 hover:-translate-y-1"
-                  style={{
-                    top: `${cy}%`, left: `${cx}%`,
-                    transform: `translate(-50%, -50%)`,
-                    animationDelay: `${delayMs}ms`,
-                    width: "clamp(80px, 13vw, 120px)",
-                    height: "clamp(80px, 13vw, 120px)",
-                  }}
-                  aria-label={`${b.label} — ${b.latin}`}
-                  tabIndex={0}
-                  role="link"
-                >
-                  {/* الدائرة — لون مختلف لكل فرع */}
+            {/* الأفرع التسعة */}
+            <nav aria-label="تنقل العجلة — عرض دائري" className="contents">
+              {branches.map((b, i) => {
+                const a = ANGLES_DEG[i];
+                const r = 36;
+                const rad = ((a - 90) * Math.PI) / 180;
+                const cx = 50 + Math.sin(rad) * r;
+                const cy = 50 + Math.cos(rad) * r;
+                return (
                   <div
-                    className="relative w-full h-full rounded-full border-[2.5px] flex flex-col items-center justify-center gap-1 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-all duration-300 hover:shadow-[0_6px_30px_rgba(0,0,0,0.7)]"
-                    style={{
-                      borderColor: color.border,
-                      backgroundColor: "#0d0d0d",
-                      boxShadow: `0 0 20px ${color.glow}30`,
-                      animation: `popIn 0.65s ease-out ${delayMs}ms both, floatBranch 5s ease-in-out infinite ${delayMs + 1100}ms`,
-                    }}
+                    key={b.id}
+                    className="absolute"
+                    style={{ top: `${cy}%`, left: `${cx}%` }}
                   >
-                    {/* أيقونة بلون الفرع */}
-                    <span className="text-[#f1f1f4] transition-transform duration-300 hover:rotate-[-4deg] hover:scale-110" style={{ color: color.border }}>
-                      {b.icon}
-                    </span>
-                    <span className="text-[0.58rem] md:text-[0.62rem] font-extrabold text-[#f1f1f4] leading-tight text-center tracking-wide" style={{ color: color.border }}>
-                      {b.label}
-                    </span>
-                    <span className="text-[0.42rem] md:text-[0.45rem] font-mono tracking-[0.15em] uppercase" style={{ color: color.glow }}>
-                      {b.latin}
-                    </span>
-                    {/* بيانات الخطة إذا وُجدت */}
-                    {(subject || currentDay || completedSteps !== undefined) && b.id === "home" && (
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#E8342F] text-white text-[0.45rem] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-md">
-                        {subject ? `${subject}` : ""}{currentDay !== undefined ? ` · يوم ${currentDay}` : ""}{totalDays ? `/${totalDays}` : ""}
-                      </span>
-                    )}
-                    {subject && b.id === "courses" && (
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#F2994A] text-[#0d0d0d] text-[0.45rem] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-md">{subject}</span>
-                    )}
-                    {currentDay && b.id === "lesson" && (
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#F2C94C] text-[#0d0d0d] text-[0.45rem] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-md">يوم {currentDay}</span>
-                    )}
-                    {currentChapter && b.id === "workspace" && (
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#6FCF97] text-[#0d0d0d] text-[0.45rem] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-md">فصل {currentChapter}</span>
-                    )}
-                    {!b.exists && (
-                      <span className="absolute -top-1.5 -right-1 bg-[#E8342F] text-white text-[0.5rem] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-lg">!</span>
-                    )}
+                    <WheelBranch
+                      branch={b}
+                      color={colorFor(i)}
+                      badge={badgeFor(b.id)}
+                      onOpenSettings={openSettings}
+                      layout="circle"
+                      delayMs={reduced ? 0 : i * 130}
+                      size="clamp(80px, 13vw, 118px)"
+                    />
                   </div>
-                </a>
-              );
-            })}
+                );
+              })}
+            </nav>
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════
-            العرض العمودي (موبايل <480px)
-            ═══════════════════════════════════════════════════════ */}
-        {isVertical && (
-          <div className="w-full max-w-md grid grid-cols-2 gap-3 md:hidden">
-            {WHEEL_BRANCHES.map((b) => {
-              const color = BRANCH_COLORS[WHEEL_BRANCHES.findIndex((x) => x.id === b.id)];
-              return (
-                <a
-                  key={b.id}
-                  href={b.exists ? b.href : undefined}
-                  onClick={(e) => {
-                    if (!b.exists) { e.preventDefault(); handleNavigate(b); return; }
-                    handleNavigate(b);
-                  }}
-                  className="flex flex-col items-center gap-2 px-4 py-4 rounded-2xl border-[2px] bg-[#0d0d0d] hover:shadow-[0_6px_24px_rgba(232,52,47,0.3)] transition shadow-sm focus-visible:ring-[2px] focus-visible:ring-offset-2 outline-none"
-                  style={{ borderColor: color.border }}
-                  aria-label={`${b.label} — ${b.latin}`}
-                  tabIndex={0}
-                  role="link"
-                >
-                  <span className="text-[1.4rem]" style={{ color: color.border }}>{b.icon}</span>
-                  <div className="min-w-0 text-center">
-                    <span className="block text-sm font-extrabold text-[#f1f1f4]" style={{ color: color.border }}>{b.label}</span>
-                    <span className="block text-[0.55rem] font-mono tracking-wider text-[#777]">{b.latin}</span>
-                  </div>
-                  {!b.exists && <span className="bg-[#E8342F] text-white text-[0.45rem] font-bold px-1.5 py-0.5 rounded-full">!</span>}
-                </a>
-              );
-            })}
-          </div>
-        )}
-
-        {/* قسم معلومات الربط */}
-        <div className="w-full max-w-3xl rounded-2xl border border-[#1c1c1c]/60 bg-[#0a0a0c]/80 backdrop-blur-sm px-5 py-5 md:px-6 md:py-6">
-          <h2 className="text-sm font-bold text-[#f1f1f4] mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E8342F] inline-block" />
-            قائمة الربط الفعلي لكل فرع
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 text-xs leading-relaxed">
-            {WHEEL_BRANCHES.map((b) => (
-              <div key={b.id} className="flex items-start gap-2">
-                <span className={`mt-[3px] block w-1.5 h-1.5 rounded-full shrink-0 ${b.exists ? "bg-[#E8342F]" : "bg-[#FF6B5B]/60"}`} />
-                <div className="min-w-0">
-                  <span className="font-semibold text-[#f1f1f4]">{b.label}</span>
-                  <span className="text-[#777] mx-1">→</span>
-                  <code className="text-[#FFB13B] font-mono text-[0.7rem] truncate inline-block max-w-[120px] align-bottom">{b.href}</code>
-                  {!b.exists && <span className="block text-[#FF6B5B] text-[0.65rem] mt-0.5">⚠️ {b.note ?? "صفحة غير موجودة — TODO"}</span>}
-                  {b.exists && b.note && <span className="block text-[#777] text-[0.65rem] mt-0.5">ℹ {b.note}</span>}
-                  <span className="inline-block text-[0.6rem] text-[#555] ml-1 align-top">({b.kind === "page" ? "صفحة" : b.kind === "signal" ? "إشارة" : b.kind === "scroll" ? "تمرير" : "ناقص"})</span>
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* ═════ شريط الإحصاءات — بيانات حقيقية من props الداشبورد ═════ */}
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
+          <StatTile
+            icon={<BookOpen size={14} strokeWidth={2.2} aria-hidden />}
+            label="الكورسات"
+            value={coursesCount === null || coursesCount === undefined ? "—" : String(coursesCount)}
+            hint="من جدول الكورسات"
+          />
+          <StatTile
+            icon={<GraduationCap size={14} strokeWidth={2.2} aria-hidden />}
+            label="تقدم التراك"
+            value={progressPct !== undefined ? `${Math.round(progressPct)}%` : "—"}
+            hint={
+              totalDays
+                ? `${completedSteps ?? 0} / ${totalDays} مهمة`
+                : "لما تختار مادة"
+            }
+          />
+          <StatTile
+            icon={<Flame size={14} strokeWidth={2.2} aria-hidden />}
+            label="الستريك"
+            value={streak !== undefined ? `${streak} يوم` : "—"}
+            hint="متتحدة من البروفايل"
+          />
+          <StatTile
+            icon={<Bell size={14} strokeWidth={2.2} aria-hidden />}
+            label="الإشعارات"
+            value={notificationsEnabled === undefined ? "—" : notificationsEnabled ? "التذكير شغال" : "مقفولة"}
+            hint="مفيش صندوق وارد لسه — التذكيرات اليومية بس"
+            action={
+              <button
+                type="button"
+                onClick={openSettings}
+                className="text-[0.62rem] font-bold underline-offset-2 hover:underline"
+                style={{ color: "var(--accent)" }}
+                aria-label="إدارة الإشعارات — يفتح درج الإعدادات"
+              >
+                إدارة
+              </button>
+            }
+          />
         </div>
-      </div>
 
-      {/* أنيميشن CSS */}
-      <style jsx global>{`
-        @keyframes rotateDashed { to { transform: rotate(360deg); } }
-        @keyframes rotateDotted { to { transform: rotate(-360deg); } }
-        @keyframes pulseInner { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
-        @keyframes floatBranch { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        @keyframes drawLine { from{stroke-dashoffset:300} to{stroke-dashoffset:0} }
-        @keyframes popIn { from{opacity:0; transform:scale(0.55) translateY(14px)} to{opacity:1; transform:scale(1) translateY(0)} }
-        @keyframes drawStroke { to { stroke-dashoffset: 0; } }
-        @keyframes fadeOut { 0%{opacity:1; transform:scale(1)} 60%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(0.85)} }
-        @keyframes pulseStar { 0%,100%{transform:scale(1); opacity:1} 50%{transform:scale(1.15); opacity:0.85} }
-        .m-stroke { animation: drawStroke 2s ease-out 0.3s forwards; }
-        .star-fill { animation: pulseStar 3s ease-in-out infinite; }
-      `}</style>
+        {/* ═════ الرسوم — بتظهر لما الداشبورد يمرر داتا (صفحة /magic-wheel
+            المستقلة من غير داتا فبتعرض الحالة الفاضية الواضحة) ═════ */}
+        <section aria-label="ملخص النشاط" className="grid gap-3 md:grid-cols-2 md:gap-4">
+          <div className="mw-chart-card">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-bold md:text-sm" style={{ color: "var(--text)" }}>
+                نشاط المذاكرة
+              </h3>
+              {onChangeRange && (
+                <div className="flex gap-1" role="group" aria-label="نطاق الرسم البياني">
+                  {(["weekly", "monthly"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => onChangeRange(r)}
+                      aria-pressed={analyticsRange === r}
+                      className="rounded-full px-2.5 py-1 text-[0.6rem] font-bold transition"
+                      style={
+                        analyticsRange === r
+                          ? { backgroundColor: "var(--accent)", color: "var(--on-marker, #fff)" }
+                          : { border: "1px solid var(--rule)", color: "var(--muted)" }
+                      }
+                    >
+                      {r === "weekly" ? "أسبوعي" : "شهري"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {activeChartData && activeChartData.length > 0 ? (
+              <>
+                <div className="h-36 w-full md:h-40" dir="ltr">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={activeChartData} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: colors.muted, fontSize: 9 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis tick={{ fill: colors.muted, fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        cursor={{ fill: colors.rule, opacity: 0.35 }}
+                        contentStyle={{
+                          backgroundColor: colors.card,
+                          border: `1px solid ${colors.rule}`,
+                          borderRadius: 10,
+                          fontSize: 11,
+                          direction: "rtl",
+                        }}
+                      />
+                      <Bar dataKey="minutes" name="دقايق تركيز" radius={[3, 3, 0, 0]} fill={colors.accent} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {weeklyFocusHoursLabel && (
+                  <p className="mt-2 font-mono text-[0.6rem]" style={{ color: "var(--muted)" }}>
+                    الإجمالي: {weeklyFocusHoursLabel} — من جدول النشاط (activity_log)
+                  </p>
+                )}
+              </>
+            ) : (
+              <EmptyChartHint text="لسه مفيش نشاط مسجّل — ابدأ أول مهمة من «مساحة العمل» وهيرسم هنا." />
+            )}
+          </div>
+
+          <div className="mw-chart-card">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-bold md:text-sm" style={{ color: "var(--text)" }}>
+                توزيع المواد
+              </h3>
+              {coursesCount !== null && coursesCount !== undefined && (
+                <span className="font-mono text-[0.6rem]" style={{ color: "var(--muted)" }}>
+                  {coursesCount} كورس
+                </span>
+              )}
+            </div>
+            {subjectBreakdown && subjectBreakdown.length > 0 ? (
+              <div className="flex items-center gap-4">
+                <div className="relative h-36 w-36 shrink-0 md:h-40 md:w-40" dir="ltr">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={subjectBreakdown}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius="58%"
+                        outerRadius="82%"
+                        paddingAngle={3}
+                        stroke={colors.card}
+                        strokeWidth={2}
+                        isAnimationActive={!reduced}
+                      >
+                        {subjectBreakdown.map((_, i) => (
+                          <Cell key={i} fill={BRANCH_COLORS[i % BRANCH_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: colors.card,
+                          border: `1px solid ${colors.rule}`,
+                          borderRadius: 10,
+                          fontSize: 11,
+                          direction: "rtl",
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-extrabold md:text-xl" style={{ color: "var(--text)" }}>
+                      {Math.round(
+                        (subjectBreakdown.reduce((s, d) => s + d.completed, 0) /
+                          Math.max(1, subjectBreakdown.reduce((s, d) => s + d.value, 0))) * 100,
+                      )}
+                      %
+                    </span>
+                    <span className="font-mono text-[0.5rem] uppercase tracking-widest" style={{ color: "var(--muted)" }}>
+                      مكتمل
+                    </span>
+                  </div>
+                </div>
+                <ul className="min-w-0 flex-1 space-y-1.5" aria-label="اكتمال كل مادة">
+                  {subjectBreakdown.slice(0, 6).map((d, i) => {
+                    const pct = d.value ? Math.round((d.completed / d.value) * 100) : 0;
+                    return (
+                      <li key={d.name} className="flex items-center gap-2 text-[0.65rem] md:text-[0.7rem]">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: BRANCH_COLORS[i % BRANCH_COLORS.length] }}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1 truncate font-semibold" style={{ color: "var(--text)" }}>
+                          {d.name}
+                        </span>
+                        <span className="font-mono tabular-nums" style={{ color: "var(--muted)" }}>
+                          {pct}%
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <EmptyChartHint text="مفيش مواد بعد — أول ما تولّد خطة من «ابدأ درسك» الدوناتة هنا هتتقسم لكل مادة ونسبة إنجازها." />
+            )}
+          </div>
+        </section>
+      </div>
     </section>
   );
+}
+
+/* ==========================================================================
+   فرع واحد — Link حقيقي للـ href، أو Button لإجراء الإعدادات.
+   keyboard-focusable بطبيعته (مفيش div بـ tabIndex) + aria-label مزدوج.
+   ========================================================================== */
+function WheelBranch({
+  branch, color, badge, onOpenSettings, layout, delayMs = 0, size,
+}: {
+  branch: WheelBranchDef;
+  color: string;
+  badge?: string;
+  onOpenSettings: () => void;
+  layout: "circle" | "grid";
+  delayMs?: number;
+  size?: string;
+}) {
+  const ariaLabel = `${branch.label} — ${branch.latin}`;
+
+  const face = <BranchFace branch={branch} color={color} badge={badge} />;
+
+  const cssVars = {
+    "--node-c": color,
+    "--mw-delay": `${delayMs}ms`,
+  } as React.CSSProperties;
+
+  if (layout === "grid") {
+    const cls =
+      "group flex flex-col items-center gap-2 rounded-2xl bg-[var(--card-primary)] px-4 py-4 text-center shadow-sm transition hover:bg-[var(--card-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
+    const style: React.CSSProperties = { border: `2px solid ${color}` };
+    return branch.kind === "action" ? (
+      <button type="button" onClick={onOpenSettings} className={cls} style={style} aria-label={ariaLabel}>
+        {face}
+      </button>
+    ) : (
+      <Link href={branch.href ?? "/"} className={cls} style={style} aria-label={ariaLabel}>
+        {face}
+      </Link>
+    );
+  }
+
+  const circleStyle: React.CSSProperties = { ...cssVars, width: size, height: size };
+
+  return branch.kind === "action" ? (
+    <button type="button" onClick={onOpenSettings} className="mw-node" style={circleStyle} aria-label={ariaLabel}>
+      <span className="mw-node-card" style={{ borderColor: color }}>
+        {face}
+      </span>
+    </button>
+  ) : (
+    <Link href={branch.href ?? "/"} className="mw-node" style={circleStyle} aria-label={ariaLabel}>
+      <span className="mw-node-card" style={{ borderColor: color }}>
+        {face}
+      </span>
+    </Link>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   بلاطة إحصاء + حالة فاضية — مفيش أرقام وهمية: null بتظهر «—» صراحةً
+   -------------------------------------------------------------------------- */
+function StatTile({
+  icon, label, value, hint, action,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="mw-tile" role="group" aria-label={`${label}: ${value}`}>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[0.68rem] font-bold md:text-[0.72rem]" style={{ color: "var(--muted)" }}>
+          <span style={{ color: "var(--accent)" }} aria-hidden>{icon}</span>
+          {label}
+        </span>
+        {action}
+      </div>
+      <p className="text-base font-extrabold leading-none tabular-nums md:text-lg" style={{ color: "var(--text)" }}>
+        {value}
+      </p>
+      {hint && (
+        <p className="mt-1.5 text-[0.58rem] leading-snug md:text-[0.62rem]" style={{ color: "var(--muted)" }}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EmptyChartHint({ text }: { text: string }) {
+  return (
+    <div
+      className="flex h-36 items-center justify-center rounded-xl border border-dashed px-4 text-center text-[0.68rem] leading-relaxed md:h-40"
+      style={{ borderColor: "var(--rule)", color: "var(--muted)" }}
+    >
+      {text}
+    </div>
+  );
+}
+
+/* إعادة تصدير زرار الثيم لوحده — يستعمله أي صفحة عايزة نفس السلوك
+   (صفحة /magic-wheel المستقلة مثلًا). */
+export function useMagicThemeCycle() {
+  const { theme, setTheme } = useTheme();
+  const themeId = theme as ThemeId;
+  const idx = MAGIC_THEME_CYCLE.indexOf(themeId);
+  const next = idx === -1 ? MAGIC_THEME_CYCLE[0] : MAGIC_THEME_CYCLE[(idx + 1) % MAGIC_THEME_CYCLE.length];
+  return { theme: themeId, next, setNext: () => setTheme(next) };
 }
