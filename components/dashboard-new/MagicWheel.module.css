@@ -1,0 +1,351 @@
+.section {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: clamp(28px, 5vw, 64px) clamp(16px, 4vw, 48px) clamp(34px, 5vw, 70px);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--rule));
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 50% 44%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 52%),
+    radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--accent-highlight) 8%, transparent), transparent 30%),
+    var(--app-bg);
+  color: var(--text);
+  box-shadow: 0 26px 70px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px var(--shade);
+}
+
+.header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 780px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--accent-highlight);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(2.4rem, 7vw, 5.5rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 0.95;
+  text-shadow: 0 0 32px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.subtitle {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.83rem;
+  letter-spacing: 0.13em;
+}
+
+.helper {
+  max-width: 22ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  text-align: start;
+}
+
+.radial {
+  position: relative;
+  width: min(100%, 760px);
+  aspect-ratio: 1;
+  min-height: 600px;
+  margin: clamp(16px, 3vw, 28px) auto 0;
+}
+
+.orbitOuter,
+.orbitInner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.orbitOuter {
+  width: 84%;
+  height: 84%;
+  border: 2px dashed color-mix(in srgb, var(--accent) 38%, transparent);
+  animation: wheelRotate 28s linear infinite;
+}
+
+.orbitInner {
+  width: 69%;
+  height: 69%;
+  border: 1px dotted color-mix(in srgb, var(--accent-highlight) 40%, transparent);
+  animation: wheelRotateReverse 38s linear infinite;
+}
+
+.lines {
+  position: absolute;
+  inset: 8%;
+  width: 84%;
+  height: 84%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.lines line {
+  stroke: color-mix(in srgb, var(--accent) 64%, transparent);
+  stroke-width: 0.22;
+  stroke-linecap: round;
+  stroke-dasharray: 0.04 0.035;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 40%, transparent));
+}
+
+.center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  width: clamp(132px, 22vw, 176px);
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  border: 2px solid color-mix(in srgb, var(--accent-highlight) 45%, transparent);
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 24%, color-mix(in srgb, var(--accent-highlight) 28%, transparent), transparent 34%), var(--accent);
+  color: var(--on-marker);
+  box-shadow: 0 0 80px color-mix(in srgb, var(--accent) 56%, transparent), inset 0 0 28px color-mix(in srgb, white 12%, transparent);
+  text-decoration: none;
+  transform: translate(-50%, -50%);
+  transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
+  animation: centerPulse 5s ease-in-out infinite;
+}
+
+.center:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 0 92px color-mix(in srgb, var(--accent) 68%, transparent), inset 0 0 30px color-mix(in srgb, white 15%, transparent);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.center:focus-visible,
+.branch:focus-visible,
+.mobileBranch:focus-visible {
+  outline: 3px solid var(--accent-highlight);
+  outline-offset: 5px;
+}
+
+.centerMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent-highlight);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent-highlight) 65%, transparent);
+}
+
+.centerMark span {
+  font-size: 0.58em;
+}
+
+.centerName {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(0.82rem, 1.8vw, 1.02rem);
+  font-weight: 800;
+}
+
+.centerSub {
+  color: color-mix(in srgb, var(--on-marker) 68%, transparent);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.5rem;
+  letter-spacing: 0.12em;
+}
+
+.branch,
+.mobileBranch {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.branch {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  width: clamp(84px, 13vw, 122px);
+  height: clamp(84px, 13vw, 122px);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
+  border: 2px solid var(--branch-color);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--card-primary) 91%, var(--branch-color) 9%);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--branch-color) 28%, transparent), 0 8px 24px var(--shade);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  animation: branchIn 580ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.branch:hover,
+.mobileBranch:hover {
+  background: color-mix(in srgb, var(--card-primary) 76%, var(--branch-color) 24%);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--branch-color) 44%, transparent), 0 12px 26px var(--shade-lift);
+  filter: brightness(1.08);
+}
+
+.branch:hover {
+  transform: translate(-50%, -50%) translateY(-5px) scale(1.06);
+}
+
+.branchIcon {
+  display: inline-flex;
+  color: var(--branch-color);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--branch-color) 40%, transparent));
+}
+
+.branchLabel {
+  max-width: 90%;
+  color: var(--text);
+  font-size: clamp(0.57rem, 1.15vw, 0.72rem);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.branchLatin {
+  max-width: 92%;
+  overflow: hidden;
+  color: var(--branch-color);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(0.42rem, 0.75vw, 0.54rem);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branchBadge {
+  position: absolute;
+  bottom: -8px;
+  max-width: 130%;
+  overflow: hidden;
+  padding: 2px 7px;
+  border: 1px solid var(--branch-color);
+  border-radius: 999px;
+  background: var(--branch-color);
+  color: var(--on-marker);
+  font-size: 0.48rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileGrid {
+  display: none;
+}
+
+.mobileBranch {
+  display: flex;
+  min-height: 94px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  border: 2px solid var(--branch-color);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--card-primary) 91%, var(--branch-color) 9%);
+  box-shadow: 0 8px 24px var(--shade);
+  text-align: center;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.mobileBranch:hover {
+  transform: translateY(-3px);
+}
+
+.srHint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes wheelRotate {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes wheelRotateReverse {
+  to { transform: translate(-50%, -50%) rotate(-360deg); }
+}
+
+@keyframes centerPulse {
+  0%, 100% { box-shadow: 0 0 68px color-mix(in srgb, var(--accent) 48%, transparent), inset 0 0 28px color-mix(in srgb, white 12%, transparent); }
+  50% { box-shadow: 0 0 92px color-mix(in srgb, var(--accent) 66%, transparent), inset 0 0 34px color-mix(in srgb, white 16%, transparent); }
+}
+
+@keyframes branchIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.58); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbitOuter,
+  .orbitInner,
+  .center,
+  .branch {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .section {
+    padding: 24px 14px 28px;
+    border-radius: 22px;
+  }
+
+  .header {
+    display: block;
+  }
+
+  .helper {
+    max-width: none;
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  .radial {
+    display: none;
+  }
+
+  .mobileGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 22px auto 0;
+  }
+
+  .mobileBranch:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 561px) and (max-width: 850px) {
+  .radial {
+    min-height: 560px;
+  }
+}
