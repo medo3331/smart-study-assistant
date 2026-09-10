@@ -6,6 +6,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import MagicWheelDashboard from "@/components/MagicWheelDashboard";
+import { TodayPlanCard, DailyMissionsCard, WeeklyProgressCard, CompanionStatusCard } from "@/components/DashboardExtraCards";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -1430,6 +1432,21 @@ export default function DashboardPage() {
         audioOn={isPlayingAudio}
       />
 
+      {/* ═══════════════════════════════════════════════════════
+          بوابة التنقل الدائرية — عجلة ماجيك (NEW)
+          تُضاف فوق كل المجموعات الحالية بدون تغيير أي قسم موجود.
+          ═══════════════════════════════════════════════════════ */}
+      <div className="relative -mt-4 mb-6 md:mb-8">
+        <MagicWheelDashboard
+          currentDay={currentDayNumber}
+          totalDays={days.length}
+          subject={config?.subject ?? ""}
+          completedSteps={completedCount}
+          progressPct={overallProgress}
+          currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+        />
+      </div>
+
       <div className="max-w-6xl mx-auto space-y-10">
         {isPrimary && primaryDashboardSafe ? (
           <div className="space-y-6">
@@ -1615,7 +1632,39 @@ export default function DashboardPage() {
           flashcards={flashcards}
           onUpdateCardStatus={updateCardStatus}
         />
-        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          GROUP C-EXTRA — كاردات إضافية (ربط ببيانات DB حقيقية)
+          ═══════════════════════════════════════════════════════ */}
+      <div className="dashboard-entrance grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TodayPlanCard
+          currentDayNumber={currentDayNumber}
+          daysLength={days.length}
+          subject={config?.subject ?? ""}
+          completedCount={completedCount}
+          chapters={chapters}
+          currentChapter={chapters.find((c) => !c.isComplete)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+        />
+        <DailyMissionsCard
+          pendingGoals={pendingGoals as any}
+          completedToday={days.filter((d) => d.isCompleted).length}
+        />
+        <WeeklyProgressCard
+          weeklyChartData={weeklyChartData}
+          monthlyChartData={monthlyChartData}
+          analyticsRange={analyticsRange}
+          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+        />
+        <CompanionStatusCard
+          level={level}
+          xp={xp}
+          streak={streak}
+          levelProgressPct={currentLevelProgress}
+          companionName={companion?.name ?? "رفيقك"}
+          hidden={companion?.hidden ?? true}
+        />
+      </div>
 
         {/* ═══════════════════════════════════════════════════════
             GROUP D — الأرقام والتقدّم

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magic Wheel — Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&display=swap');
+  :root{--bg:#0a0a0c;--card:#111113;--border:#1f1f22;--accent:#E23A3A;--accent-glow:#FF6B5B;--text:#f1f1f4;--muted:#a0a0a8;}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:"Cairo",system-ui,sans-serif;min-h-screen;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  @keyframes rotate-dashed{to{transform:rotate(360deg)}}
+  @keyframes rotate-dotted{to{transform:rotate(-360deg)}}
+  @keyframes pulse-inner{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  @keyframes draw{from{stroke-dashoffset:300}to{stroke-dashoffset:0}}
+  @keyframes pop-in{from{opacity:0;transform:scale(0.6) translateY(14px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  @keyframes dot-move{0%{offset-distance:0%}100%{offset-distance:100%}}
+  /* Background subtle radial glow */
+  .bg-glow{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 45%,rgba(226,58,58,0.08) 0%,transparent 65%);z-index:0}
+  /* Main container */
+  .wheel-wrap{position:relative;width:min(92vw,880px);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;z-index:1}
+  /* Center circle */
+  .center-circle{position:absolute;width:180px;height:180px;border-radius:50%;background:linear-gradient(145deg,#18181b,#0f0f10);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex-direction:column;box-shadow:0 0 60px rgba(226,58,58,0.18),inset 0 0 30px rgba(226,58,58,0.06);animation:pulse-inner 4s ease-in-out infinite;z-index:10;backdrop-filter:blur(8px)}
+  .center-circle h1{font-family:"Cinzel Decorative",Georgia,serif;font-size:2.2rem;font-weight:900;color:var(--text);letter-spacing:0.08em;line-height:1;text-shadow:0 0 30px rgba(226,58,58,0.35);}
+  .center-circle .sub{font-family:"IBM Plex Mono",monospace;font-size:0.65rem;color:var(--accent-glow);letter-spacing:0.15em;margin-top:6px;text-transform:uppercase}
+  /* Orbit rings */
+  .orbit{position:absolute;border-radius:50%;border:2px dashed rgba(226,58,58,0.25);animation:rotate-dashed 24s linear infinite;width:420px;height:420px}
+  .orbit-dotted{position:absolute;border-radius:50%;border:2px dotted rgba(255,107,91,0.35);animation:rotate-dotted 36s linear infinite;width:360px;height:360px}
+  /* Lines from center to branches */
+  .line{position:absolute;height:1.5px;background:linear-gradient(90deg,transparent 0%,rgba(226,58,58,0.35) 40%,rgba(226,58,58,0.6) 60%,transparent 100%);transform-origin:left center;top:50%;left:50%;border-radius:999px;box-shadow:0 0 8px rgba(226,58,58,0.2);animation:draw 1.2s ease-out forwards;opacity:0}
+  .line::after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:var(--accent-glow);box-shadow:0 0 10px 2px var(--accent-glow);top:-3.25px;animation:dot-move 2.6s linear infinite;offset-path:path("M0,0 L200,0");animation-delay:inherit}
+  /* Branch cards */
+  .branch{position:absolute;display:flex;align-items:center;justify-content:center;width:110px;height:110px;transform-origin:center center}
+  .branch-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;background:#16161a;border:1.5px solid var(--border);border-radius:16px;width:100px;box-shadow:0 0 0 rgba(226,58,58,0);transition:box-shadow 0.3s ease,border-color 0.3s ease,background 0.3s ease,transform 0.3s ease;animation:pop-in 0.7s ease-out both;position:relative;overflow:hidden}
+  .branch-card::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,transparent 60%,rgba(226,58,58,0.06) 100%);pointer-events:none;opacity:0;transition:opacity 0.3s}
+  .branch-card:hover{border-color:var(--accent);background:#1a0a0a;box-shadow:0 0 20px rgba(226,58,58,0.25);transform:translateY(-4px) scale(1.05)}
+  .branch-card:hover::before{opacity:1}
+  .branch-card:focus-visible{outline:2px solid var(--accent);outline-offset:4px;box-shadow:0 0 0 4px rgba(226,58,58,0.35)}
+  .branch-card .icon{font-size:1.6rem;color:var(--accent-glow);filter:drop-shadow(0 0 6px rgba(255,107,91,0.3));transition:transform 0.3s}
+  .branch-card:hover .icon{transform:scale(1.15) rotate(-3deg)}
+  .branch-card .label{font-size:0.72rem;font-weight:700;color:var(--text);text-align:center;line-height:1.2;letter-spacing:0.01em}
+  .branch-card .label-sub{font-size:0.55rem;color:var(--muted);font-family:"IBM Plex Mono",monospace;margin-top:2px}
+  /* Responsive adjustments inside preview */
+  @media(max-width:640px){
+    .center-circle{width:120px;height:120px}
+    .center-circle h1{font-size:1.3rem}
+    .orbit{width:260px;height:260px}
+    .orbit-dotted{width:220px;height:220px}
+    .branch-card{width:72px;padding:6px}
+    .branch{width:80px;height:80px}
+    .branch-card .icon{font-size:1.1rem}
+    .branch-card .label{font-size:0.58rem}
+  }
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+<div class="wheel-wrap">
+  <!-- Orbit rings -->
+  <div class="orbit" aria-hidden="true"></div>
+  <div class="orbit-dotted" aria-hidden="true"></div>
+
+  <!-- Lines + branches placed with absolute positioning around center -->
+  <!-- Using 9 branches every ~40° -->
+  <script>
+    const branches = [
+      {label:"الرئيسية",sub:"Home",icon:"ti-home",href:"/",deg:90},
+      {label:"الكورسات",sub:"Courses",icon:"ti-books",href:"/dashboard/courses",deg:130},
+      {label:"الدرس",sub:"Lesson",icon:"ti-notebook",href:"/lesson",deg:170},
+      {label:"مساحة العمل",sub:"Workspace",icon:"ti-folder",href:"/dashboard/workspace",deg:210},
+      {label:"عباداتي",sub:"Worship",icon:"ti-mosque",href:"/worship",deg:250},
+      {label:"المساعد الذكي",sub:"AI Assistant",icon:"ti-robot",href:"/dashboard",deg:290},
+      {label:"المتجر",sub:"Shop",icon:"ti-shopping-bag",href:"/shop",deg:330},
+      {label:"التحليلات",sub:"Analytics",icon:"ti-chart-bar",href:"/dashboard",deg:10},
+      {label:"الإعدادات",sub:"Settings",icon:"ti-settings",href:"/dashboard",deg:50},
+    ];
+    const wrap = document.currentScript?.parentElement || document.querySelector('.wheel-wrap');
+    // We inject branches as HTML nodes manually below; using fixed positions approximating a circle
+  </script>
+
+  <!-- Center -->
+  <div class="center-circle" aria-label="Magic — عجلة التنقل الرئيسية">
+    <h1>Magic</h1>
+    <span class="sub">WHEEL</span>
+  </div>
+</div>
+<!-- Branches injected as static positioned nodes -->
+<div style="position:relative;width:min(92vw,880px);height:min(92vw,880px);margin:0 auto;transform:translateY(-50%);">
+  <!-- 9 branches at approximate 40° spacing on a circle radius ~220px from center (440px circle) -->
+  <a href="/" class="branch" style="position:absolute;left:50%;top:50%;margin-left:-55px;margin-top:-275px;" aria-label="الرئيسية — Home" tabindex="0" onclick="event.preventDefault(); alert('Navigation: / (الرئيسية)')">
+    <div class="branch-card"><i class="ti ti-home icon"></i><span class="label">الرئيسية</span><span class="label-sub">Home</span></div>
+  </a>
+  <a href="/dashboard/courses" class="branch" style="position:absolute;left:50%;top:50%;margin-left:-180px;margin-top:-150px;" aria-label="الكورسات — Courses" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /dashboard/courses (الكورسات) — TODO: verify page exists')">
+    <div class="branch-card"><i class="ti ti-books icon"></i><span class="label">الكورسات</span><span class="label-sub">Courses</span></div>
+  </a>
+  <a href="/lesson" class="branch" style="position:absolute;left:50%;top:50%;margin-left:-245px;margin-top:5px;" aria-label="الدرس — Lesson" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /lesson (الدرس)')">
+    <div class="branch-card"><i class="ti ti-notebook icon"></i><span class="label">الدرس</span><span class="label-sub">Lesson</span></div>
+  </a>
+  <a href="/dashboard/workspace" class="branch" style="position:absolute;left:50%;top:50%;margin-left:-160px;margin-top:180px;" aria-label="مساحة العمل — Workspace" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /dashboard/workspace (مساحة العمل) — TODO: verify page exists')">
+    <div class="branch-card"><i class="ti ti-folder icon"></i><span class="label">مساحة العمل</span><span class="label-sub">Workspace</span></div>
+  </a>
+  <a href="/worship" class="branch" style="position:absolute;left:50%;top:50%;margin-left:80px;margin-top:170px;" aria-label="عباداتي — Worship Center" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /worship (عباداتي)')">
+    <div class="branch-card"><i class="ti ti-mosque icon"></i><span class="label">عباداتي</span><span class="label-sub">Worship</span></div>
+  </a>
+  <a href="/dashboard" class="branch" style="position:absolute;left:50%;top:50%;margin-left:170px;margin-top:-30px;" aria-label="المساعد الذكي — AI Assistant" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /dashboard (AI assistant signal)')">
+    <div class="branch-card"><i class="ti ti-robot icon"></i><span class="label">المساعد الذكي</span><span class="label-sub">AI Assistant</span></div>
+  </a>
+  <a href="/shop" class="branch" style="position:absolute;left:50%;top:50%;margin-left:130px;margin-top:-180px;" aria-label="المتجر — Shop" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /shop (المتجر)')">
+    <div class="branch-card"><i class="ti ti-shopping-bag icon"></i><span class="label">المتجر</span><span class="label-sub">Shop</span></div>
+  </a>
+  <a href="/dashboard" class="branch" style="position:absolute;left:50%;top:50%;margin-left:-70px;margin-top:-295px;transform:translateX(15px);" aria-label="التحليلات — Analytics" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /dashboard#analytics (التحليلات — scrollTo section)')">
+    <div class="branch-card"><i class="ti ti-chart-bar icon"></i><span class="label">التحليلات</span><span class="label-sub">Analytics</span></div>
+  </a>
+  <a href="/dashboard" class="branch" style="position:absolute;left:50%;top:50%;margin-left:30px;margin-top:-260px;" aria-label="الإعدادات — Settings" tabindex="0" onclick="event.preventDefault(); alert('Navigation: /dashboard (settings modal signal)')">
+    <div class="branch-card"><i class="ti ti-settings icon"></i><span class="label">الإعدادات</span><span class="label-sub">Settings</span></div>
+  </a>
+
+  <!-- Lines drawn via SVG overlay -->
+  <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;" aria-hidden="true">
+    <defs>
+      <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="transparent"/>
+        <stop offset="40%" stop-color="#E23A3A" stop-opacity="0.35"/>
+        <stop offset="60%" stop-color="#E23A3A" stop-opacity="0.7"/>
+        <stop offset="100%" stop-color="transparent"/>
+      </linearGradient>
+    </defs>
+    <line x1="50%" y1="50%" x2="50%" y2="15%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="25%" y2="30%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="15%" y2="50%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="30%" y2="72%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="65%" y2="72%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="72%" y2="50%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="65%" y2="28%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="45%" y2="14%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="50%" y1="50%" x2="55%" y2="14%" stroke="url(#lineGrad)" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- Moving red dot on first line -->
+    <circle cx="50%" cy="32%" r="3" fill="#FF6B5B" filter="drop-shadow(0 0 6px #FF6B5B)">
+      <animateMotion dur="2.6s" repeatCount="indefinite" path="M0,-70 L0,0 L0,70 L0,0" calcMode="linear"/>
+    </circle>
+  </svg>
+</div>
+</body>
+</html>
