@@ -30,6 +30,11 @@ export const metadata: Metadata = pageMeta({
 });
 
 export default function FaqPage() {
+  const ssrFaq = [
+    { q: "هو مجاني ولا لأ؟", a: "فيه خطة مجانية مع ميزات أساسية، وخطة مدفوعة للمزايا الكاملة." },
+    { q: "بيدعم أنهي مواد؟", a: "أي مادة ترفع ملفها أو تكتبها — أكاديمي أو مهارة أو مشروع." },
+    { q: "دقّة الشرح إزاي؟", a: "شرح بأربع طرق: مبسّط، أكاديمي، تشبيه، مثال عملي." },
+  ];
   return (
     <>
       {/* الأسئلة كلها ظاهرة تحت، فالـ FAQPage صح هنا. + فتات خبز
@@ -43,6 +48,15 @@ export default function FaqPage() {
           ]),
         ]}
       />
+      {/* SSR visible FAQ content — لا يعتمد على hydration من FaqSection */}
+      <section aria-label="أسئلة شائعة — تحميل أولي">
+        <h1>الأسئلة الشائعة</h1>
+        <ul>
+          {ssrFaq.map((item) => (
+            <li key={item.q}><strong>{item.q}</strong> — {item.a}</li>
+          ))}
+        </ul>
+      </section>
       <SubPageShell>
         <FaqSection asPage />
       </SubPageShell>

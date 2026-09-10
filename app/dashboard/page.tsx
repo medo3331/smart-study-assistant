@@ -84,8 +84,22 @@ import { isPrimaryExperience } from "@/lib/education/experience";
 const CHAPTER_SIZE = 5;
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [supabase] = useState(() => createClient());
+  const router = useRouter();
+  // Redirect unauthenticated users to login — prevents empty dashboard
+  const [checkedAuth, setCheckedAuth] = useState(false);
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace("/login?next=/dashboard");
+        }
+      } catch {}
+      setCheckedAuth(true);
+    };
+    check();
+  }, [supabase, router]);
   const [eduSubjects, setEduSubjects] = useState<any[]>([]);
   const [eduLoading, setEduLoading] = useState(false);
   const [eduError, setEduError] = useState<string|null>(null);

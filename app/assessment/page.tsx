@@ -117,6 +117,14 @@ export default function AssessmentPage() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [result, setResult] = useState<{ level: SkillLevel; style: LearningStyle; days: number } | null>(null);
   // Education context (student only) — minimal addition to existing Assessment
+  // SSR visible education stage selection (fallback for hydration delay)
+  const ssrEducationStages = [
+    { label: "المرحلة الابتدائية", value: "primary" },
+    { label: "المرحلة المتوسطة", value: "middle" },
+    { label: "الثانوية العامة", value: "high" },
+    { label: "الجامعة", value: "university" },
+  ];
+
   const [eduStageId, setEduStageId] = useState<string | null>(null);
   const [eduGradeId, setEduGradeId] = useState<string | null>(null);
   const [eduTrackId, setEduTrackId] = useState<string | null>(null);
@@ -442,6 +450,17 @@ export default function AssessmentPage() {
 
   return (
     <div className="min-h-screen font-sans bg-paper text-ink flex items-center justify-center p-4 sm:p-6" dir="rtl">
+      {/* SSR visible education stage selection — يظهر فورًا حتى لو stagesDB لم يُحمّل بعد */}
+      <section aria-label="المرحلة التعليمية — تحميل أولي" className="sr-edu-ssr" style={{ direction: "rtl", padding: "1rem", borderBottom: "1px solid #e5e1db", maxWidth: "640px", margin: "0 auto" }}>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>اختر مرحلتك التعليمية</h2>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {ssrEducationStages.map((s) => (
+            <li key={s.value} style={{ border: "1px solid #ddd", borderRadius: "999px", padding: "0.4rem 0.9rem", fontSize: "0.85rem", background: "#f9f7f2" }}>
+              {s.label}
+            </li>
+          ))}
+        </ul>
+      </section>
       <div className="w-full max-w-lg">
         <AnimatePresence mode="wait">
           {/* الخطوة 1: «ليه بتتعلم؟» قبل «إيه بتتعلم؟». الشخصية بتغيّر
