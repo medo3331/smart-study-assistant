@@ -1,7 +1,15 @@
 import type { AiChatRequest, AiProviderName, AiTaskType } from "./types";
 import { AiProviderError } from "./types";
-import { streamingAdapterFor, type AiStreamChunk } from "./streaming";
+import { streamingAdapterFor, type AiStreamChunk, type AiStreamingProvider } from "./streaming";
 import { routeCandidates } from "./routing";
+
+type AdapterLookup = (provider: AiProviderName) => AiStreamingProvider | undefined;
+let adapterLookup: AdapterLookup = streamingAdapterFor;
+
+/** @internal — حقن محوّلات وهمية في الاختبارات فقط. */
+export function __setStreamingAdapterLookupForTests(lookup: AdapterLookup | null) {
+  adapterLookup = lookup ?? streamingAdapterFor;
+}
 
 /**
  * Try streaming adapters in route-candidate order.
@@ -27,7 +35,7 @@ export async function* streamWithFallback(
   }
 
   for (const provider of ordered) {
-    const adapter = streamingAdapterFor(provider);
+    const adapter = adapterLookup(provider);
     if (!adapter) continue;
     try {
       yield* adapter.streamChat({
@@ -39,9 +47,14 @@ export async function* streamWithFallback(
       lastError = err as Error;
       const status = err instanceof AiProviderError ? err.status : 0;
       if (status === 400 || status === 413 || status === 422) throw err;
-      console.warn(`[Stream Fallback] ${provider} failed (${status || lastError.message}), trying next…`);
+      const safeMsg = lastError.message.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 80);
+      console.warn(`[Stream Fallback] ${provider} failed (${status || safeMsg}), trying next…`);
     }
   }
 
-  throw lastError ?? new AiProviderError("All stream providers failed", 502, "groq");
+  throw new AiProviderError(
+    `All stream providers failed. Last error: ${lastError?.message ?? "unknown"}`,
+    lastError instanceof AiProviderError ? lastError.status : 502,
+    lastError instanceof AiProviderError ? lastError.provider : "groq"
+  );
 }
