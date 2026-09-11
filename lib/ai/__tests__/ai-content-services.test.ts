@@ -44,6 +44,7 @@ function fakeSupabase(entitlements: Array<{ kind: string; value: string }>): Sup
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 // ─────────────────────────────────────────────
@@ -90,6 +91,49 @@ describe("generateEducationalImage fallback chain", () => {
       "عذراً، تعذر توليد الصورة حاليا"
     );
   }, 30000);
+
+  it("uses Pollinations when it responds — free, zero cost, base64 data URL", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]).buffer;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => bytes,
+      headers: new Headers({ "content-type": "image/jpeg" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateEducationalImage({ prompt: "خلية نباتية" });
+
+    expect(result.model).toBe("pollinations");
+    expect(result.cost).toBe(0);
+    expect(result.url.startsWith("data:image/jpeg;base64,")).toBe(true);
+    // اتصل مرة واحدة بس (ما كملش للسلسلة المدفوعة)
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const calledUrl = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(calledUrl).toContain("image.pollinations.ai/prompt/");
+    expect(calledUrl).toContain("model=flux");
+    expect(calledUrl).toContain("nologo=true");
+  });
+
+  it("skips to next provider immediately when Pollinations times out (AbortController)", async () => {
+    // fetch بيفشل بإلغاء (زي ما بيحصل لما الـ timeout يخلص) — ومن غير مفاتيح
+    // مدفوعة السلسلة كلها بتخلص للرسالة النهائية بسرعة من غير انتظار ٧٥ ثانية
+    const abortErr = Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+    });
+    const fetchMock = vi.fn(async () => {
+      throw abortErr;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("REPLICATE_API_TOKEN", "");
+    vi.stubEnv("STABILITY_API_KEY", "");
+
+    await expect(generateEducationalImage({ prompt: "تجربة" })).rejects.toThrow(
+      "عذراً، تعذر توليد الصورة حاليا"
+    );
+    // حاول مرة واحدة بس (المجاني) وعدّى الباقي لأنه مفيش مفاتيحهم
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─────────────────────────────────────────────

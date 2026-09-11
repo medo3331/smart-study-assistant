@@ -97,7 +97,13 @@ Minimal text, maximum visual clarity.`,
 //    (موديل flux عبر Pollinations بيكتب نصوص عربي/إنجليزي كويس
 //     و &nologo=true بيشيل اللوجو عشان الصور تبقى جاهزة للملفات)
 // ============================================
-const POLLINATIONS_TIMEOUT_MS = 75_000;
+
+/**
+ * ⏱️ مهلة قصيرة نسبيًا: لو سيرفر Pollinations اتأخر أكتر من كده بنلغي
+ * الطلب فورًا (AbortController) وننقل للمزوّد اللي بعده في السلسلة
+ * بدل ما المستخدم يقعد مستني.
+ */
+const POLLINATIONS_TIMEOUT_MS = 20_000;
 
 async function generateWithPollinations(
   prompt: string,
@@ -115,11 +121,26 @@ async function generateWithPollinations(
     headers["Authorization"] = `Bearer ${apiKey}`;
   }
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers,
-    signal: AbortSignal.timeout(POLLINATIONS_TIMEOUT_MS),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), POLLINATIONS_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") {
+      throw new Error(
+        `Pollinations timed out after ${POLLINATIONS_TIMEOUT_MS / 1000}s — falling back`
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`Pollinations failed: ${response.status}`);
