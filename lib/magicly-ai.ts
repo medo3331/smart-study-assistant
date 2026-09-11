@@ -167,6 +167,18 @@ const MODE_GUIDE: Record<MagiclyMode, string> = {
   flashcards: "أنشئ فلاش كاردز قصيرة من المحتوى: سؤال واضح في سطر وإجابته في سطر. ابدأ بـ5 فقط، ولا تضف معلومة من خارج المادة.",
 };
 
+/**
+ * تعليمات الوضع المختصرة — بتتحقن في برومبت محرك البرومبت الجديد
+ * (lib/ai/prompt-engine.ts) عبر PromptConfig.modeInstruction.
+ *
+ * ليه لسه موجودة: الأوضاع دي (summarize/review/flashcards/file) أدق من
+ * أنواع الرسائل الخمسة في المحرك، ولو رميناها كنا فقدنا سلوك موجود
+ * (ملخص مرتب، فلاش كاردز من المحتوى بس، التزام بالملف المرفق).
+ */
+export function describeMode(mode: MagiclyMode): string {
+  return MODE_GUIDE[mode];
+}
+
 export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyMode, toolFacts: string[] = []) {
   const memories = context.memories.length
     ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")

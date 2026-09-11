@@ -4,7 +4,9 @@ import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
-import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { describeMode, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { buildFullContext } from "@/lib/ai/context-builder";
+import { resolveMessageType } from "@/lib/ai/prompt-engine";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
@@ -73,13 +75,41 @@ export async function POST(req: Request) {
       );
     }
 
+    const latestMessage = safeMessages.at(-1)?.content ?? "";
+
     // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
+    // ⚠️ حقل systemInstruction اللي بعض الصفحات بتبعته **مش بيتقرا** عن قصد:
+    // السماح للعميل بحقن system prompt كان هيبقى باب تجاوز لكل قواعد
+    // الأمان اللي في lib/ai/prompt-engine.ts.
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
-    const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
-    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
-    const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
-    void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
+    const selectedMode = parseMode(mode, latestMessage);
+    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage);
+    void rememberSessionContext(supabase, user.id, studentContext, latestMessage);
+
+    // ٤) محرك البرومبت: بروفايل + نقاط ضعف + تاريخ + نوع الرسالة
+    const messageType = resolveMessageType(mode, latestMessage);
+    const built = await buildFullContext(supabase, user.id, latestMessage, {
+      conversationId: conversationId || undefined,
+      // الكلاينت هو اللي ماسك تاريخ المحادثة في الواجهة الحالية، فبنمرّره
+      // زي ما هو — ولو بعت رسالة واحدة بس ومعاه conversationId، المحرك
+      // هيكمل التاريخ من chat_messages بنفسه.
+      historyMessages: safeMessages.slice(0, -1),
+      subject: studentContext.subject,
+      topic: studentContext.lesson,
+      learningStyle: studentContext.learningStyle,
+      messageType,
+      // الوضع الصريح من الواجهة (تلخيص/مراجعة/فلاش كاردز/ملف) أدق من
+      // أنواع الرسائل الخمسة، فبيتحقن فوقها من غير ما يلغيها.
+      modeInstruction: describeMode(selectedMode),
+      extraFacts: [
+        `المادة: ${studentContext.subject}`,
+        `الدرس: ${studentContext.lesson}`,
+        `التقدم: ${studentContext.progress.completed}/${studentContext.progress.total} دروس مكتملة`,
+        `أسلوب التعلّم: ${studentContext.learningStyle}`,
+        ...toolFacts,
+      ],
+    });
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
     const candidates = routeCandidates("chat");
@@ -91,14 +121,24 @@ export async function POST(req: Request) {
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
-    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    // الموديل المقترح من المحرك بيتحجز الائتمان عليه لو المستخدم فعلًا عنده
+    // صلاحية له — وإلا نرجع لأول مرشح متاح زي قبل كده بالظبط.
+    const suggestedAccessible = built.modelSuggestion
+      ? accessible.find((candidate) => candidate.model === built.modelSuggestion)
+      : undefined;
+    const reservedModel = suggestedAccessible?.model ?? accessible[0]?.model ?? "openai/gpt-oss-120b";
+    const guard = await guardAiAccessAndReserve(supabase, user.id, reservedModel);
     if (!guard.ok) return guard.response;
 
     let completion;
     try {
       completion = await aiRouter.completeChat("chat", {
-        messages: [{ role: "system", content: system }, ...safeMessages],
-        temperature: 0.7,
+        messages: built.messages,
+        // temperature حسب المرحلة: ابتدائي 0.8 ← جامعي 0.4
+        temperature: built.temperature,
+        // الموديل الأنسب لنوع الرسالة — الراوتر بيجرّبه الأول، ولو مش
+        // مؤهّل (موقوف/مقفول/مزوّده تعبان) بيكمل بترشيحه العادي.
+        preferredModel: built.modelSuggestion,
       });
     } catch (error) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
@@ -139,14 +179,14 @@ export async function POST(req: Request) {
         if (!savedConversationId) {
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "محادثة جديدة" })
+            .insert({ user_id: user.id, title: latestMessage.slice(0, 80) || "محادثة جديدة" })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
         }
         if (savedConversationId) {
           await supabase.from("chat_messages").insert([
-            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: safeMessages.at(-1)?.content ?? "" },
+            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: latestMessage },
             { conversation_id: savedConversationId, user_id: user.id, role: "assistant", content: answer },
           ]);
           await supabase
@@ -163,7 +203,10 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...data,
       conversationId: savedConversationId || undefined,
-      suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
+      suggestedAgent: suggestAgentFromText(latestMessage) ?? undefined,
+      // للتشخيص ولأي واجهة عايزة توري المستخدم نوع طلبه — مش حقول لازمة.
+      messageType: built.messageType,
+      modelSuggestion: built.modelSuggestion,
     });
   } catch (error) {
     console.error("chat route error:", error);

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
     "check:links": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-site-links.mjs",
     "test:ai": "node scripts/test-ai-providers.mjs",
     "test:ai:groq": "node scripts/test-ai-providers.mjs groq",

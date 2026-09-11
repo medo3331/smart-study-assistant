@@ -40,6 +40,16 @@ export type AiChatRequest = {
   messages: AiChatMessage[];
   model?: string;
   temperature?: number;
+  /**
+   * تفضيل موديل من طبقة المنتج (مثلًا اقتراح prompt-engine حسب نوع
+   * الرسالة). الراوتر بيجرّبه **أولًا** لو عدّى نفس بوابة الأهلية
+   * (مسجّل + enabled + free/مسموح + القدرات المطلوبة + صحة المزوّد)،
+   * ولو فشل أو مش مؤهل بيكمل بترتيب المرشحين العادي.
+   *
+   * مش بديل عن model: model اختيار نهائي من الراوتر للمرشّح الحالي،
+   * وده مجرد أولوية تجربة.
+   */
+  preferredModel?: string;
 };
 
 /** The part of an OpenAI-compatible response used by the current chat UI. */

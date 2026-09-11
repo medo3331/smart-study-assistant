@@ -186,13 +186,18 @@ function shouldTryNextCandidate(status: number): boolean {
 
 /**
  * ترتيب المرشحين لمهمة نصية:
+ * ٠) تفضيل طبقة المنتج (preferredModel): نفس البوابة، بس بيتجرّب الأول.
  * ١) مصفوفة تفضيل المهمة (لو موجودة): موديل مسجّل + قابل للاختيار + صحة المزوّد بتسمح.
  * ٢) موديلات مزوّد السياسة المؤهَّلة للقدرات المطلوبة بترتيب أولويتها.
  * ٣) باقي المزوّدات بموديلاتها المؤهَّلة (بترتيب fallback داخلية).
  *
  * البوابة الموحّدة في كل الحالات: enabled + freeEndpoint + تهيئة المزوّد + صحته.
  */
-export function routeCandidates(task: AiTaskType, now: Date = new Date()): RouteCandidate[] {
+export function routeCandidates(
+  task: AiTaskType,
+  now: Date = new Date(),
+  preferredModel?: string
+): RouteCandidate[] {
   void now; // نقطة توسّع مستقبلية (sticky sessions / budget windows) — مش مستخدمة حاليًا.
   const required = TASK_CAPABILITIES[task];
   const primaryProvider = AI_PROVIDER_BY_TASK[task];
@@ -220,6 +225,16 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
       candidates.push({ provider });
     }
   };
+
+  // ٠) تفضيل طبقة المنتج (prompt-engine) — بيتجرّب الأول لو أهّلته نفس
+  // البوابة. مفيش تجاوز لأي شرط: موديل غير مسجّل/موقوف/بلا قدرة مطلوبة
+  // بيتخطى هنا بالظبط زي أي مرشح تاني.
+  if (preferredModel) {
+    const hinted = MODEL_REGISTRY.find((model) => model.id === preferredModel);
+    if (hinted && isUsable(hinted.provider)) {
+      pushIfEligible(hinted.provider, hinted.id);
+    }
+  }
 
   // ١) مصفوفة تفضيل المهمة — بالترتيب المعلن، والموقوف/غير الصحي بيتخطى ديناميكيًا.
   for (const modelId of TASK_MODEL_PREFERENCE[task] ?? []) {
@@ -296,7 +311,9 @@ export class AiRouter {
     }
 
     const attempts: RouterAttempt[] = [];
-    const candidates = routeCandidates(task);
+    // تفضيل طبقة المنتج بيتجرّب الأول — ولو مش أهّلته البوابة، الترتيب
+    // القديم زي ما هو بالظبط (الاستدعاء من غيره = سلوك سابق بلا تغيير).
+    const candidates = routeCandidates(task, new Date(), input.preferredModel);
 
     if (candidates.length === 0) {
       throw new AiRouteError(

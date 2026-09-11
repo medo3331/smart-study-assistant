@@ -279,3 +279,81 @@ export const modelsForCapabilities = selectableModelsForCapabilities;
 export function modelsForProvider(provider: AiProviderName): ModelDefinition[] {
   return MODEL_REGISTRY.filter((model) => model.provider === provider);
 }
+
+/* ------------------------------------------------------------------ */
+/* تفضيل الموديل حسب نوع الرسالة (prompt-engine)                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * أنواع الطلبات اللي بيكشفها lib/ai/prompt-engine.ts.
+ *
+ * الاتحاد معرّف هنا بالاسم بدل استيراد MessageType من prompt-engine عشان
+ * السجل المركزي يفضل من غير أي اعتماد على طبقة البرومبت (مفيش دورة
+ * استيراد: prompt-engine ← models، والعكس ممنوع).
+ */
+export type PromptMessageType = "explain" | "solve" | "quiz" | "plan" | "general";
+
+/**
+ * ترتيب تجربة الموديلات لكل نوع رسالة. نفس قاعدة TASK_MODEL_PREFERENCE:
+ * كل معرّف لازم يكون مسجّلًا في MODEL_REGISTRY، والقيم دي **تفضيلات مش
+ * تصاريح** — بوابة enabled/freeEndpoint والصحة والـ entitlements لسه
+ * بتتطبّق بعدها في الراوتر.
+ *
+ * المنطق:
+ * - explain جامعي → استدلال ثقيل (Super) لأن النقاش أكاديمي ومتعمق.
+ * - explain لباقي المراحل → Groq أولاً (أسرع وأرخص) وجودته كافية.
+ * - solve → موديل بقدر reasoning فعليًا (gpt-oss-120b)، مش موديل سريع.
+ * - quiz → الأخف والأسرع (gpt-oss-20b): أسئلة قصيرة وتوليد كتير.
+ * - plan → استدلال + تنظيم، و Gemini احتياطي لأنه قوي في المهام المهيكلة.
+ * - general → مفيش تفضيل: الراوتر يختار من سياسة المهمة (chat) وحده.
+ */
+export const MESSAGE_TYPE_MODEL_PREFERENCE: Readonly<Record<PromptMessageType, readonly string[]>> = {
+  explain: [
+    "openai/gpt-oss-120b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+  ],
+  solve: [
+    "openai/gpt-oss-120b",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+  ],
+  quiz: [
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+  ],
+  plan: [
+    "nvidia/nemotron-3-super-120b-a12b",
+    "openai/gpt-oss-120b",
+    "gemini-3.6-flash",
+  ],
+  general: [],
+};
+
+/** شرح جامعي يستاهل استدلال أثقل من شرح طالب إعدادي. */
+const UNIVERSITY_EXPLAIN_PREFERENCE: readonly string[] = [
+  "nvidia/nemotron-3-super-120b-a12b",
+  "openai/gpt-oss-120b",
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+];
+
+/**
+ * أول موديل مفضّل قابل للاختيار **الآن** لنوع الرسالة.
+ * undefined = مفيش تفضيل (أو كل المفضّلة موقوفة/مدفوعة ومقفولة) —
+ * والراوتر وقتها يكمل بسياسة المهمة العادية.
+ */
+export function suggestModelForMessageType(
+  messageType: PromptMessageType,
+  stageKey?: string | null
+): string | undefined {
+  const preference =
+    messageType === "explain" && stageKey === "جامعي"
+      ? UNIVERSITY_EXPLAIN_PREFERENCE
+      : MESSAGE_TYPE_MODEL_PREFERENCE[messageType];
+
+  for (const modelId of preference) {
+    const model = MODEL_REGISTRY.find((candidate) => candidate.id === modelId);
+    // البوابة الموحّدة نفسها اللي بيستخدمها الراوتر — مفيش مصدر حقيقة تاني.
+    if (model && isModelSelectable(model)) return model.id;
+  }
+  return undefined;
+}
