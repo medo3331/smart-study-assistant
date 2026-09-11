@@ -28,7 +28,7 @@ async function callGroqWithModel(
   _language: string = "ar"
 ): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
   void _language;
-  const key = process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY || "";
+  const key = process.env.GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
   try {
     const res = await fetch(GROQ_URL, {

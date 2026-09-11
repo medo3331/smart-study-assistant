@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import {
-  aiRouter,
   isImplementedAiTask,
   runAiTask,
   toAiPublicError,
-  streamingAdapterFor,
   generateImageWithFallback,
   generateVideoWithFallback,
   type AiTaskResult,
@@ -15,6 +13,7 @@ import { recordAiOperation } from "@/lib/ai/operations";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
+import { streamWithFallback } from "@/lib/ai/streaming-fallback";
 
 /**
  * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
@@ -250,23 +249,16 @@ export async function POST(req: Request) {
       }
       const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
       if (!guard.ok) return guard.response;
-      const providerName = aiRouter.getProviderName(task);
-      const adapter = streamingAdapterFor(providerName);
-      if (!adapter) {
-        await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-        return NextResponse.json(
-          { success: false, error: { code: "MODEL_UNAVAILABLE", message: "البث غير متاح لهذه المهمة حاليًا.", retryable: false } },
-          { status: 502 }
-        );
-      }
-
       const encoder = new TextEncoder();
       const sseStream = new ReadableStream<Uint8Array>({
         async start(controller) {
           const send = (payload: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
           let streamFailed = false;
           try {
-            for await (const chunk of adapter.streamChat(input)) {
+            const streamTask = (task === "chat" || task === "content" || task === "coding" || task === "explain" || task === "tutor"
+              ? task
+              : "chat") as "chat" | "content" | "coding" | "explain" | "tutor";
+            for await (const chunk of streamWithFallback(streamTask, input)) {
               send(chunk);
             }
           } catch (error) {

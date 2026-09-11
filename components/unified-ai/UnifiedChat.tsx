@@ -208,7 +208,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           type="button"
           onClick={() => fileInputRef.current?.click()}
           aria-label="رفع ملف"
-          className="p-2 rounded-xl hover:bg-paper-3 text-ink-soft transition"
+          className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <Paperclip size={20} />
         </button>
@@ -216,7 +216,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           type="button"
           onClick={() => imageInputRef.current?.click()}
           aria-label="رفع صورة"
-          className="p-2 rounded-xl hover:bg-paper-3 text-ink-soft transition"
+          className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <ImagePlus size={20} />
         </button>
