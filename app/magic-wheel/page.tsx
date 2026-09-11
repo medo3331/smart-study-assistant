@@ -38,5 +38,3 @@ export default function MagicWheelPage() {
   );
 }
 
-/* تصدير المسارات للمرجع (للتأكد من الربط) */
-export { WHEEL_BRANCHES };

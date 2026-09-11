@@ -188,7 +188,7 @@ export function BaccalaureateGoalInput({ onRecommendation, gradeName, trackName,
         )}
 
         {explainContent && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-white p-4">
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-paper-2 p-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-sm text-ink">{explainTitle || "الشرح"}</h3>
               <button type="button" onClick={() => setExplainContent(null)} className="text-xs text-ink-soft underline">إخفاء</button>

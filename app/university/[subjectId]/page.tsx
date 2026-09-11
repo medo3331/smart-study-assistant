@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import Link from "next/link";
 
-export default function UniversitySubjectPage({ params }: { params: { subjectId: string } }) {
+export default function UniversitySubjectPage({ params }: { params: Promise<{ subjectId: string }> }) {
+  // Next 15+: params بقى Promise — في Client Component بنفكّه بـ React.use
+  const { subjectId } = React.use(params);
   const router = useRouter();
   const { locale } = useLanguage();
   const [subject, setSubject] = useState<any>(null);
@@ -26,7 +28,7 @@ export default function UniversitySubjectPage({ params }: { params: { subjectId:
         const { data: subjData } = await supabase
           .from("university_subjects")
           .select("id, name, name_en, code, type, source_url, university_id, department_id, academic_level_id, semester_id")
-          .eq("id", params.subjectId)
+          .eq("id", subjectId)
           .maybeSingle();
         if (!cancelled) {
           setSubject(subjData || null);
@@ -40,7 +42,7 @@ export default function UniversitySubjectPage({ params }: { params: { subjectId:
             const { data: resData, error: resErr } = await supabase
               .from("university_resources")
               .select("id, title, description, resource_type, url, storage_path, source_url, source_type, language, status, created_at, updated_at")
-              .eq("university_subject_id", params.subjectId)
+              .eq("university_subject_id", subjectId)
               .eq("status", "published")
               .order("updated_at", { ascending: false });
             if (!cancelled) {
@@ -62,7 +64,7 @@ export default function UniversitySubjectPage({ params }: { params: { subjectId:
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [params.subjectId, locale]);
+  }, [subjectId, locale]);
 
   const label = locale === "ar" ? (subject?.name || "المادة") : (subject?.name_en || subject?.name || "Subject");
 

@@ -112,7 +112,7 @@ export function PreparatoryDashboard({
           <PreparatoryProgress completed={completed} total={total} progressPct={progressPct} currentDay={currentDay} />
           <section aria-label="نصيحة للمرحلة الإعدادية" className="sheet-card p-5 bg-gradient-to-br from-violet-50/60 to-sky-50/40">
             <div className="flex gap-3">
-              <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white border border-rule">📋</span>
+              <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-paper-2 border border-rule">📋</span>
               <div>
                 <p className="text-sm font-semibold text-ink">نصيحة منظمة</p>
                 <p className="mt-1 text-sm leading-6 text-ink-soft">قسّم مذاكرتك لكتل 40 دقيقة + راحة 10 دقائق. بعد كل درس حل سؤالين لتثبيت المعلومة.</p>
