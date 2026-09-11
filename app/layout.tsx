@@ -10,6 +10,7 @@ import { SupportWidget } from '@/components/SupportWidget';
 import { FloatingAssistant } from '@/components/FloatingAssistant';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { JsonLd } from '@/components/JsonLd';
+
 import {
   SITE_URL,
   SITE_NAME,
