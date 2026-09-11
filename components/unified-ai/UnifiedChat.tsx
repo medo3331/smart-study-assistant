@@ -166,7 +166,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
               {msg.role === "user" ? (
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
-                <MarkdownRenderer>{msg.content}</MarkdownRenderer>
+                <MarkdownRenderer content={msg.content} />
               )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>

@@ -93,8 +93,8 @@ export interface WheelBranchDef {
   note: string;
 }
 
-export function buildWheelBranches(opts: { currentDay?: number | null } = {}): WheelBranchDef[] {
-  const { currentDay } = opts;
+export function buildWheelBranches(opts: { currentDay?: number | null; currentDayId?: string | null } = {}): WheelBranchDef[] {
+  const { currentDay, currentDayId } = opts;
   return [
     { id: "home", label: "الرئيسية", latin: "Home", icon: <Home size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/", note: "صفحة الهبوط الرئيسية" },
     { id: "courses", label: "الكورسات", latin: "Courses", icon: <BookOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/courses", note: "قايمة التراكات (study_configs)" },
@@ -104,9 +104,16 @@ export function buildWheelBranches(opts: { currentDay?: number | null } = {}): W
       latin: "Lesson",
       icon: <GraduationCap size={18} strokeWidth={2} aria-hidden />,
       kind: "link",
-      // ⚠️ مفيش /lesson index — المسار الحقيقي /lesson/[dayId]. من غير خطة: بوابة التوليد.
-      href: currentDay ? `/lesson/${currentDay}` : "/dashboard/create",
-      note: currentDay ? `/lesson/${currentDay} (يوم الخطة الحالي)` : "مفيش خطة بعد → /dashboard/create",
+      // ⚠️ مفيش /lesson index — المسار الحقيقي /lesson/[dayId] ولازم id الدرس
+      // الحقيقي (uuid من study_days) مش رقم اليوم — رقم اليوم لوحده بيرمي
+      // المستخدم على «الدرس ده مش متاح». من غير id صالح بنفضّل الداشبورد
+      // (لو فيه خطة بتتجهز) أو بوابة التوليد (لو مفيش خطة خالص).
+      href: currentDayId ? `/lesson/${currentDayId}` : currentDay ? "/dashboard" : "/dashboard/create",
+      note: currentDayId
+        ? `/lesson/${currentDayId} (درس يوم ${currentDay} الحالي)`
+        : currentDay
+          ? "id الدرس لسه بيتحمّل → /dashboard"
+          : "مفيش خطة بعد → /dashboard/create",
     },
     { id: "workspace", label: "مساحة العمل", latin: "Workspace", icon: <FolderOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/workspace", note: "الملفات والمذاكرة" },
     { id: "worship", label: "عباداتي", latin: "Worship", icon: <Landmark size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/worship", note: "الصلوات + الأذكار + القرآن" },
@@ -139,6 +146,8 @@ export interface WheelChartPoint {
 export interface MagicWheelProps {
   /* التراك الحالي (من صفحة الداشبورد) */
   currentDay?: number;
+  /** id الحقيقي لدرس اليوم الحالي (uuid من study_days) — بدونه رابط الدرس بيتكسر */
+  currentDayId?: string | null;
   totalDays?: number;
   subject?: string;
   completedSteps?: number;
@@ -267,7 +276,7 @@ function BranchFace({
    =========================================================================== */
 export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   const {
-    currentDay, totalDays, subject, completedSteps, progressPct, currentChapter,
+    currentDay, currentDayId, totalDays, subject, completedSteps, progressPct, currentChapter,
     streak, coursesCount, subjectBreakdown,
     activeChartData, analyticsRange, onChangeRange, weeklyFocusHoursLabel,
     notificationsEnabled, onOpenSettings,
@@ -283,7 +292,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   /* أقل من 640px (زي ما البريف بيعمل) → شبكة عمودية بدل الدائرة */
   const isVertical = useMediaQuery("(max-width: 640px)");
 
-  const branches = buildWheelBranches({ currentDay });
+  const branches = buildWheelBranches({ currentDay, currentDayId });
 
   /* الإعدادات: إجراء مش مسار. من جوه الداشبورد بنفتح الدرج على طول؛ من أي
      صفحة تانية بنكتب النية في sessionStorage وننقل — نفس مفتاح/فورمات

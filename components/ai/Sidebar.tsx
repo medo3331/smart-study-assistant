@@ -29,7 +29,9 @@ const groups: SidebarGroup[] = [
     labelEn: "Study",
     items: [
       { id: "plan", labelAr: "خطتي", labelEn: "My Plan", href: "/dashboard" },
-      { id: "lessons", labelAr: "الدروس", labelEn: "Lessons", href: "/lesson/[dayId]" },
+      // ⚠️ /lesson/[dayId] مسار ديناميكي مش صفحة حقيقية — كتابته حرفيًا هنا كانت
+      // بتنقل المستخدم لرابط مكسور. صفحة الدرس محتاجة id حقيقي، فالدروس بتتفتح من الداشبورد.
+      { id: "lessons", labelAr: "الدروس", labelEn: "Lessons", href: "/dashboard" },
       { id: "subjects", labelAr: "المواد", labelEn: "Subjects", href: "/dashboard" },
     ],
   },

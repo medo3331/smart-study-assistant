@@ -1494,6 +1494,13 @@ export default function DashboardPage() {
       <div className="relative -mt-4 mb-6 md:mb-8">
         <MagicWheelDashboard
           currentDay={currentDayNumber}
+          /* 🔗 id الدرس الحقيقي (uuid من study_days) مش رقم اليوم — بدونه زر
+             «الدرس» في العجلة بيفتح /lesson/<رقم> ويقع على «الدرس مش متاح».
+             بنستبعد الـ ids الاصطناعية primary-* بنفس أسلوب handlePrimaryOpenLesson. */
+          currentDayId={(() => {
+            const today = days.find((d) => d.day === currentDayNumber);
+            return today?.id && !String(today.id).startsWith("primary-") ? today.id : null;
+          })()}
           totalDays={days.length}
           subject={config?.subject ?? ""}
           completedSteps={completedCount}
