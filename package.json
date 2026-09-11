@@ -14,7 +14,10 @@
     "test:ai:core": "node scripts/run-ai-core-tests.mjs",
     "test:ai:foundation": "node scripts/test-ai-agent-foundation.mjs",
     "test:ai:agents": "node --experimental-strip-types scripts/test-ai-agents.mjs",
-    "test:ai:image": "node scripts/test-gemini-image.mjs"
+    "test:ai:image": "node scripts/test-gemini-image.mjs",
+    "test:ai:chaos": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run lib/ai/__tests__/chaos-*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:all": "vitest run"
   },
   "dependencies": {
     "@google/genai": "^2.12.0",
