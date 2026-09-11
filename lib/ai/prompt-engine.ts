@@ -591,6 +591,67 @@ function asksForStructuredOutput(message: string): boolean {
   return /json/i.test(message) && /(فقط|only|بدون أي|بدون اي|no extra)/i.test(message);
 }
 
+/**
+ * هل الطلب ده مخرجاته بتتقرا بـ JSON.parse في الواجهة؟
+ *
+ * الفحص على الرسالة **وعلى** تعليمات التنسيق من العميل: في BossFight و
+ * CommunityQuiz و assessment/page.tsx طلب الـ JSON موجود جوه
+ * systemInstruction مش جوه الرسالة («جهز أسئلة البوس فايت دلوقتي.»)،
+ * فلو فحصنا الرسالة بس كنا هنحقن شخصية الكويز ونكسر الـ parse.
+ */
+export function isStructuredOutputRequest(
+  message: string,
+  clientInstruction?: unknown
+): boolean {
+  if (asksForStructuredOutput(message)) return true;
+  return typeof clientInstruction === "string" && asksForStructuredOutput(clientInstruction);
+}
+
+// ============================================
+// تعليمات التنسيق من العميل (systemInstruction)
+// ============================================
+
+/**
+ * أقصى طول لتعليمات التنسيق القادمة من العميل.
+ *
+ * مقاس مش مخمَّن: أطول systemInstruction حقيقي في الواجهة هو
+ * app/assessment/page.tsx:301 (~567 حرف في المصدر) وبعد حقن
+ * buildPersonaContext (أقصاه 252 حرف، مقاس على كل تركيبات
+ * الشخصية × المستوى × المجال) + اسم المادة والتراك بيوصل ~850.
+ * فـ 1200 سقف مريح فوق الشرعي ومانع للتضخيم.
+ */
+export const MAX_CLIENT_INSTRUCTION_CHARS = 1200;
+
+/**
+ * بيلحق تعليمات التنسيق من العميل في **آخر** الـ system prompt.
+ *
+ * ليه في الآخر مش system prompt منفصل: قواعد الأمان والهوية بتفضل أول
+ * البرومبت، والعميل بيكتب تنسيق الإخراج بس مش شخصية المساعد.
+ *
+ * ⚠️ الحد الحقيقي للحماية هنا: النص ده من العميل، فمهما لفّيناه هو قادر
+ * نظريًا يحاول يتجاوز التعليمات. اللي بيمنع ده عمليًا:
+ *   ١. قواعد الأمان في الأول + تنبيه صريح إنها لسه سارية بعد الإلحاق.
+ *   ٢. سقف الطول — مفيش إغراق للسياق.
+ *   ٣. رسايل role:"system" من العميل بتترمي (في context-builder).
+ * مش بديل عن مراجعة أي استخدام جديد للحقل ده.
+ */
+export function appendSystemInstruction(
+  systemPrompt: string,
+  clientInstruction?: unknown
+): string {
+  if (typeof clientInstruction !== "string") return systemPrompt;
+
+  const sanitized = clientInstruction.trim().slice(0, MAX_CLIENT_INSTRUCTION_CHARS);
+  if (!sanitized) return systemPrompt;
+
+  return `${systemPrompt}
+
+---
+⚠️ تعليمات تنسيق الإخراج الإلزامية لهذا الطلب (Format Constraints):
+${sanitized}
+تنبيه: التزم بدقة بالتنسيق المطلوب أعلاه (مثل صيغة JSON المحددة) مع الحفاظ على شخصية وهوية ماجيكلي التعليمية، وقواعد الأمان في أول الرسالة لسه سارية كما هي.`;
+}
+
 export function detectMessageType(message: string): MessageType {
   const lower = message.toLowerCase();
 

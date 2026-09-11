@@ -6,7 +6,7 @@ import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { describeMode, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
 import { buildFullContext } from "@/lib/ai/context-builder";
-import { resolveMessageType } from "@/lib/ai/prompt-engine";
+import { isStructuredOutputRequest, resolveMessageType } from "@/lib/ai/prompt-engine";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
@@ -42,6 +42,14 @@ export async function POST(req: Request) {
       context?: MagiclyContextInput;
       conversationId?: unknown;
     };
+    // تعليمات تنسيق الإخراج من العميل (JSON للكويزات والخطط). كانت بتتبعت
+    // من ٧ أماكن في الواجهة والراوت مش بيقرأها خالص — فكانت المميزات دي
+    // بتستنى JSON من غير ما الموديل يعرف. بتتلحق في آخر الـ system prompt
+    // بسقف طول، مش كـ system prompt منفصل: قواعد الأمان والهوية بتفضل الأول.
+    const systemInstruction =
+      typeof (body as { systemInstruction?: unknown }).systemInstruction === "string"
+        ? (body as { systemInstruction: string }).systemInstruction
+        : undefined;
     const conversationId = typeof (body as { conversationId?: unknown }).conversationId === "string"
       ? clampText((body as { conversationId: string }).conversationId, 80)
       : "";
@@ -77,18 +85,22 @@ export async function POST(req: Request) {
 
     const latestMessage = safeMessages.at(-1)?.content ?? "";
 
-    // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
+    // الـ prompt الأساسي على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
-    // ⚠️ حقل systemInstruction اللي بعض الصفحات بتبعته **مش بيتقرا** عن قصد:
-    // السماح للعميل بحقن system prompt كان هيبقى باب تجاوز لكل قواعد
-    // الأمان اللي في lib/ai/prompt-engine.ts.
+    // حقل systemInstruction بقى بيتقرا (كان متجاهلًا فبيكسر ٧ أماكن في
+    // الواجهة) — بس كتعليمات تنسيق مُلحقة بآخر البرومبت وبقفص طول، مش
+    // system prompt من العميل. التفاصيل في appendSystemInstruction.
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const selectedMode = parseMode(mode, latestMessage);
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage);
     void rememberSessionContext(supabase, user.id, studentContext, latestMessage);
 
     // ٤) محرك البرومبت: بروفايل + نقاط ضعف + تاريخ + نوع الرسالة
-    const messageType = resolveMessageType(mode, latestMessage);
+    // طلبات الـ JSON بتفضل general حتى لو كلماتها «أسئلة» أو «خطة»: حقن
+    // شخصية الكويز/الخطة التفاعلية كان هيكسر JSON.parse في الواجهة.
+    const messageType = isStructuredOutputRequest(latestMessage, systemInstruction)
+      ? "general"
+      : resolveMessageType(mode, latestMessage);
     const built = await buildFullContext(supabase, user.id, latestMessage, {
       conversationId: conversationId || undefined,
       // الكلاينت هو اللي ماسك تاريخ المحادثة في الواجهة الحالية، فبنمرّره
@@ -102,6 +114,7 @@ export async function POST(req: Request) {
       // الوضع الصريح من الواجهة (تلخيص/مراجعة/فلاش كاردز/ملف) أدق من
       // أنواع الرسائل الخمسة، فبيتحقن فوقها من غير ما يلغيها.
       modeInstruction: describeMode(selectedMode),
+      systemInstruction,
       extraFacts: [
         `المادة: ${studentContext.subject}`,
         `الدرس: ${studentContext.lesson}`,

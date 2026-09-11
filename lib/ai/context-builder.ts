@@ -24,6 +24,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AiChatMessage } from "./types";
 import {
+  appendSystemInstruction,
   buildSystemPrompt,
   detectMessageType,
   getTemperature,
@@ -63,6 +64,12 @@ export interface BuildContextOptions {
   messageType?: MessageType;
   /** تعليمات الوضع الصريح (MODE_GUIDE) — أدق من نوع الرسالة. */
   modeInstruction?: string;
+  /**
+   * تعليمات تنسيق الإخراج من العميل (حقل systemInstruction). بتتلحق في
+   * آخر الـ system prompt بسقف MAX_CLIENT_INSTRUCTION_CHARS — شوف
+   * appendSystemInstruction في prompt-engine.ts لحدود الحماية.
+   */
+  systemInstruction?: string;
   /** حقائق موثوقة من الأدوات (التقدم/الدرس المفتوح/الملفات). */
   extraFacts?: string[];
 }
@@ -262,7 +269,10 @@ export async function buildFullContext(
     modeInstruction: options.modeInstruction,
     extraFacts: options.extraFacts?.map(shortText).filter(Boolean) ?? [],
   };
-  const systemPrompt = buildSystemPrompt(config);
+  const systemPrompt = appendSystemInstruction(
+    buildSystemPrompt(config),
+    options.systemInstruction
+  );
 
   // ٥) تاريخ المحادثة
   const clientHistory = (options.historyMessages ?? []).filter(
