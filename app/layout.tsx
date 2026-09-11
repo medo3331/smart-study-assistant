@@ -24,6 +24,7 @@ import {
   organizationLd,
   webSiteLd,
 } from '@/lib/seo';
+import 'katex/dist/katex.min.css';
 import './globals.css';
 
 /* العناوين: خط عربي هندسي، متغيّر الأوزان */

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, BookOpen, Bot, ClipboardCheck, LoaderCircle, Send, Sparkles, Target } from "lucide-react";
 import { MicButton } from "@/components/MicButton";
+import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type SuggestedAgent = "marketing" | "research" | "content";
@@ -146,7 +147,13 @@ export function ChatWorkspace() {
               {messages.map((message, index) => (
                 <article key={`${message.role}-${index}`} className={`flex gap-3 ${message.role === "user" ? "justify-start" : "justify-end"}`}>
                   {message.role === "assistant" && <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-paper-2"><Bot size={18} /></span>}
-                  <p className={`max-w-[85%] whitespace-pre-wrap rounded-[var(--r-md)] px-4 py-3 text-sm leading-7 ${message.role === "user" ? "bg-marker text-onmarker" : "border border-rule bg-paper-2"}`}>{message.content}</p>
+                  {message.role === "user" ? (
+                    <p className="max-w-[85%] whitespace-pre-wrap rounded-[var(--r-md)] px-4 py-3 text-sm leading-7 bg-marker text-onmarker">{message.content}</p>
+                  ) : (
+                    <div className="max-w-[85%] rounded-[var(--r-md)] px-4 py-3 text-sm leading-7 border border-rule bg-paper-2">
+                      <MarkdownRenderer content={message.content} />
+                    </div>
+                  )}
                 </article>
               ))}
               {suggestedAgent && !loading && (

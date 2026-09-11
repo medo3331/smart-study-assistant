@@ -6577,3 +6577,192 @@ html {
   .mw-theme-btn { transition: none !important; }
   .mw-node:hover { transform: translate(-50%, -50%) scale(1.02); }
 }
+
+/* ==========================================================================
+   KaTeX + MarkdownRenderer — إصلاحات المعادلات للغة العربية (RTL)
+   ⚠️ برّه أي @layer عن قصد: قواعد KaTeX الأصلية برّه الطبقات، وأي CSS
+   برّه طبقة بيغلب اللي جوّه @layer components — فالإصلاحات دي لازم
+   تفضل هنا في الآخر عشان تضمن الغلبة على katex.min.css.
+   ========================================================================== */
+
+/* إجبار المعادلات تكون من الشمال لليمين دائماً — من غيرها المتصفح
+   بيعكس ترتيب الرموز جوّه الصفحة العربي (RTL) والمعادلة بتتقلب. */
+.katex,
+.katex-display {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  font-size: 1.05em;
+}
+
+/* المعادلات المنفصلة (Display Math): متمركزة (الوضع الطبيعي) مع
+   تمرير أفقي لو المعادلة أطول من الفقاعة — بدل ما تكسر التخطيط. */
+.katex-display {
+  margin: 0.75rem 0 !important;
+  padding: 0.5rem 0.25rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  scrollbar-width: thin;
+}
+
+/* المعادلات المضمنة وسط السطر (Inline Math) */
+.katex-inline {
+  display: inline-block;
+  padding: 0 0.2rem;
+  vertical-align: middle;
+}
+
+/* ==========================================================================
+   .markdown-renderer — تنسيقات الماركداون جوه فقاعات الشات
+   المشروع مافيهوش @tailwindcss/typography، ومن غير التنسيقات دي عناوين
+   وفقرات وقوائم الماركداون بتطلع مسطّحة (preflight بيصفّرها). كل الألوان
+   توكنز (ink/rule/...) فبتتماشى مع الثيمات الفاتحة والغامقة وباليتات
+   المتجر لوحدها — مفيش hex ثابت هنا.
+   ========================================================================== */
+
+.markdown-renderer {
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.markdown-renderer > *:first-child { margin-top: 0; }
+.markdown-renderer > *:last-child { margin-bottom: 0; }
+
+.markdown-renderer p { margin: 0.5rem 0; }
+.markdown-renderer p:first-child { margin-top: 0; }
+.markdown-renderer p:last-child { margin-bottom: 0; }
+
+.markdown-renderer h1,
+.markdown-renderer h2,
+.markdown-renderer h3,
+.markdown-renderer h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0.9rem 0 0.45rem;
+}
+.markdown-renderer h1 { font-size: 1.25rem; }
+.markdown-renderer h2 { font-size: 1.12rem; }
+.markdown-renderer h3 { font-size: 1.02rem; }
+.markdown-renderer h4 { font-size: 0.95rem; }
+
+.markdown-renderer ul,
+.markdown-renderer ol {
+  margin: 0.5rem 0;
+  padding-inline-start: 1.4rem;
+}
+.markdown-renderer ul { list-style: disc; }
+.markdown-renderer ol { list-style: decimal; }
+.markdown-renderer li { margin: 0.25rem 0; }
+.markdown-renderer li::marker { color: var(--ink-soft); }
+
+/* روابط بلون مميز — currentColor بتخليها مقروءة سواء الفقاعة فاتحة
+   أو بلون الـ accent الغامق. */
+.markdown-renderer a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 3px;
+}
+.markdown-renderer a:hover {
+  text-decoration-color: currentColor;
+}
+
+.markdown-renderer blockquote {
+  margin: 0.6rem 0;
+  padding: 0.4rem 0.8rem;
+  border-inline-start: 3px solid var(--rule-strong);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+}
+.markdown-renderer blockquote p { margin: 0.3rem 0; }
+
+.markdown-renderer hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 0.9rem 0;
+}
+
+.markdown-renderer img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-sm);
+}
+
+/* كود مضمّن وسط السطر: خلفية شفافة من لون النص نفسه — شغالة على أي
+   فقاعة (ورق/accent) وفي أي ثيم من غير لون ثابت. */
+.markdown-renderer code:not(pre code) {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.85em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: break-spaces;
+}
+
+/* بلوك الكود: بطاقة ورق جوّه الفقاعة + تمرير أفقي، LTR دائماً */
+.markdown-renderer .md-codeblock {
+  margin: 0.6rem 0;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+}
+.markdown-renderer .md-codeblock pre {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  overflow-x: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--ink);
+  background: transparent;
+  scrollbar-width: thin;
+}
+.markdown-renderer .md-codeblock code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  white-space: pre;
+}
+
+/* الجداول: غلاف بيتمرّر أفقياً على الموبايل بدل ما يكسر الفقاعة */
+.markdown-renderer .md-table-wrap {
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  scrollbar-width: thin;
+}
+.markdown-renderer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: start;
+}
+.markdown-renderer th,
+.markdown-renderer td {
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.markdown-renderer thead th {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.markdown-renderer tbody tr:last-child td { border-bottom: 0; }
+
+/* عناصر GFM: تاسكات + فوتنوت */
+.markdown-renderer input[type="checkbox"] {
+  margin-inline-end: 0.4rem;
+  accent-color: var(--marker);
+}
+.markdown-renderer .footnotes { font-size: 0.8rem; }
+.markdown-renderer .footnotes hr { margin: 0.7rem 0 0.4rem; }
