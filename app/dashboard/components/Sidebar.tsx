@@ -83,6 +83,12 @@ const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
 
 // Phase 1 — 4 ثيمات الداشبورد (العقدة الجديدة)
 const THEME_SWATCHES: { id: ThemeId; label: string; accent: string; bg: string }[] = [
+  // 🎡 الثيمات الأربعة المعتمدة في تصميم magiclly-final (نفس دول اللي بيلفّ
+  // زرار العجلة عليهم) — متصدرين القايمة، والباقي تحت زي ما هو.
+  { id: "colorful", label: "ملوّن (حالي)", accent: "#F0D24A", bg: "#0D0906" },
+  { id: "crimson", label: "أسود وأحمر", accent: "#E23A3A", bg: "#0a0a0c" },
+  { id: "azure", label: "أزرق", accent: "#4FA9F5", bg: "#0A1428" },
+  { id: "mono", label: "أبيض ورمادي", accent: "#4B5563", bg: "#F4F5F7" },
   { id: "indigo-light", label: "نيلي فاتح", accent: "#4338CA", bg: "#F3F5FC" },
   { id: "warm-dark", label: "أسود دافي", accent: "#DC4C4C", bg: "#0D0906" },
   { id: "slate", label: "رمادي", accent: "#64748B", bg: "#1A1D23" },
