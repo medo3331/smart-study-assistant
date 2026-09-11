@@ -136,7 +136,27 @@ export default function OnboardingPage() {
             } else if (existing === "student" && stageSet && gradeSet) {
               setStageId(profile.education_stage_id || null);
               setGradeId(profile.education_grade_id || null);
-              setStep("track");
+
+              /* التفرع حسب نوع المرحلة: البكالوريا وحدها تحتاج خطوة مسار؛
+                 غيرها بياناته مكتملة أصلًا → إكمال تلقائي. القيم تُمرر صراحةً
+                 من نتيجة الـ query (لا stale closure)، وpersist() تتحقق من
+                 اتساق grade↔stage قبل الحفظ — فأسوأ نتيجة رسالة خطأ واضحة
+                 بدل الشاشة الفاضية. */
+              const { data: stageRow } = await supabase
+                .from("education_stages")
+                .select("code")
+                .eq("id", profile.education_stage_id as string)
+                .maybeSingle();
+
+              if (cancelled) return;
+              if (stageRow?.code === "BACCALAUREATE") {
+                setStep("track");
+              } else {
+                void finish(existing, {
+                  stageId: profile.education_stage_id,
+                  gradeId: profile.education_grade_id,
+                });
+              }
             } else if (existing !== "student") {
               /* عائد (خريج/فريلانسر) بدون onboarded_at: لا توجد بيانات ناقصة —
                  إكمال تلقائي آمن بدل شاشة done الوهمية. الـ role يُمرر صراحةً
@@ -339,22 +359,27 @@ export default function OnboardingPage() {
     return { ok: true };
   }
 
-  async function finish(roleOverride?: Role): Promise<void> {
+  async function finish(
+    roleOverride?: Role,
+    dataOverride?: { stageId?: string | null; gradeId?: string | null }
+  ): Promise<void> {
     setSaving(true); setError(null);
 
-    // الـ role الصريح (للعائدين من الـ effect) يتجاوز الـ state،
-    // لأن setRole داخل نفس الـ effect لم يُطبَّق بعد (stale closure).
+    // القيم الصريحة (للعائدين من الـ effect) تتجاوز الـ state،
+    // لأن setX داخل نفس الـ effect لم يُطبَّق بعد (stale closure).
     const effRole = roleOverride ?? role;
+    const effStageId = dataOverride?.stageId !== undefined ? dataOverride.stageId : stageId;
+    const effGradeId = dataOverride?.gradeId !== undefined ? dataOverride.gradeId : gradeId;
 
     // استخدام الـ state الحقيقي بدل إعادة القراءة من localStorage
     // (الـ state متغذي أصلًا من localStorage عند mount — شوف أول useEffect)
     const studentTypeParam = studentType;
 
-    if (effRole === "student" && studentTypeParam !== 'university' && !stageId) {
+    if (effRole === "student" && studentTypeParam !== 'university' && !effStageId) {
       setError(locale === "ar" ? "اختر المرحلة." : "Select stage.");
       setSaving(false); return;
     }
-    if (effRole === "student" && studentTypeParam !== 'university' && stageId && !gradeId) {
+    if (effRole === "student" && studentTypeParam !== 'university' && effStageId && !effGradeId) {
       setError(locale === "ar" ? "اختر الصف." : "Select grade.");
       setSaving(false); return;
     }
@@ -369,9 +394,9 @@ export default function OnboardingPage() {
     const { ok, error: err } = await persist({
       persona,
       studentType: studentTypeParam,
-      stageId: (effRole === "student" && studentTypeParam !== 'university') ? stageId : null,
-      gradeId: (effRole === "student" && studentTypeParam !== 'university') ? gradeId : null,
-      trackId: (effRole === "student" && studentTypeParam !== 'university' && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
+      stageId: (effRole === "student" && studentTypeParam !== 'university') ? effStageId : null,
+      gradeId: (effRole === "student" && studentTypeParam !== 'university') ? effGradeId : null,
+      trackId: (effRole === "student" && studentTypeParam !== 'university' && effStageId && stages.find(s => s.id === effStageId)?.code === "BACCALAUREATE") ? trackId : null,
       universityId: studentTypeParam === 'university' ? universityId : null,
       facultyId: studentTypeParam === 'university' ? facultyId : null,
       departmentId: studentTypeParam === 'university' ? departmentId : null,
