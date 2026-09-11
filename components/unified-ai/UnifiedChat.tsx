@@ -13,6 +13,7 @@ import Link from "next/link";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 
 type ChatMsg = { role: "user" | "assistant"; content: string; attachmentName?: string };
 
@@ -161,8 +162,12 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       <div className="space-y-3 mb-4 min-h-[240px]">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--accent)] text-[var(--on-marker)]"}`}>
-              <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--card-primary)] border border-[var(--rule)] text-ink shadow-sm"}`}>
+              {msg.role === "user" ? (
+                <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+              ) : (
+                <MarkdownRenderer>{msg.content}</MarkdownRenderer>
+              )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
               )}

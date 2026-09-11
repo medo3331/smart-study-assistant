@@ -29,6 +29,8 @@ const COMMUNITY_UPDATED = new Date('2026-08-07');
 const SPOKES_UPDATED = new Date('2026-08-12');
 /** صفحات المحتوى التعليمي العامة. */
 const SEO_CONTENT_UPDATED = new Date('2026-08-20');
+/** إطلاق استوديو المحتوى (صور + مخططات + ملفات). */
+const AI_STUDIO_UPDATED = new Date('2026-09-11');
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
@@ -88,6 +90,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${SITE_URL}/study-tools`,
       lastModified: SEO_CONTENT_UPDATED,
       changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${SITE_URL}/ai-studio`,
+      lastModified: AI_STUDIO_UPDATED,
+      changeFrequency: 'weekly',
       priority: 0.8,
     },
   ];

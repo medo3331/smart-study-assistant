@@ -29,6 +29,7 @@ export default function StudyToolsPage() {
               { icon: '📅', title: 'المخطط وخطة المذاكرة', body: 'حوّل المادة إلى أهداف وخطوات يومية واعرف ما أنجزته.' },
               { icon: '📊', title: 'متابعة التقدم', body: 'تابع نشاطك وإنجازاتك لتعرف كيف تسير خطة التعلم.' },
               { icon: '🖼️', title: 'قراءة الصور وPDF', body: 'استخدم المواد المرفوعة بصيغ مناسبة ضمن رحلة الدراسة نفسها.' },
+              { icon: '✨', title: 'استوديو المحتوى التعليمي', body: 'ولّد صورًا توضيحية وخرائط ذهنية ومخططات، وحمّل ملخصاتك وكويزاتك كملفات PDF وWord وExcel وPowerPoint.' },
             ],
           },
           {
@@ -36,7 +37,7 @@ export default function StudyToolsPage() {
             body: 'ابدأ بالشرح عندما تتعرف على درس جديد، انتقل للتلخيص عند تنظيم الملاحظات، ثم استخدم الأسئلة والكروت عند المراجعة. التخطيط والمتابعة يساعدانك على الاستمرار بين الجلسات.',
           },
         ]}
-        links={[{ href: '/ai-study-assistant', label: 'كيف يعمل مساعد الدراسة؟' }, { href: '/subjects', label: 'المواد التعليمية' }, { href: '/programming', label: 'تعلم البرمجة' }, { href: '/features', label: 'كل ميزات Magicly' }]}
+        links={[{ href: '/ai-studio', label: 'استوديو الصور والمخططات والملفات' }, { href: '/ai-study-assistant', label: 'كيف يعمل مساعد الدراسة؟' }, { href: '/subjects', label: 'المواد التعليمية' }, { href: '/programming', label: 'تعلم البرمجة' }]}
       />
     </>
   );

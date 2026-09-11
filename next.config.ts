@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['mammoth', 'tesseract.js'],
+  serverExternalPackages: ['mammoth', 'tesseract.js', '@react-pdf/renderer'],
   async headers() {
     return [
       {
