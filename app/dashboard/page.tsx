@@ -58,6 +58,7 @@ import { DEFAULT_PERSONA, getUiText, isPersona } from "@/lib/user-persona";
 import type { Persona } from "@/lib/user-persona";
 import { LeaderboardModal } from "./components/Models/LeaderboardModal";
 import {  ShopModal } from "./components/Models/ShopModal";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {  ParentReportModal,  } from "./components/Models/ParentReportModal";
 import {  WeeklySummaryModal } from "./components/Models/WeeklySummaryModal";
 import { AiChatModal } from "./components/Aichat";
@@ -268,6 +269,9 @@ export default function DashboardPage() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("20:00");
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
+  // Web Push الحقيقي (بيشتغل حتى لو التطبيق مقفول) — نفس الـ hook المستخدم
+  // في أي شاشة تانية، عشان منطق الاشتراك مايتكررش ويتعارض.
+  const webPush = usePushNotifications();
 
   // 10. لوحة المتصدرين
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -833,34 +837,23 @@ export default function DashboardPage() {
   }
 
   const handleEnableWebPush = async () => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    // النسخة القديمة كانت بتمرّر مفتاح VAPID كنص خام في applicationServerKey
+    // فكانت بتضرب في Chrome — الـ hook بيحوّله لـ Uint8Array صح.
+    const status = await webPush.subscribe();
+    if (status === "subscribed") {
+      setNotifPermission("granted");
+      setNotificationsEnabled(true);
+      alert("🎉 تم تفعيل التنبيهات في الخلفية! هتوصلك حتى لو التطبيق مقفول.");
+    } else if (status === "unsupported") {
       alert("😅 المتصفح ده لا يدعم التنبيهات في الخلفية (Web Push).");
-      return;
-    }
-    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!vapidKey) {
-      alert("⚠️ الميزة دي لسه محتاجة إعداد من ناحية السيرفر (VAPID key + API route). راجع التعليقات فوق الدالة دي في الكود.");
-      return;
-    }
-    try {
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: vapidKey,
-      });
-      // الـ user_id بياخده السيرفر من الجلسة، فمش بنبعته من هنا
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription }),
-      });
-      if (!res.ok) {
-        alert("⚠️ مقدرناش نحفظ الاشتراك. تأكد إنك مسجّل دخول وحاول تاني.");
-        return;
-      }
-      alert("🎉 تم تفعيل التنبيهات في الخلفية!");
-    } catch (err) {
-      console.error("Web Push subscribe failed:", err);
+    } else if (status === "no-vapid-key") {
+      alert("⚠️ الإشعارات مش متظبطة على السيرفر بعد (ناقص VAPID key).");
+    } else if (status === "permission-denied") {
+      setNotifPermission("denied");
+      alert("محتاجين إذنك لإرسال التنبيهات من إعدادات المتصفح.");
+    } else if (status === "save-failed") {
+      alert("⚠️ مقدرناش نحفظ الاشتراك. تأكد إنك مسجّل دخول وحاول تاني.");
+    } else {
       alert("⚠️ حصل خطأ أثناء تفعيل التنبيهات، حاول تاني.");
     }
   };

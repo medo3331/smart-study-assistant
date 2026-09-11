@@ -13,7 +13,7 @@
 
 /* ⚠️ زوّد الرقم ده مع أي تعديل في السيرفس وركر عشان الكاش القديم يتمسح
    ويتفعّل الجديد للمستخدمين. */
-const VERSION = "v2";
+const VERSION = "v3";
 const PRECACHE = `magicly-precache-${VERSION}`;
 const STATIC = `magicly-static-${VERSION}`;
 const PAGES = `magicly-pages-${VERSION}`;
@@ -191,7 +191,9 @@ self.addEventListener("fetch", (event) => {
 // Web Push — نفس السلوك القديم (اتساب زي ما هو)
 // =====================================================================
 
-// 🔔 بيتنفذ لما السيرفر يبعت push notification فعلي
+// 🔔 بيتنفذ لما السيرفر يبعت push notification فعلي.
+// نفس شكل الـ payload اللي بيبعته lib/notifications/web-push.ts:
+// ‏{ title, body, url, icon } — وأي حقل ناقص له بديل عربي معقول.
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -200,26 +202,41 @@ self.addEventListener("push", (event) => {
     data = { title: "🔥 حافظ على سلسلتك!", body: event.data ? event.data.text() : "" };
   }
 
-  const title = data.title || "🔥 حافظ على سلسلتك!";
+  const title = data.title || "ماجيكلي 🧙‍♂️";
   const options = {
-    body: data.body || "لسه ما ذاكرتش النهارده... خلي السلسلة ماتنكسرش!",
-    icon: data.icon || "/favicon.ico",
-    badge: "/favicon.ico",
+    body: data.body || "ميعاد جلستك الدراسية جاهز!",
+    icon: data.icon || "/icon-192.png",
+    badge: "/icon-192.png",
+    dir: "rtl",
+    lang: "ar",
     data: { url: data.url || "/dashboard" },
+    vibrate: [100, 50, 100],
+    actions: [
+      { action: "open", title: "افتح التطبيق" },
+      { action: "dismiss", title: "لاحقاً" },
+    ],
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// 👆 لما المستخدم يدوس على الإشعار، يفتحله التطبيق
+// 👆 لما المستخدم يدوس على الإشعار (أو زرار "افتح التطبيق")، يفتحله
+// الشاشة المناسبة: لو فيه تاب مفتوح من الموقع بنوجّهه ونركّز عليه،
+// وإلا بنفتح نافذة جديدة. زرار "لاحقاً" بيقفل الإشعار وخلاص.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
+  if (event.action === "dismiss") return;
+
   const targetUrl = event.notification.data?.url || "/dashboard";
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsList) => {
       for (const client of clientsList) {
-        if (client.url.includes(targetUrl) && "focus" in client) {
+        if (client.url.startsWith(self.location.origin) && "focus" in client) {
+          if ("navigate" in client && !client.url.includes(targetUrl)) {
+            client.navigate(targetUrl);
+          }
           return client.focus();
         }
       }

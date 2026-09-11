@@ -9,6 +9,7 @@ import { QuranAudioProvider } from '@/hooks/useQuranAudio';
 import { SupportWidget } from '@/components/SupportWidget';
 import { FloatingAssistant } from '@/components/FloatingAssistant';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { InstallPromptBanner } from '@/components/pwa/InstallPromptBanner';
 import { JsonLd } from '@/components/JsonLd';
 import {
   SITE_URL,
@@ -220,6 +221,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* بيسجّل السيرفس وركر عشان الأوفلاين + استقبال الإشعارات. بيرندر
             null، وبيشتغل في الإنتاج بس (شوف ServiceWorkerRegister). */}
         <ServiceWorkerRegister />
+
+        {/* بانر تثبيت التطبيق (PWA) — بيظهر تلقائياً على الموبايل للي مش
+            مثبّتينه، وnull لغيرهم. برّه الـ providers عن قصد: محتواه عربي
+            ثابت ومش محتاج ثيم/لغة من الكونتكست (بيستخدم CSS vars مباشرة). */}
+        <InstallPromptBanner />
 
         {/* قياسات Vercel. الاتنين بيرندروا null — مافيش أي حاجة في الشاشة،
             بس سكربت بيتحمّل، فمكانهم آخر الـ body عن قصد.

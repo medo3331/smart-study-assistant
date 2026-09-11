@@ -53,5 +53,19 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: 'maskable',
       },
     ],
+    /* اختصارات الضغط المطوّل على أيقونة التطبيق (أندرويد). الأيقونات نفس
+       أيقونة التطبيق — مافيش أصول ٩٦ مخصصة، والمتصفح بيصغّر لوحده. */
+    shortcuts: [
+      {
+        name: 'ابدأ مذاكرة الآن',
+        url: '/chat',
+        icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+      },
+      {
+        name: 'خطتي الدراسية',
+        url: '/dashboard/planner',
+        icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+      },
+    ],
   };
 }
