@@ -17,6 +17,7 @@
 import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile } from "../extract-text";
+import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 
 // Groq adapter — verified working (key from env, model openai/gpt-oss-120b, HTTP 200)
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -25,20 +26,26 @@ const GROQ_MODEL = "openai/gpt-oss-120b";
 async function callGroqWithModel(
   prompt: string,
   model: string,
-  _language: string = "ar"
+  _language: string = "ar",
+  system?: string
 ): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
   void _language;
   const key = process.env.GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
   try {
+    const messages = [
+      ...(system ? [{ role: "system", content: system }] : []),
+      { role: "user", content: prompt },
+    ];
     const res = await fetch(GROQ_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
-        messages: [{ role: "user", content: prompt }],
+        messages,
         temperature: 0.7,
-        max_tokens: 1200,
+        // 2048 بدل 1200 — المخططات (Mermaid) والردود الطويلة محتاجة مساحة
+        max_tokens: 2048,
       }),
       signal: AbortSignal.timeout(25000),
     });
@@ -121,7 +128,9 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // If input.model is present, route already verified entitlement before reserve — use it.
     // Otherwise use CURRENT_AI_MODEL (free, always accessible).
     const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : GROQ_MODEL;
-    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang);
+    // حقن إرشادات المخططات (Mermaid) — المساعد بيرسم خرائط ذهنية/مخططات
+    // داخل الشات مباشرة، وبيعرضها MermaidViewer في الواجهة.
+    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, DIAGRAM_GUIDELINES);
     if (!providerResult.ok) {
       return {
         ok: false,

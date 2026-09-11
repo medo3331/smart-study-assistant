@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
+import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
 
 export const MAGICLY_MODES = ["explain", "quiz", "summarize", "review", "file", "flashcards"] as const;
 export type MagiclyMode = (typeof MAGICLY_MODES)[number];
@@ -172,7 +173,7 @@ export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyM
     ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")
     : "لا توجد ذكريات مفيدة محفوظة بعد.";
 
-  return `أنت «ماجيكلي»، مساعد مذاكرة مصري خفيف وطبيعي. هدفك فهم الطالب وتدريبه، وليس مجرد إعطاء إجابة.
+  return withDiagramGuidelines(`أنت «ماجيكلي»، مساعد مذاكرة مصري خفيف وطبيعي. هدفك فهم الطالب وتدريبه، وليس مجرد إعطاء إجابة.
 
 السياق الموثوق:
 - المادة: ${context.subject}
@@ -191,5 +192,5 @@ ${toolFacts.length ? `- نتائج الأدوات: ${toolFacts.join(" ")}` : ""}
 - ${STYLE_GUIDE[context.learningStyle]}
 
 الوضع الحالي: ${mode}.
-${MODE_GUIDE[mode]}`;
+${MODE_GUIDE[mode]}`);
 }

@@ -1,15 +1,30 @@
-const OUTPUT_FORMAT_MARKER = "تعليمات تنسيق الإخراج الإلزامية";
-export const SYSTEM_INSTRUCTION_MAX_CHARS = 1200;
-
 /**
- * يلحق تعليمات تنسيق بالنظام مع قصّ صريح عند الحد حتى ما ننفجر في السياق.
+ * lib/ai/prompt-engine.ts — قواعد الـ Prompt المشتركة
+ *
+ * حاليًا بيضم إرشادات رسم المخططات (Mermaid) اللي بتتحقن في نظام
+ * الشات، عشان المساعد يرسم خريطة ذهنية/مخطط انسيابي/جدول زمني
+ * داخل المحادثة مباشرة بدل ما يرجّع كود نصي.
+ *
+ * العرض نفسه بيتم في المتصفح عبر components/ui/MermaidViewer.tsx
+ * اللي بيتعرف على بلوكات ```mermaid من داخل MarkdownRenderer.
  */
-export function appendSystemInstruction(basePrompt: string, instruction: string): string {
-  const clipped = instruction.slice(0, SYSTEM_INSTRUCTION_MAX_CHARS);
-  return `${basePrompt}\n\n${OUTPUT_FORMAT_MARKER}:\n${clipped}`;
-}
 
-export function truncateText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return value.slice(0, Math.max(0, maxChars - 1)) + "…";
+export const DIAGRAM_GUIDELINES = `
+## 📊 إرشادات رسم المخططات والخرائط الذهنية (Mermaid):
+- لما الطالب يطلب (خريطة ذهنية، مخطط انسيابي، مخطط سريان، جدول زمني، مقارنة شجرية، خطوات تجربة، رسم بياني)، ارسمها فورًا داخل ردّك باستخدام بلوك كود \`\`\`mermaid.
+- استخدم الصيغ التالية حسب المطلوب:
+  1. الخرائط الذهنية: \`mindmap\`
+  2. تسلسل الخطوات والشروط: \`graph TD\` أو \`flowchart TD\`
+  3. التواريخ والتسلسل الزمني: \`timeline\`
+  4. المقارنات والنسب: \`pie title العنوان\`
+  5. خطط المذاكرة الزمنية: \`gantt\` مع \`dateFormat YYYY-MM-DD\`
+  6. الرسوم البيانية بالقيم: \`xychart-beta\`
+- احرص دايمًا إن النصوص داخل العقد (Nodes) تكون قصيرة ومباشرة بالعربي (3-5 كلمات) بدون علامات تنصيص معقدة تتلف الـ Syntax.
+- بلوك الـ mermaid لازم يحتوي على الكود فقط — بدون شرح داخل البلوك، وأي تعليق للطالب يكون خارج البلوك.
+- لو الرسم غير مناسب للطلب (سؤال سريع أو حساب بسيط) لا ترسم مخططًا بدون داعٍ.
+`.trim();
+
+/** إلحاق إرشادات المخططات بأي system prompt قائم. */
+export function withDiagramGuidelines(systemPrompt: string): string {
+  return `${systemPrompt}\n\n${DIAGRAM_GUIDELINES}`;
 }
