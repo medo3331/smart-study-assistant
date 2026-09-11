@@ -137,8 +137,14 @@ export default function OnboardingPage() {
               setStageId(profile.education_stage_id || null);
               setGradeId(profile.education_grade_id || null);
               setStep("track");
+            } else if (existing !== "student") {
+              /* عائد (خريج/فريلانسر) بدون onboarded_at: لا توجد بيانات ناقصة —
+                 إكمال تلقائي آمن بدل شاشة done الوهمية. الـ role يُمرر صراحةً
+                 لأن setRole فوق لم يُطبَّق بعد. عند فشل الحفظ يبقى المستخدم
+                 على خطوة الـ role ويعيد المحاولة بزر Continue (role صحيحة حينها). */
+              void finish(existing);
             } else {
-              setStep(existing === "student" ? "stage" : "done");
+              setStep("stage");
             }
           }
         }
@@ -333,35 +339,39 @@ export default function OnboardingPage() {
     return { ok: true };
   }
 
-  async function finish(): Promise<void> {
+  async function finish(roleOverride?: Role): Promise<void> {
     setSaving(true); setError(null);
+
+    // الـ role الصريح (للعائدين من الـ effect) يتجاوز الـ state،
+    // لأن setRole داخل نفس الـ effect لم يُطبَّق بعد (stale closure).
+    const effRole = roleOverride ?? role;
 
     // استخدام الـ state الحقيقي بدل إعادة القراءة من localStorage
     // (الـ state متغذي أصلًا من localStorage عند mount — شوف أول useEffect)
     const studentTypeParam = studentType;
 
-    if (role === "student" && studentTypeParam !== 'university' && !stageId) {
+    if (effRole === "student" && studentTypeParam !== 'university' && !stageId) {
       setError(locale === "ar" ? "اختر المرحلة." : "Select stage.");
       setSaving(false); return;
     }
-    if (role === "student" && studentTypeParam !== 'university' && stageId && !gradeId) {
+    if (effRole === "student" && studentTypeParam !== 'university' && stageId && !gradeId) {
       setError(locale === "ar" ? "اختر الصف." : "Select grade.");
       setSaving(false); return;
     }
-    if (role === "student" && studentTypeParam === 'university' && !universityId) {
+    if (effRole === "student" && studentTypeParam === 'university' && !universityId) {
       setError(locale === "ar" ? "اختر الجامعة." : "Select university.");
       setSaving(false); return;
     }
 
     const iso = new Date().toISOString();
-    const persona: "student" | "grad" | "freelancer" = role === "graduate" ? "grad" : role;
+    const persona: "student" | "grad" | "freelancer" = effRole === "graduate" ? "grad" : effRole;
 
     const { ok, error: err } = await persist({
       persona,
       studentType: studentTypeParam,
-      stageId: (role === "student" && studentTypeParam !== 'university') ? stageId : null,
-      gradeId: (role === "student" && studentTypeParam !== 'university') ? gradeId : null,
-      trackId: (role === "student" && studentTypeParam !== 'university' && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
+      stageId: (effRole === "student" && studentTypeParam !== 'university') ? stageId : null,
+      gradeId: (effRole === "student" && studentTypeParam !== 'university') ? gradeId : null,
+      trackId: (effRole === "student" && studentTypeParam !== 'university' && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
       universityId: studentTypeParam === 'university' ? universityId : null,
       facultyId: studentTypeParam === 'university' ? facultyId : null,
       departmentId: studentTypeParam === 'university' ? departmentId : null,
@@ -377,7 +387,7 @@ export default function OnboardingPage() {
     /* Short success view then redirect (preserves existing flow) */
     setTimeout(() => {
       const next = currentNext();
-      router.push(next || roleHome(role));
+      router.push(next || roleHome(effRole));
       router.refresh();
     }, 800);
   }
