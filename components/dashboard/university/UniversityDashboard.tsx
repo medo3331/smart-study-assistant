@@ -76,7 +76,7 @@ export function UniversityDashboard({
               <button type="button" onClick={() => onOpenLesson?.()} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-ink px-5 py-3 text-sm font-bold text-white hover:bg-ink/90">
                 دخول الدرس <span aria-hidden>→</span>
               </button>
-              <button type="button" onClick={() => onOpenAi?.(currentDayObj.topic)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rule bg-white px-5 py-3 text-sm font-bold text-ink hover:bg-paper-3">
+              <button type="button" onClick={() => onOpenAi?.(currentDayObj.topic)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rule bg-paper-2 px-5 py-3 text-sm font-bold text-ink hover:bg-paper-3">
                 اسأل المساعد <span aria-hidden>🎓</span>
               </button>
             </div>
