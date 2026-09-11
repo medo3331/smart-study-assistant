@@ -212,12 +212,16 @@ export default function OnboardingPage() {
     })();
   }, [stageId]);
 
-  /* ---- Load tracks when Baccalaureate stage + grade selected ---- */
+  /* ---- Load tracks when (Baccalaureate | Secondary 2+) stage + grade selected ---- */
   const loadTracks = useCallback(async () => {
     if (!stageId || !gradeId) { setTracks([]); return; }
-    /* Only show tracks for Baccalaureate; guard via stage code read from stage row */
+    /* Tracks for Baccalaureate, or Secondary grade 2+ (D1) — same rule as flow engine */
     const stage = stages.find((s) => s.id === stageId);
-    if (!stage || stage.code !== "BACCALAUREATE") { setTracks([]); setTrackId(null); return; }
+    const grade = grades.find((g) => g.id === gradeId);
+    if (!stage || !grade) { setTracks([]); return; }
+    const isBaccalaureate = stage.code === "BACCALAUREATE";
+    const isSecondarySenior = stage.code === "SECONDARY" && grade.order_index >= 2;
+    if (!isBaccalaureate && !isSecondarySenior) { setTracks([]); setTrackId(null); return; }
     setLoadingTax(true);
     try {
       if (!supabaseRef.current) supabaseRef.current = createClient();
@@ -234,7 +238,7 @@ export default function OnboardingPage() {
       setTracks(filtered);
     } catch {}
     setLoadingTax(false);
-  }, [stageId, gradeId, stages]);
+  }, [stageId, gradeId, stages, grades]);
 
   useEffect(() => {
     if (step === "track") loadTracks();
@@ -300,10 +304,19 @@ export default function OnboardingPage() {
         if (!gRow || gRow.stage_id !== data.stageId) return { ok: false, error: locale === "ar" ? "صف لا يتوافق مع المرحلة." : "Grade does not match stage." };
       }
       if (data.trackId) {
-        const { data: tRow } = await supabase.from("education_tracks").select("id, stage_id").eq("id", data.trackId).maybeSingle();
+        const { data: tRow } = await supabase.from("education_tracks").select("id, stage_id, grade_id").eq("id", data.trackId).maybeSingle();
         if (!tRow || tRow.stage_id !== data.stageId) return { ok: false, error: locale === "ar" ? "مسار لا يتوافق." : "Track does not match stage." };
-        /* Track only allowed for Baccalaureate */
-        if (sRow.code !== "BACCALAUREATE") return { ok: false, error: locale === "ar" ? "المسار فقط للبكالوريا." : "Track only for Baccalaureate." };
+        /* Track allowed for Baccalaureate, or Secondary grade 2+ (D1). Reuses sRow from above. */
+        /* NOTE: tRow.grade_id is advisory (preferred grade), not mandatory — Bacc tracks are
+           linked to BACC_3 yet validly shown for all Bacc grades as fallback, so linkage
+           is deliberately NOT enforced here. */
+        if (sRow.code === "SECONDARY") {
+          if (!data.gradeId) return { ok: false, error: locale === "ar" ? "المسار يحتاج صفًا." : "Track needs a grade." };
+          const { data: gRow } = await supabase.from("education_grades").select("order_index").eq("id", data.gradeId).maybeSingle();
+          if (!gRow || gRow.order_index < 2) return { ok: false, error: locale === "ar" ? "المسار غير متاح لهذا الصف." : "Track not available for this grade." };
+        } else if (sRow.code !== "BACCALAUREATE") {
+          return { ok: false, error: locale === "ar" ? "المسار غير متاح لهذه المرحلة." : "Track not available for this stage." };
+        }
       }
     }
 
