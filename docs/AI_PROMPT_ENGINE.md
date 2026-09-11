@@ -152,20 +152,54 @@ export const DIALECT: Dialect = "مصري";   // ← غيّر هنا بس
 التعليمات. القيود الأربعة فوق بتقلّل المساحة مش بتلغيها — أي استخدام جديد
 للحقل ده يحتاج مراجعة.
 
-## البناء والخطوط (Google Fonts)
+## البناء والخطوط (Google Fonts) — اتحلّت
 
-`next build` بيفشل في بيئة من غير اتصال بـ `fonts.googleapis.com` بـ
-`next/font: Failed to fetch ...` من `app/layout.tsx:2`.
+`next/font/google` بينزّل ملفات الخطوط **وقت البناء**، فأي بيئة من غير اتصال
+بـ `fonts.googleapis.com` (CI معزول، sandbox، بناء محلي بدون إنترنت) كان
+`next build` بيفشل عندها بـ `next/font: Failed to fetch`.
 
-⚠️ **`display: 'swap'` مش الحل** — وهو **موجود أصلًا** على التلات خطوط
-(`layout.tsx:32` و`:39` و`:47`) والبناء لسه بيفشل. السبب: `next/font/google`
-بينزّل ملفات الخطوط **وقت البناء** ويعملها self-host، و`display` مجرد خاصية
-CSS (`font-display`) بتأثر على وقت التشغيل بس.
+⚠️ **`display: 'swap'` مش الحل** — وكان **موجود أصلًا** على كل الخطوط
+والبناء لسه بيفشل، لأن `display` خاصية CSS (`font-display`) لوقت التشغيل بس.
 
-الحل الوحيد الفعلي هو `next/font/local` بخطوط محفوظة في الريبو — وده معناه
-commit لملفات خطوط binary (مفيش أي خط محلي في `public/` حاليًا). **مش معمول**
-لأن العطل ده خاص ببيئة معزولة عن الإنترنت؛ بناء Vercel الحقيقي بيشتغل عادي.
-لو مطلوب، ده تغيير في الهوية البصرية + أصول binary، ومحتاج قرار صريح.
+### الحل المطبّق: `next/font/local` من حزم `@fontsource`
+
+| الخط | الحزمة | السبب |
+|---|---|---|
+| Alexandria | `@fontsource-variable/alexandria` | variable |
+| IBM Plex Sans Arabic | `@fontsource/ibm-plex-sans-arabic` | **مفيش نسخة variable على npm** — `@fontsource-variable/ibm-plex-sans-arabic` غير موجود، فبنستخدم الثابتة بالأوزان 400/500/600/700 نفسها |
+| JetBrains Mono | `@fontsource-variable/jetbrains-mono` | variable |
+| Playfair Display | `@fontsource-variable/playfair-display` | **كان في `components/landing/Capabilities.tsx:9` مش في layout** — من غيره البناء يفضل fails |
+
+النقاط اللي ممنوع تتكسر:
+
+1. **أسماء المتغيرات زي ما هي**: `--font-display-src` و`--font-body-src`
+   و`--font-mono-src` و`--font-playfair-display-src`. `app/globals.css` بيبني
+   عليهم `--font-display` / `--font-body` / `--font-mono` في ~٢٥ موضع، فأي
+   تغيير اسم كان هيكسر التايبوجرافي في الموقع كله.
+2. **الحزم في `dependencies` مش `devDependencies`** — البناء محتاجها.
+3. **مفيش أصول binary في Git**: المسارات بتشير لـ `node_modules/`، فالخطوط
+   بتيجي من npm بإصدارات مثبّتة. (الخطة البديلة بنسخها في `public/fonts/`
+   مش مستخدمة: بتضيف ملفات للريبو **و** بتخليها متاحة كـ static كمان.)
+
+### نتيجة البناء المتحقَّق منها
+
+```
+✓ Compiled successfully in 38.1s
+  Finished TypeScript in 31.2s
+  Generating static pages (91/91)
+BUILD_EXIT=0
+```
+
+- ١٢ ملف `woff2` اتحزموا في `.next/static/media/` (٤١٢ ك على الديسك؛
+  المتصفح بينزّل بس الأوزان والـ subsets اللي الصفحة محتاجاها).
+- صفر أخطاء خطوط في اللوج.
+
+⚠️ ملاحظتان على البيئة (مش من التغيير ده):
+- خطوة TypeScript في `next build` بتحتاج `NODE_OPTIONS=--max-old-space-size=3072`
+  على جهاز راماته ٤ جيجا — من غيره OOM.
+- `next build` بيحتاج `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  وقت SSG، وإلا `/assessment` بيقع بـ `@supabase/ssr: Your project's URL and
+  API key are required`. البناء المتحقَّق منه اشتغل بمفاتيح وهمية.
 
 ## الاختبار
 

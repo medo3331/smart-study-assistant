@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Alexandria, IBM_Plex_Sans_Arabic, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -26,24 +26,51 @@ import {
 } from '@/lib/seo';
 import './globals.css';
 
+/* ------------------------------------------------------------------
+   الخطوط محلية من حزم @fontsource — مش next/font/google.
+
+   ليه: next/font/google بينزّل ملفات الخطوط **وقت البناء**، فأي بيئة من
+   غير اتصال بـ fonts.googleapis.com (CI معزول، sandbox، بناء محلي بدون
+   إنترنت) كان البناء بيفشل عندها بـ "Failed to fetch". وdisplay:'swap'
+   ما بيحلهاش لأنها خاصية CSS لوقت التشغيل بس.
+
+   ⚠️ أسماء المتغيرات --font-*-src ممنوع تتغير: app/globals.css بيبني
+   عليها --font-display / --font-body / --font-mono في ~٢٥ موضع.
+   ------------------------------------------------------------------ */
+
 /* العناوين: خط عربي هندسي، متغيّر الأوزان */
-const display = Alexandria({
-  subsets: ['arabic', 'latin'],
+const display = localFont({
+  src: [
+    { path: '../node_modules/@fontsource-variable/alexandria/files/alexandria-arabic-wght-normal.woff2', style: 'normal' },
+    { path: '../node_modules/@fontsource-variable/alexandria/files/alexandria-latin-wght-normal.woff2', style: 'normal' },
+  ],
   display: 'swap',
   variable: '--font-display-src',
 });
 
-/* المتن: خط إنساني يعمل تضادًا مع العنوان الهندسي */
-const body = IBM_Plex_Sans_Arabic({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '600', '700'],
+/* المتن: خط إنساني يعمل تضادًا مع العنوان الهندسي.
+   مفيش نسخة variable منه على npm (@fontsource-variable/ibm-plex-sans-arabic
+   مش موجود)، فبنستخدم الثابتة بنفس الأوزان الأربعة اللي كانت مطلوبة. */
+const body = localFont({
+  src: [
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-700-normal.woff2', weight: '700', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: '../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-700-normal.woff2', weight: '700', style: 'normal' },
+  ],
   display: 'swap',
   variable: '--font-body-src',
 });
 
 /* الأرقام وأسماء الملفات واللافتات */
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
+const mono = localFont({
+  src: [
+    { path: '../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2', style: 'normal' },
+  ],
   display: 'swap',
   variable: '--font-mono-src',
 });

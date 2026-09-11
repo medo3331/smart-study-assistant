@@ -2,14 +2,21 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Playfair_Display } from 'next/font/google';
+import localFont from 'next/font/local';
 import styles from './Capabilities.module.css';
 import PreviewCard from './PreviewCard';
 
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: '700',
-  style: ['italic'],
+/* محلي من @fontsource-variable — نفس سبب app/layout.tsx: next/font/google
+   بينزّل وقت البناء فبيكسر أي بناء من غير إنترنت. الملف variable مائل
+   (italic) ومحور الوزن فيه بيغطي 700 المطلوبة.
+   اسم المتغير --font-playfair-display-src زي ما هو من غير تغيير. */
+const playfair = localFont({
+  src: [
+    {
+      path: '../../node_modules/@fontsource-variable/playfair-display/files/playfair-display-latin-wght-italic.woff2',
+      style: 'italic',
+    },
+  ],
   display: 'swap',
   variable: '--font-playfair-display-src',
 });
