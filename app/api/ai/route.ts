@@ -255,9 +255,10 @@ export async function POST(req: Request) {
           const send = (payload: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
           let streamFailed = false;
           try {
-            const streamTask = (task === "chat" || task === "content" || task === "coding" || task === "explain" || task === "tutor"
-              ? task
-              : "chat") as "chat" | "content" | "coding" | "explain" | "tutor";
+            // task مضيّق فوق عبر isImplementedAiTask لـ chat/explain/tutor فقط
+            // (مهام content/coding مش منفذة في السجل وبتترفض قبل كده)،
+            // وكلها ضمن الأنواع المقبولة لـ streamWithFallback.
+            const streamTask: "chat" | "explain" | "tutor" = task;
             for await (const chunk of streamWithFallback(streamTask, input)) {
               send(chunk);
             }
