@@ -10,7 +10,7 @@
 
 | الملف | الوظيفة |
 |---|---|
-| `lib/ai/image-generator.ts` | توليد الصور التعليمية — DALL-E 3 → Flux Pro → SDXL مع Fallback تلقائي + بناء prompt تعليمي حسب الأسلوب والمرحلة |
+| `lib/ai/image-generator.ts` | توليد الصور التعليمية — **Pollinations المجاني أولًا** ثم DALL-E 3 → Flux Pro → SDXL مع Fallback تلقائي + بناء prompt تعليمي حسب الأسلوب والمرحلة |
 | `lib/ai/diagram-generator.ts` | توليد مخططات Mermaid عبر نموذج اللغة (مجاني 100% — الرسم في المتصفح) + تنظيف الاستجابة + خريطة أنواع المخططات حسب المادة |
 | `lib/ai/file-generator.tsx` | توليد الملفات: PDF (@react-pdf/renderer) + Word (docx) + Excel (xlsx) + PowerPoint (pptxgenjs) — محتوى ملخص/كويز/خطة مذاكرة/بطاقات/تقرير |
 | `lib/ai/service-registry.ts` | سجل الخدمات + حدود الباقات (Free/Pro/Ultra) + عدّادات يومية + تحديد الباقة من `entitlements` |
@@ -51,24 +51,30 @@
 
 | الخدمة | Free | Pro | Ultra |
 |---|---|---|---|
-| الصور | ❌ | 5/يوم | غير محدود |
+| الصور | 3/يوم (مجاني) | 5/يوم | غير محدود |
 | المخططات | 3/يوم | 20/يوم | غير محدود |
 | PDF | 5/يوم | 50/يوم | غير محدود |
 | Word/Excel | ❌ | 20/يوم | غير محدود |
 | PowerPoint | ❌ | 10/يوم | غير محدود |
-| موديل الصور | — | SDXL | DALL-E 3 + Flux + SDXL |
+| موديل الصور | Pollinations | SDXL + Pollinations | DALL-E 3 + Flux + Pollinations + SDXL |
+
+> الصور بقت متاحة للباقة المجانية بعد إضافة **Pollinations** (موديل flux، بدون
+> علامة مائية، بيكتب نصوص عربي/إنجليزي كويس) كمزوّد أول مجاني — من غير أي
+> استهلاك كروت أو اشتراكات. الباقات المدفوعة بتزوّد الحد وتفتح الموديلات الأعلى.
 
 تحديد الباقة: `plan:ultra` → Ultra، `plan:pro` أو `plan:premium` أو `feature:premium-ai` → Pro، غير كده Free.
 
 ## 🔑 متغيرات البيئة الجديدة (.env / Vercel)
 
 ```
-OPENAI_API_KEY=        # DALL-E 3
-REPLICATE_API_TOKEN=   # Flux 1.1 Pro
-STABILITY_API_KEY=     # SDXL
+POLLINATIONS_API_KEY=  # اختياري — المزوّد المجاني شغال من غيره
+OPENAI_API_KEY=        # DALL-E 3 (اختياري)
+REPLICATE_API_TOKEN=   # Flux 1.1 Pro (اختياري)
+STABILITY_API_KEY=     # SDXL (اختياري)
 ```
 
-من غير أي مفتاح خدمة الصور بتعتذر برسالة واضحة. المخططات والملفات شغالة من غير مفاتيح إضافية.
+خدمة الصور شغالة من غير أي مفاتيح (عبر Pollinations المجاني).
+المخططات والملفات كمان شغالة من غير مفاتيح إضافية.
 
 ## 🧪 التحقق
 

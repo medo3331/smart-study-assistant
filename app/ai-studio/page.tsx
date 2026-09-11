@@ -54,7 +54,7 @@ export default function AiStudioPage() {
               <tbody className="[&_td]:border-t [&_td]:border-[var(--rule)]">
                 <tr>
                   <td className="py-2">🖼️ الصور</td>
-                  <td className="py-2 text-center">❌</td>
+                  <td className="py-2 text-center">3 صور/يوم</td>
                   <td className="py-2 text-center">5 صور/يوم</td>
                   <td className="py-2 text-center">غير محدود</td>
                 </tr>
@@ -90,9 +90,9 @@ export default function AiStudioPage() {
                 </tr>
                 <tr>
                   <td className="py-2">موديل الصور</td>
-                  <td className="py-2 text-center">—</td>
-                  <td className="py-2 text-center">SDXL</td>
-                  <td className="py-2 text-center">DALL-E 3 + Flux</td>
+                  <td className="py-2 text-center">Pollinations (مجاني)</td>
+                  <td className="py-2 text-center">SDXL + Pollinations</td>
+                  <td className="py-2 text-center">DALL-E 3 + Flux + Pollinations</td>
                 </tr>
               </tbody>
             </table>

@@ -2,16 +2,22 @@
  * lib/ai/image-generator.ts — توليد الصور التعليمية
  *
  * سلسلة مزوّدين مع Fallback:
- *   DALL-E 3 (OpenAI — الأعلى جودة) → Flux Pro (Replicate) → SD3/SDXL (Stability — الأرخص)
+ *   Pollinations (مجاني — الأول دائمًا) → DALL-E 3 (OpenAI — الأعلى جودة)
+ *   → Flux Pro (Replicate) → SD3/SDXL (Stability — الأرخص بين المدفوعين)
  *
- * كل مزوّد بيشتغل بمفتاح البيئة الخاص به، ولو المفتاح مش موجود بيتعدّى
- * للمزوّد اللي بعده — فخدمة الصور بتفضل شغالة بأي مفتاح متاح.
+ * أي مزوّد مدفوع بيشتغل بمفتاح البيئة الخاص به، ولو المفتاح مش موجود
+ * بيتعدّى للذي بعده — ووجود Pollinations المجاني معناه إن الخدمة
+ * بتفضل شغالة حتى لو مفيش أي مفاتيح مدفوعة خالص.
  *
- * ملحوظة: دي طببة المزوّدين المدفوعين (مستقلة عن مسار Gemini المجاني في
- * /api/ai/image-gen) وبتستخدمها خدمة "استوديو الصور التعليمية".
+ * ملحوظة: دي طبقة المزوّدين المستقلة عن مسار Gemini المجاني في
+ * /api/ai/image-gen وبتستخدمها خدمة "استوديو الصور التعليمية".
  */
 
-export type ImageModel = "dall-e-3" | "flux-pro" | "stable-diffusion-xl";
+export type ImageModel =
+  | "pollinations"
+  | "dall-e-3"
+  | "flux-pro"
+  | "stable-diffusion-xl";
 export type ImageSize = "1024x1024" | "1024x1792" | "1792x1024";
 export type ImageStyle = "educational" | "realistic" | "cartoon" | "infographic";
 
@@ -87,7 +93,58 @@ Minimal text, maximum visual clarity.`,
 }
 
 // ============================================
-// 2. DALL-E 3 (OpenAI) — الأعلى جودة
+// 2. Pollinations — مجاني وسريع، المزوّد الأول والفولباك الدائم
+//    (موديل flux عبر Pollinations بيكتب نصوص عربي/إنجليزي كويس
+//     و &nologo=true بيشيل اللوجو عشان الصور تبقى جاهزة للملفات)
+// ============================================
+const POLLINATIONS_TIMEOUT_MS = 75_000;
+
+async function generateWithPollinations(
+  prompt: string,
+  size: ImageSize
+): Promise<ImageResult> {
+  const apiKey = process.env.POLLINATIONS_API_KEY;
+  const seed = Math.floor(Math.random() * 1_000_000);
+  const [width, height] = size.split("x").map(Number);
+
+  const encodedPrompt = encodeURIComponent(prompt);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux&nologo=true&seed=${seed}`;
+
+  const headers: Record<string, string> = {};
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers,
+    signal: AbortSignal.timeout(POLLINATIONS_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pollinations failed: ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  if (!arrayBuffer.byteLength) {
+    throw new Error("Pollinations returned an empty image");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "image/jpeg";
+  const mimeType = contentType.startsWith("image/")
+    ? contentType.split(";")[0]
+    : "image/jpeg";
+  const base64Image = `data:${mimeType};base64,${Buffer.from(arrayBuffer).toString("base64")}`;
+
+  return {
+    url: base64Image,
+    model: "pollinations",
+    cost: 0, // مجاني — لا تكلفة
+  };
+}
+
+// ============================================
+// 3. DALL-E 3 (OpenAI) — الأعلى جودة
 // ============================================
 async function generateWithDalle3(prompt: string, size: ImageSize): Promise<ImageResult> {
   const response = await fetch("https://api.openai.com/v1/images/generations", {
@@ -127,7 +184,7 @@ async function generateWithDalle3(prompt: string, size: ImageSize): Promise<Imag
 }
 
 // ============================================
-// 3. Flux Pro (Replicate) — سريع وممتاز
+// 4. Flux Pro (Replicate) — سريع وممتاز
 // ============================================
 async function generateWithFlux(prompt: string, size: ImageSize): Promise<ImageResult> {
   const token = process.env.REPLICATE_API_TOKEN;
@@ -198,7 +255,7 @@ async function generateWithFlux(prompt: string, size: ImageSize): Promise<ImageR
 }
 
 // ============================================
-// 4. Stable Diffusion (Stability AI) — الأرخص
+// 5. Stable Diffusion (Stability AI) — الأرخص بين المدفوعين
 // ============================================
 async function generateWithSDXL(prompt: string, size: ImageSize): Promise<ImageResult> {
   const form = new FormData();
@@ -237,29 +294,39 @@ async function generateWithSDXL(prompt: string, size: ImageSize): Promise<ImageR
 }
 
 // ============================================
-// 5. الدالة الرئيسية مع Fallback
+// 6. الدالة الرئيسية مع Fallback
 // ============================================
 export async function generateEducationalImage(
   options: GenerateImageOptions
 ): Promise<ImageResult> {
-  const { model = "dall-e-3", size = "1024x1024" } = options;
+  const { model = "pollinations", size = "1024x1024" } = options;
 
   const enhancedPrompt = buildEducationalImagePrompt(options);
 
-  // Fallback chain: ابدأ بالموديل المطلوب ثم جرّب الباقي بالترتيب
-  const generators = [
+  // Fallback chain: ابدأ بالموديل المطلوب ثم جرّب الباقي بالترتيب.
+  // المفتاح = متطلب البيئة؛ `undefined` يعني المزوّد شغال من غير مفتاح (مجاني).
+  const generators: Array<{
+    name: ImageModel;
+    fn: () => Promise<ImageResult>;
+    key?: string;
+  }> = [
     {
-      name: "dall-e-3" as ImageModel,
+      name: "pollinations",
+      fn: () => generateWithPollinations(enhancedPrompt, size),
+      // مجاني — من غير مفتاح
+    },
+    {
+      name: "dall-e-3",
       fn: () => generateWithDalle3(enhancedPrompt, size),
       key: "OPENAI_API_KEY",
     },
     {
-      name: "flux-pro" as ImageModel,
+      name: "flux-pro",
       fn: () => generateWithFlux(enhancedPrompt, size),
       key: "REPLICATE_API_TOKEN",
     },
     {
-      name: "stable-diffusion-xl" as ImageModel,
+      name: "stable-diffusion-xl",
       fn: () => generateWithSDXL(enhancedPrompt, size),
       key: "STABILITY_API_KEY",
     },
@@ -270,7 +337,7 @@ export async function generateEducationalImage(
   const ordered = [generators[first], ...generators.filter((_, i) => i !== first)];
 
   for (const gen of ordered) {
-    if (!process.env[gen.key]) {
+    if (gen.key && !process.env[gen.key]) {
       console.warn(`[Image Gen] Skipping ${gen.name}: no API key`);
       continue;
     }
@@ -284,5 +351,5 @@ export async function generateEducationalImage(
     }
   }
 
-  throw new Error("جميع موديلات توليد الصور غير متاحة حالياً");
+  throw new Error("عذراً، تعذر توليد الصورة حالياً. يرجى المحاولة مرة أخرى لاحقاً.");
 }

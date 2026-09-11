@@ -24,6 +24,7 @@ const SIZES = [
 
 const MODELS = [
   { value: "", label: "تلقائي (حسب الباقة)" },
+  { value: "pollinations", label: "Pollinations — مجاني وسريع ⚡" },
   { value: "dall-e-3", label: "DALL-E 3 — أعلى جودة" },
   { value: "flux-pro", label: "Flux Pro — سريع وممتاز" },
   { value: "stable-diffusion-xl", label: "SDXL — اقتصادي" },
@@ -236,7 +237,7 @@ export function ImageGenerator({ defaultSubject }: ImageGeneratorProps) {
           />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-slate-500">
-              الموديل: {result.model}
+              الموديل: {result.model === "pollinations" ? "Pollinations (Flux) — مجاني" : result.model}
             </span>
             <button
               onClick={downloadImage}

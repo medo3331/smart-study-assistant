@@ -41,8 +41,11 @@ export const SERVICE_REGISTRY: Record<AiServiceId, ServiceDefinition> = {
   image: {
     id: "image",
     labelAr: "توليد الصور التعليمية",
-    dailyLimits: { free: 0, pro: 5, ultra: UNLIMITED },
-    upgradeHintAr: "توليد الصور متاح في باقة Pro (5 صور يوميًا) وباقة Ultra (بلا حدود).",
+    // الصور بقت متاحة مجانًا عبر مزوّد Pollinations المجاني؛ الباقات
+    // المدفوعة بتزوّد الحد وتفتح الموديلات الأعلى جودة.
+    dailyLimits: { free: 3, pro: 5, ultra: UNLIMITED },
+    upgradeHintAr:
+      "باقة Pro بتديك 5 صور يوميًا بموديلات أعلى، وباقة Ultra بلا حدود.",
   },
   diagram: {
     id: "diagram",
@@ -75,11 +78,15 @@ export const SERVICE_REGISTRY: Record<AiServiceId, ServiceDefinition> = {
   },
 };
 
-/** موديلات الصور المتاحة لكل باقة — حسب مصفوفة الخطة. */
+/**
+ * موديلات الصور المتاحة لكل باقة — حسب مصفوفة الخطة.
+ * الترتيب = الأولوية: المجاني (Pollinations) متاح للكل، والمدفوعين
+ * بيتفتحوا حسب الباقة.
+ */
 export const IMAGE_MODELS_BY_TIER: Record<ServiceTier, ImageModel[]> = {
-  free: ["stable-diffusion-xl"],
-  pro: ["stable-diffusion-xl"],
-  ultra: ["dall-e-3", "flux-pro", "stable-diffusion-xl"],
+  free: ["pollinations"],
+  pro: ["pollinations", "stable-diffusion-xl"],
+  ultra: ["dall-e-3", "flux-pro", "pollinations", "stable-diffusion-xl"],
 };
 
 // ============================================

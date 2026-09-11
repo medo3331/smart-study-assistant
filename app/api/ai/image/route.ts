@@ -5,7 +5,7 @@
  * الباقة بتحدد الموديلات المتاحة (الجدول في service-registry).
  */
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/api-guard";
+import { checkRateLimit, requireUser } from "@/lib/api-guard";
 import {
   generateEducationalImage,
   type ImageModel,
@@ -17,12 +17,21 @@ import { consumeServiceQuota, IMAGE_MODELS_BY_TIER } from "@/lib/ai/service-regi
 const MAX_PROMPT_CHARS = 1000;
 const VALID_SIZES: ImageSize[] = ["1024x1024", "1024x1792", "1792x1024"];
 const VALID_STYLES: ImageStyle[] = ["educational", "realistic", "cartoon", "infographic"];
-const VALID_MODELS: ImageModel[] = ["dall-e-3", "flux-pro", "stable-diffusion-xl"];
+const VALID_MODELS: ImageModel[] = [
+  "pollinations",
+  "dall-e-3",
+  "flux-pro",
+  "stable-diffusion-xl",
+];
 
 export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
+
+    // حماية من الضغط المتواصل (مهم خصوصًا إن المزوّد المجاني مفتوح للكل)
+    const limited = checkRateLimit(`image:${user.id}`, 3, 60_000, "message");
+    if (limited) return limited;
 
     // الباقة بتحدد هل الخدمة متاحة أصلًا + الحد اليومي
     const quota = await consumeServiceQuota(supabase, user.id, "image");

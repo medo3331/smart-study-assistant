@@ -81,14 +81,15 @@ describe("Educational Image Prompt Builder", () => {
 });
 
 describe("generateEducationalImage fallback chain", () => {
-  it("fails with Arabic message when no provider keys configured", async () => {
+  it("fails with friendly Arabic message when every provider (incl. free Pollinations) fails", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("REPLICATE_API_TOKEN", "");
     vi.stubEnv("STABILITY_API_KEY", "");
+    // مفيش نت في الساندبوكس → حتى المزوّد المجاني هيفشل → الرسالة النهائية
     await expect(generateEducationalImage({ prompt: "صورة تجريبية" })).rejects.toThrow(
-      "جميع موديلات توليد الصور غير متاحة حالياً"
+      "عذراً، تعذر توليد الصورة حاليا"
     );
-  });
+  }, 30000);
 });
 
 // ─────────────────────────────────────────────
@@ -162,7 +163,8 @@ describe("Service Registry", () => {
   });
 
   it("plan matrix matches product spec (free tier)", () => {
-    expect(SERVICE_REGISTRY.image.dailyLimits.free).toBe(0);
+    // الصور بقت متاحة مجانًا عبر Pollinations
+    expect(SERVICE_REGISTRY.image.dailyLimits.free).toBe(3);
     expect(SERVICE_REGISTRY.diagram.dailyLimits.free).toBe(3);
     expect(SERVICE_REGISTRY.file_pdf.dailyLimits.free).toBeGreaterThan(0);
     expect(SERVICE_REGISTRY.file_docx.dailyLimits.free).toBe(0);
@@ -170,11 +172,15 @@ describe("Service Registry", () => {
     expect(SERVICE_REGISTRY.file_pptx.dailyLimits.free).toBe(0);
   });
 
-  it("image models gated by tier", () => {
+  it("image models gated by tier — free gets Pollinations only", () => {
+    expect(IMAGE_MODELS_BY_TIER.free).toEqual(["pollinations"]);
     expect(IMAGE_MODELS_BY_TIER.free).not.toContain("dall-e-3");
+    expect(IMAGE_MODELS_BY_TIER.pro).toContain("pollinations");
+    expect(IMAGE_MODELS_BY_TIER.pro).toContain("stable-diffusion-xl");
+    expect(IMAGE_MODELS_BY_TIER.pro).not.toContain("dall-e-3");
     expect(IMAGE_MODELS_BY_TIER.ultra).toContain("dall-e-3");
     expect(IMAGE_MODELS_BY_TIER.ultra).toContain("flux-pro");
-    expect(IMAGE_MODELS_BY_TIER.pro).toEqual(["stable-diffusion-xl"]);
+    expect(IMAGE_MODELS_BY_TIER.ultra).toContain("pollinations");
   });
 
   it("resolveServiceTier maps entitlements", async () => {
@@ -188,10 +194,15 @@ describe("Service Registry", () => {
     await expect(resolveServiceTier(fakeSupabase([]), null)).resolves.toBe("free");
   });
 
-  it("free user blocked from image generation (0/day)", async () => {
-    const quota = await consumeServiceQuota(fakeSupabase([]), "user-free-img", "image");
-    expect(quota.allowed).toBe(false);
-    expect(quota.tier).toBe("free");
+  it("free user gets Pollinations images (3/day) then blocked", async () => {
+    const sb = fakeSupabase([]);
+    for (let i = 0; i < 3; i++) {
+      const q = await consumeServiceQuota(sb, "user-free-img", "image");
+      expect(q.allowed).toBe(true);
+      expect(q.tier).toBe("free");
+    }
+    const blocked = await consumeServiceQuota(sb, "user-free-img", "image");
+    expect(blocked.allowed).toBe(false);
   });
 
   it("free user gets 3 diagrams/day then blocked", async () => {
