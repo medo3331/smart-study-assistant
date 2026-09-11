@@ -335,29 +335,38 @@ export default function OnboardingPage() {
 
   async function finish(): Promise<void> {
     setSaving(true); setError(null);
-    const studentTypeFromStorage = typeof window !== 'undefined' ? (window.localStorage.getItem('pendingStudentType') || null) : null;
-    const studentTypeParam = studentTypeFromStorage === 'university' ? 'university' : (studentTypeFromStorage === 'school' ? 'school' : null);
-    if (role === "student" && studentTypeParam !== 'university' && !stageId) { setError(locale === "ar" ? "اختر المرحلة." : "Select stage."); setSaving(false); return; }
-    if (role === "student" && studentTypeParam !== 'university' && stageId && !gradeId) { setError(locale === "ar" ? "اختر الصف." : "Select grade."); setSaving(false); return; }
-    if (role === "student" && studentTypeParam === 'university' && !(universityId || (studentTypeFromStorage === 'university' ? (typeof window !== 'undefined' ? window.localStorage.getItem('pendingUniversityId') || null : null) : null))) { setError(locale === "ar" ? "اختر الجامعة." : "Select university."); setSaving(false); return; }
+
+    // استخدام الـ state الحقيقي بدل إعادة القراءة من localStorage
+    // (الـ state متغذي أصلًا من localStorage عند mount — شوف أول useEffect)
+    const studentTypeParam = studentType;
+
+    if (role === "student" && studentTypeParam !== 'university' && !stageId) {
+      setError(locale === "ar" ? "اختر المرحلة." : "Select stage.");
+      setSaving(false); return;
+    }
+    if (role === "student" && studentTypeParam !== 'university' && stageId && !gradeId) {
+      setError(locale === "ar" ? "اختر الصف." : "Select grade.");
+      setSaving(false); return;
+    }
+    if (role === "student" && studentTypeParam === 'university' && !universityId) {
+      setError(locale === "ar" ? "اختر الجامعة." : "Select university.");
+      setSaving(false); return;
+    }
+
     const iso = new Date().toISOString();
     const persona: "student" | "grad" | "freelancer" = role === "graduate" ? "grad" : role;
-    const universityIdFromStorage = studentTypeParam === 'university' ? (typeof window !== 'undefined' ? window.localStorage.getItem('pendingUniversityId') || null : null) : null;
-    const facultyIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingFacultyId') || null) : null;
-    const departmentIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingDepartmentId') || null) : null;
-    const academicLevelIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingAcademicLevelId') || null) : null;
-    const semesterIdFromStorage = studentTypeParam === 'university' ? (window.localStorage.getItem('pendingSemesterId') || null) : null;
+
     const { ok, error: err } = await persist({
       persona,
       studentType: studentTypeParam,
       stageId: (role === "student" && studentTypeParam !== 'university') ? stageId : null,
       gradeId: (role === "student" && studentTypeParam !== 'university') ? gradeId : null,
       trackId: (role === "student" && studentTypeParam !== 'university' && stageId && stages.find(s => s.id === stageId)?.code === "BACCALAUREATE") ? trackId : null,
-      universityId: studentTypeParam === 'university' ? universityIdFromStorage : null,
-      facultyId: studentTypeParam === 'university' ? facultyIdFromStorage : null,
-      departmentId: studentTypeParam === 'university' ? departmentIdFromStorage : null,
-      academicLevelId: studentTypeParam === 'university' ? academicLevelIdFromStorage : null,
-      semesterId: studentTypeParam === 'university' ? semesterIdFromStorage : null,
+      universityId: studentTypeParam === 'university' ? universityId : null,
+      facultyId: studentTypeParam === 'university' ? facultyId : null,
+      departmentId: studentTypeParam === 'university' ? departmentId : null,
+      academicLevelId: studentTypeParam === 'university' ? academicLevelId : null,
+      semesterId: studentTypeParam === 'university' ? semesterId : null,
       onboardedAtIso: iso,
     });
     if (!ok) {
@@ -523,7 +532,12 @@ export default function OnboardingPage() {
                 })}
               </div>
 
-              <button type="button" className="btn btn-marker btn-block" onClick={() => setStep(isStudent ? "stage" : "done")}>
+              <button
+                type="button"
+                className="btn btn-marker btn-block"
+                onClick={() => { if (isStudent) { setStep("stage"); } else { void finish(); } }}
+                disabled={saving}
+              >
                 {locale === "ar" ? "استمر" : "Continue"}
               </button>
               <button type="button" className="small muted" style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }} onClick={skip} disabled={saving}>
@@ -533,7 +547,7 @@ export default function OnboardingPage() {
           )}
 
           {/* STEP 2 — STAGE (student only) */}
-          {step === "stage" && isStudent && (
+          {step === "stage" && isStudent && studentType !== 'university' && (
             <>
               <h2 className="h3" style={{ margin: 0 }}>
                 {locale === "ar" ? "إيه مرحلتك الدراسية؟" : "What is your education stage?"}
@@ -638,7 +652,7 @@ export default function OnboardingPage() {
                 )}
               </div>
               <div className="row" style={{ gap: "10px" }}>
-                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (universityId && facultyId && departmentId && academicLevelId && semesterId) { setStep("done"); } else { setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details."); } }} disabled={saving || !(universityId && facultyId && departmentId && academicLevelId && semesterId)}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (universityId && facultyId && departmentId && academicLevelId && semesterId) { void finish(); } else { setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details."); } }} disabled={saving || !(universityId && facultyId && departmentId && academicLevelId && semesterId)}>
                   {locale === "ar" ? "استمر" : "Continue"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
@@ -676,7 +690,7 @@ export default function OnboardingPage() {
                 <button type="button" className="btn btn-marker btn-block" onClick={() => {
                   if (!gradeId) { setError(locale === "ar" ? "اختر صف." : "Select grade."); return; }
                   const stageCode = stages.find((s) => s.id === stageId)?.code;
-                  setStep(stageCode === "BACCALAUREATE" ? "track" : "done");
+                  if (stageCode === "BACCALAUREATE") { setStep("track"); } else { void finish(); }
                 }} disabled={saving || !gradeId}>
                   {locale === "ar" ? "استمر" : "Continue"}
                 </button>
@@ -716,7 +730,7 @@ export default function OnboardingPage() {
                 </div>
               )}
               <div className="row" style={{ gap: "10px" }}>
-                <button type="button" className="btn btn-marker btn-block" onClick={() => setStep("done")} disabled={saving}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => void finish()} disabled={saving}>
                   {locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
@@ -728,7 +742,7 @@ export default function OnboardingPage() {
           {step === "grade" && !isStudent && (
             <>
               <h2 className="h3">{locale === "ar" ? "الخريج / Freelancer — لا تحتاج اختيار مرحلة." : "Graduate / Freelancer — no stage needed."}</h2>
-              <button type="button" className="btn btn-marker btn-block" onClick={() => setStep("done")}>{locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}</button>
+              <button type="button" className="btn btn-marker btn-block" onClick={() => void finish()} disabled={saving}>{locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}</button>
               <button type="button" className="btn btn-secondary" onClick={goBack}>← {locale === "ar" ? "رجوع" : "Back"}</button>
             </>
           )}
