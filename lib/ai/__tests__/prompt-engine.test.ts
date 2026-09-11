@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildSystemPrompt,
   detectMessageType,
+  DIALECT,
+  DIALECT_PHRASES,
   getTemperature,
   normalizeStage,
   normalizeStyle,
@@ -238,5 +240,115 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("الهدف:");
     expect(prompt).not.toContain("ساعات المذاكرة:");
     expect(prompt).toContain("المواد: غير محدد");
+  });
+});
+
+describe("النبرة المصرية (صوت المنتج) هي الافتراضية", () => {
+  // المفردات الخليجية اللي كانت في المواصفة الأصلية — ممنوع تظهر في
+  // البرومبت الافتراضي. ملاحظة: "هذه/هذا" الفصحى مش هنا، دي مقبولة في الحالتين.
+  const GULF_MARKERS = [
+    "إيش",
+    "ليش",
+    "هذي",
+    "تبي ",
+    "خلنا",
+    "الحين",
+    "السيارة تفرمل",
+    "بطارية سيارتك",
+  ];
+
+  /** برومبت واحد لكل تركيبة مرحلة × أسلوب × مادة × نوع رسالة. */
+  function renderEveryCombination(): string {
+    const stages = [
+      "ابتدائي", "متوسط", "ثانوي", "جامعي", "أخرى",
+      "Primary", "Preparatory", "Secondary", "Baccalaureate", "University",
+      "prep", "high", "uni", "masters", "حاجة غريبة",
+    ];
+    const styles = [
+      "مبسّط", "تفصيلي", "أسئلة وأجوبة", "خرائط ذهنية",
+      "practical", "visual", "academic", "unknown", "",
+    ];
+    const subjects = [
+      "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء",
+      "اللغة العربية", "اللغة الإنجليزية", "التاريخ", "الجغرافيا",
+      "Computer Science", undefined,
+    ];
+    const types = ["explain", "solve", "quiz", "plan", "general"] as const;
+
+    const chunks: string[] = [];
+    for (const stage of stages)
+      for (const style of styles)
+        for (const subject of subjects)
+          for (const messageType of types)
+            chunks.push(
+              buildSystemPrompt({
+                profile: profile({ stage, preferred_style: style }),
+                currentSubject: subject,
+                messageType,
+              })
+            );
+    // وكمان حالة مفيش بروفايل خالص
+    chunks.push(buildSystemPrompt({ profile: null }));
+    return chunks.join("\n");
+  }
+
+  it("مفيش أي مفردة خليجية في أي تركيبة", () => {
+    const all = renderEveryCombination();
+    // العينة كبيرة فعلًا — لو التركيبة اتكسرت الاختبار ده ما ينفعش يعدّي
+    expect(all.length).toBeGreaterThan(100_000);
+    for (const marker of GULF_MARKERS) {
+      expect(all, `المفردة «${marker}» لسه موجودة`).not.toContain(marker);
+    }
+  });
+
+  it("الجمل المصرية موصولة صح في مكانها", () => {
+    const base = { full_name: "أحمد", grade: null, goal: null, subjects: [], daily_study_hours: null };
+
+    // الهوية
+    const identity = buildSystemPrompt({ profile: { ...base, stage: "متوسط", preferred_style: "" } });
+    expect(identity).toContain("تتكلم بالمصرية الواضحة");
+    expect(identity).toContain("فكرة ممتازة! بس تعالى نراجع نقطة صغيرة...");
+
+    // المرحلة المتوسطة
+    const prep = buildSystemPrompt({ profile: { ...base, stage: "Preparatory", preferred_style: "" } });
+    expect(prep).toContain("أتحداك تحل دي! 💪");
+    expect(prep).toContain("تعرف ليه السما زرقاء؟ ده بسبب...");
+
+    // أسلوب أسئلة وأجوبة
+    const qa = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "أسئلة وأجوبة" } });
+    expect(qa).toContain("طيب، برأيك ليه...؟");
+    expect(qa).toContain("يلا نختبر فهمك بـ 3 أسئلة سريعة! 🎯");
+
+    // المواد
+    const physics = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, currentSubject: "الفيزياء" });
+    expect(physics).toContain("ده القانون اللي بيخلي العربية تفرمل");
+    const chem = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, currentSubject: "الكيمياء" });
+    expect(chem).toContain("ده التفاعل اللي بيحصل في بطارية عربيتك");
+    const bio = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, currentSubject: "الأحياء" });
+    expect(bio).toContain("ده بالظبط اللي بيحصل في خلاياك دلوقتي");
+    const math = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, currentSubject: "الرياضيات" });
+    expect(math).toContain("تحب تحاول مسألة شبهها؟ 💪");
+
+    // أنواع الرسائل
+    const explain = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, messageType: "explain" });
+    expect(explain).toContain("إيه اللي تعرفه عن ... قبل ما أشرح؟");
+    const solve = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, messageType: "solve" });
+    expect(solve).toContain("إيه المعطيات اللي عندك؟");
+    const plan = buildSystemPrompt({ profile: { ...base, stage: "ثانوي", preferred_style: "" }, messageType: "plan" });
+    expect(plan).toContain("الخطة دي واقعية بالنسبة لك؟");
+  });
+
+  it("الخليجي محفوظ كخيار — والتبديل سطر واحد في DIALECT", () => {
+    expect(DIALECT).toBe("مصري");
+    // نفس المفتاح، اللهجتين: المصري بـ«إيه» والخليجي بـ«إيش»
+    expect(DIALECT_PHRASES["مصري"].givens).toBe("إيه المعطيات اللي عندك؟");
+    expect(DIALECT_PHRASES["خليجي"].givens).toBe("إيش المعطيات اللي عندك؟");
+    // الجدولين لازم يكون لهما نفس المفاتيح بالظبط — مفيش مفتاح ناقص
+    expect(Object.keys(DIALECT_PHRASES["مصري"]).sort()).toEqual(
+      Object.keys(DIALECT_PHRASES["خليجي"]).sort()
+    );
+    for (const value of Object.values(DIALECT_PHRASES["مصري"])) {
+      expect(value.trim().length).toBeGreaterThan(0);
+    }
   });
 });
