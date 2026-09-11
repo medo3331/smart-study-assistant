@@ -69,6 +69,7 @@ import { CommunityInvite } from "@/components/CommunityInvite";
 import { StudyPet } from "@/components/StudyPet";
 
 import { useEquippedCompanion } from "@/lib/shop/use-companion";
+import { fetchCourses } from "@/lib/pages-data";
 import { getAvailableSubjects, getEducationContext } from "@/lib/education/context";
 import { PrimaryDashboard } from "@/components/dashboard/primary/PrimaryDashboard";
 import { PrimaryErrorBoundary } from "@/components/dashboard/primary/PrimaryErrorBoundary";
@@ -236,6 +237,46 @@ export default function DashboardPage() {
   // 8. سجل النشاط اليومي (للرسوم البيانية)
   const [activityLog, setActivityLog] = useState<ActivityLog>({});
   const [analyticsRange, setAnalyticsRange] = useState<"weekly" | "monthly">("weekly");
+
+  /* 🎡 عجلة ماجيك — عدّاد الكورسات + توزيع المواد (بيانات حقيقية).
+     fetchCourses بتجيب study_configs + عدّاد study_days لكل تراك، فبنشتق
+     الرقم والـ donut من نفس الرد — ولا جدول جديد ولا endpoint إضافي.
+     null = لسه بيتحمّل أو فشل صامت، والواجهة بتعرض «—» بدل أي رقم وهمي. */
+  const [coursesCount, setCoursesCount] = useState<number | null>(null);
+  const [subjectBreakdown, setSubjectBreakdown] = useState<
+    { name: string; value: number; completed: number }[]
+  >([]);
+  useEffect(() => {
+    if (!authUser) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchCourses(supabase, authUser.id);
+      if (cancelled) return;
+      if (res.error || !res.data) {
+        setCoursesCount(null);
+        return;
+      }
+      const courses = res.data;
+      setCoursesCount(courses.length);
+      const bySubject = new Map<string, { total: number; done: number }>();
+      for (const c of courses) {
+        const k = c.subject || "بدون اسم";
+        const e = bySubject.get(k) ?? { total: 0, done: 0 };
+        e.total += c.totalDays || c.daysCount;
+        e.done += c.completedDays;
+        bySubject.set(k, e);
+      }
+      setSubjectBreakdown(
+        Array.from(bySubject.entries())
+          .map(([name, v]) => ({ name, value: v.total, completed: v.done }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 9),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, supabase]);
 
   // 9. تنبيهات تذكير الستريك
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -1458,6 +1499,15 @@ export default function DashboardPage() {
           completedSteps={completedCount}
           progressPct={overallProgress}
           currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+          streak={streak}
+          coursesCount={coursesCount}
+          subjectBreakdown={subjectBreakdown}
+          activeChartData={activeChartData}
+          analyticsRange={analyticsRange}
+          onChangeRange={setAnalyticsRange}
+          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+          notificationsEnabled={notificationsEnabled}
+          onOpenSettings={() => setIsMenuOpen(true)}
         />
       </div>
 
