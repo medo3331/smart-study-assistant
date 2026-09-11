@@ -167,17 +167,17 @@ export const viewport: Viewport = {
    (شوف PACK_KEY في lib/shop/shop-data.ts — الاسم لازم يتطابق.) */
 const noFlashTheme = `
 (function(){try{
-  var VALID=['indigo-light','warm-dark','slate','deep-green','magic-color','magic-noir','magic-blue','magic-paper'];
+  var VALID=['colorful','crimson','azure','mono','indigo-light','warm-dark','slate','deep-green'];
   var LEGACY={light:'indigo-light',dark:'warm-dark'};
   var s=localStorage.getItem('theme');
   var t=null;
   if(s && VALID.indexOf(s)!==-1) t=s;
   else if(s && LEGACY[s]) { t=LEGACY[s]; try{localStorage.setItem('theme',t);}catch(e){} }
   else if(!s) {
-    t=(window.matchMedia('(prefers-color-scheme: light)').matches?'indigo-light':'warm-dark');
+    t=(window.matchMedia('(prefers-color-scheme: light)').matches?'indigo-light':'colorful');
     try{localStorage.setItem('theme',t);}catch(e){}
   }
-  if(!t || VALID.indexOf(t)===-1) t='warm-dark';
+  if(!t || VALID.indexOf(t)===-1) t='colorful';
   document.documentElement.setAttribute('data-theme',t);
   var p=localStorage.getItem('shop_pack');
   if(p){document.documentElement.setAttribute('data-pack',p);}

@@ -78,7 +78,8 @@
 }
 
 /* ---- override النهار: خلفية ورق الملزمة + عناصر مقروءة على الفاتح ---- */
-:root[data-theme="light"] {
+:root[data-theme="light"],
+:root[data-theme="mono"] {
   --bg-0: #E4EAF4;
   --bg-1: #EEF2F8;
   --bg-panel: #FFFFFF;
@@ -188,8 +189,11 @@
   --shadow: var(--shade);
 }
 
-/* ---- THEME 2 — أسود دافي (Warm Dark) — الحالي ---- */
+/* ---- THEME 2 — أسود دافي (Warm Dark) — الحالي ----
+   🎡 «colorful» (الملون الحالي في تصميم العجلة) بيشارك نفس التوكينز بالظبط؛
+   الفرق الوحيد إن العجلة ترسم فروعها ملونة — وده بيتقرّر في الكومبوننت. */
 :root[data-theme="warm-dark"],
+:root[data-theme="colorful"],
 :root[data-theme="dark"] {
   --app-bg: #0D0906;
   --card-primary: #161009;
@@ -339,169 +343,172 @@
   --shadow: var(--shade);
 }
 
-/* ---- MAGIC WHEEL PREVIEW THEMES — additional ThemeProvider IDs ---- */
-:root[data-theme="magic-color"] {
-  color-scheme: dark;
-  --app-bg: #11162A;
-  --card-primary: #181E38;
-  --card-secondary: #222A4D;
-  --accent: #7B7EF4;
-  --accent-highlight: #A6A8FF;
-  --text: #F5F7FF;
-  --muted: #AEB8D1;
-  --app-bg-image: radial-gradient(circle at 85% 0%, rgba(123, 126, 244, 0.14), transparent 34%);
-  --paper: var(--app-bg);
-  --paper-2: var(--card-primary);
-  --paper-3: var(--card-secondary);
-  --ink: var(--text);
-  --ink-soft: var(--muted);
-  --rule: rgba(245, 247, 255, 0.1);
-  --rule-strong: rgba(245, 247, 255, 0.2);
-  --marker: var(--accent);
-  --marker-deep: #5E61D8;
-  --redpen: #F26FA1;
-  --redpen-soft: rgba(242, 111, 161, 0.34);
-  --shade: rgba(3, 6, 18, 0.4);
-  --shade-lift: rgba(3, 6, 18, 0.62);
-  --on-danger: #FFFFFF;
-  --on-marker: #FFFFFF;
-  --hl-yellow-fill: #F2C94C;
-  --hl-yellow-deep: #D7AB24;
-  --hl-yellow-ink: #F7D979;
-  --hl-green-fill: #6FCF97;
-  --hl-green-ink: #8EE2B0;
-  --hl-red-fill: #E8342F;
-  --hl-red-ink: #FF7B73;
-  --hl-orange-ink: #F2994A;
-  --hl-blue-fill: #4FA9F5;
-  --hl-blue-ink: #7CC2FF;
-  --hl-purple-fill: #B57BF4;
-  --hl-purple-ink: #C9A6FF;
-  --hl-indigo-fill: #7B7EF4;
-  --hl-indigo-ink: #A6A8FF;
-}
+/* ---- THEME 5 — أسود وأحمر (Crimson) — من باليتة preview العجلة المعتمدة ---- */
+:root[data-theme="crimson"] {
+  --app-bg: #0a0a0c;
+  --card-primary: #111113;
+  --card-secondary: #16161a;
+  --accent: #E23A3A;
+  --accent-highlight: #FF6B5B;
+  --text: #f1f1f4;
+  --muted: #a0a0a8;
+  --app-bg-image: none;
 
-:root[data-theme="magic-noir"] {
-  color-scheme: dark;
-  --app-bg: #0A0A0C;
-  --card-primary: #151519;
-  --card-secondary: #202026;
-  --accent: #E8342F;
-  --accent-highlight: #FF7B6F;
-  --text: #F6F6F8;
-  --muted: #A6A6AF;
-  --app-bg-image: radial-gradient(circle at 80% 0%, rgba(232, 52, 47, 0.13), transparent 36%);
   --paper: var(--app-bg);
   --paper-2: var(--card-primary);
   --paper-3: var(--card-secondary);
   --ink: var(--text);
   --ink-soft: var(--muted);
-  --rule: rgba(246, 246, 248, 0.1);
-  --rule-strong: rgba(246, 246, 248, 0.2);
+  --rule: rgba(241, 241, 244, 0.10);
+  --rule-strong: rgba(241, 241, 244, 0.20);
   --marker: var(--accent);
-  --marker-deep: #B92925;
-  --redpen: #FF6FA0;
-  --redpen-soft: rgba(255, 111, 160, 0.34);
+  --marker-deep: #B32828;
+  --redpen: #FF6B5B;
+  --redpen-soft: rgba(255, 107, 91, 0.36);
   --shade: rgba(0, 0, 0, 0.5);
-  --shade-lift: rgba(0, 0, 0, 0.72);
-  --on-danger: #FFFFFF;
+  --shade-lift: rgba(0, 0, 0, 0.65);
+  --on-danger: #1A0A0A;
   --on-marker: #FFFFFF;
-  --hl-yellow-fill: #F2C94C;
-  --hl-yellow-deep: #D7AB24;
-  --hl-yellow-ink: #F7D979;
+
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
   --hl-green-fill: #6FCF97;
-  --hl-green-ink: #8EE2B0;
-  --hl-red-fill: #E8342F;
-  --hl-red-ink: #FF7B73;
-  --hl-orange-ink: #F2994A;
+  --hl-green-ink: #8FE3B6;
+  --hl-red-fill: #FF6B5B;
+  --hl-red-ink: #FF6B5B;
+  --hl-orange-ink: #F0A868;
   --hl-blue-fill: #4FA9F5;
-  --hl-blue-ink: #7CC2FF;
+  --hl-blue-ink: #7CC4FF;
   --hl-purple-fill: #B57BF4;
-  --hl-purple-ink: #C9A6FF;
+  --hl-purple-ink: #C9A0F7;
   --hl-indigo-fill: #7B7EF4;
-  --hl-indigo-ink: #A6A8FF;
+  --hl-indigo-ink: #9DA0F8;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
 }
 
-:root[data-theme="magic-blue"] {
-  color-scheme: dark;
-  --app-bg: #081525;
-  --card-primary: #10233B;
-  --card-secondary: #173354;
-  --accent: #3B82F6;
-  --accent-highlight: #7DB3FF;
-  --text: #F1F7FF;
-  --muted: #9FB6D4;
-  --app-bg-image: radial-gradient(circle at 82% 0%, rgba(59, 130, 246, 0.16), transparent 36%);
+/* ---- THEME 6 — أزرق (Azure) ---- */
+:root[data-theme="azure"] {
+  --app-bg: #0A1428;
+  --card-primary: #101F3C;
+  --card-secondary: #16294C;
+  --accent: #4FA9F5;
+  --accent-highlight: #7CC4FF;
+  --text: #EAF2FF;
+  --muted: #8AA3C4;
+  --app-bg-image: none;
+
   --paper: var(--app-bg);
   --paper-2: var(--card-primary);
   --paper-3: var(--card-secondary);
   --ink: var(--text);
   --ink-soft: var(--muted);
-  --rule: rgba(241, 247, 255, 0.1);
-  --rule-strong: rgba(241, 247, 255, 0.2);
+  --rule: rgba(234, 242, 255, 0.10);
+  --rule-strong: rgba(234, 242, 255, 0.20);
   --marker: var(--accent);
-  --marker-deep: #2563C4;
-  --redpen: #F26F88;
-  --redpen-soft: rgba(242, 111, 136, 0.34);
-  --shade: rgba(3, 14, 29, 0.44);
-  --shade-lift: rgba(3, 14, 29, 0.64);
-  --on-danger: #FFFFFF;
+  --marker-deep: #2D7CC9;
+  --redpen: #FF8FA3;
+  --redpen-soft: rgba(255, 143, 163, 0.32);
+  --shade: rgba(4, 10, 24, 0.5);
+  --shade-lift: rgba(4, 10, 24, 0.68);
+  --on-danger: #08111F;
   --on-marker: #FFFFFF;
-  --hl-yellow-fill: #F2C94C;
-  --hl-yellow-deep: #D7AB24;
-  --hl-yellow-ink: #F7D979;
-  --hl-green-fill: #6FCF97;
-  --hl-green-ink: #8EE2B0;
-  --hl-red-fill: #E8342F;
-  --hl-red-ink: #FF7B73;
-  --hl-orange-ink: #F2994A;
-  --hl-blue-fill: #3B82F6;
-  --hl-blue-ink: #7DB3FF;
-  --hl-purple-fill: #B57BF4;
-  --hl-purple-ink: #C9A6FF;
-  --hl-indigo-fill: #7B7EF4;
-  --hl-indigo-ink: #A6A8FF;
+
+  --hl-yellow-fill: #F0D24A;
+  --hl-yellow-deep: #D8B932;
+  --hl-yellow-ink: #F0D24A;
+  --hl-green-fill: #34D399;
+  --hl-green-ink: #6EE7B7;
+  --hl-red-fill: #F0708A;
+  --hl-red-ink: #FF9FB1;
+  --hl-orange-ink: #F0A868;
+  --hl-blue-fill: #60A5FA;
+  --hl-blue-ink: #93C5FD;
+  --hl-purple-fill: #A78BFA;
+  --hl-purple-ink: #C4B5FD;
+  --hl-indigo-fill: #818CF8;
+  --hl-indigo-ink: #A5B4FC;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
 }
 
-:root[data-theme="magic-paper"] {
-  color-scheme: light;
-  --app-bg: #F2F4F7;
+/* ---- THEME 7 — أبيض ورمادي (Mono) ---- */
+:root[data-theme="mono"] {
+  --app-bg: #F4F5F7;
   --card-primary: #FFFFFF;
-  --card-secondary: #E8ECF1;
-  --accent: #64748B;
-  --accent-highlight: #334155;
+  --card-secondary: #ECEEF1;
+  --accent: #4B5563;
+  --accent-highlight: #6B7280;
   --text: #1F2937;
-  --muted: #64748B;
-  --app-bg-image: radial-gradient(circle at 88% 0%, rgba(100, 116, 139, 0.13), transparent 36%);
+  --muted: #6B7280;
+  --app-bg-image: none;
+
   --paper: var(--app-bg);
   --paper-2: var(--card-primary);
   --paper-3: var(--card-secondary);
   --ink: var(--text);
   --ink-soft: var(--muted);
-  --rule: rgba(31, 41, 55, 0.12);
-  --rule-strong: rgba(31, 41, 55, 0.22);
+  --rule: #D9DDE3;
+  --rule-strong: #C2C8D1;
   --marker: var(--accent);
-  --marker-deep: #475569;
-  --redpen: #C2415A;
-  --redpen-soft: rgba(194, 65, 90, 0.3);
+  --marker-deep: #374151;
+  --redpen: #C0565F;
+  --redpen-soft: rgba(192, 86, 95, 0.30);
   --shade: rgba(31, 41, 55, 0.08);
-  --shade-lift: rgba(31, 41, 55, 0.16);
+  --shade-lift: rgba(31, 41, 55, 0.14);
   --on-danger: #FFFFFF;
   --on-marker: #FFFFFF;
-  --hl-yellow-fill: #D7AB24;
-  --hl-yellow-deep: #B98B14;
-  --hl-yellow-ink: #785D0A;
-  --hl-green-fill: #24A96D;
-  --hl-green-ink: #087044;
-  --hl-red-fill: #C7354C;
-  --hl-red-ink: #AA2038;
-  --hl-orange-ink: #A85A16;
-  --hl-blue-fill: #2B72C8;
-  --hl-blue-ink: #1D579F;
-  --hl-purple-fill: #8656C7;
-  --hl-purple-ink: #6837A8;
-  --hl-indigo-fill: #4F57C9;
-  --hl-indigo-ink: #353CA7;
+
+  --hl-yellow-fill: #E8CE55;
+  --hl-yellow-deep: #D4B93F;
+  --hl-yellow-ink: #7A5A00;
+  --hl-green-fill: #2FA573;
+  --hl-green-ink: #0F6B4E;
+  --hl-red-fill: #C94F63;
+  --hl-red-ink: #A63A4D;
+  --hl-orange-ink: #9A4B10;
+  --hl-blue-fill: #2F86C9;
+  --hl-blue-ink: #1E5E94;
+  --hl-purple-fill: #7B5CD6;
+  --hl-purple-ink: #5B3FAE;
+  --hl-indigo-fill: #4353B8;
+  --hl-indigo-ink: #32409A;
+
+  --bg: var(--paper);
+  --bg-elevated: var(--paper-2);
+  --border: var(--rule);
+  --emerald: var(--ink);
+  --amber: var(--marker);
+  --shadow: var(--shade);
+}
+
+/* لمّة اللاندينج لثيم Mono: رمادي بدل كحلي الورق — نفس روح [data-theme="light"] */
+:root[data-theme="mono"] {
+  --bg-0: #F1F2F4;
+  --bg-1: #F7F8FA;
+  --bg-panel: #FFFFFF;
+  --white: #1F2937;
+  --muted: #5B6472;
+  --muted-2: #8A91A0;
+  --line: rgba(31, 41, 55, 0.12);
+  --line-strong: rgba(31, 41, 55, 0.22);
+  --panel-tint: rgba(31, 41, 55, 0.03);
+  --panel-tint-2: rgba(31, 41, 55, 0.025);
+  --bar-track: rgba(31, 41, 55, 0.10);
+  --tag-bg: rgba(31, 41, 55, 0.05);
+  --card-shadow: rgba(31, 41, 55, 0.10);
+  --check-green: #2FA573;
 }
 
 /* ==========================================================================
@@ -6383,4 +6390,190 @@ html {
   color: var(--muted);
   opacity: 0.8;
   margin-left: 4px;
+}
+
+/* ==========================================================================
+   🎡 Magic Wheel — عجلة التنقل (components/MagicWheelDashboard.tsx)
+   كل الألوان من توكنز data-theme، فالثيمات الأربعة (colorful/crimson/azure/
+   mono) بتعدّي على العجلة أوتوماتيك. ملاحظة: الكلاسات `.wheel-*` بتاعة
+   عجلة الحظ في المتجر — دي `.mw-*` عشان مفيش تعارض.
+   ========================================================================== */
+
+.mw-root {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--app-bg);
+  color: var(--text);
+  direction: rtl;
+}
+
+.mw-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--accent) 10%, transparent) 0%,
+    transparent 62%
+  );
+  z-index: 0;
+}
+
+.mw-ring {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.mw-ring-dash {
+  border: 2px dashed color-mix(in srgb, var(--accent) 32%, transparent);
+  animation: mw-rotate-dash 28s linear infinite;
+}
+
+.mw-ring-dot {
+  border: 1.5px dotted color-mix(in srgb, var(--accent-highlight) 30%, transparent);
+  animation: mw-rotate-dot 40s linear infinite reverse;
+}
+
+.mw-node {
+  display: block;
+  outline: none;
+  user-select: none;
+  transform: translate(-50%, -50%);
+  transition: transform 0.3s ease;
+}
+.mw-node:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+}
+.mw-node:focus-visible {
+  outline: 2.5px solid var(--accent-highlight);
+  outline-offset: 4px;
+  border-radius: 9999px;
+}
+
+.mw-node-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  border-width: 2.5px;
+  border-style: solid;
+  background: var(--card-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  box-shadow: 0 4px 24px var(--shade), 0 0 18px color-mix(in srgb, var(--node-c, var(--accent)) 22%, transparent);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+  animation:
+    mw-pop-in 0.65s ease-out var(--mw-delay, 0ms) both,
+    mw-float 5s ease-in-out infinite calc(var(--mw-delay, 0ms) + 1.1s);
+}
+.mw-node:hover .mw-node-card {
+  box-shadow: 0 8px 30px var(--shade-lift), 0 0 26px color-mix(in srgb, var(--node-c, var(--accent)) 40%, transparent);
+  background: var(--card-secondary);
+}
+
+.mw-center {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 62%, #000));
+  border: 2.5px solid color-mix(in srgb, var(--accent-highlight) 45%, transparent);
+  box-shadow: 0 0 80px color-mix(in srgb, var(--accent) 42%, transparent);
+  animation: mw-pulse 5s ease-in-out infinite;
+  outline: none;
+  transition: transform 0.3s ease;
+}
+.mw-center:hover { transform: scale(1.05); }
+.mw-center:focus-visible {
+  outline: 3px solid var(--accent-highlight);
+  outline-offset: 4px;
+}
+
+.mw-line {
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
+  animation: mw-draw 1.1s ease-out var(--mw-delay, 0ms) forwards;
+}
+
+.mw-tile {
+  border: 1px solid var(--rule);
+  background: var(--card-primary);
+  border-radius: 1rem;
+  padding: 0.85rem 1rem;
+  transition: border-color 0.25s ease;
+}
+.mw-tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--rule)); }
+
+.mw-chart-card {
+  border: 1px solid var(--rule);
+  background: var(--card-primary);
+  border-radius: 1.25rem;
+  padding: 1rem 1.15rem;
+}
+
+.mw-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--rule-strong);
+  background: var(--card-primary);
+  color: var(--text);
+  border-radius: 9999px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.mw-theme-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+.mw-theme-btn:focus-visible { outline: 2px solid var(--accent-highlight); outline-offset: 3px; }
+
+.mw-glyph-m { animation: mw-glyph-draw 2s ease-out 0.3s forwards; }
+.mw-glyph-star { animation: mw-star-pulse 3s ease-in-out infinite; transform-origin: center; }
+
+@keyframes mw-rotate-dash { to { transform: rotate(360deg); } }
+@keyframes mw-rotate-dot { to { transform: rotate(-360deg); } }
+@keyframes mw-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@keyframes mw-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes mw-draw { to { stroke-dashoffset: 0; } }
+@keyframes mw-pop-in {
+  from { opacity: 0; transform: scale(0.55) translateY(14px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes mw-glyph-draw { to { stroke-dashoffset: 0; } }
+@keyframes mw-star-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.85; }
+}
+
+/* احترام تقليل الحركة: لا دوران، لا طَفْو، لا رسم تدريجي — كل حاجة تثبت */
+@media (prefers-reduced-motion: reduce) {
+  .mw-root .mw-ring-dash,
+  .mw-root .mw-ring-dot,
+  .mw-root .mw-center,
+  .mw-root .mw-node-card,
+  .mw-glyph-m,
+  .mw-glyph-star {
+    animation: none !important;
+  }
+  .mw-line { animation: none !important; stroke-dashoffset: 0 !important; }
+  .mw-node,
+  .mw-node-card,
+  .mw-center,
+  .mw-theme-btn { transition: none !important; }
+  .mw-node:hover { transform: translate(-50%, -50%) scale(1.02); }
 }
