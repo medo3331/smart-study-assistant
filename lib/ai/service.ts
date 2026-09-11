@@ -9,8 +9,8 @@ import type {
 } from "./types";
 import type { AiCapability } from "./health";
 import { capabilitiesForTask } from "./routing";
-import { streamingAdapterFor } from "./streaming";
 import type { AiStreamChunk } from "./streaming";
+import { streamWithFallback } from "./streaming-fallback";
 import {
   validateStructured,
   type Validator,
@@ -50,16 +50,11 @@ export const AIService = {
   },
 
   /**
-   * بث تدريجي للنص. يرجّع AsyncGenerator من chunks موحّدة بدون كشف المزوّد.
-   * البث حاليًا بيمشي على سياسة مهمة النصوص الأساسية (بدون fallback أثناء
-   * البث) — fallback البث المتوسط هيتقرر في مرحلة لاحقة بعد قياس سلوكه.
+   * بث تدريجي للنص مع سلسلة fallback بين المزودين عند 429/5xx.
    */
   async *stream(task: Extract<AiTaskType, "chat" | "content" | "coding">,
     input: Omit<AiChatRequest, "model"> & { model?: string }): AsyncGenerator<AiStreamChunk, void, undefined> {
-    const providerName = aiRouter.getProviderName(task);
-    const adapter = streamingAdapterFor(providerName);
-    if (!adapter) throw new Error(`No streaming adapter for provider "${providerName}".`);
-    yield* adapter.streamChat(input);
+    yield* streamWithFallback(task, input);
   },
 
   /** تحليل وسائط (صور/ملفات) عبر مزوّد الرؤية. */

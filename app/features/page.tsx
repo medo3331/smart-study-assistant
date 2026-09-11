@@ -28,8 +28,27 @@ export const metadata: Metadata = pageMeta({
 });
 
 export default function FeaturesPage() {
+  // SSR fallback content — يظهر فورًا دون انتظار hydration من SubPageShell / FeaturesSection
+  const ssrFeatures = [
+    { title: "يفهم ملفاتك", desc: "ارفع PDF أو Word مرة واحدة، ويفضل مرجع دائم." },
+    { title: "خطة على قد وقتك", desc: "قول التراك وعندك كام يوم، وتطلع خطة بمواضيع مرتبة." },
+    { title: "الدرس بأربع طرق", desc: "مبسّط، أكاديمي، بتشبيهات، أو مثال عملي." },
+    { title: "كويز في آخر كل درس", desc: "أسئلة على اللي لسه قريته، واليوم ما بيتقفلش غير لما تعدّي." },
+    { title: "صوّر المحاضرة", desc: "صورة السبورة أو الورقة بتتحوّل نص مقروء." },
+    { title: "عرض شرائح", desc: "من موضوع لعرض تستعرضه بالكيبورد." },
+  ];
   return (
     <>
+      {/* SSR visible content — لا يعتمد على hydration */}
+      <section aria-label="محتوى الميزات — تحميل أولي" className="sr-visible-ssr">
+        <h1>كل أدوات مذاكرتك في مكان واحد</h1>
+        <p>اسأل بالعربي أو بالإنجليزي — المصطلحات التقنية بتفضل زي ما هي في المراجع.</p>
+        <ul>
+          {ssrFeatures.map((f) => (
+            <li key={f.title}><strong>{f.title}</strong> — {f.desc}</li>
+          ))}
+        </ul>
+      </section>
       <JsonLd
         data={breadcrumbLd([
           { name: 'الرئيسية', path: '/' },

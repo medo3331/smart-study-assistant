@@ -20,6 +20,7 @@ import {
   isModelSelectable,
   paidModelsAllowed,
 } from "./models";
+import { withConcurrencyLimit } from "./queue";
 
 /**
  * AI Boundary (Phase A) — لا coupling مع Economy بعد.
@@ -275,6 +276,10 @@ export class AiRouter {
   }
 
   async completeChat(task: AiTaskType, input: AiChatRequest): Promise<AiRoutedResponse> {
+    return withConcurrencyLimit(() => this.completeChatInner(task, input));
+  }
+
+  private async completeChatInner(task: AiTaskType, input: AiChatRequest): Promise<AiRoutedResponse> {
     const required = TASK_CAPABILITIES[task];
     const mediaOnly = required.some((capability) => capability === "vision" || capability === "file_analysis");
 
