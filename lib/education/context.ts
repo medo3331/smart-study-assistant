@@ -144,6 +144,22 @@ export async function getDetailedAIContext(userId: string) {
     if (profile?.subject) subjects = [String(profile.subject)];
   }
 
+  // 3. جلب أهم 3 نقاط ضعف ديناميكية (الأعلى أخطاءً والأقل إتقاناً)
+  const { data: weaknessesData } = await supabase
+    .from("user_weaknesses")
+    .select("topic_name, error_count, mastery_level, subject:subject_id(name)")
+    .eq("user_id", userId)
+    .order("error_count", { ascending: false })
+    .order("mastery_level", { ascending: true })
+    .limit(3);
+
+  const weaknesses = (weaknessesData || []).map((w: any) => ({
+    topic: w.topic_name,
+    subject: w.subject?.name || "عام",
+    errorCount: w.error_count,
+    mastery: Number(w.mastery_level)
+  }));
+
   return {
     name: profile?.full_name || "يا بطل",
     persona: profile?.persona ?? null,
@@ -156,5 +172,6 @@ export async function getDetailedAIContext(userId: string) {
     goals: Array.isArray(profile?.goals) ? profile.goals : [],
     style: profile?.learning_style ?? null,
     subjects: subjects,
+    weaknesses: weaknesses,
   };
 }
