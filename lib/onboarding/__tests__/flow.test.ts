@@ -5,7 +5,14 @@
  * أي تغيير مستقبلي في منطق التفرع يجب أن يُحدَّث هنا أولًا (test-first).
  */
 import { describe, it, expect } from "vitest";
-import { getNextStep, getPrevStep, type FlowContext, type UniPresence } from "../flow";
+import {
+  getNextStep,
+  getPrevStep,
+  isSchoolStageCode,
+  needsTrackForSchool,
+  type FlowContext,
+  type UniPresence,
+} from "../flow";
 
 function ctx(
   over: Omit<Partial<FlowContext>, "uni"> & { uni?: Partial<UniPresence> } = {},
@@ -372,5 +379,28 @@ describe("getPrevStep — back navigation", () => {
     ).toBe("grade");
     // طالب بلا مرحلة → المرحلة
     expect(getPrevStep(ctx({ role: "student" }), "done")).toBe("stage");
+  });
+});
+
+describe("helpers — direct pinning", () => {
+  it("needsTrackForSchool", () => {
+    expect(needsTrackForSchool("BACCALAUREATE", 1)).toBe(true);
+    expect(needsTrackForSchool("BACCALAUREATE", 3)).toBe(true);
+    expect(needsTrackForSchool("SECONDARY", 1)).toBe(false);
+    expect(needsTrackForSchool("SECONDARY", 2)).toBe(true);
+    expect(needsTrackForSchool("SECONDARY", 3)).toBe(true);
+    expect(needsTrackForSchool("PRIMARY", 6)).toBe(false);
+    expect(needsTrackForSchool("PREPARATORY", 3)).toBe(false);
+  });
+
+  it("isSchoolStageCode", () => {
+    expect(isSchoolStageCode("PRIMARY")).toBe(true);
+    expect(isSchoolStageCode("PREPARATORY")).toBe(true);
+    expect(isSchoolStageCode("SECONDARY")).toBe(true);
+    expect(isSchoolStageCode("BACCALAUREATE")).toBe(true);
+    expect(isSchoolStageCode("UNIVERSITY")).toBe(false);
+    expect(isSchoolStageCode("WHATEVER")).toBe(false);
+    expect(isSchoolStageCode(null)).toBe(false);
+    expect(isSchoolStageCode(undefined)).toBe(false);
   });
 });

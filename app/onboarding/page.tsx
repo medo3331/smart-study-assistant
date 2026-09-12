@@ -13,6 +13,14 @@ import {
   roleHome,
   safeNext,
 } from "@/lib/auth-roles";
+import {
+  getNextStep,
+  getPrevStep,
+  isSchoolStageCode,
+  needsTrackForSchool,
+  type FlowContext,
+  type StepKey as FlowStepKey,
+} from "@/lib/onboarding/flow";
 
 type Role = "student" | "graduate" | "freelancer";
 type StepKey = "role" | "stage" | "grade" | "track" | "done";
@@ -25,6 +33,25 @@ interface TrackRow { id: string; stage_id: string; grade_id: string | null; name
 function currentNext(): string {
   if (typeof window === "undefined") return "";
   return safeNext(new URLSearchParams(window.location.search).get("next"), "");
+}
+
+/* R4: engine keys → UI key set. The university manifold (5 granular keys)
+   renders as ONE screen with progressive disclosure inside. */
+function mapFlowStepToUi(s: FlowStepKey): StepKey {
+  switch (s) {
+    case "role":
+    case "stage":
+    case "grade":
+    case "track":
+    case "done":
+      return s;
+    case "university":
+    case "faculty":
+    case "department":
+    case "academic-level":
+    case "semester":
+      return "stage";
+  }
 }
 
 export default function OnboardingPage() {
@@ -74,9 +101,13 @@ export default function OnboardingPage() {
     }
   }, []);
 
-  /* ---- Load university taxonomy (once, when university student) ---- */
+  /* ---- Load university taxonomy (once, when university student) ----
+     R4b: lists must load even with preselected IDs (picker/resume) —
+     previously the `|| universityId` guard left preselected users with
+     empty lists and stranded uni-incomplete returners with no way to finish. */
   useEffect(() => {
-    if (studentType !== 'university' || universityId) return;
+    if (studentType !== 'university') return;
+    if (uniData.universities.length > 0) return;
     void (async () => {
       try {
         if (!supabaseRef.current) supabaseRef.current = createClient();
@@ -90,13 +121,13 @@ export default function OnboardingPage() {
         ]);
         const uData = { universities: univ || [], faculties: fac || [], departments: dept || [], levels: lvl || [], semesters: sem || [] };
         setUniData(uData);
-        // If there's a pre-selected university from localStorage, use it; else default to first
-        const preUni = typeof window !== 'undefined' ? window.localStorage.getItem('pendingUniversityId') || null : null;
+        // Default to first university only when nothing preselected (fresh flow).
+        // Picker/resume preselections already in state are preserved.
         const firstUniId = (univ && univ[0]) ? univ[0].id : null;
-        setUniversityId(preUni || firstUniId);
+        if (firstUniId) setUniversityId((prev) => prev ?? firstUniId);
       } catch { /* silent */ }
     })();
-  }, [studentType]);
+  }, [studentType, uniData.universities.length]);
 
   /* ---- Auth guard + existing profile read ---- */
   useEffect(() => {
@@ -114,7 +145,7 @@ export default function OnboardingPage() {
       if (!cancelled && user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("persona, onboarded_at, education_stage_id, education_grade_id, education_track_id")
+          .select("persona, onboarded_at, education_stage_id, education_grade_id, education_track_id, university_id, faculty_id, department_id, academic_level_id, semester_id")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -127,44 +158,90 @@ export default function OnboardingPage() {
           const existing = personaToRole(profile?.persona);
           if (existing) {
             setRole(existing);
-            /* If previous onboarding partial (e.g., role saved but stage not), resume from stage for students */
-            const stageSet = !!profile?.education_stage_id;
-            const gradeSet = !!profile?.education_grade_id;
-            if (existing === "student" && stageSet && !gradeSet) {
-              setStageId(profile.education_stage_id || null);
-              setStep("grade");
-            } else if (existing === "student" && stageSet && gradeSet) {
-              setStageId(profile.education_stage_id || null);
-              setGradeId(profile.education_grade_id || null);
-
-              /* التفرع حسب نوع المرحلة: البكالوريا وحدها تحتاج خطوة مسار؛
-                 غيرها بياناته مكتملة أصلًا → إكمال تلقائي. القيم تُمرر صراحةً
-                 من نتيجة الـ query (لا stale closure)، وpersist() تتحقق من
-                 اتساق grade↔stage قبل الحفظ — فأسوأ نتيجة رسالة خطأ واضحة
-                 بدل الشاشة الفاضية. */
-              const { data: stageRow } = await supabase
+            /* R3: truth snapshot for the flow engine — explicit reads only,
+               never component state (mount-effect staleness, Fixes 4/5). */
+            const pending = typeof window !== "undefined"
+              ? window.localStorage.getItem("pendingStudentType")
+              : null;
+            // R3a: DB truth wins (persist nulls the other group, so both can
+            // never be set); localStorage is fallback for fresh Picker flows.
+            // This also heals cross-device resume (no localStorage there).
+            const snapshotType: "school" | "university" | null =
+              profile?.university_id ? "university"
+              : profile?.education_stage_id ? "school"
+              : pending === "university" ? "university"
+              : pending === "school" ? "school"
+              : null;
+            let snapshotStageCode: string | null = null;
+            let snapshotGradeOrder: number | null = null;
+            if (profile?.education_stage_id) {
+              const { data: sRow } = await supabase
                 .from("education_stages")
                 .select("code")
-                .eq("id", profile.education_stage_id as string)
+                .eq("id", profile.education_stage_id)
                 .maybeSingle();
+              snapshotStageCode = sRow?.code ?? null;
+            }
+            if (cancelled) return;
+            if (profile?.education_grade_id) {
+              const { data: gRow } = await supabase
+                .from("education_grades")
+                .select("order_index")
+                .eq("id", profile.education_grade_id)
+                .maybeSingle();
+              snapshotGradeOrder = gRow?.order_index ?? null;
+            }
+            if (cancelled) return;
 
-              if (cancelled) return;
-              if (stageRow?.code === "BACCALAUREATE") {
-                setStep("track");
-              } else {
-                void finish(existing, {
-                  stageId: profile.education_stage_id,
-                  gradeId: profile.education_grade_id,
-                });
-              }
-            } else if (existing !== "student") {
-              /* عائد (خريج/فريلانسر) بدون onboarded_at: لا توجد بيانات ناقصة —
-                 إكمال تلقائي آمن بدل شاشة done الوهمية. الـ role يُمرر صراحةً
-                 لأن setRole فوق لم يُطبَّق بعد. عند فشل الحفظ يبقى المستخدم
-                 على خطوة الـ role ويعيد المحاولة بزر Continue (role صحيحة حينها). */
-              void finish(existing);
+            const flowCtx: FlowContext = {
+              role: existing,
+              studentType: snapshotType,
+              stageCode: snapshotStageCode,
+              gradeOrderIndex: snapshotGradeOrder,
+              hasGrade: !!profile?.education_grade_id,
+              hasTrack: !!profile?.education_track_id,
+              uni: {
+                hasUniversity: !!profile?.university_id,
+                hasFaculty: !!profile?.faculty_id,
+                hasDepartment: !!profile?.department_id,
+                hasLevel: !!profile?.academic_level_id,
+                hasSemester: !!profile?.semester_id,
+              },
+            };
+            const next = getNextStep(flowCtx);
+            if (next === "done") {
+              /* Complete data → self-heal with the full snapshot (R7) */
+              void finish(existing, {
+                studentType: snapshotType,
+                stageId: profile?.education_stage_id ?? null,
+                gradeId: profile?.education_grade_id ?? null,
+                trackId: profile?.education_track_id ?? null,
+                stageCode: snapshotStageCode,
+                gradeOrder: snapshotGradeOrder,
+                universityId: profile?.university_id ?? null,
+                facultyId: profile?.faculty_id ?? null,
+                departmentId: profile?.department_id ?? null,
+                academicLevelId: profile?.academic_level_id ?? null,
+                semesterId: profile?.semester_id ?? null,
+              });
             } else {
-              setStep("stage");
+              /* Incomplete → seed UI state for the resume step. R3b: the type
+                 must be synced too, or the Fix-1 screen guard shows the wrong
+                 manifold. (No track prefill: engine routes to "track" only
+                 when no track is saved — prefill would be dead code.) */
+              setStudentType(snapshotType);
+              if (existing === "student" && snapshotType !== "university") {
+                if (profile?.education_stage_id) setStageId(profile.education_stage_id);
+                if (profile?.education_grade_id) setGradeId(profile.education_grade_id);
+              }
+              if (existing === "student" && snapshotType === "university") {
+                if (profile?.university_id) setUniversityId(profile.university_id);
+                if (profile?.faculty_id) setFacultyId(profile.faculty_id);
+                if (profile?.department_id) setDepartmentId(profile.department_id);
+                if (profile?.academic_level_id) setAcademicLevelId(profile.academic_level_id);
+                if (profile?.semester_id) setSemesterId(profile.semester_id);
+              }
+              setStep(mapFlowStepToUi(next));
             }
           }
         }
@@ -374,47 +451,90 @@ export default function OnboardingPage() {
 
   async function finish(
     roleOverride?: Role,
-    dataOverride?: { stageId?: string | null; gradeId?: string | null }
+    dataOverride?: {
+      studentType?: "school" | "university" | null;
+      stageId?: string | null;
+      gradeId?: string | null;
+      trackId?: string | null;
+      /** Decision-only: resolved code/order for the needsTrack call (R7) */
+      stageCode?: string | null;
+      gradeOrder?: number | null;
+      universityId?: string | null;
+      facultyId?: string | null;
+      departmentId?: string | null;
+      academicLevelId?: string | null;
+      semesterId?: string | null;
+      /** R5 escape hatch: waive the D4 required-track check */
+      requireTrack?: boolean;
+    }
   ): Promise<void> {
     setSaving(true); setError(null);
 
-    // القيم الصريحة (للعائدين من الـ effect) تتجاوز الـ state،
-    // لأن setX داخل نفس الـ effect لم يُطبَّق بعد (stale closure).
+    // Explicit values (resume callers) override state — setX in the same mount
+    // effect has not applied yet (stale closure — Fixes 4/5 pattern).
     const effRole = roleOverride ?? role;
+    const effStudentType = dataOverride?.studentType !== undefined ? dataOverride.studentType : studentType;
     const effStageId = dataOverride?.stageId !== undefined ? dataOverride.stageId : stageId;
     const effGradeId = dataOverride?.gradeId !== undefined ? dataOverride.gradeId : gradeId;
+    const effTrackId = dataOverride?.trackId !== undefined ? dataOverride.trackId : trackId;
+    const effUniversityId = dataOverride?.universityId !== undefined ? dataOverride.universityId : universityId;
+    const effFacultyId = dataOverride?.facultyId !== undefined ? dataOverride.facultyId : facultyId;
+    const effDepartmentId = dataOverride?.departmentId !== undefined ? dataOverride.departmentId : departmentId;
+    const effLevelId = dataOverride?.academicLevelId !== undefined ? dataOverride.academicLevelId : academicLevelId;
+    const effSemesterId = dataOverride?.semesterId !== undefined ? dataOverride.semesterId : semesterId;
+    // needsTrack inputs: override first, else derive from loaded taxonomy
+    // (resume callers always pass overrides — taxonomy may be unloaded there).
+    const effStageCode = dataOverride?.stageCode !== undefined ? dataOverride.stageCode : stages.find((s) => s.id === effStageId)?.code ?? null;
+    const effGradeOrder = dataOverride?.gradeOrder !== undefined ? dataOverride.gradeOrder : grades.find((g) => g.id === effGradeId)?.order_index ?? null;
 
-    // استخدام الـ state الحقيقي بدل إعادة القراءة من localStorage
-    // (الـ state متغذي أصلًا من localStorage عند mount — شوف أول useEffect)
-    const studentTypeParam = studentType;
+    const isSchoolStudent = effRole === "student" && effStudentType !== "university";
+    const isUniStudent = effRole === "student" && effStudentType === "university";
 
-    if (effRole === "student" && studentTypeParam !== 'university' && !effStageId) {
+    if (isSchoolStudent && !effStageId) {
       setError(locale === "ar" ? "اختر المرحلة." : "Select stage.");
       setSaving(false); return;
     }
-    if (effRole === "student" && studentTypeParam !== 'university' && effStageId && !effGradeId) {
+    if (isSchoolStudent && effStageId && !effGradeId) {
       setError(locale === "ar" ? "اختر الصف." : "Select grade.");
       setSaving(false); return;
     }
-    if (effRole === "student" && studentTypeParam === 'university' && !universityId) {
-      setError(locale === "ar" ? "اختر الجامعة." : "Select university.");
+    // D4: track required when the engine can decide (R5 hatch may waive it)
+    const trackNeeded =
+      effStageCode !== null && effGradeOrder !== null &&
+      needsTrackForSchool(effStageCode, effGradeOrder);
+    if (isSchoolStudent && trackNeeded && (dataOverride?.requireTrack ?? true) && !effTrackId) {
+      const secondary = effStageCode === "SECONDARY";
+      setError(
+        secondary
+          ? (locale === "ar" ? "اختر الشعبة." : "Select a branch.")
+          : (locale === "ar" ? "اختر المسار." : "Select a track."),
+      );
+      setSaving(false); return;
+    }
+    if (isUniStudent && !(effUniversityId && effFacultyId && effDepartmentId && effLevelId && effSemesterId)) {
+      setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details.");
       setSaving(false); return;
     }
 
     const iso = new Date().toISOString();
     const persona: "student" | "grad" | "freelancer" = effRole === "graduate" ? "grad" : effRole;
 
+    // Pass-through: known non-track flow → null (clears any stray ID);
+    // unknown (taxonomy unresolved) → pass to persist, which revalidates from DB.
+    const trackKnown = effStageCode !== null && effGradeOrder !== null;
+    const trackPassthrough = !trackKnown || trackNeeded;
+
     const { ok, error: err } = await persist({
       persona,
-      studentType: studentTypeParam,
-      stageId: (effRole === "student" && studentTypeParam !== 'university') ? effStageId : null,
-      gradeId: (effRole === "student" && studentTypeParam !== 'university') ? effGradeId : null,
-      trackId: (effRole === "student" && studentTypeParam !== 'university' && effStageId && stages.find(s => s.id === effStageId)?.code === "BACCALAUREATE") ? trackId : null,
-      universityId: studentTypeParam === 'university' ? universityId : null,
-      facultyId: studentTypeParam === 'university' ? facultyId : null,
-      departmentId: studentTypeParam === 'university' ? departmentId : null,
-      academicLevelId: studentTypeParam === 'university' ? academicLevelId : null,
-      semesterId: studentTypeParam === 'university' ? semesterId : null,
+      studentType: effStudentType,
+      stageId: isSchoolStudent ? effStageId : null,
+      gradeId: isSchoolStudent ? effGradeId : null,
+      trackId: isSchoolStudent && trackPassthrough ? effTrackId : null,
+      universityId: isUniStudent ? effUniversityId : null,
+      facultyId: isUniStudent ? effFacultyId : null,
+      departmentId: isUniStudent ? effDepartmentId : null,
+      academicLevelId: isUniStudent ? effLevelId : null,
+      semesterId: isUniStudent ? effSemesterId : null,
       onboardedAtIso: iso,
     });
     if (!ok) {
@@ -431,16 +551,54 @@ export default function OnboardingPage() {
   }
 
   function skip(): void {
-    // Default: save with null fields; university student reads from localStorage in finish
+    // Save whatever is set; finish() validates and reports errors in place.
     void finish();
   }
 
-  /* ---- Back navigation ---- */
+  /* ---- Engine wiring (R3–R6): UI state → FlowContext → decision ---- */
+  function buildUiCtx(): FlowContext {
+    return {
+      role,
+      studentType,
+      stageCode: stages.find((s) => s.id === stageId)?.code ?? null,
+      gradeOrderIndex: grades.find((g) => g.id === gradeId)?.order_index ?? null,
+      hasGrade: !!gradeId,
+      hasTrack: !!trackId,
+      uni: {
+        hasUniversity: !!universityId,
+        hasFaculty: !!facultyId,
+        hasDepartment: !!departmentId,
+        hasLevel: !!academicLevelId,
+        hasSemester: !!semesterId,
+      },
+    };
+  }
+
+  /* Single advancement point: engine decides, UI maps (R4), stale errors cleared */
+  function advance(): void {
+    setError(null);
+    const next = getNextStep(buildUiCtx());
+    if (next === "done") { void finish(); }
+    else { setStep(mapFlowStepToUi(next)); }
+  }
+
+  /* ---- Back navigation (R6): engine decides, downstream IDs cleared ---- */
   function goBack(): void {
-    if (step === "stage") { setStep("role"); setStageId(null); }
-    else if (step === "grade") { setStep("stage"); setGradeId(null); }
-    else if (step === "track") { setStep("grade"); setTrackId(null); }
-    else if (step === "done") { setStep(role === "student" ? (studentType === 'university' ? "stage" : (stages.find(s => s.id === stageId)?.code === "BACCALAUREATE" ? "track" : "grade")) : "role"); }
+    // R4: university is a single screen — back exits to role (selections kept).
+    // (Engine uni keys all map to this screen, so engine-back would be a no-op.)
+    if (step === "stage" && studentType === "university") {
+      setError(null);
+      setStep("role");
+      return;
+    }
+    const prev = getPrevStep(buildUiCtx(), step);
+    // Clear IDs downstream of the step being left (R6 invariant)
+    if (step === "track") setTrackId(null);
+    else if (step === "grade") { setGradeId(null); setTrackId(null); }
+    else if (step === "stage") { setStageId(null); setGradeId(null); setTrackId(null); }
+    // (back from done clears nothing — data is save-pending, not abandoned)
+    setError(null);
+    setStep(mapFlowStepToUi(prev));
   }
 
   /* ---- Progress indicator (only relevant steps shown) ---- */
@@ -450,10 +608,20 @@ export default function OnboardingPage() {
     { key: "grade", labelAr: "الصف", labelEn: "Grade" },
     { key: "track", labelAr: "المسار", labelEn: "Track" },
   ];
+  /* Resolved taxonomy for engine-driven UI (single source — no hardcoded codes) */
+  const uiStageCode = stages.find((s) => s.id === stageId)?.code ?? null;
+  const uiGradeOrder = grades.find((g) => g.id === gradeId)?.order_index ?? null;
+  /* R3c: stray non-school rows (e.g. the legacy University stage) are never
+     offered as school options — the engine would only bounce them back. */
+  const schoolStages = stages.filter((s) => isSchoolStageCode(s.code));
   const visibleProgress = progressSteps.filter((s) => {
-    if (role !== "student") return s.key === "role" || s.key === "done";
-    const stageCode = stages.find((st) => st.id === stageId)?.code;
-    if (s.key === "track") return !!stageCode && stageCode === "BACCALAUREATE" && step === "track" || step === "done";
+    if (role !== "student") return s.key === "role";
+    if (s.key === "track") {
+      // Track dot joins the flow only when the engine requires a track;
+      // while taxonomy is unresolved, show it once the track step is reached.
+      if (uiStageCode === null || uiGradeOrder === null) return step === "track";
+      return needsTrackForSchool(uiStageCode, uiGradeOrder);
+    }
     return true;
   });
   const activeIndex = visibleProgress.findIndex((s) => s.key === step || (step === "done" && s.key === "track"));
@@ -482,8 +650,13 @@ export default function OnboardingPage() {
   }
 
   const isStudent = role === "student";
-  const baccStageCode = stages.find((s) => s.id === stageId)?.code;
-  const showTrack = isStudent && !!stageId && baccStageCode === "BACCALAUREATE" && ((step as string) === "track" || (step as string) === "done");
+  /* D1: track UI shows exactly when the engine requires a track (Bacc | SEC 2+).
+     While taxonomy is still loading we trust the routing (no blank flash). */
+  const showTrack =
+    isStudent &&
+    step === "track" &&
+    (uiStageCode === null || uiGradeOrder === null || needsTrackForSchool(uiStageCode, uiGradeOrder));
+  const isSecondaryTrack = uiStageCode === "SECONDARY";
 
   return (
     <div className="auth" dir={locale === "ar" ? "rtl" : "ltr"}>
@@ -583,7 +756,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 className="btn btn-marker btn-block"
-                onClick={() => { if (isStudent) { setStep("stage"); } else { void finish(); } }}
+                onClick={() => advance()}
                 disabled={saving}
               >
                 {locale === "ar" ? "استمر" : "Continue"}
@@ -607,7 +780,7 @@ export default function OnboardingPage() {
                 <p className="mono muted">{t.login_loading}</p>
               ) : (
                 <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "المرحلة" : "Education stage"}>
-                  {stages.map((s) => {
+                  {schoolStages.map((s) => {
                     const selected = stageId === s.id;
                     return (
                       <button key={s.id} type="button" role="radio" aria-checked={selected}
@@ -623,11 +796,11 @@ export default function OnboardingPage() {
                       </button>
                     );
                   })}
-                  {stages.length === 0 && (<p className="small muted">{locale === "ar" ? "لم يتم تحميل المراحل." : "Stages not loaded."}</p>)}
+                  {schoolStages.length === 0 && (<p className="small muted">{locale === "ar" ? "لم يتم تحميل المراحل." : "Stages not loaded."}</p>)}
                 </div>
               )}
               <div className="row" style={{ gap: "10px" }}>
-                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (stageId) { setStep("grade"); } else { setError(locale === "ar" ? "اختر مرحلة." : "Select stage."); } }} disabled={saving || !stageId}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (!stageId) { setError(locale === "ar" ? "اختر مرحلة." : "Select stage."); return; } advance(); }} disabled={saving || !stageId}>
                   {locale === "ar" ? "استمر" : "Continue"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
@@ -700,7 +873,7 @@ export default function OnboardingPage() {
                 )}
               </div>
               <div className="row" style={{ gap: "10px" }}>
-                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (universityId && facultyId && departmentId && academicLevelId && semesterId) { void finish(); } else { setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details."); } }} disabled={saving || !(universityId && facultyId && departmentId && academicLevelId && semesterId)}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => { if (!(universityId && facultyId && departmentId && academicLevelId && semesterId)) { setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details."); return; } advance(); }} disabled={saving || !(universityId && facultyId && departmentId && academicLevelId && semesterId)}>
                   {locale === "ar" ? "استمر" : "Continue"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
@@ -737,8 +910,7 @@ export default function OnboardingPage() {
               <div className="row" style={{ gap: "10px" }}>
                 <button type="button" className="btn btn-marker btn-block" onClick={() => {
                   if (!gradeId) { setError(locale === "ar" ? "اختر صف." : "Select grade."); return; }
-                  const stageCode = stages.find((s) => s.id === stageId)?.code;
-                  if (stageCode === "BACCALAUREATE") { setStep("track"); } else { void finish(); }
+                  advance();
                 }} disabled={saving || !gradeId}>
                   {locale === "ar" ? "استمر" : "Continue"}
                 </button>
@@ -747,17 +919,19 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* STEP 4 — TRACK (Baccalaureate only) */}
+          {/* STEP 4 — TRACK (Bacc | Secondary 2+) */}
           {step === "track" && isStudent && showTrack && (
             <>
               <h2 className="h3" style={{ margin: 0 }}>
-                {locale === "ar" ? "المسار (البكالوريا فقط)" : "Track (Baccalaureate only)"}
+                {isSecondaryTrack
+                  ? (locale === "ar" ? "الشعبة" : "Branch")
+                  : (locale === "ar" ? "المسار" : "Track")}
               </h2>
               <p className="small muted" style={{ margin: 0 }}>
-                {locale === "ar" ? "من taxonomy — Medicine / Engineering / Business / Humanities." : "From taxonomy — Medicine / Engineering / Business / Humanities."}
+                {locale === "ar" ? "من taxonomy — اختر الأنسب لمسارك." : "From taxonomy — pick yours."}
               </p>
               {loadingTax ? <p className="mono muted">{t.login_loading}</p> : (
-                <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "المسار" : "Track"}>
+                <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={isSecondaryTrack ? (locale === "ar" ? "الشعبة" : "Branch") : (locale === "ar" ? "المسار" : "Track")}>
                   {tracks.map((tr) => {
                     const selected = trackId === tr.id;
                     return (
@@ -778,11 +952,20 @@ export default function OnboardingPage() {
                 </div>
               )}
               <div className="row" style={{ gap: "10px" }}>
-                <button type="button" className="btn btn-marker btn-block" onClick={() => void finish()} disabled={saving}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => {
+                  if (!trackId) { setError(isSecondaryTrack ? (locale === "ar" ? "اختر الشعبة." : "Select a branch.") : (locale === "ar" ? "اختر المسار." : "Select a track.")); return; }
+                  advance();
+                }} disabled={saving}>
                   {locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
               </div>
+              {/* R5 escape hatch: required-if-available (D4) — never strand on empty taxonomy */}
+              {!loadingTax && tracks.length === 0 && (
+                <button type="button" className="small muted" style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }} onClick={() => void finish(undefined, { requireTrack: false })} disabled={saving}>
+                  {locale === "ar" ? "متابعة بدون اختيار مسار" : "Continue without a track"}
+                </button>
+              )}
             </>
           )}
 
@@ -790,7 +973,7 @@ export default function OnboardingPage() {
           {step === "grade" && !isStudent && (
             <>
               <h2 className="h3">{locale === "ar" ? "الخريج / Freelancer — لا تحتاج اختيار مرحلة." : "Graduate / Freelancer — no stage needed."}</h2>
-              <button type="button" className="btn btn-marker btn-block" onClick={() => void finish()} disabled={saving}>{locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}</button>
+              <button type="button" className="btn btn-marker btn-block" onClick={() => advance()} disabled={saving}>{locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}</button>
               <button type="button" className="btn btn-secondary" onClick={goBack}>← {locale === "ar" ? "رجوع" : "Back"}</button>
             </>
           )}

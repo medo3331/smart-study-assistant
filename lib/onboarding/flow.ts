@@ -59,8 +59,16 @@ const SCHOOL_STAGE_CODES: readonly string[] = [
   "BACCALAUREATE",
 ];
 
+/**
+ * هل هذا كود مرحلة مدرسية صالحة؟ (D3 — أي كود آخر يُعاد اختياره)
+ * المصدر الوحيد لهذه القاعدة: المحرك + فلتر قائمة المراحل في الـ UI.
+ */
+export function isSchoolStageCode(code: string | null | undefined): code is string {
+  return !!code && SCHOOL_STAGE_CODES.includes(code);
+}
+
 /** هل يحتاج هذا السياق المدرسي خطوة مسار؟ (D1 + D4) */
-function needsTrackForSchool(stageCode: string, gradeOrderIndex: number): boolean {
+export function needsTrackForSchool(stageCode: string, gradeOrderIndex: number): boolean {
   if (stageCode === "BACCALAUREATE") return true;
   if (stageCode === "SECONDARY" && gradeOrderIndex >= 2) return true;
   return false;
@@ -88,7 +96,7 @@ export function getNextStep(ctx: FlowContext): StepKey {
   if (!ctx.stageCode) return "stage";
 
   // Row 13 — كود غير معروف (مثل صف UNIVERSITY القديم) → إعادة اختيار (D3)
-  if (!SCHOOL_STAGE_CODES.includes(ctx.stageCode)) return "stage";
+  if (!isSchoolStageCode(ctx.stageCode)) return "stage";
 
   // Rows 5, 8, 10 — بلا صف → خطوة الصف
   if (!ctx.hasGrade) return "grade";
@@ -131,8 +139,7 @@ export function getPrevStep(ctx: FlowContext, currentStep: StepKey): StepKey {
       if (ctx.studentType === "university") return "semester";
       const order = ctx.gradeOrderIndex ?? 0;
       if (
-        ctx.stageCode &&
-        SCHOOL_STAGE_CODES.includes(ctx.stageCode) &&
+        isSchoolStageCode(ctx.stageCode) &&
         ctx.hasGrade &&
         needsTrackForSchool(ctx.stageCode, order)
       ) {
