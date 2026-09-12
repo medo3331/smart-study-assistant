@@ -5,6 +5,7 @@ import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
@@ -79,6 +80,15 @@ export async function POST(req: Request) {
     const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+
+    // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
+    let personaPrompt = "";
+    try {
+      personaPrompt = await buildSystemPrompt(user.id);
+    } catch (e) {
+      console.warn("Persona prompt build failed, falling back to base system prompt:", e);
+    }
+    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
@@ -97,7 +107,7 @@ export async function POST(req: Request) {
     let completion;
     try {
       completion = await aiRouter.completeChat("chat", {
-        messages: [{ role: "system", content: system }, ...safeMessages],
+        messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
         temperature: 0.7,
       });
     } catch (error) {

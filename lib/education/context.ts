@@ -2,6 +2,7 @@
 // Foundation: abstraction; NO invented mapping per audit sec 3/4
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 
 export interface Profile {
   country?: string | null;
@@ -102,4 +103,58 @@ export async function getAvailableSubjects(supabase: SupabaseClient, ctx: Partia
     } catch { return []; }
   }
   return [];
+}
+
+/** جلب السياق المفصل للطالب لبناء الـ System Prompt المخصص (Persona Builder) */
+export async function getDetailedAIContext(userId: string) {
+  const supabase = await createClient();
+
+  // 1. جلب بيانات البروفايل مع أسماء المرحلة والصف والشعبة والجامعة
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select(`
+      full_name,
+      persona,
+      goals,
+      learning_style,
+      education_stage_id,
+      education_stages(name, code),
+      education_grade_id,
+      education_grades(name, order_index),
+      education_track_id,
+      education_tracks(name, code),
+      university_id,
+      universities(name),
+      university_faculties(name),
+      university_departments(name)
+    `)
+    .eq("id", userId)
+    .single();
+
+  // 2. جلب أسماء المواد التي اختارها الطالب (user_subjects أو من settings)
+  let subjects: string[] = [];
+  try {
+    const { data: subjectsData } = await supabase
+      .from("user_subjects")
+      .select("subject_id, subjects(name)")
+      .eq("user_id", userId);
+    subjects = subjectsData?.map((s: any) => s.subjects?.name).filter(Boolean) || [];
+  } catch {
+    // fallback: إذا لم يكن جدول user_subjects موجوداً بعد، نقرأ من profile.subject مباشرة
+    if (profile?.subject) subjects = [String(profile.subject)];
+  }
+
+  return {
+    name: profile?.full_name || "يا بطل",
+    persona: profile?.persona ?? null,
+    stage: (profile?.education_stages as { name?: string; code?: string } | null)?.name ?? null,
+    grade: (profile?.education_grades as { name?: string; order_index?: number } | null)?.name ?? null,
+    track: (profile?.education_tracks as { name?: string; code?: string } | null)?.name ?? null,
+    university: (profile?.universities as { name?: string } | null)?.name ?? null,
+    faculty: (profile?.university_faculties as { name?: string } | null)?.name ?? null,
+    department: (profile?.university_departments as { name?: string } | null)?.name ?? null,
+    goals: Array.isArray(profile?.goals) ? profile.goals : [],
+    style: profile?.learning_style ?? null,
+    subjects: subjects,
+  };
 }

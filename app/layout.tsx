@@ -67,7 +67,7 @@ export const metadata: Metadata = {
   authors: [{ name: SITE_NAME }],
   creator: SITE_NAME,
   publisher: SITE_NAME,
-  manifest: '/manifest.webmanifest',
+  manifest: '/manifest.json',
   category: 'education',
 
   /* الأيقونات على مصدرين، والتقسيمة مقصودة:
