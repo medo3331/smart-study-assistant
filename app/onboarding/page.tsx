@@ -21,9 +21,24 @@ import {
   type FlowContext,
   type StepKey as FlowStepKey,
 } from "@/lib/onboarding/flow";
+import { getAvailableSubjects } from "@/lib/education/context";
+import {
+  GOAL_IDS,
+  GOAL_OPTIONS,
+  STYLE_IDS,
+  STYLE_OPTIONS,
+} from "@/lib/onboarding/options";
 
 type Role = "student" | "graduate" | "freelancer";
-type StepKey = "role" | "stage" | "grade" | "track" | "done";
+type StepKey =
+  | "role"
+  | "stage"
+  | "grade"
+  | "track"
+  | "subjects"
+  | "goals"
+  | "preferences"
+  | "done";
 
 /* Canonical taxonomy records read from DB — not hardcoded names */
 interface StageRow { id: string; name: string; code: string; order_index: number };
@@ -43,6 +58,9 @@ function mapFlowStepToUi(s: FlowStepKey): StepKey {
     case "stage":
     case "grade":
     case "track":
+    case "subjects":
+    case "goals":
+    case "preferences":
     case "done":
       return s;
     case "university":
@@ -52,6 +70,26 @@ function mapFlowStepToUi(s: FlowStepKey): StepKey {
     case "semester":
       return "stage";
   }
+}
+
+/* Taxonomy fingerprint — R5 waivers bind to the exact taxonomy they were
+   granted for; any taxonomy change voids them (no stale skips). */
+interface TaxonomyIds {
+  stageId: string | null;
+  gradeId: string | null;
+  trackId: string | null;
+  universityId: string | null;
+  facultyId: string | null;
+  departmentId: string | null;
+  academicLevelId: string | null;
+  semesterId: string | null;
+}
+
+function taxonomyFingerprint(v: TaxonomyIds): string {
+  return [
+    v.stageId, v.gradeId, v.trackId, v.universityId,
+    v.facultyId, v.departmentId, v.academicLevelId, v.semesterId,
+  ].map((x) => x ?? "-").join("|");
 }
 
 export default function OnboardingPage() {
@@ -73,6 +111,17 @@ export default function OnboardingPage() {
   const [stageId, setStageId] = useState<string | null>(null);
   const [gradeId, setGradeId] = useState<string | null>(null);
   const [trackId, setTrackId] = useState<string | null>(null);
+
+  /* Learning-profile tail (Phase 3) — school/uni selections stay split because
+     they come from separate catalogs (subjects vs university_subjects). */
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedUniSubjects, setSelectedUniSubjects] = useState<string[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<{ id: string; name: string }[]>([]);
+  const [goals, setGoals] = useState<string[]>([]);
+  const [learningStyle, setLearningStyle] = useState<string | null>(null);
+  /* R5 waivers bound to taxonomyFingerprint (void on any taxonomy change) */
+  const [trackWaivedFor, setTrackWaivedFor] = useState<string | null>(null);
+  const [subjectsWaivedFor, setSubjectsWaivedFor] = useState<string | null>(null);
 
   const [loadingTax, setLoadingTax] = useState(false);
 
@@ -145,7 +194,7 @@ export default function OnboardingPage() {
       if (!cancelled && user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("persona, onboarded_at, education_stage_id, education_grade_id, education_track_id, university_id, faculty_id, department_id, academic_level_id, semester_id")
+          .select("persona, onboarded_at, education_stage_id, education_grade_id, education_track_id, university_id, faculty_id, department_id, academic_level_id, semester_id, goals, learning_style")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -192,6 +241,18 @@ export default function OnboardingPage() {
               snapshotGradeOrder = gRow?.order_index ?? null;
             }
             if (cancelled) return;
+            // Saved subject selections (both manifolds — split by catalog)
+            const { data: savedSubjects } = await supabase
+              .from("user_subjects")
+              .select("subject_id, university_subject_id")
+              .eq("user_id", user.id);
+            if (cancelled) return;
+            const savedSchoolIds = (savedSubjects ?? [])
+              .map((r) => r.subject_id as string | null)
+              .filter((x): x is string => !!x);
+            const savedUniIds = (savedSubjects ?? [])
+              .map((r) => r.university_subject_id as string | null)
+              .filter((x): x is string => !!x);
 
             const flowCtx: FlowContext = {
               role: existing,
@@ -200,6 +261,9 @@ export default function OnboardingPage() {
               gradeOrderIndex: snapshotGradeOrder,
               hasGrade: !!profile?.education_grade_id,
               hasTrack: !!profile?.education_track_id,
+              hasSubjects: savedSchoolIds.length + savedUniIds.length > 0,
+              hasGoals: (profile?.goals?.length ?? 0) > 0,
+              hasPreferences: !!profile?.learning_style,
               uni: {
                 hasUniversity: !!profile?.university_id,
                 hasFaculty: !!profile?.faculty_id,
@@ -216,6 +280,10 @@ export default function OnboardingPage() {
                 stageId: profile?.education_stage_id ?? null,
                 gradeId: profile?.education_grade_id ?? null,
                 trackId: profile?.education_track_id ?? null,
+                subjectIds: savedSchoolIds,
+                universitySubjectIds: savedUniIds,
+                goals: profile?.goals ?? [],
+                learningStyle: profile?.learning_style ?? null,
                 stageCode: snapshotStageCode,
                 gradeOrder: snapshotGradeOrder,
                 universityId: profile?.university_id ?? null,
@@ -230,6 +298,11 @@ export default function OnboardingPage() {
                  manifold. (No track prefill: engine routes to "track" only
                  when no track is saved — prefill would be dead code.) */
               setStudentType(snapshotType);
+              // Prefill tail selections from saved data (review-and-continue)
+              if (savedSchoolIds.length > 0) setSelectedSubjects(savedSchoolIds);
+              if (savedUniIds.length > 0) setSelectedUniSubjects(savedUniIds);
+              if (profile?.goals?.length) setGoals(profile.goals);
+              if (profile?.learning_style) setLearningStyle(profile.learning_style);
               if (existing === "student" && snapshotType !== "university") {
                 if (profile?.education_stage_id) setStageId(profile.education_stage_id);
                 if (profile?.education_grade_id) setGradeId(profile.education_grade_id);
@@ -321,6 +394,37 @@ export default function OnboardingPage() {
     if (step === "track") loadTracks();
   }, [step, loadTracks]);
 
+  /* ---- Load available subjects for the subjects step (both manifolds) ----
+     Reuses the catalog abstraction (curricula→subjects / university_subjects);
+     then reconciles selections (drops IDs no longer offered). */
+  useEffect(() => {
+    if (step !== "subjects") return;
+    let cancelledFetch = false;
+    void (async () => {
+      setLoadingTax(true);
+      try {
+        if (!supabaseRef.current) supabaseRef.current = createClient();
+        const supabase = supabaseRef.current;
+        const list = await getAvailableSubjects(supabase, {
+          stageId, gradeId, trackId,
+          universityId, departmentId, academicLevelId, semesterId,
+        });
+        if (cancelledFetch) return;
+        setAvailableSubjects(list.map((s) => ({ id: s.id, name: s.name })));
+        const ids = new Set(list.map((s) => s.id));
+        if (studentType === "university") {
+          setSelectedUniSubjects((prev) => prev.filter((id) => ids.has(id)));
+        } else {
+          setSelectedSubjects((prev) => prev.filter((id) => ids.has(id)));
+        }
+      } catch {
+        if (!cancelledFetch) setAvailableSubjects([]);
+      }
+      if (!cancelledFetch) setLoadingTax(false);
+    })();
+    return () => { cancelledFetch = true; };
+  }, [step, studentType, stageId, gradeId, trackId, universityId, departmentId, academicLevelId, semesterId]);
+
   /* ---- Persist (server-side) ---- */
   async function persist(data: {
     persona: "student" | "grad" | "freelancer";
@@ -333,6 +437,10 @@ export default function OnboardingPage() {
     departmentId?: string | null;
     academicLevelId?: string | null;
     semesterId?: string | null;
+    subjectIds?: string[];
+    universitySubjectIds?: string[];
+    goals?: string[];
+    learningStyle?: string | null;
     onboardedAtIso: string;
   }): Promise<{ ok: boolean; error?: string }> {
     if (!supabaseRef.current) supabaseRef.current = createClient();
@@ -397,9 +505,63 @@ export default function OnboardingPage() {
       }
     }
 
+    /* Learning-profile tail (Phase 3): whitelist mirrors DB CHECK + UI options */
+    const effGoals = data.goals ?? [];
+    const effStyle = data.learningStyle ?? null;
+    if (!effGoals.every((g) => (GOAL_IDS as readonly string[]).includes(g))) {
+      return { ok: false, error: locale === "ar" ? "هدف غير صالح." : "Invalid goal." };
+    }
+    if (effStyle !== null && !(STYLE_IDS as readonly string[]).includes(effStyle)) {
+      return { ok: false, error: locale === "ar" ? "أسلوب غير صالح." : "Invalid style." };
+    }
+    const schoolIds = [...new Set(data.subjectIds ?? [])];
+    const uniSubjIds = [...new Set(data.universitySubjectIds ?? [])];
+    if (data.persona === "student") {
+      // Existence checks (curriculum match is soft — catalogs evolve via SQL)
+      if (schoolIds.length > 0) {
+        const { data: rows, error: exErr } = await supabase.from("subjects").select("id").in("id", schoolIds);
+        if (exErr || !rows || rows.length !== schoolIds.length) {
+          return { ok: false, error: locale === "ar" ? "مادة غير صالحة." : "Invalid subject." };
+        }
+      }
+      if (uniSubjIds.length > 0) {
+        const { data: uRows, error: uExErr } = await supabase.from("university_subjects").select("id").in("id", uniSubjIds);
+        if (uExErr || !uRows || uRows.length !== uniSubjIds.length) {
+          return { ok: false, error: locale === "ar" ? "مادة جامعية غير صالحة." : "Invalid university subject." };
+        }
+      }
+      // Idempotent replace BEFORE the profile upsert: a subjects failure must
+      // abort before onboarded_at is set (retry re-runs the same replace).
+      const { error: delErr } = await supabase.from("user_subjects").delete().eq("user_id", user.id);
+      if (delErr) {
+        console.error("onboarding subjects delete failed:", delErr.message);
+        return { ok: false, error: locale === "ar" ? "حفظ المواد فشل." : "Subjects save failed." };
+      }
+      const rowsToInsert = [
+        ...schoolIds.map((id) => ({ user_id: user.id, subject_id: id, university_subject_id: null as string | null })),
+        ...uniSubjIds.map((id) => ({ user_id: user.id, subject_id: null as string | null, university_subject_id: id })),
+      ];
+      if (rowsToInsert.length > 0) {
+        const { error: insErr } = await supabase.from("user_subjects").insert(rowsToInsert);
+        if (insErr) {
+          console.error("onboarding subjects insert failed:", insErr.message);
+          return { ok: false, error: locale === "ar" ? "حفظ المواد فشل." : "Subjects save failed." };
+        }
+      }
+    } else {
+      // Non-students hold no learning profile (also cleans persona-switch strays)
+      const { error: delErr } = await supabase.from("user_subjects").delete().eq("user_id", user.id);
+      if (delErr) {
+        console.error("onboarding subjects delete failed:", delErr.message);
+        return { ok: false, error: locale === "ar" ? "حفظ فشل." : "Save failed." };
+      }
+    }
+
     const fields: Record<string, unknown> = {
       persona: data.persona,
       onboarded_at: data.onboardedAtIso,
+      goals: data.persona === "student" ? effGoals : [],
+      learning_style: data.persona === "student" ? effStyle : null,
     };
     // School student: existing taxonomy
     if (data.persona === "student" && data.studentType !== 'university') {
@@ -464,8 +626,10 @@ export default function OnboardingPage() {
       departmentId?: string | null;
       academicLevelId?: string | null;
       semesterId?: string | null;
-      /** R5 escape hatch: waive the D4 required-track check */
-      requireTrack?: boolean;
+      subjectIds?: string[];
+      universitySubjectIds?: string[];
+      goals?: string[];
+      learningStyle?: string | null;
     }
   ): Promise<void> {
     setSaving(true); setError(null);
@@ -482,6 +646,10 @@ export default function OnboardingPage() {
     const effDepartmentId = dataOverride?.departmentId !== undefined ? dataOverride.departmentId : departmentId;
     const effLevelId = dataOverride?.academicLevelId !== undefined ? dataOverride.academicLevelId : academicLevelId;
     const effSemesterId = dataOverride?.semesterId !== undefined ? dataOverride.semesterId : semesterId;
+    const effSubjectIds = dataOverride?.subjectIds !== undefined ? dataOverride.subjectIds : selectedSubjects;
+    const effUniSubjectIds = dataOverride?.universitySubjectIds !== undefined ? dataOverride.universitySubjectIds : selectedUniSubjects;
+    const effGoals = dataOverride?.goals !== undefined ? dataOverride.goals : goals;
+    const effLearningStyle = dataOverride?.learningStyle !== undefined ? dataOverride.learningStyle : learningStyle;
     // needsTrack inputs: override first, else derive from loaded taxonomy
     // (resume callers always pass overrides — taxonomy may be unloaded there).
     const effStageCode = dataOverride?.stageCode !== undefined ? dataOverride.stageCode : stages.find((s) => s.id === effStageId)?.code ?? null;
@@ -498,11 +666,18 @@ export default function OnboardingPage() {
       setError(locale === "ar" ? "اختر الصف." : "Select grade.");
       setSaving(false); return;
     }
-    // D4: track required when the engine can decide (R5 hatch may waive it)
+    // Effective fingerprint — waivers (UI path only; resume states start null)
+    const effFp = taxonomyFingerprint({
+      stageId: effStageId, gradeId: effGradeId, trackId: effTrackId,
+      universityId: effUniversityId, facultyId: effFacultyId, departmentId: effDepartmentId,
+      academicLevelId: effLevelId, semesterId: effSemesterId,
+    });
+    // D4: track required when the engine can decide (fingerprint waiver may excuse it)
     const trackNeeded =
       effStageCode !== null && effGradeOrder !== null &&
       needsTrackForSchool(effStageCode, effGradeOrder);
-    if (isSchoolStudent && trackNeeded && (dataOverride?.requireTrack ?? true) && !effTrackId) {
+    const trackWaived = trackWaivedFor !== null && trackWaivedFor === effFp;
+    if (isSchoolStudent && trackNeeded && !trackWaived && !effTrackId) {
       const secondary = effStageCode === "SECONDARY";
       setError(
         secondary
@@ -513,6 +688,20 @@ export default function OnboardingPage() {
     }
     if (isUniStudent && !(effUniversityId && effFacultyId && effDepartmentId && effLevelId && effSemesterId)) {
       setError(locale === "ar" ? "أكمل بيانات الجامعة." : "Complete university details.");
+      setSaving(false); return;
+    }
+    // Tail validations (students only — engine routes non-students straight to done)
+    const subjectsWaived = subjectsWaivedFor !== null && subjectsWaivedFor === effFp;
+    if (effRole === "student" && effSubjectIds.length + effUniSubjectIds.length === 0 && !subjectsWaived) {
+      setError(locale === "ar" ? "اختر مادة على الأقل." : "Select at least one subject.");
+      setSaving(false); return;
+    }
+    if (effRole === "student" && effGoals.length === 0) {
+      setError(locale === "ar" ? "اختر هدفك." : "Select your goal.");
+      setSaving(false); return;
+    }
+    if (effRole === "student" && !effLearningStyle) {
+      setError(locale === "ar" ? "اختر أسلوب الشرح." : "Select a learning style.");
       setSaving(false); return;
     }
 
@@ -535,6 +724,10 @@ export default function OnboardingPage() {
       departmentId: isUniStudent ? effDepartmentId : null,
       academicLevelId: isUniStudent ? effLevelId : null,
       semesterId: isUniStudent ? effSemesterId : null,
+      subjectIds: effRole === "student" ? effSubjectIds : [],
+      universitySubjectIds: effRole === "student" ? effUniSubjectIds : [],
+      goals: effRole === "student" ? effGoals : [],
+      learningStyle: effRole === "student" ? effLearningStyle : null,
       onboardedAtIso: iso,
     });
     if (!ok) {
@@ -556,14 +749,25 @@ export default function OnboardingPage() {
   }
 
   /* ---- Engine wiring (R3–R6): UI state → FlowContext → decision ---- */
+  function currentFingerprint(): string {
+    return taxonomyFingerprint({
+      stageId, gradeId, trackId, universityId,
+      facultyId, departmentId, academicLevelId, semesterId,
+    });
+  }
+
   function buildUiCtx(): FlowContext {
+    const fp = currentFingerprint();
     return {
       role,
       studentType,
       stageCode: stages.find((s) => s.id === stageId)?.code ?? null,
       gradeOrderIndex: grades.find((g) => g.id === gradeId)?.order_index ?? null,
       hasGrade: !!gradeId,
-      hasTrack: !!trackId,
+      hasTrack: !!trackId || trackWaivedFor === fp,
+      hasSubjects: selectedSubjects.length + selectedUniSubjects.length > 0 || subjectsWaivedFor === fp,
+      hasGoals: goals.length > 0,
+      hasPreferences: !!learningStyle,
       uni: {
         hasUniversity: !!universityId,
         hasFaculty: !!facultyId,
@@ -574,10 +778,18 @@ export default function OnboardingPage() {
     };
   }
 
-  /* Single advancement point: engine decides, UI maps (R4), stale errors cleared */
-  function advance(): void {
+  /* Single advancement point: engine decides, UI maps (R4), stale errors cleared.
+     R5 hatches pass waivers bound to the current taxonomy fingerprint. */
+  function advance(opts?: { waiveTrack?: boolean; waiveSubjects?: boolean }): void {
     setError(null);
-    const next = getNextStep(buildUiCtx());
+    const fp = currentFingerprint();
+    if (opts?.waiveTrack) setTrackWaivedFor(fp);
+    if (opts?.waiveSubjects) setSubjectsWaivedFor(fp);
+    const c = buildUiCtx();
+    // Setters above haven't applied yet — force the waiver for THIS decision
+    if (opts?.waiveTrack) c.hasTrack = true;
+    if (opts?.waiveSubjects) c.hasSubjects = true;
+    const next = getNextStep(c);
     if (next === "done") { void finish(); }
     else { setStep(mapFlowStepToUi(next)); }
   }
@@ -607,6 +819,9 @@ export default function OnboardingPage() {
     { key: "stage", labelAr: "المرحلة", labelEn: "Stage" },
     { key: "grade", labelAr: "الصف", labelEn: "Grade" },
     { key: "track", labelAr: "المسار", labelEn: "Track" },
+    { key: "subjects", labelAr: "المواد", labelEn: "Subjects" },
+    { key: "goals", labelAr: "الأهداف", labelEn: "Goals" },
+    { key: "preferences", labelAr: "التفضيلات", labelEn: "Preferences" },
   ];
   /* Resolved taxonomy for engine-driven UI (single source — no hardcoded codes) */
   const uiStageCode = stages.find((s) => s.id === stageId)?.code ?? null;
@@ -616,6 +831,8 @@ export default function OnboardingPage() {
   const schoolStages = stages.filter((s) => isSchoolStageCode(s.code));
   const visibleProgress = progressSteps.filter((s) => {
     if (role !== "student") return s.key === "role";
+    // Uni manifold keeps its screen dot; school funnel dots hidden (U2-mini)
+    if (studentType === "university") return s.key !== "grade" && s.key !== "track";
     if (s.key === "track") {
       // Track dot joins the flow only when the engine requires a track;
       // while taxonomy is unresolved, show it once the track step is reached.
@@ -956,16 +1173,145 @@ export default function OnboardingPage() {
                   if (!trackId) { setError(isSecondaryTrack ? (locale === "ar" ? "اختر الشعبة." : "Select a branch.") : (locale === "ar" ? "اختر المسار." : "Select a track.")); return; }
                   advance();
                 }} disabled={saving}>
-                  {locale === "ar" ? "ابدأ Magiclly" : "Start Magiclly"}
+                  {locale === "ar" ? "استمر" : "Continue"}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
               </div>
               {/* R5 escape hatch: required-if-available (D4) — never strand on empty taxonomy */}
               {!loadingTax && tracks.length === 0 && (
-                <button type="button" className="small muted" style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }} onClick={() => void finish(undefined, { requireTrack: false })} disabled={saving}>
+                <button type="button" className="small muted" style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }} onClick={() => advance({ waiveTrack: true })} disabled={saving}>
                   {locale === "ar" ? "متابعة بدون اختيار مسار" : "Continue without a track"}
                 </button>
               )}
+            </>
+          )}
+
+          {/* STEP 5 — SUBJECTS (both student manifolds) */}
+          {step === "subjects" && isStudent && (
+            <>
+              <h2 className="h3" style={{ margin: 0 }}>
+                {locale === "ar" ? "اختار المواد اللي بتدرسها 📚" : "Pick your subjects 📚"}
+              </h2>
+              <p className="small muted" style={{ margin: 0 }}>
+                {locale === "ar" ? "من الكتالوج — حسب مرحلتك وصفك ومسارك." : "From the catalog — for your stage, grade and track."}
+              </p>
+              {loadingTax ? <p className="mono muted">{t.login_loading}</p> : (
+                <div className="row" style={{ gap: "8px", flexWrap: "wrap" }} role="group" aria-label={locale === "ar" ? "المواد" : "Subjects"}>
+                  {availableSubjects.map((s) => {
+                    const activeList = studentType === "university" ? selectedUniSubjects : selectedSubjects;
+                    const selected = activeList.includes(s.id);
+                    return (
+                      <button key={s.id} type="button" aria-pressed={selected}
+                        onClick={() => {
+                          if (studentType === "university") {
+                            setSelectedUniSubjects((prev) => prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]);
+                          } else {
+                            setSelectedSubjects((prev) => prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]);
+                          }
+                        }}
+                        style={{
+                          padding: "9px 16px", borderRadius: "999px", border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                          background: selected ? "var(--ink)" : "var(--paper)", color: selected ? "var(--paper-2)" : "var(--ink)",
+                          fontSize: "var(--t-sm)", fontWeight: 600, cursor: "pointer", font: "inherit",
+                        }}>{s.name}</button>
+                    );
+                  })}
+                  {availableSubjects.length === 0 && <p className="small muted">{locale === "ar" ? "لا توجد مواد مسجلة لهذا المسار بعد." : "No subjects catalogued for this path yet."}</p>}
+                </div>
+              )}
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => {
+                  if (selectedSubjects.length + selectedUniSubjects.length === 0) { setError(locale === "ar" ? "اختر مادة على الأقل." : "Select at least one subject."); return; }
+                  advance();
+                }} disabled={saving || (selectedSubjects.length + selectedUniSubjects.length === 0)}>
+                  {locale === "ar" ? "استمر" : "Continue"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
+              </div>
+              {/* R5 hatch: an empty catalog must never strand the user */}
+              {!loadingTax && availableSubjects.length === 0 && (
+                <button type="button" className="small muted" style={{ alignSelf: "center", background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }} onClick={() => advance({ waiveSubjects: true })} disabled={saving}>
+                  {locale === "ar" ? "متابعة بدون اختيار مواد" : "Continue without subjects"}
+                </button>
+              )}
+            </>
+          )}
+
+          {/* STEP 6 — GOALS (single-select for now; stored as an array) */}
+          {step === "goals" && isStudent && (
+            <>
+              <h2 className="h3" style={{ margin: 0 }}>
+                {locale === "ar" ? "إيه هدفك من المذاكرة؟ 🎯" : "What is your goal? 🎯"}
+              </h2>
+              <p className="small muted" style={{ margin: 0 }}>
+                {locale === "ar" ? "اختار هدفًا واحدًا — تقدر تغيّره بعدين." : "Pick one goal — changeable later."}
+              </p>
+              <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "الهدف" : "Goal"}>
+                {GOAL_OPTIONS.map((opt) => {
+                  const selected = goals.includes(opt.id);
+                  return (
+                    <button key={opt.id} type="button" role="radio" aria-checked={selected}
+                      onClick={() => setGoals([opt.id])}
+                      className="row" style={{
+                        gap: "12px", padding: "14px 16px", borderRadius: "var(--r-sm)",
+                        border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                        background: selected ? "color-mix(in srgb, var(--marker) 14%, transparent)" : "var(--paper)",
+                        cursor: "pointer", font: "inherit", color: "inherit", textAlign: "start",
+                      }}>
+                      <span style={{ fontSize: "1.5rem", lineHeight: 1.2 }}>{opt.emoji}</span>
+                      <b style={{ fontFamily: "var(--font-display)" }}>{locale === "ar" ? opt.labelAr : opt.labelEn}</b>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => {
+                  if (goals.length === 0) { setError(locale === "ar" ? "اختر هدفك." : "Select your goal."); return; }
+                  advance();
+                }} disabled={saving || goals.length === 0}>
+                  {locale === "ar" ? "استمر" : "Continue"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
+              </div>
+            </>
+          )}
+
+          {/* STEP 7 — PREFERENCES (final step before done) */}
+          {step === "preferences" && isStudent && (
+            <>
+              <h2 className="h3" style={{ margin: 0 }}>
+                {locale === "ar" ? "بتحب الشرح يكون إزاي؟ 🧠" : "How do you like explanations? 🧠"}
+              </h2>
+              <p className="small muted" style={{ margin: 0 }}>
+                {locale === "ar" ? "آخر خطوة — بعدها ماجيكلي هيتظبط عليك." : "Last step — then Magiclly adapts to you."}
+              </p>
+              <div className="stack" style={{ gap: "10px" }} role="radiogroup" aria-label={locale === "ar" ? "أسلوب الشرح" : "Learning style"}>
+                {STYLE_OPTIONS.map((opt) => {
+                  const selected = learningStyle === opt.id;
+                  return (
+                    <button key={opt.id} type="button" role="radio" aria-checked={selected}
+                      onClick={() => setLearningStyle(opt.id)}
+                      className="row" style={{
+                        gap: "12px", padding: "14px 16px", borderRadius: "var(--r-sm)",
+                        border: `1.5px solid ${selected ? "var(--ink)" : "var(--rule-strong)"}`,
+                        background: selected ? "color-mix(in srgb, var(--marker) 14%, transparent)" : "var(--paper)",
+                        cursor: "pointer", font: "inherit", color: "inherit", textAlign: "start",
+                      }}>
+                      <span style={{ fontSize: "1.5rem", lineHeight: 1.2 }}>{opt.emoji}</span>
+                      <b style={{ fontFamily: "var(--font-display)" }}>{locale === "ar" ? opt.labelAr : opt.labelEn}</b>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="row" style={{ gap: "10px" }}>
+                <button type="button" className="btn btn-marker btn-block" onClick={() => {
+                  if (!learningStyle) { setError(locale === "ar" ? "اختر أسلوب الشرح." : "Select a learning style."); return; }
+                  advance();
+                }} disabled={saving || !learningStyle}>
+                  {locale === "ar" ? "ابدأ رحلتك مع ماجيكلي ✨" : "Start your journey ✨"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>← {locale === "ar" ? "رجوع" : "Back"}</button>
+              </div>
             </>
           )}
 
