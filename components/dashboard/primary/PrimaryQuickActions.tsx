@@ -20,7 +20,7 @@ export function PrimaryQuickActions() {
             href={a.href}
             className={`group flex flex-col items-center gap-2 rounded-2xl border p-4 text-center hover:shadow-[0_4px_12px_var(--shade)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/20 ${a.tone}`}
           >
-            <span aria-hidden className="flex h-11 w-11 items-center justify-center rounded-xl bg-white border border-rule text-xl shadow-sm">
+            <span aria-hidden className="flex h-11 w-11 items-center justify-center rounded-xl bg-paper-2 border border-rule text-xl shadow-sm">
               {a.icon}
             </span>
             <span className="font-bold text-sm text-ink">{a.label}</span>

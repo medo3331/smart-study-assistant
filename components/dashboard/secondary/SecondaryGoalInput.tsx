@@ -152,7 +152,7 @@ export function SecondaryGoalInput({ onRecommendation, gradeName, trackName, ext
             onChange={(e) => setGoal(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !loading) void submit(goal); }}
             placeholder="مثال: عايز أذاكر الفيزياء"
-            className="flex-1 rounded-xl border border-rule bg-white px-4 py-3 text-sm text-ink placeholder:text-ink-soft/60 focus:border-ink/20 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="flex-1 rounded-xl border border-rule bg-paper-2 px-4 py-3 text-sm text-ink placeholder:text-ink-soft/60 focus:border-ink/20 focus:outline-none focus:ring-2 focus:ring-slate-200"
             disabled={loading}
             dir="rtl"
             autoComplete="off"
@@ -188,7 +188,7 @@ export function SecondaryGoalInput({ onRecommendation, gradeName, trackName, ext
         )}
 
         {explainContent && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mt-4 rounded-xl border border-rule bg-paper-2 p-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-sm text-ink">{explainTitle || "الشرح"}</h3>
               <button type="button" onClick={() => setExplainContent(null)} className="text-xs text-ink-soft underline">إخفاء</button>

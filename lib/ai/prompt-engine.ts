@@ -28,3 +28,29 @@ export const DIAGRAM_GUIDELINES = `
 export function withDiagramGuidelines(systemPrompt: string): string {
   return `${systemPrompt}\n\n${DIAGRAM_GUIDELINES}`;
 }
+
+/* ------------------------------------------------------------------ */
+/*  تعليمات النظام المقيدة بالحجم (context-builder + chaos tests)      */
+/* ------------------------------------------------------------------ */
+
+/** الحد الأقصى لحروف التعليمة الملحقة — أي زيادة بتتقطع مع …. */
+export const SYSTEM_INSTRUCTION_MAX_CHARS = 1200;
+
+/** علامة بداية التعليمات — ثابتة عشان التشخيص والاختبارات يلاقوها. */
+const INSTRUCTION_MARKER = "تعليمات تنسيق الإخراج الإلزامية";
+
+/** قصّ نص لطول أقصى مع … في الآخر. النص الأقصر بيرجع زي ما هو. */
+export function truncateText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 1) return "…".slice(0, Math.max(0, maxChars));
+  return text.slice(0, maxChars - 1) + "…";
+}
+
+/**
+ * إلحاق تعليمة ببرومبت النظام تحت علامة ثابتة، مقصوصة للحد الأقصى.
+ * التعليمة بتيجي في الآخر دايمًا — وحتى الفاضية بتسيب العلامة موجودة
+ * عشان اللي بيقرا البرومبت يعرف إن مكان التعليمات هنا.
+ */
+export function appendSystemInstruction(basePrompt: string, instruction: string): string {
+  return `${basePrompt}\n\n${INSTRUCTION_MARKER}\n${truncateText(instruction, SYSTEM_INSTRUCTION_MAX_CHARS)}`;
+}

@@ -85,7 +85,7 @@ export function BaccalaureateDashboard({
               <button type="button" onClick={() => onOpenLesson?.()} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-5 py-3 text-sm font-bold text-white hover:bg-amber-700">
                 دخول الدرس <span aria-hidden>→</span>
               </button>
-              <button type="button" onClick={() => onOpenAi?.(currentDayObj.topic)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-white px-5 py-3 text-sm font-bold text-amber-800 hover:bg-amber-50">
+              <button type="button" onClick={() => onOpenAi?.(currentDayObj.topic)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-paper-2 px-5 py-3 text-sm font-bold text-ink hover:bg-paper-3">
                 اسأل المساعد <span aria-hidden>🎓</span>
               </button>
             </div>

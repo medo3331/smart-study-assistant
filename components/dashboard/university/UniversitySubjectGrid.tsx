@@ -88,7 +88,7 @@ export function UniversitySubjectGrid({
             type="button"
             onClick={() => onSelect?.(s.name)}
             aria-label={`افتح ${s.name}`}
-            className="group flex flex-col gap-2.5 rounded-xl border border-rule bg-white p-4 text-right hover:border-ink/15 hover:shadow-sm active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/10"
+            className="group flex flex-col gap-2.5 rounded-xl border border-rule bg-paper-2 p-4 text-right hover:border-ink/15 hover:shadow-sm active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/10"
           >
             <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white text-sm font-bold">
               {iconFor(s.name)}

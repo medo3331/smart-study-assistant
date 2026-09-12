@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 
-export default async function ExamDetailPage({ params }: { params: { examId: string } }) {
+export default async function ExamDetailPage({ params }: { params: Promise<{ examId: string }> }) {
+  // Next 15+: params بقى Promise في الـ App Router
+  const { examId } = await params;
   const sb = await createClient();
   // RLS enforced: only published exam + linked questions visible
-  const examResult = await sb.from("past_exams").select("id, title, exam_date, duration_minutes, total_marks, exam_file_path, answer_file_path, source_name, source_url").eq("id", params.examId).eq("is_published", true).limit(1);
+  const examResult = await sb.from("past_exams").select("id, title, exam_date, duration_minutes, total_marks, exam_file_path, answer_file_path, source_name, source_url").eq("id", examId).eq("is_published", true).limit(1);
   const { data: exam, error } = examResult;
 
   if (error || !exam || exam.length === 0) {
@@ -13,7 +15,7 @@ export default async function ExamDetailPage({ params }: { params: { examId: str
 
   const ex = exam[0];
   // Questions — only if exam is published and questions exist; else show honest message
-  const questionsResult = await sb.from("past_exam_questions").select("id, question_number, question_text, marks, question_type").eq("exam_id", params.examId).order("question_number", { ascending: true }).limit(50);
+  const questionsResult = await sb.from("past_exam_questions").select("id, question_number, question_text, marks, question_type").eq("exam_id", examId).order("question_number", { ascending: true }).limit(50);
   const { data: questions, error: qErr } = questionsResult;
 
   return (

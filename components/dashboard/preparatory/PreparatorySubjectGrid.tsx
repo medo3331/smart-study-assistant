@@ -101,7 +101,7 @@ export function PreparatorySubjectGrid({
             aria-label={`افتح مادة ${s.name}`}
             className="group flex items-center gap-3 rounded-xl border border-rule bg-paper-2 p-3.5 text-right hover:bg-paper-3 hover:border-ink/10 hover:shadow-[0_2px_8px_var(--shade)] active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/15"
           >
-            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white border border-rule text-[1.1rem]">
+            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-paper-2 border border-rule text-[1.1rem]">
               {iconFor(s.name)}
             </span>
             <span className="min-w-0 flex-1">

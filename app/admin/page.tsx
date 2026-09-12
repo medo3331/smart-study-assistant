@@ -11,7 +11,7 @@ import { addAdminByEmail, addAdminByEmailFromForm } from "@/app/admin/actions/ad
 import pg from "pg";
 import { 
   UserCog, Trash2, Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
-  Bot, BookOpen, ShoppingBag, Activity, Database, Cpu, Gauge, Eye, UserSearch, AlertTriangle, Server
+  Bot, BookOpen, ShoppingBag, Activity, Database, Cpu, Gauge, Eye, UserSearch, AlertTriangle, Server, Crown
 } from "lucide-react";
 
 async function pgQuery<T=any>(sql: string, params: any[] = []): Promise<T[]> {
@@ -25,8 +25,12 @@ async function pgQuery<T=any>(sql: string, params: any[] = []): Promise<T[]> {
 export default async function AdminControlCenter({
   searchParams,
 }: {
-  searchParams: { success?: string; error?: string };
+  // Next 15+: searchParams بقى Promise في الـ App Router — نفس النمط
+  // المستخدم في app/dashboard/[role]/page.tsx. من غير ده next build بيفشل
+  // بـ "does not satisfy the constraint 'PageProps'".
+  searchParams: Promise<{ success?: string; error?: string }>;
 }) {
+  const sp = await searchParams;
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -125,6 +129,79 @@ export default async function AdminControlCenter({
     economyError = e.message || "تعذر جلب إحصائيات Economy";
   }
 
+  // ── Platform Overview — الاشتراكات الفعلية + أحدث التسجيلات ──
+  // ⚠️ مصدر الحقيقة هو entitlements(kind='plan', value='premium').
+  // مفيش في المشروع جدول `plans` ولا `user_subscriptions` — الباقتين الموجودين
+  // فعلاً هما free (الافتراضي من غير entitlement) وpremium (بـ entitlement)،
+  // والتجربة المجانية بتتميّز بـ metadata.source='premium_trial_0_5'
+  // (شوف db/economy-phase-0-5-trial-atomic.sql سطر 93-96).
+  // بنستخدم pgQuery زي باقي الصفحة: بيتجاوز RLS ويشتغل من غير SERVICE_ROLE_KEY.
+  type RecentSignup = {
+    id: string;
+    email: string | null;
+    display_name: string | null;
+    created_at: string | null;
+    is_premium: boolean;
+    on_trial: boolean;
+  };
+  let planOverview: { premium: number; trials: number; recent: RecentSignup[] } | null = null;
+  let planOverviewError: string | null = null;
+  try {
+    const [premRes, trialRes] = await Promise.all([
+      pgQuery<{ count: string }>(
+        `SELECT count(distinct user_id)::text AS count FROM entitlements
+          WHERE kind='plan' AND value='premium' AND (expires_at IS NULL OR expires_at > now())`
+      ),
+      pgQuery<{ count: string }>(
+        `SELECT count(distinct user_id)::text AS count FROM entitlements
+          WHERE kind='plan' AND value='premium' AND metadata->>'source' = 'premium_trial_0_5'
+            AND (expires_at IS NULL OR expires_at > now())`
+      ),
+    ]);
+
+    // profiles مالهوش DDL في الريبو (بيتعمل خارج المشروع)، فعمود created_at
+    // مش مضمون. بنسأل information_schema الأول عشان الاستعلام ما يقعش —
+    // ولو العمود مش موجود بنعرض الجدول من غير عمود التاريخ بدل ما نفشل خالص.
+    const [colRes] = await pgQuery<{ has: boolean }>(
+      `SELECT exists(
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='profiles' AND column_name='created_at'
+       ) AS has`
+    );
+    const hasCreatedAt = !!colRes?.has;
+    const timeCol = hasCreatedAt ? "p.created_at::text" : "NULL";
+    const orderClause = hasCreatedAt ? "ORDER BY p.created_at DESC NULLS LAST" : "ORDER BY p.id";
+
+    const recent = await pgQuery<RecentSignup>(
+      `SELECT p.id::text AS id,
+              p.email,
+              p.display_name,
+              ${timeCol} AS created_at,
+              exists(
+                SELECT 1 FROM entitlements e
+                 WHERE e.user_id = p.id AND e.kind='plan' AND e.value='premium'
+                   AND (e.expires_at IS NULL OR e.expires_at > now())
+              ) AS is_premium,
+              exists(
+                SELECT 1 FROM entitlements e
+                 WHERE e.user_id = p.id AND e.kind='plan' AND e.value='premium'
+                   AND e.metadata->>'source' = 'premium_trial_0_5'
+                   AND (e.expires_at IS NULL OR e.expires_at > now())
+              ) AS on_trial
+         FROM public.profiles p
+         ${orderClause}
+        LIMIT 5`
+    );
+
+    planOverview = {
+      premium: parseInt(premRes[0]?.count || "0", 10),
+      trials: parseInt(trialRes[0]?.count || "0", 10),
+      recent: recent || [],
+    };
+  } catch (e: any) {
+    planOverviewError = e.message || "تعذر جلب إحصائيات الاشتراكات";
+  }
+
   const allModels = MODEL_REGISTRY;
   const gatedModels = Object.keys(GATED_MODELS);
   const agents = Object.values(ALL_AGENTS);
@@ -145,14 +222,14 @@ export default async function AdminControlCenter({
       </div>
 
       {/* التنبيهات */}
-      {searchParams.success && (
+      {sp.success && (
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-2 text-sm">
           <CheckCircle size={18} /> تم تنفيذ العملية بنجاح!
         </div>
       )}
-      {searchParams.error && (
+      {sp.error && (
         <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center gap-2 text-sm">
-          <AlertCircle size={18} /> {searchParams.error}
+          <AlertCircle size={18} /> {sp.error}
         </div>
       )}
 
@@ -187,6 +264,104 @@ export default async function AdminControlCenter({
           <p className="text-3xl font-bold">محمية 🛡️</p>
         </div>
       </div>
+
+      {/* 1.05 Platform Overview — الاشتراكات الفعلية + أحدث التسجيلات
+          ⚠️ مفيش جدول plans/user_subscriptions في المشروع: الباقات بتتحسب من
+          entitlements(kind='plan', value='premium'). فمفيش "Pro" و"Ultra" —
+          الموجود free وpremium بس. ومفيش نظام تذاكر، فمش معروض رقم وهمي له. */}
+      <section className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2 text-slate-200">
+            <Crown size={20} className="text-amber-400" /> نظرة عامة على المنصة
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            الاشتراكات محسوبة من <code className="text-slate-400">entitlements(kind=&apos;plan&apos;, value=&apos;premium&apos;)</code> — الباقة المتاحة حالياً هي premium فقط.
+          </p>
+        </div>
+
+        {planOverviewError ? (
+          <p className="text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl p-3">
+            {planOverviewError} — تأكد من <code>DATABASE_URL</code> أو من تطبيق <code>db/economy-phase-d.sql</code>.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                <div className="flex items-center justify-between text-purple-400 mb-2">
+                  <Crown size={18} />
+                  <span className="text-[11px] bg-purple-500/10 px-2 py-0.5 rounded">مشترك Premium</span>
+                </div>
+                <p className="text-2xl font-bold">{planOverview?.premium ?? 0}</p>
+              </div>
+              <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                <div className="flex items-center justify-between text-emerald-400 mb-2">
+                  <Zap size={18} />
+                  <span className="text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded">منهم تجربة مجانية</span>
+                </div>
+                <p className="text-2xl font-bold">{planOverview?.trials ?? 0}</p>
+              </div>
+              <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                <div className="flex items-center justify-between text-blue-400 mb-2">
+                  <Users size={18} />
+                  <span className="text-[11px] bg-blue-500/10 px-2 py-0.5 rounded">نسبة الاشتراك</span>
+                </div>
+                <p className="text-2xl font-bold">
+                  {usersCount ? `${(((planOverview?.premium ?? 0) / usersCount) * 100).toFixed(1)}%` : "—"}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800 bg-slate-950/40">
+                <h3 className="text-sm font-bold text-slate-200">أحدث الطلاب تسجيلاً</h3>
+              </div>
+              {(planOverview?.recent.length ?? 0) === 0 ? (
+                <p className="p-4 text-sm text-slate-500">لا توجد تسجيلات بعد.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-right">
+                    <thead>
+                      <tr className="bg-slate-950/30 text-slate-500 text-xs">
+                        <th className="p-3 font-semibold">الطالب</th>
+                        <th className="p-3 font-semibold">البريد الإلكتروني</th>
+                        <th className="p-3 font-semibold">التسجيل</th>
+                        <th className="p-3 font-semibold">الباقة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {planOverview!.recent.map((u) => (
+                        <tr key={u.id} className="border-t border-slate-800/60 hover:bg-slate-800/30">
+                          <td className="p-3 font-semibold text-slate-200">
+                            {u.display_name?.trim() || `طالب #${u.id.slice(0, 6)}`}
+                          </td>
+                          <td className="p-3 text-slate-400" dir="ltr">{u.email || "—"}</td>
+                          <td className="p-3 text-slate-500 text-xs">
+                            {u.created_at ? new Date(u.created_at).toLocaleDateString("ar-EG") : "غير متاح"}
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={
+                                "px-2 py-1 rounded-lg text-[11px] font-bold " +
+                                (u.is_premium
+                                  ? u.on_trial
+                                    ? "bg-emerald-500/10 text-emerald-300"
+                                    : "bg-purple-500/10 text-purple-300"
+                                  : "bg-slate-800 text-slate-400")
+                              }
+                            >
+                              {u.is_premium ? (u.on_trial ? "Premium (تجربة)" : "Premium") : "مجاني"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </section>
 
       {/* 1.1 AI Overview — Phase D */}
       <section className="bg-slate-900/80 border border-purple-500/30 rounded-2xl p-6 shadow-xl space-y-4">
