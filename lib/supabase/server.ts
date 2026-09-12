@@ -36,7 +36,7 @@ export async function createClient() {
         getAll: () => cookieStore.getAll(),
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set?.(name, value, options as { path?: string; maxAge?: number; domain?: string; secure?: boolean; httpOnly?: boolean; sameSite?: "lax" | "strict" | "none" } | undefined));
           } catch {
             // Server Components لا تستطيع دائمًا كتابة الكوكيز؛ middleware يتولى refresh.
           }
