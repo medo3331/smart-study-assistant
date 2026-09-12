@@ -1,15 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { cookies, headers } from "next/headers";
 
 /** عميل Supabase لراوتات السيرفر وServer Components — يدعم Authorization Bearer للاختبار الآلي. */
 export async function createClient() {
-  const cookieStore = await cookies();
+  let cookieStore: { getAll: () => Array<{ name: string; value: string; options?: unknown }>; set?: (name: string, value: string, options?: unknown) => void } = { getAll: () => [], set: () => {} };
   let authHeader: string | null = null;
   try {
-    const h = await headers();
-    authHeader = h.get("authorization") || h.get("Authorization");
-  } catch {}
+    // next/headers متاح فقط في App Router Server Components / Route Handlers
+    const { cookies: c, headers: h } = await import("next/headers");
+    cookieStore = await c();
+    try {
+      const headerVal = await h();
+      authHeader = headerVal.get("authorization") || headerVal.get("Authorization") || null;
+    } catch {}
+  } catch {
+    // Pages Router أو سياق لا يدعم next/headers — نواصل بدون cookies
+  }
   // إذا وُجد Bearer token، استخدمه مباشرة (للاختبار عبر curl) — يفوق الكوكيز
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
