@@ -255,9 +255,9 @@ export async function POST(req: Request) {
           const send = (payload: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
           let streamFailed = false;
           try {
-            const streamTask = (task === "chat" || task === "content" || task === "coding" || task === "explain" || task === "tutor"
-              ? task
-              : "chat") as "chat" | "content" | "coding" | "explain" | "tutor";
+            const streamTask = (["chat", "explain", "tutor"].includes(task as string)
+              ? (task as "chat" | "explain" | "tutor")
+              : "chat");
             for await (const chunk of streamWithFallback(streamTask, input)) {
               send(chunk);
             }
