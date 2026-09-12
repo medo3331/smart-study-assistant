@@ -8,7 +8,7 @@ export async function createClient() {
   try {
     // next/headers متاح فقط في App Router Server Components / Route Handlers
     const { cookies: c, headers: h } = await import("next/headers");
-    cookieStore = await c();
+    cookieStore = await c() as typeof cookieStore;
     try {
       const headerVal = await h();
       authHeader = headerVal.get("authorization") || headerVal.get("Authorization") || null;
