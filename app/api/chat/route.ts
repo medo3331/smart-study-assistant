@@ -8,7 +8,7 @@ import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMo
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { routeCandidates } from "@/lib/ai/routing";
-import { filterAccessibleModels } from "@/lib/ai/model-access";
+import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 
 /** أقصى عدد رسايل بنمررها للموديل (الأحدث بس). */
 const MAX_MESSAGES = 30;
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
-    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? CURRENT_AI_MODEL);
     if (!guard.ok) return guard.response;
 
     let completion;
@@ -114,15 +114,17 @@ export async function POST(req: Request) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       const isRate = error.status === 429;
+      const isUnavailable = error.status === 503;
       return NextResponse.json(
         {
           error: {
             message: isRate
               ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية."
               : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.",
+            code: isRate ? "PROVIDER_RATE_LIMIT" : isUnavailable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR",
           },
         },
-        { status: error.status === 503 ? 503 : isRate ? 429 : 502 }
+        { status: isUnavailable ? 503 : isRate ? 429 : 502 }
       );
     }
 
@@ -178,7 +180,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("chat route error:", error);
     return NextResponse.json(
-      { error: { message: "حصل خطأ غير متوقع أثناء الاتصال." } },
+      { error: { message: "حصل خطأ غير متوقع أثناء الاتصال.", code: "INTERNAL_ERROR" } },
       { status: 500 }
     );
   }

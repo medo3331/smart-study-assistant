@@ -1,6 +1,6 @@
 // Primary Experience Resolver — Phase PRIMARY Foundation
 // Abstraction to determine which experience to show based on education context.
-// Future-ready for preparatory/secondary/baccalaureate/university, but ONLY primary is implemented now.
+// Reality Sync (P2 executed): All stages mapped; Primary/Preparatory strongest, Secondary in active development (UI exists, integration ongoing), University partial, Graduate/Freelancer early. This reflects verified reality — not theoretical.
 
 import type { EducationContext } from "./context";
 

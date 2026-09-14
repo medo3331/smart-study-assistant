@@ -1,0 +1,48 @@
+diff --git a/app/onboarding/page.tsx b/app/onboarding/page.tsx
+index 545d1d5..6081cd2 100644
+--- a/app/onboarding/page.tsx
++++ b/app/onboarding/page.tsx
+@@ -104,8 +104,23 @@ export default function OnboardingPage() {
+     void (async () => {
+       if (!supabaseRef.current) supabaseRef.current = createClient();
+       const supabase = supabaseRef.current;
+-      const { data } = await supabase.auth.getUser();
+-      const user = data.user;
++
++      let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] = null;
++      try {
++        const { data } = await supabase.auth.getUser();
++        user = data.user;
++      } catch {
++        // فشل مؤقت (شبكة/مزامنة كوكي الجلسة لسه ما وصلتش) — منسيبش الصفحة
++        // تكسر. بنعيد المحاولة مرة واحدة بعد لحظة بسيطة بدل ما نرمي المستخدم
++        // على شاشة "حصل خطأ" من أول تسجيل.
++        await new Promise((r) => setTimeout(r, 400));
++        try {
++          const retry = await supabase.auth.getUser();
++          user = retry.data.user;
++        } catch {
++          user = null;
++        }
++      }
+ 
+       if (!cancelled && (!user || user.is_anonymous)) {
+         router.replace("/welcome");
+diff --git a/app/register/page.tsx b/app/register/page.tsx
+index 3fb42d3..ecbe073 100644
+--- a/app/register/page.tsx
++++ b/app/register/page.tsx
+@@ -115,8 +115,11 @@ export default function RegisterPage() {
+ 
+     if (data.session) {
+       // تأكيد الإيميل متجاوز أو الرابط سبق أكّده → جلسة جاهزة: يلا للأونبوردنج.
+-      router.push(currentNext());
+-      router.refresh();
++      // ملحوظة: كنا بنستخدم router.push() + router.refresh() مع بعض، وده كان بيسبق
++      // أحيانًا مزامنة كوكي الجلسة بتاعة Supabase SSR فيحصل خطأ غير متوقع في الصفحة
++      // اللي بعده. بنستخدم تحميل كامل (full reload) هنا عشان نضمن إن الكوكي اتكتبت
++      // فعلًا قبل ما أي صفحة تحاول تقرا الجلسة.
++      window.location.href = currentNext();
+       return;
+     }
+     // تأكيد البريد مفعّل → مفيش جلسة. الرسالة هي الشاشة المؤقتة لحد الضغط.

@@ -115,8 +115,11 @@ export default function RegisterPage() {
 
     if (data.session) {
       // تأكيد الإيميل متجاوز أو الرابط سبق أكّده → جلسة جاهزة: يلا للأونبوردنج.
-      router.push(currentNext());
-      router.refresh();
+      // ملحوظة: كنا بنستخدم router.push() + router.refresh() مع بعض، وده كان بيسبق
+      // أحيانًا مزامنة كوكي الجلسة بتاعة Supabase SSR فيحصل خطأ غير متوقع في الصفحة
+      // اللي بعده. بنستخدم تحميل كامل (full reload) هنا عشان نضمن إن الكوكي اتكتبت
+      // فعلًا قبل ما أي صفحة تحاول تقرا الجلسة.
+      window.location.href = currentNext();
       return;
     }
     // تأكيد البريد مفعّل → مفيش جلسة. الرسالة هي الشاشة المؤقتة لحد الضغط.

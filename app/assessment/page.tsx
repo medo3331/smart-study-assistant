@@ -131,6 +131,7 @@ export default function AssessmentPage() {
   const [stagesDB, setStagesDB] = useState<{ id: string; name: string; code: string }[]>([]);
   const [gradesDB, setGradesDB] = useState<{ id: string; stage_id: string; name: string; code: string; order_index: number }[]>([]);
   const [tracksDB, setTracksDB] = useState<{ id: string; stage_id: string; grade_id: string | null; name: string; code: string }[]>([]);
+  const [tracksLoading, setTracksLoading] = useState(false);
   // University branch (faculty suggestion list is suggestions-only; stored value is free text)
   const [uniFaculty, setUniFaculty] = useState("");
   const [uniFacultyFree, setUniFacultyFree] = useState("");
@@ -188,10 +189,20 @@ export default function AssessmentPage() {
   // Conditional tracks: Secondary شعبة + Baccalaureate مسار — grade 2/3 only.
   // Secondary rows are stage-level (grade_id null); Bac prefers grade-linked rows.
   useEffect(() => {
-    if (persona !== "student" || !eduStageId || !eduGradeId) { setTracksDB([]); setEduTrackId(null); return; }
-    const code = stagesDB.find((s) => s.id === eduStageId)?.code;
-    const order = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? 0;
-    if ((code !== "SECONDARY" && code !== "BACCALAUREATE") || order < 2) { setTracksDB([]); setEduTrackId(null); return; }
+    const stageCode = stagesDB.find((s) => s.id === eduStageId)?.code;
+    const gradeOrder = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? 0;
+    const trackRequired =
+      persona === "student" && eduStageId && eduGradeId &&
+      (stageCode === "SECONDARY" || stageCode === "BACCALAUREATE") && gradeOrder >= 2;
+
+    if (!trackRequired) {
+      setTracksDB([]);
+      setEduTrackId(null);
+      setTracksLoading(false);
+      return;
+    }
+
+    setTracksLoading(true);
     void (async () => {
       try {
         const { data } = await supabase.from("education_tracks").select("id, stage_id, grade_id, name, code").eq("stage_id", eduStageId);
@@ -199,7 +210,11 @@ export default function AssessmentPage() {
         const linked = rows.filter((t) => t.grade_id === eduGradeId);
         rows = linked.length > 0 ? linked : rows.filter((t) => t.grade_id == null);
         setTracksDB(rows);
-      } catch { setTracksDB([]); }
+      } catch {
+        setTracksDB([]);
+      } finally {
+        setTracksLoading(false);
+      }
     })();
   }, [eduStageId, eduGradeId, gradesDB, persona, stagesDB, supabase]);
 
@@ -448,20 +463,40 @@ export default function AssessmentPage() {
     }
   }
 
+  const isNextDisabled = React.useMemo(() => {
+    if (persona !== "student") return needsStudentLevel && !studentLevel;
+    if (!eduStageId) return true;
+    const stageCode = stagesDB.find((s) => s.id === eduStageId)?.code;
+    if (stageCode === "UNIVERSITY") {
+      return !((uniFaculty || uniFacultyFree.trim()) && uniYear);
+    }
+    if (!eduGradeId) return true;
+    const gradeOrder = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? 0;
+    const trackRequired = (stageCode === "SECONDARY" || stageCode === "BACCALAUREATE") && gradeOrder >= 2;
+    if (trackRequired && tracksLoading) return true;
+    if (tracksDB.length > 0 && !eduTrackId) return true;
+    return false;
+  }, [
+    persona, needsStudentLevel, studentLevel,
+    eduStageId, eduGradeId, eduTrackId,
+    stagesDB, gradesDB, tracksDB, tracksLoading,
+    uniFaculty, uniFacultyFree, uniYear
+  ]);
+
   return (
-    <div className="min-h-screen font-sans bg-paper text-ink flex items-center justify-center p-4 sm:p-6" dir="rtl">
-      {/* SSR visible education stage selection — يظهر فورًا حتى لو stagesDB لم يُحمّل بعد */}
-      <section aria-label="المرحلة التعليمية — تحميل أولي" className="sr-edu-ssr" style={{ direction: "rtl", padding: "1rem", borderBottom: "1px solid #e5e1db", maxWidth: "640px", margin: "0 auto" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>اختر مرحلتك التعليمية</h2>
-        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          {ssrEducationStages.map((s) => (
-            <li key={s.value} style={{ border: "1px solid #ddd", borderRadius: "999px", padding: "0.4rem 0.9rem", fontSize: "0.85rem", background: "#f9f7f2" }}>
-              {s.label}
-            </li>
-          ))}
-        </ul>
-      </section>
-      <div className="w-full max-w-lg">
+    <div className="assessment-root min-h-screen font-sans bg-paper text-ink flex items-center justify-center p-4 sm:p-6 md:p-8" dir="rtl">
+      <style jsx global>{`
+        .assessment-root { width: 100%; max-width: 100vw; padding-inline: 16px; overflow-x: hidden; }
+        .assessment-card { max-width: 100%; width: 100%; margin-inline: auto; }
+        .sheet-card button, .sheet-card .btn, .btn { min-height: 44px; touch-action: manipulation; }
+        @media (max-width: 414px) { .sheet-card { padding: 1.1rem 1rem !important; border-radius: 16px !important; } .h2 { font-size: 1.25rem !important; line-height: 1.25; text-wrap: balance; overflow-wrap: break-word; } .eyebrow { font-size: 0.7rem !important; } .grid { display: flex; flex-direction: column; gap: 0.5rem; } }
+        @media (max-width: 360px) { .sheet-card { padding: 1rem 0.75rem !important; } .btn-block { padding: 12px 14px; font-size: 0.95rem; } }
+        @media (min-width: 415px) and (max-width: 768px) { .assessment-card { max-width: 92vw; } }
+        @media (min-width: 769px) { .assessment-card { max-width: 600px; } }
+        body { overflow-x: hidden; }
+      `}</style>
+      {/* المرحلة التعليمية: تم حذف الواجهة بالكامل — المنطق مخفي بدون تأثير على الـ flow */}
+      <div className="assessment-card w-full max-w-full md:max-w-lg lg:max-w-xl">
         <AnimatePresence mode="wait">
           {/* الخطوة 1: «ليه بتتعلم؟» قبل «إيه بتتعلم؟». الشخصية بتغيّر
               نبرة الخطة والموارد، والمستوى يظهر للطالب فقط. */}
@@ -471,11 +506,11 @@ export default function AssessmentPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              className="sheet-card sheet-card-live card-lift p-6 sm:p-8 space-y-6"
+              className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-5"
             >
               <div>
                 <p className="eyebrow eyebrow-flush mb-1.5">ابدأ خطتك</p>
-                <h1 className="h2"><span className="mark mark-tilt">خلّينا نعرفك الأول</span></h1>
+                <h1 className="h2" style={{ textWrap: "balance", overflowWrap: "break-word", fontSize: "clamp(1.15rem, 5vw, 2.1rem)" }}><span className="mark mark-tilt">خلّينا نعرفك الأول</span></h1>
                 <p className="text-sm text-ink-soft mt-2">اختيارات قليلة عشان الخطة تبقى مناسبة لاحتياجك، مش جدولًا عامًا.</p>
               </div>
 
@@ -547,78 +582,125 @@ export default function AssessmentPage() {
               )}
 
               {/* Education Stage + Grade — student only; DB-driven */}
-              {persona === "student" && (
-                <div className="space-y-4">
+                            {persona === "student" && (
+                <div className="space-y-4" dir="rtl">
                   <div>
-                    <p className="field-label">{locale === "ar" ? "المرحلة التعليمية" : "Education Stage"}</p>
-                    <div className="flex flex-wrap gap-2">
+                    <label htmlFor="edu-stage-select" className="field-label">المرحلة التعليمية</label>
+                    <select
+                      id="edu-stage-select"
+                      value={eduStageId || ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEduStageId(v || null);
+                        setEduGradeId(null);
+                        setEduTrackId(null);
+                        setUniFaculty("");
+                        setUniFacultyFree("");
+                        setUniYear(null);
+                        setSubjectsAuto([]);
+                      }}
+                      className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
+                      aria-required="true"
+                    >
+                      <option value="">اختر المرحلة…</option>
                       {stagesDB.map((s) => {
-                        // Localization per sec 12/13: DB codes canonical; UI localized by locale
                         const label = locale === "ar"
                           ? (s.code === "PRIMARY" ? "ابتدائي" : s.code === "PREPARATORY" ? "إعدادي" : s.code === "SECONDARY" ? "ثانوي" : s.code === "BACCALAUREATE" ? "بكالوريا" : s.code === "UNIVERSITY" ? "جامعة" : s.name)
                           : (s.code === "PRIMARY" ? "Primary" : s.code === "PREPARATORY" ? "Preparatory" : s.code === "SECONDARY" ? "Secondary" : s.code === "BACCALAUREATE" ? "Baccalaureate" : s.code === "UNIVERSITY" ? "University" : s.name);
-                        return (
-                          <button key={s.id} type="button" onClick={() => { setEduStageId(s.id); setEduGradeId(null); setEduTrackId(null); setUniFaculty(""); setUniFacultyFree(""); setUniYear(null); setSubjectsAuto([]); }} aria-pressed={eduStageId === s.id} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${eduStageId === s.id ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{label}</button>
-                        );
+                        return <option key={s.id} value={s.id}>{label}</option>;
                       })}
-                      {stagesDB.length === 0 && <span className="mono text-xs text-ink-soft">جارٍ التحميل…</span>}
-                    </div>
+                      {stagesDB.length === 0 && <option disabled>جارٍ التحميل…</option>}
+                    </select>
                   </div>
-                  {/* School grades — hidden for university branch */}
-                  {eduStageId && stagesDB.find((s) => s.id === eduStageId)?.code !== "UNIVERSITY" && (
-                    <div>
-                      <p className="field-label">{locale === "ar" ? "الصف" : "Grade"}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {gradesDB.map((g) => {
-                          const label = locale === "ar"
-                            ? (g.code === "P1" ? "الصف الأول" : g.code === "P2" ? "الصف الثاني" : g.code === "P3" ? "الصف الثالث" : g.code === "P4" ? "الصف الرابع" : g.code === "P5" ? "الصف الخامس" : g.code === "P6" ? "الصف السادس" : g.code === "PREP1" ? "الصف الأول الإعدادي" : g.code === "PREP2" ? "الصف الثاني الإعدادي" : g.code === "PREP3" ? "الصف الثالث الإعدادي" : g.code === "SEC_GEN_1" ? "الصف الأول الثانوي" : g.code === "SEC_GEN_2" ? "الصف الثاني الثانوي" : g.code === "SEC_GEN_3" ? "الصف الثالث الثانوي" : g.code === "BACC_1" ? "الصف الأول" : g.code === "BACC_2" ? "الصف الثاني" : g.code === "BACC_3" ? "الصف الثالث" : g.name)
-                            : (g.code === "P1" ? "Grade 1" : g.code === "P2" ? "Grade 2" : g.code === "P3" ? "Grade 3" : g.code === "P4" ? "Grade 4" : g.code === "P5" ? "Grade 5" : g.code === "P6" ? "Grade 6" : g.code === "PREP1" ? "Preparatory Grade 1" : g.code === "PREP2" ? "Preparatory Grade 2" : g.code === "PREP3" ? "Preparatory Grade 3" : g.code === "SEC_GEN_1" ? "Secondary Grade 1" : g.code === "SEC_GEN_2" ? "Secondary Grade 2" : g.code === "SEC_GEN_3" ? "Secondary Grade 3" : g.code === "BACC_1" ? "Grade 1" : g.code === "BACC_2" ? "Grade 2" : g.code === "BACC_3" ? "Grade 3" : g.name);
-                          return (
-                            <button key={g.id} type="button" onClick={() => { setEduGradeId(g.id); setEduTrackId(null); setSubjectsAuto([]); }} aria-pressed={eduGradeId === g.id} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${eduGradeId === g.id ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{label}</button>
-                          );
-                        })}
-                        {gradesDB.length === 0 && <span className="mono text-xs text-ink-soft">لا توجد صفوف</span>}
-                      </div>
-                    </div>
-                  )}
-                  {/* University branch — faculty + year (no fixed subjects) */}
+                  <div>
+                    <label htmlFor="edu-grade-select" className="field-label">الصف</label>
+                    <select
+                      id="edu-grade-select"
+                      value={eduGradeId || ""}
+                      disabled={!eduStageId || stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY"}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEduGradeId(v || null);
+                        setEduTrackId(null);
+                        setSubjectsAuto([]);
+                      }}
+                      className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-required="true"
+                      aria-disabled={!eduStageId || stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY"}
+                    >
+                      <option value="">
+                        {!eduStageId ? "اختر المرحلة أولاً" : stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY" ? "لا يوجد صف ثابت للجامعة" : "اختر الصف…"}
+                      </option>
+                      {eduStageId && stagesDB.find((s) => s.id === eduStageId)?.code !== "UNIVERSITY" && gradesDB.map((g) => {
+                        const label = locale === "ar"
+                          ? (g.code === "P1" ? "الصف الأول" : g.code === "P2" ? "الصف الثاني" : g.code === "P3" ? "الصف الثالث" : g.code === "P4" ? "الصف الرابع" : g.code === "P5" ? "الصف الخامس" : g.code === "P6" ? "الصف السادس" : g.code === "PREP1" ? "الصف الأول الإعدادي" : g.code === "PREP2" ? "الصف الثاني الإعدادي" : g.code === "PREP3" ? "الصف الثالث الإعدادي" : g.code === "SEC_GEN_1" ? "الصف الأول الثانوي" : g.code === "SEC_GEN_2" ? "الصف الثاني الثانوي" : g.code === "SEC_GEN_3" ? "الصف الثالث الثانوي" : g.code === "BACC_1" ? "الصف الأول" : g.code === "BACC_2" ? "الصف الثاني" : g.code === "BACC_3" ? "الصف الثالث" : g.name)
+                          : (g.code === "P1" ? "Grade 1" : g.code === "P2" ? "Grade 2" : g.code === "P3" ? "Grade 3" : g.code === "P4" ? "Grade 4" : g.code === "P5" ? "Grade 5" : g.code === "P6" ? "Grade 6" : g.code === "PREP1" ? "Preparatory Grade 1" : g.code === "PREP2" ? "Preparatory Grade 2" : g.code === "PREP3" ? "Preparatory Grade 3" : g.code === "SEC_GEN_1" ? "Secondary Grade 1" : g.code === "SEC_GEN_2" ? "Secondary Grade 2" : g.code === "SEC_GEN_3" ? "Secondary Grade 3" : g.code === "BACC_1" ? "Grade 1" : g.code === "BACC_2" ? "Grade 2" : g.code === "BACC_3" ? "Grade 3" : g.name);
+                        return <option key={g.id} value={g.id}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
                   {eduStageId && stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY" && (
                     <div className="space-y-3">
                       <div>
-                        <p className="field-label">{locale === "ar" ? "الكلية / التخصص" : "Faculty / Major"}</p>
-                        <div className="flex flex-wrap gap-2">
+                        <label htmlFor="uni-faculty-select" className="field-label">الكلية / التخصص</label>
+                        <select
+                          id="uni-faculty-select"
+                          value={uniFaculty || ""}
+                          onChange={(e) => { setUniFaculty(e.target.value || ""); setUniFacultyFree(""); }}
+                          className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
+                        >
+                          <option value="">اختر الكلية…</option>
                           {["الهندسة","الطب","الصيدلة","التجارة","الحقوق","الآداب","العلوم","الحاسبات والمعلومات","التربية","الإعلام"].map((f) => (
-                            <button key={f} type="button" onClick={() => { setUniFaculty(f); setUniFacultyFree(""); }} aria-pressed={uniFaculty === f} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${uniFaculty === f ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{f}</button>
+                            <option key={f} value={f}>{f}</option>
                           ))}
-                        </div>
-                        <input value={uniFacultyFree} onChange={(e) => { setUniFacultyFree(e.target.value); if (e.target.value) setUniFaculty(""); }} placeholder={locale === "ar" ? "لو مش موجودة — اكتب تخصصك" : "Not listed? Type your major"} className="field text-sm mt-2" />
+                        </select>
+                        <input
+                          value={uniFacultyFree}
+                          onChange={(e) => { setUniFacultyFree(e.target.value); if (e.target.value) setUniFaculty(""); }}
+                          placeholder="لو مش موجودة — اكتب تخصصك"
+                          className="field text-sm mt-2 w-full h-[44px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2"
+                        />
                       </div>
                       <div>
-                        <p className="field-label">{locale === "ar" ? "الفرقة الدراسية" : "Academic Year"}</p>
-                        <div className="flex flex-wrap gap-2">
+                        <label htmlFor="uni-year-select" className="field-label">الفرقة الدراسية</label>
+                        <select
+                          id="uni-year-select"
+                          value={uniYear ?? ""}
+                          onChange={(e) => setUniYear(e.target.value ? Number(e.target.value) : null)}
+                          className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
+                        >
+                          <option value="">اختر الفرقة…</option>
                           {[1,2,3,4,5].map((y) => (
-                            <button key={y} type="button" onClick={() => setUniYear(y)} aria-pressed={uniYear === y} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${uniYear === y ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{y}</button>
+                            <option key={y} value={y}>{y}</option>
                           ))}
-                        </div>
+                        </select>
                       </div>
                       <p className="text-xs text-ink-soft">لا مواد ثابتة للجامعة — هتضيف مواد كل كورس بنفسك.</p>
                     </div>
                   )}
-                  {/* Conditional track — secondary شعبة / bac مسار (grade 2/3 only) */}
                   {eduStageId && eduGradeId && stagesDB.find((s) => s.id === eduStageId)?.code !== "UNIVERSITY" && tracksDB.length > 0 && (
                     <div>
-                      <p className="field-label">{locale === "ar" ? (stagesDB.find((s) => s.id === eduStageId)?.code === "SECONDARY" ? "الشعبة" : "المسار") : (stagesDB.find((s) => s.id === eduStageId)?.code === "SECONDARY" ? "Track" : "Path")}</p>
-                      <div className="flex flex-wrap gap-2">
+                      <label htmlFor="edu-track-select" className="field-label">{locale === "ar" ? (stagesDB.find((s) => s.id === eduStageId)?.code === "SECONDARY" ? "الشعبة" : "المسار") : (stagesDB.find((s) => s.id === eduStageId)?.code === "SECONDARY" ? "Track" : "Path")}</label>
+                      <select
+                        id="edu-track-select"
+                        value={eduTrackId || ""}
+                        disabled={!eduGradeId}
+                        onChange={(e) => setEduTrackId(e.target.value || null)}
+                        className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">اختر المسار / الشعبة…</option>
                         {tracksDB.map((t) => {
                           const lab = locale === "ar"
                             ? (t.code === "SEC_SCI" ? "علمي علوم" : t.code === "SEC_MATH" ? "علمي رياضة" : t.code === "SEC_LIT" ? "أدبي" : t.code.startsWith("MED") ? "طب وعلوم حياة" : t.code.startsWith("ENG") ? "هندسة وعلوم حاسب" : t.code.startsWith("BUS") ? "قطاع أعمال" : t.code.startsWith("HUM") ? "آداب وفنون" : t.name)
                             : (t.code === "SEC_SCI" ? "Science" : t.code === "SEC_MATH" ? "Math" : t.code === "SEC_LIT" ? "Literary" : t.name);
-                          return <button key={t.id} type="button" onClick={() => setEduTrackId(t.id)} aria-pressed={eduTrackId === t.id} className={`mono px-3 py-2 rounded-full border text-xs font-semibold transition ${eduTrackId === t.id ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:border-ink"}`}>{lab}</button>;
+                          return <option key={t.id} value={t.id}>{lab}</option>;
                         })}
-                      </div>
+                      </select>
                     </div>
                   )}
-                  {/* Auto subjects preview — live from DB, never hardcoded */}
+                  {tracksLoading && (
+                    <p className="text-xs text-ink-soft mt-1">جارٍ تحميل المسارات…</p>
+                  )}
                   {subjectsAuto.length > 0 && (
                     <div className="bg-paper border border-dashed border-rule rounded-[var(--r-sm)] p-3">
                       <p className="mono text-xs font-bold mb-2">📚 {locale === "ar" ? `موادك (${subjectsAuto.length}) — من قاعدة البيانات` : `Your subjects (${subjectsAuto.length}) — from DB`}</p>
@@ -629,20 +711,13 @@ export default function AssessmentPage() {
                     </div>
                   )}
                 </div>
-              )}
-
-              <button
+              )}              <button
                 type="button"
-                onClick={() => setStep("subject")}
-                disabled={(() => {
-                  if (persona !== "student") return needsStudentLevel && !studentLevel;
-                  if (!eduStageId) return true;
-                  const code = stagesDB.find((s) => s.id === eduStageId)?.code;
-                  if (code === "UNIVERSITY") return !((uniFaculty || uniFacultyFree.trim()) && uniYear);
-                  if (!eduGradeId) return true;
-                  if (tracksDB.length > 0 && !eduTrackId) return true;
-                  return false;
-                })()}
+                disabled={isNextDisabled}
+                onClick={() => {
+                  if (isNextDisabled) return;
+                  setStep("subject");
+                }}
                 className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 كمّل اختيار هدفك
@@ -658,7 +733,7 @@ export default function AssessmentPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              className="sheet-card sheet-card-live card-lift p-6 sm:p-8 space-y-6"
+              className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-5"
             >
               <div>
                 <div className="flex items-center justify-between gap-3">
@@ -753,7 +828,7 @@ export default function AssessmentPage() {
 
               <div>
                 <p className="field-label">نبدأ بكام خطوة؟</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {([1, 3, 5] as const).map((count) => (
                     <button
                       key={count}
@@ -786,7 +861,7 @@ export default function AssessmentPage() {
               initial={{ opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -16 }}
-              className="sheet-card sheet-card-live card-lift p-6 sm:p-8 space-y-6"
+              className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-5"
             >
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between gap-3">
@@ -833,7 +908,7 @@ export default function AssessmentPage() {
               key="building"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="sheet-card sheet-card-live card-lift p-8 text-center space-y-4"
+              className="sheet-card sheet-card-live card-lift p-5 sm:p-7 md:p-9 text-center space-y-4"
             >
               <div className="w-11 h-11 border-2 border-rule border-t-ink rounded-full animate-spin mx-auto" />
               <p className="tag justify-center">بيتم التجهيز</p>
@@ -850,7 +925,7 @@ export default function AssessmentPage() {
               key="result"
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="sheet-card sheet-card-live card-lift p-6 sm:p-8 space-y-5"
+              className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-4"
             >
               {buildError ? (
                 <>
@@ -873,7 +948,7 @@ export default function AssessmentPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="eyebrow eyebrow-flush mb-1.5">التقييم المبدئي</p>
-                      <h2 className="h2">خطتك جاهزة</h2>
+                      <h2 className="h2" style={{ textWrap: "balance", overflowWrap: "break-word" }}>خطتك جاهزة</h2>
                     </div>
                     {/* ختم مضروب على الورقة بدل إيموجي احتفال */}
                     <span className="stamp bg-emerald-500 text-onmarker" aria-hidden="true">
@@ -883,7 +958,7 @@ export default function AssessmentPage() {
                   </div>
 
                   {result && (
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="bg-paper rounded-[var(--r-sm)] p-3">
                         <p className="tag mb-1.5">مستواك</p>
                         <p className="text-sm font-bold text-ink m-0">{LEVEL_LABEL[result.level]}</p>

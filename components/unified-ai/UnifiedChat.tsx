@@ -10,10 +10,18 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock } from "lucide-react";
+import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
+import { SITE_LINKS } from "@/lib/site-links";
+
+function supportWhatsappHref(code?: string, detail?: string) {
+  const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
+  const text = `أهلاً، عندي مشكلة في المساعد الذكي${code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}text=${encodeURIComponent(text)}`;
+}
 
 type ChatMsg = { role: "user" | "assistant"; content: string; attachmentName?: string };
 
@@ -37,15 +45,18 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [studyMode, setStudyMode] = useState<"explain" | "quiz" | "summarize" | "review">("explain");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
     message?: string;
-    actions?: { label: string; href: string }[];
+    actions?: { label: string; href: string; external?: boolean }[];
     retryAfterHours?: number;
     retryAfter?: number;
     limit?: number;
     used?: number;
+    kind?: "credits" | "limit" | "access" | "technical";
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -89,6 +100,9 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         Object.assign(ctx, initialContext);
       }
       if (!ctx.language) ctx.language = "ar";
+      // ذاكرة المحادثة + وضع المذاكرة (كانوا في /api/chat — اتوحدوا هنا)
+      if (conversationId) ctx.conversationId = conversationId;
+      if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
       // حقن سياق الدرس الحقيقي إذا متوفر — يبعت للـ API كـ hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
@@ -110,31 +124,86 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       setLoading(false);
 
       if (!res.ok || !data?.ok) {
-        // ── Rate Limit توجيهي (429) ──
-        if (res.status === 429 || data?.code === "RATE_LIMIT_EXCEEDED") {
+        const code = (data?.code as string | undefined) || (data?.error?.code as string | undefined) || "";
+        const rawError =
+          (typeof data?.error === "string" ? data.error : data?.error?.message) ||
+          (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ.");
+        const supportHref = supportWhatsappHref(code || String(res.status), rawError);
+        const supportAction = { label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true };
+
+        // ── رصيد AI Credits خلص (402) — مش عطل فني ──
+        if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
           const info = {
-            error: data?.error || (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ."),
+            error: "رصيد AI Credits لا يكفي.",
+            message: "دي مش مشكلة في الموقع — رصيدك خلص. اشترِ حزمة من المتجر، أو كلم الدعم الفني على واتساب لو شايف إن ده غلط.",
+            actions: [
+              { label: "شراء حزمة رصيد", href: "/store" },
+              supportAction,
+            ],
+            kind: "credits" as const,
+          };
+          setRateLimitInfo(info);
+          setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
+          return;
+        }
+
+        // ── صلاحية مطلوبة (403) — مش عطل فني ──
+        if (res.status === 403 || code === "MODEL_ACCESS_REQUIRED") {
+          const info = {
+            error: rawError || "هذه الميزة تتطلب صلاحية.",
+            message: "حسابك شغال تمام، بس النموذج ده محتاج اشتراك أو صلاحية. اشترك من المتجر أو كلم الدعم.",
+            actions: [
+              { label: "الاشتراك في الخطة المدفوعة", href: "/pricing" },
+              supportAction,
+            ],
+            kind: "access" as const,
+          };
+          setRateLimitInfo(info);
+          setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
+          return;
+        }
+
+        // ── Rate Limit توجيهي (429) ──
+        if (res.status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "GUEST_RATE_LIMIT") {
+          const info = {
+            error: rawError,
             message: data?.message || "يمكنك الانتظار لحين تجدد الرصيد المجاني، أو الاشتراك في الخطة المدفوعة للحصول على استخدام غير محدود!",
             actions: (data?.actions as { label: string; href: string }[]) || [
               { label: "الاشتراك في الخطة المدفوعة", href: "/pricing" },
               { label: "شراء حزمة رصيد", href: "/store" },
+              supportAction,
             ],
             retryAfterHours: data?.retryAfterHours as number | undefined,
             retryAfter: data?.retryAfter as number | undefined,
             limit: data?.limit as number | undefined,
             used: data?.used as number | undefined,
+            kind: "limit" as const,
           };
           setRateLimitInfo(info);
           // أيضاً أضف رسالة في سجل المحادثة للتوضيح
           setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
           return;
         }
-        setMessages((m) => [...m, { role: "assistant", content: "حدث خطأ أثناء المعالجة. جرب مرة أخرى." }]);
+
+        // ── عطل فني (500/502/503 أو PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) ──
+        const technicalInfo = {
+          error: "عطل فني مؤقت.",
+          message: `المشكلة من عندنا مش من رصيدك${code ? ` (${code})` : ""}. حاول تاني بعد شوية، ولو اتكررت ابعتلنا على واتساب وهنحلها.`,
+          actions: [supportAction],
+          kind: "technical" as const,
+        };
+        setRateLimitInfo(technicalInfo);
+        setMessages((m) => [...m, { role: "assistant", content: `${technicalInfo.error}\n\n${technicalInfo.message}` }]);
         return;
       }
 
       // نجح — امسح حالة الـ rate limit السابقة
       setRateLimitInfo(null);
+
+      // ذاكرة المحادثة: السيرفر رجّع معرف الجلسة
+      if (typeof data?.conversationId === "string" && data.conversationId) {
+        setConversationId(data.conversationId);
+      }
 
       // Show assistant response — نظيف بدون أي ذكر للوكيل
       const assistantText = data?.answer || "تم المعالجة عبر Unified AI.";
@@ -146,16 +215,58 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       removeAttachment();
     } catch {
       setLoading(false);
-      setMessages((m) => [...m, { role: "assistant", content: "حدث خطأ أثناء المعالجة. جرب مرة أخرى." }]);
+      const supportHref = supportWhatsappHref("NETWORK", "تعذر الاتصال بالخادم");
+      setRateLimitInfo({
+        error: "تعذر الاتصال.",
+        message: "اتأكد من الإنترنت وحاول تاني، ولو المشكلة مستمرة كلمنا واتساب.",
+        actions: [{ label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true }],
+        kind: "technical",
+      });
+      setMessages((m) => [...m, { role: "assistant", content: "تعذر الاتصال. اتأكد من الإنترنت وحاول تاني." }]);
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-3">
         <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="الرجوع للوحة التحكم">
           ← لوحة التحكم
         </button>
+        <button
+          onClick={() => {
+            setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك. لا تحتاج لاختيار وكيل." }]);
+            setConversationId(null);
+            setRateLimitInfo(null);
+          }}
+          className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition"
+          aria-label="محادثة جديدة"
+        >
+          ✦ محادثة جديدة
+        </button>
+      </div>
+
+      {/* أوضاع المذاكرة (كانت في مساعد الداشبورد — اتوحدت هنا) */}
+      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="وضع المذاكرة">
+        {([
+          { id: "explain", label: "اشرحلي" },
+          { id: "quiz", label: "اختبرني" },
+          { id: "summarize", label: "لخصلي" },
+          { id: "review", label: "راجعلي" },
+        ] as const).map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setStudyMode(m.id)}
+            aria-pressed={studyMode === m.id}
+            className={`text-xs font-bold px-3 py-1.5 rounded-full border transition ${
+              studyMode === m.id
+                ? "bg-[var(--accent)] text-[var(--on-marker)] border-transparent"
+                : "border-rule bg-paper text-ink-soft hover:bg-paper-3"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       {/* Chat messages */}
@@ -284,20 +395,29 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-3">
-                <Link
-                  href={rateLimitInfo.actions?.[0]?.href || "/pricing"}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
-                >
-                  <Crown size={14} />
-                  {rateLimitInfo.actions?.[0]?.label || "الاشتراك في الخطة المدفوعة"}
-                </Link>
-                <Link
-                  href={rateLimitInfo.actions?.[1]?.href || "/store"}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-rule bg-paper text-ink text-xs font-bold px-4 py-2 hover:bg-paper-3 transition"
-                >
-                  <ShoppingBag size={14} />
-                  {rateLimitInfo.actions?.[1]?.label || "شراء حزمة رصيد"}
-                </Link>
+                {(rateLimitInfo.actions || []).map((a) =>
+                  a.external || a.href.startsWith("https://") ? (
+                    <a
+                      key={a.href + a.label}
+                      href={a.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#25D366] text-white text-xs font-bold px-4 py-2 hover:brightness-110 transition"
+                    >
+                      <MessageCircle size={14} />
+                      {a.label}
+                    </a>
+                  ) : (
+                    <Link
+                      key={a.href + a.label}
+                      href={a.href}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
+                    >
+                      {a.label.includes("الاشتراك") ? <Crown size={14} /> : <ShoppingBag size={14} />}
+                      {a.label}
+                    </Link>
+                  )
+                )}
               </div>
             </div>
             <button

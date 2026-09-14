@@ -19,6 +19,9 @@ export interface UnifiedAIInput {
   // Phase H: explicit task/model — server validates; client cannot bypass policy
   task?: string;  // optional AiTaskType for routing; if omitted defaults to "chat"
   model?: string; // optional model id; if provided server checks entitlement BEFORE reserve
+  // Unified brain: server-built system prompt (persona + student context + study facts).
+  // Built server-side only — client must never send it.
+  system?: string;
 }
 
 export interface UnifiedAIResult {
