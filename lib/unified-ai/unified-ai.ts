@@ -18,10 +18,11 @@ import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile } from "../extract-text";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
+import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 
-// Groq adapter — verified working (key from env, model openai/gpt-oss-120b, HTTP 200)
+// Groq adapter — verified working (key from env, HTTP 200)
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "openai/gpt-oss-120b";
+const GROQ_MODEL = CURRENT_AI_MODEL;
 
 async function callGroqWithModel(
   prompt: string,
@@ -130,7 +131,10 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : GROQ_MODEL;
     // حقن إرشادات المخططات (Mermaid) — المساعد بيرسم خرائط ذهنية/مخططات
     // داخل الشات مباشرة، وبيعرضها MermaidViewer في الواجهة.
-    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, DIAGRAM_GUIDELINES);
+    // Unified brain: system من السيرفر (شخصية + سياق الطالب) + إرشادات المخططات.
+    const serverSystem = typeof input.system === "string" ? input.system.trim() : "";
+    const systemPrompt = serverSystem ? `${serverSystem}\n\n${DIAGRAM_GUIDELINES}` : DIAGRAM_GUIDELINES;
+    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemPrompt);
     if (!providerResult.ok) {
       return {
         ok: false,

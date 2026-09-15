@@ -45,6 +45,15 @@ import {
 import { findModel } from "@/lib/ai/models";
 import { routeCandidates } from "@/lib/ai/routing";
 import type { AiTaskType } from "@/lib/ai/types";
+import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
+import {
+  buildMagiclySystemPrompt,
+  getStudentContext,
+  getStudyToolFacts,
+  parseMode,
+  rememberSessionContext,
+  type MagiclyContextInput,
+} from "@/lib/magicly-ai";
 
 function serverRequestId(): string {
   try {
@@ -470,6 +479,36 @@ export async function POST(req: Request) {
     if (imageInput) input.imageInput = imageInput;
     if (fileInput) input.fileInput = fileInput;
 
+    // ---- Unified brain (من /api/chat): شخصية الطالب + سياقه الدراسي — best-effort ----
+    // للمسجلين فقط؛ الزوار والمجهولون يكملون بدونها ولا يتعطلون.
+    const ctxInput = context as unknown as MagiclyContextInput;
+    const rawMode = (context as Record<string, unknown>)?.mode;
+    const rawConversationId = (context as Record<string, unknown>)?.conversationId;
+    let incomingConversationId = "";
+    if (typeof rawConversationId === "string" && rawConversationId.trim().length > 0) {
+      incomingConversationId = rawConversationId.trim().slice(0, 80);
+    }
+    if (userId && supabase && !isAnonymous) {
+      try {
+        const studentContext = await getStudentContext(supabase, userId, ctxInput);
+        const selectedMode = parseMode(rawMode, prompt);
+        const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt);
+        const magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+        let personaPrompt = "";
+        try {
+          personaPrompt = await buildSystemPrompt(userId);
+        } catch (e) {
+          console.warn("[unified-ai] persona prompt build failed, using base system prompt:", e);
+        }
+        input.system = personaPrompt
+          ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${magiclySystem}`
+          : magiclySystem;
+        void rememberSessionContext(supabase, userId, studentContext, prompt);
+      } catch (e) {
+        console.warn("[unified-ai] student context build failed, continuing without it:", e);
+      }
+    }
+
     // REAL INFERENCE
     const result: UnifiedAIResult = await unifiedAI(input);
 
@@ -488,6 +527,42 @@ export async function POST(req: Request) {
     }
 
     // SUCCESS → consume is implicit (reserve = consume); no extra ledger write
+    // حفظ المحادثة best-effort (نفس نمط /api/chat) — الفشل هنا لا يحرم الطالب من الرد.
+    let savedConversationId = incomingConversationId;
+    if (userId && supabase && !isAnonymous && result.answer) {
+      try {
+        if (savedConversationId) {
+          const { data: ownedConversation } = await supabase
+            .from("chat_conversations")
+            .select("id")
+            .eq("id", savedConversationId)
+            .eq("user_id", userId)
+            .maybeSingle();
+          if (!ownedConversation) savedConversationId = "";
+        }
+        if (!savedConversationId) {
+          const { data: conversation } = await supabase
+            .from("chat_conversations")
+            .insert({ user_id: userId, title: prompt.slice(0, 80) || "محادثة جديدة" })
+            .select("id")
+            .single();
+          savedConversationId = conversation?.id ?? "";
+        }
+        if (savedConversationId) {
+          await supabase.from("chat_messages").insert([
+            { conversation_id: savedConversationId, user_id: userId, role: "user", content: prompt },
+            { conversation_id: savedConversationId, user_id: userId, role: "assistant", content: result.answer },
+          ]);
+          await supabase
+            .from("chat_conversations")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", savedConversationId)
+            .eq("user_id", userId);
+        }
+      } catch (saveError) {
+        console.warn("[unified-ai] could not save conversation", saveError);
+      }
+    }
     const uiResponse = {
       ok: true,
       answer: result.answer,
@@ -495,6 +570,7 @@ export async function POST(req: Request) {
       extractedText: result.extractedText,
       metadata: { ...result.metadata, modelUsed: modelToUse, resolvedVia },
       reasoning: result.reasoning,
+      conversationId: savedConversationId || undefined,
     };
     return NextResponse.json(uiResponse);
   } catch (e: unknown) {

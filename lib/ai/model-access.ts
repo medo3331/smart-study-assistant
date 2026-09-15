@@ -73,7 +73,7 @@ export function requiresEntitlement(modelId: string): boolean {
   return getModelAccessPolicy(modelId).access === "entitlement";
 }
 
-export const CURRENT_AI_MODEL = "openai/gpt-oss-120b";
+export const CURRENT_AI_MODEL = "openai/gpt-oss-20b";
 
 // ── Phase H: filterAccessibleModels (لا إعادة بناء للـ Router) ──
 // يطبّق الترتيب: is healthy? is enabled? is entitled? → skip إذا مقفل

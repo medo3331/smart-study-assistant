@@ -60,7 +60,6 @@ import { LeaderboardModal } from "./components/Models/LeaderboardModal";
 import {  ShopModal } from "./components/Models/ShopModal";
 import {  ParentReportModal,  } from "./components/Models/ParentReportModal";
 import {  WeeklySummaryModal } from "./components/Models/WeeklySummaryModal";
-import { AiChatModal } from "./components/Aichat";
 // 🚨 خطة الطوارئ + الرأي + الجروب — كومبوننتات عامة بره مجلد الداشبورد
 import { ExamPlanCard } from "@/components/ExamPlanCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
@@ -227,9 +226,6 @@ export default function DashboardPage() {
   const [isPomoRunning, setIsPomoRunning] = useState(false);
   const [userNote, setUserNote] = useState("");
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
-
-  // 6. الدرس المفتوح حاليًا في محادثة الـ AI
-  const [activeAiLesson, setActiveAiLesson] = useState<StudyDay | null>(null);
 
   // 7. رسالة التهنئة عند إنجاز يوم
   const [celebration, setCelebration] = useState<{ topic: string; xp: number } | null>(null);
@@ -766,9 +762,24 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [notificationsEnabled, reminderTime, activityLog, streak]);
 
+  /** المساعد الموحد الوحيد — الداشبورد يفتح /chat مع سياق الدرس (user decision). */
+  const openUnifiedChat = (day?: StudyDay | null, subject?: string) => {
+    const params = new URLSearchParams();
+    if (configId) params.set("configId", configId);
+    if (day && Number.isInteger(day.day)) params.set("lessonDay", String(day.day));
+    const subjectName = subject || config?.subject || "";
+    if (subjectName) params.set("subject", subjectName);
+    if (day?.topic) params.set("lesson", day.topic);
+    if (day?.title) params.set("title", day.title);
+    const desc = (day as (StudyDay & { description?: unknown }) | null | undefined)?.description;
+    if (typeof desc === "string" && desc.trim()) params.set("content", desc.slice(0, 4000));
+    const qs = params.toString();
+    router.push(qs ? `/chat?${qs}` : "/chat");
+  };
+
   const handleOpenAiAssistant = () => {
     const current = days.find((d) => d.day === currentDayNumber) || days[0];
-    if (current) setActiveAiLesson(current);
+    openUnifiedChat(current ?? null);
   };
 
   /* 📑 كل بند «مودال» في القايمة الجانبية بيوصل هنا.
@@ -1278,21 +1289,7 @@ export default function DashboardPage() {
   // Primary: handlers to link subject/lesson + AI assistant (real study)
   const handlePrimarySubjectAi = (subjectName: string) => {
     const matched = days.find((d) => d.topic.includes(subjectName) || d.title.includes(subjectName) || config?.subject === subjectName);
-    if (matched) {
-      setActiveAiLesson(matched);
-    } else {
-      const synthetic: StudyDay = {
-        id: `primary-${Date.now()}`,
-        day: currentDayNumber || 1,
-        title: `درس ${subjectName}`,
-        topic: subjectName,
-        description: `شرح مبسط لمادة ${subjectName} للصف ${primaryGradeName || "الابتدائي"}`,
-        isCompleted: false,
-        xpReward: 10,
-        learningStyle: "practical",
-      };
-      setActiveAiLesson(synthetic);
-    }
+    openUnifiedChat(matched ?? null, subjectName);
   };
 
   const handlePrimaryOpenLesson = (subjectName?: string) => {
@@ -1304,7 +1301,7 @@ export default function DashboardPage() {
     if (target?.id && !String(target.id).startsWith("primary-")) {
       router.push(`/lesson/${target.id}`);
     } else if (target) {
-      setActiveAiLesson(target);
+      openUnifiedChat(target);
     } else if (subjectName) {
       handlePrimarySubjectAi(subjectName);
     } else if (config?.subject) {
@@ -1685,7 +1682,7 @@ export default function DashboardPage() {
           onToggleDayCompletion={toggleDayCompletion}
           onChangeLessonStyle={changeLessonStyle}
           onOpenFullLesson={(id) => router.push(`/lesson/${id}`)}
-          onOpenAiLesson={(day) => setActiveAiLesson(day)}
+          onOpenAiLesson={(day) => openUnifiedChat(day)}
           onAddPlanStep={addPlanStep}
           isAddingPlanStep={isAddingPlanStep}
           chapters={chapters}
@@ -1855,7 +1852,7 @@ export default function DashboardPage() {
 
       {/* زرار ماجيك العايم: نفس أخضر المونوجرام اللي في كارت المدرّب
           وترويسة المحادثة، عشان يتقرا كإنه نفس الشخصية مش زرار تاني */}
-      {!activeAiLesson && days.length > 0 && (
+      {days.length > 0 && (
         <button
           onClick={handleOpenAiAssistant}
           className={`fixed left-6 z-40 bg-emerald-500 hover:opacity-90 text-onmarker text-sm font-bold px-4 py-3 rounded-[var(--r-sm)] shadow-[0_18px_44px_-18px_var(--shade-lift)] flex items-center gap-2.5 transition active:scale-95 ${
@@ -1958,17 +1955,6 @@ export default function DashboardPage() {
         themeStyles={themeStyles}
       />
 
-      <AiChatModal
-        activeAiLesson={activeAiLesson}
-        onClose={() => setActiveAiLesson(null)}
-        onSwitchLesson={(day: React.SetStateAction<StudyDay | null>) => setActiveAiLesson(day)}
-        days={days}
-        configId={configId}
-        config={config}
-        themeStyles={themeStyles}
-        onExamPlanSaved={() => setExamPlanKey((k) => k + 1)}
-      />
-
       {activeBossChapter !== null && (
         <BossFight
           subject={config.subject}
@@ -2001,7 +1987,6 @@ export default function DashboardPage() {
         page="dashboard"
         featureLabel="الداشبورد"
         enabled={
-          !activeAiLesson &&
           !celebration &&
           activeBossChapter === null &&
           !showLeaderboard &&

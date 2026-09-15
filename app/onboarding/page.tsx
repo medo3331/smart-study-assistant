@@ -104,8 +104,23 @@ export default function OnboardingPage() {
     void (async () => {
       if (!supabaseRef.current) supabaseRef.current = createClient();
       const supabase = supabaseRef.current;
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
+
+      let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] = null;
+      try {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+      } catch {
+        // فشل مؤقت (شبكة/مزامنة كوكي الجلسة لسه ما وصلتش) — منسيبش الصفحة
+        // تكسر. بنعيد المحاولة مرة واحدة بعد لحظة بسيطة بدل ما نرمي المستخدم
+        // على شاشة "حصل خطأ" من أول تسجيل.
+        await new Promise((r) => setTimeout(r, 400));
+        try {
+          const retry = await supabase.auth.getUser();
+          user = retry.data.user;
+        } catch {
+          user = null;
+        }
+      }
 
       if (!cancelled && (!user || user.is_anonymous)) {
         router.replace("/welcome");
