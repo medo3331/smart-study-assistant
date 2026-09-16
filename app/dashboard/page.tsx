@@ -2,8 +2,6 @@
 /* eslint-disable react-hooks/exhaustive-deps -- TODO: stable deps */
 /* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system is intentional */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
-/* eslint-disable @typescript-eslint/no-unused-vars -- Dashboard redesign: legacy imports kept for primary/secondary branches, not all used in new Control Center default branch */
-
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -51,13 +49,12 @@ import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
-// 🧩 Dashboard Control Center — new lightweight layout (header → wheel → stats → navigation → focus)
-import { DashboardHeader } from "./components/DashboardHeader";
+// 🧩 سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
+import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
+// Preview branch: conservative control center extension (stats + navigation + focus)
 import { DashboardStats } from "./components/DashboardStats";
 import { QuickNavigation, buildQuickNavItems } from "./components/QuickNavigation";
 import { TodayFocus } from "./components/TodayFocus";
-// 🧩 سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
-import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
@@ -1491,7 +1488,31 @@ export default function DashboardPage() {
         audioOn={isPlayingAudio}
       />
 
-      {/* Dashboard Control Center — header/wheel/stats/navigation/focus live inside the default branch below */}
+      {/* ═══════════════════════════════════════════════════════
+          بوابة التنقل الدائرية — عجلة ماجيك (NEW)
+          تُضاف فوق كل المجموعات الحالية بدون تغيير أي قسم موجود.
+          ═══════════════════════════════════════════════════════ */}
+      <div className="relative -mt-4 mb-6 md:mb-8 dashboard-entrance" style={{ animationDelay: "0ms" }}>
+        <div className="motion-safe:animate-[wheelPulse_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
+        <MagicWheelDashboard
+          currentDay={currentDayNumber}
+          totalDays={days.length}
+          subject={config?.subject ?? ""}
+          completedSteps={completedCount}
+          progressPct={overallProgress}
+          currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+          streak={streak}
+          coursesCount={coursesCount}
+          subjectBreakdown={subjectBreakdown}
+          activeChartData={activeChartData}
+          analyticsRange={analyticsRange}
+          onChangeRange={setAnalyticsRange}
+          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+          notificationsEnabled={notificationsEnabled}
+          onOpenSettings={() => setIsMenuOpen(true)}
+        />
+        </div>
+      </div>
 
       <div className="max-w-6xl mx-auto space-y-10">
         {isPrimary && primaryDashboardSafe ? (
@@ -1561,70 +1582,318 @@ export default function DashboardPage() {
             </details>
           </div>
         ) : (
-          <div className="space-y-6 max-w-5xl mx-auto">
-            {/* 1 — Header: real displayName, no hero gradient */}
-            <div className="dashboard-entrance" style={{ animationDelay: "0ms" }}>
-              <DashboardHeader displayName={displayName} />
-            </div>
+          <>
+        {/* ═══════════════════════════════════════════════════════
+            PREVIEW: Control Center extension — Stats + Quick Nav + Focus
+            Added conservatively; old dashboard kept below.
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "0ms" }}>
+          <DashboardStats
+            streak={streak}
+            progressPct={days.length > 0 ? overallProgress : null}
+            notificationsCount={null}
+            coursesCount={coursesCount}
+          />
+        </div>
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "40ms" }}>
+          <QuickNavigation
+            items={buildQuickNavItems({
+              onOpenAi: handleOpenAiAssistant,
+              onOpenSettings: () => setIsMenuOpen(true),
+            })}
+          />
+        </div>
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "80ms" }}>
+          <TodayFocus
+            currentDay={currentTaskForCoach ?? null}
+            progressPct={days.length > 0 ? overallProgress : null}
+            totalSteps={days.length}
+            completedSteps={completedCount}
+            subject={config?.subject ?? ""}
+            onContinue={() => {
+              const el = document.getElementById(`day-${currentDayNumber}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          />
+        </div>
 
-            {/* 2 — Wheel: centered, subtle pulse (no logic change) */}
-            <div className="dashboard-entrance flex justify-center" style={{ animationDelay: "40ms" }}>
-              <div className="w-full max-w-[640px] motion-safe:animate-[wheelPulse_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
-                <MagicWheelDashboard
-                  currentDay={currentDayNumber}
-                  totalDays={days.length}
-                  subject={config?.subject ?? ""}
-                  completedSteps={completedCount}
-                  progressPct={overallProgress}
-                  currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
-                  streak={streak}
-                  coursesCount={coursesCount}
-                  subjectBreakdown={subjectBreakdown}
-                  activeChartData={activeChartData}
-                  analyticsRange={analyticsRange}
-                  onChangeRange={setAnalyticsRange}
-                  weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-                  notificationsEnabled={notificationsEnabled}
-                  onOpenSettings={() => setIsMenuOpen(true)}
-                />
-              </div>
-            </div>
+        {/* ═══════════════════════════════════════════════════════
+            GROUP A — الهوية والفعل
+            HeroCard → CurrentStepCard → ExamPlanCard (conditional)
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "0ms" }}>
+          {/* ═══ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
+                  إجراءات سريعة (أكمل التعلّم · المساعد الذكي · العبادات · المتجر).
+                  كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. ═══ */}
+          <HeroCard
+            displayName={displayName}
+            subtitle={headerSubtitle}
+            level={level}
+            streak={streak}
+            planProgressPct={overallProgress}
+            completedSteps={completedCount}
+            totalSteps={days.length}
+            onContinue={() => {
+              const el = document.getElementById(`day-${currentDayNumber}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            onOpenAiAssistant={handleOpenAiAssistant}
+          />
+          {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
+          <EconomyStrip />
+          {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
+                  (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
+          <CurrentStepCard
+            currentDay={currentTaskForCoach ?? null}
+            completedSteps={completedCount}
+            totalSteps={days.length}
+            isCurrent={
+              currentTaskForCoach ? currentTaskForCoach.day === currentDayNumber : false
+            }
+            subjectName={config.subject}
+            onContinue={() => {
+              const el = document.getElementById(`day-${currentDayNumber}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          />
 
-            {/* 3 — Quick Stats: 4 small cards, real data only */}
-            <div className="dashboard-entrance" style={{ animationDelay: "80ms" }}>
-              <DashboardStats
+          {/* Phase 0.1 — Daily Micro-Challenge */}
+          <DailyMicroChallenge />
+
+          {/* Phase 0.2 — Smart Contextual Notification (in-app only; zero DB; no push/cron) */}
+          <ContextualNotification />
+
+          {/* Phase 0.4 — Light Social Comparison (reuses weekly_quiz_leaderboard; no new DB) */}
+          <LightSocialComparison />
+
+          {/* 🚨 خطة الامتحان القريب — أهم deadline إذا وُجد.
+              مكانها بعد CTA مباشرة عن قصد: اللي عنده امتحان بعد ٣ أيام لازم يشوف
+              المطلوب منه النهاردة قبل أي إحصائية. الكارت بيخفي نفسه
+              لوحده لو مفيش خطة شغالة. */}
+          {authUser && (
+            // ⚠️ الـ key فيه examPlanKey: الكارت بيجيب الخطة مرة واحدة عند
+            // التركيب، فلو المستخدم عمل خطة من الشات الكارت كان هيفضل فاضي
+            // لحد ريفريش. تغيير الـ key بيعيد تركيبه فبيجيب الخطة الجديدة.
+            <ExamPlanCard
+              key={examPlanKey}
+              userId={authUser.id}
+              themeStyles={themeStyles}
+            />
+          )}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP B — السياق اليومي
+            PersonalAssistant → HeroSection / AIStudyCoach
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "60ms" }}>
+          {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
+          <PersonalAssistant context={personalAssistantContext} />
+
+          <HeroSection displayName={displayName} coachTasks={coachTasks} />
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP C — العمل الحقيقي (محفوظ لكن بدون احتلال مساحة ضخمة في Preview)
+            StudySections wrapped in collapsible <details> per task §5.
+            ═══════════════════════════════════════════════════════ */}
+        <details className="group rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)]" open>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--text)" }}>
+            <span className="flex items-center gap-2"><span aria-hidden>📚</span> المواد الدراسية</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--rule)] bg-[var(--card-secondary)] text-[var(--muted)] transition group-open:rotate-180" aria-hidden>▾</span>
+          </summary>
+          <div className="border-t border-[var(--rule)] p-4">
+            <p className="mb-3 text-xs leading-5" style={{ color: "var(--muted)" }}>هذا القسم كان يحتل مساحة كبيرة في الـDashboard. في Preview تم تصغيره داخل عنصر قابل للطي — المحتوى والبيانات نفسها محفوظة، والوصول الكامل عبر <span style={{ color: "var(--text)" }}>/dashboard/courses</span>.</p>
+          <StudySections
+          config={config}
+          uiText={uiText}
+          themeStyles={themeStyles}
+          isEmergencyMode={isEmergencyMode}
+          showPomodoro={showPomodoro}
+          onTogglePomodoro={() => setShowPomodoro(!showPomodoro)}
+          pomoTime={pomoTime}
+          isPomoRunning={isPomoRunning}
+          onTogglePomoRunning={() => setIsPomoRunning(!isPomoRunning)}
+          onResetPomo={() => {
+            setIsPomoRunning(false);
+            setPomoTime(25 * 60);
+          }}
+          completedCount={completedCount}
+          overallProgress={overallProgress}
+          showLagWarning={showLagWarning}
+          daysSinceLastActivity={daysSinceLastActivity}
+          currentDayNumber={currentDayNumber}
+          days={days}
+          earlyUnlockedDays={earlyUnlockedDays}
+          onToggleDayCompletion={toggleDayCompletion}
+          onChangeLessonStyle={changeLessonStyle}
+          onOpenFullLesson={(id) => router.push(`/lesson/${id}`)}
+          onOpenAiLesson={(day) => openUnifiedChat(day)}
+          onAddPlanStep={addPlanStep}
+          isAddingPlanStep={isAddingPlanStep}
+          chapters={chapters}
+          onOpenBossFight={(chapterNumber) => setActiveBossChapter(chapterNumber)}
+          userNote={userNote}
+          onChangeUserNote={setUserNote}
+          onAddNote={handleGenerateFlashcards}
+          flashcards={flashcards}
+          onUpdateCardStatus={updateCardStatus}
+        />
+          </div>
+        </details>
+
+      {/* ═══════════════════════════════════════════════════════
+          GROUP C-EXTRA — كاردات إضافية (ربط ببيانات DB حقيقية)
+          ═══════════════════════════════════════════════════════ */}
+      <div className="dashboard-entrance grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TodayPlanCard
+          currentDayNumber={currentDayNumber}
+          daysLength={days.length}
+          subject={config?.subject ?? ""}
+          completedCount={completedCount}
+          chapters={chapters}
+          currentChapter={chapters.find((c) => !c.isComplete)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+        />
+        <DailyMissionsCard
+          pendingGoals={pendingGoals as any}
+          completedToday={days.filter((d) => d.isCompleted).length}
+        />
+        <WeeklyProgressCard
+          weeklyChartData={weeklyChartData}
+          monthlyChartData={monthlyChartData}
+          analyticsRange={analyticsRange}
+          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+        />
+        <CompanionStatusCard
+          level={level}
+          xp={xp}
+          streak={streak}
+          levelProgressPct={currentLevelProgress}
+          companionName={companion?.name ?? "رفيقك"}
+          hidden={companion?.hidden ?? true}
+        />
+      </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP D — الأرقام والتقدّم
+            كل progress/metrics في منطقة واحدة بعد العمل الحقيقي
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "180ms" }}>
+          {/* ═══ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا ═══ */}
+
+          {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
+                  — عدّ من صفر مرة واحدة بخط المونو ═══ */}
+          <StatCards
+            xp={xp}
+            streak={streak}
+            completedSteps={completedCount}
+            weeklyFocusMinutes={weeklyFocusMinutesTotal}
+          />
+
+          {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
+            {/* 🐣 الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في
+                الشبكة: الشبكة عمودين، والتالت كان هيسيب فراغ جنبه على
+                الشاشة الكبيرة. والعمود ده أقصر من الرسم البياني أصلاً. */}
+            <div className="flex flex-col gap-6">
+              <AchievementsStrip
                 streak={streak}
-                progressPct={days.length > 0 ? overallProgress : null}
-                notificationsCount={null}
-                coursesCount={coursesCount}
+                completedCount={completedCount}
+                level={level}
+                badgeCount={badgeCount}
+                themeStyles={themeStyles}
               />
-            </div>
 
-            {/* 4 — Quick Navigation: 2 cols mobile, 3 tablet, 4 desktop */}
-            <div className="dashboard-entrance" style={{ animationDelay: "120ms" }}>
-              <QuickNavigation
-                items={buildQuickNavItems({
-                  onOpenAi: handleOpenAiAssistant,
-                  onOpenSettings: () => setIsMenuOpen(true),
-                })}
-              />
-            </div>
-
-            {/* 5 — Today's Focus: real task or honest empty state */}
-            <div className="dashboard-entrance" style={{ animationDelay: "160ms" }}>
-              <TodayFocus
-                currentDay={currentTaskForCoach ?? null}
-                progressPct={days.length > 0 ? overallProgress : null}
-                totalSteps={days.length}
-                completedSteps={completedCount}
-                subject={config?.subject ?? ""}
-                onContinue={() => {
-                  const el = document.getElementById(`day-${currentDayNumber}`);
-                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                }}
-              />
+              {companion.hidden ? (
+                <button
+                  type="button"
+                  onClick={companion.show}
+                  className="mono text-ink-soft hover:text-ink border border-dashed border-rule rounded-[var(--r-sm)] py-2.5 hover:bg-paper-3 transition"
+                >
+                  رجّع رفيقك
+                </button>
+              ) : (
+                <StudyPet
+                  level={level}
+                  xp={xp}
+                  levelProgressPct={currentLevelProgress}
+                  streak={streak}
+                  daysSinceLastActivity={daysSinceLastActivity}
+                  theme={theme}
+                  stages={companion.stages}
+                  companionName={companion.name}
+                  onDismiss={companion.hide}
+                />
+              )}
             </div>
           </div>
+
+          {/* Phase 4: Progressive disclosure — collapsed by default, preserves id="analytics" for nav scroll. */}
+          <details id="analytics" className="scroll-mt-6 group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-sm)] border border-rule bg-paper px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden marker:content-none">
+              <span>مزيد من التحليلات</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>
+                ▾
+              </span>
+            </summary>
+            <div className="mt-4">
+              <AnalyticsSection
+                analyticsRange={analyticsRange}
+                onChangeRange={setAnalyticsRange}
+                weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+                overallProgress={overallProgress}
+                streak={streak}
+                activeChartData={activeChartData}
+                theme={theme}
+                heatmapCells={heatmapCells}
+                heatmapColors={heatmapColors}
+              />
+            </div>
+          </details>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP E — العبادات
+            Worship CTA → QuranSection
+            ═══════════════════════════════════════════════════════ */}
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "240ms" }}>
+          {/* 📖 بوابة العبادات — تبقى قبل القرآن مباشرة */}
+          <Link href="/worship" className="block">
+            <button
+              type="button"
+              aria-label="عباداتي — Worship Center"
+              className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-gradient-to-l from-[#2DD4BF]/10 to-[#7C5CFF]/10 border border-[#2DD4BF]/20 hover:border-[#7C5CFF]/40 transition-colors text-right"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] text-xl">🕌</span>
+              <div className="min-w-0">
+                <h3 className="font-bold text-white leading-snug">عباداتي — Worship Center</h3>
+                <p className="text-sm text-[#B69CFF]">مواقيت الصلاة · الأذكار · القرآن · التسبيح</p>
+              </div>
+              <ArrowLeft size={18} className="mr-auto text-[#9AA0C0] shrink-0" aria-hidden />
+            </button>
+          </Link>
+
+          {/* 📖 القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط المكتبة.
+              الصوت عايش في AudioProvider فالسورة بتكمّل في أي صفحة. */}
+          <QuranSection
+            themeStyles={themeStyles}
+            onOpenLibrary={() => {
+              setSettingsFocus("sound");
+              setIsMenuOpen(true);
+            }}
+          />
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            GROUP F — الثانوي
+            ═══════════════════════════════════════════════════════ */}
+        {/* 👥 دعوة الجروب في آخر الصفحة: اللي وصل لحد هنا شاف الموقع
+            كله وبقى مؤهّل يدخل. البانر بيخفي نفسه لو مفيش لينك مظبوط. */}
+        <div className="dashboard-entrance" style={{ animationDelay: "300ms" }}>
+          <CommunityInvite variant="banner" />
+        </div>
+          </>
         )}
       </div>
 
