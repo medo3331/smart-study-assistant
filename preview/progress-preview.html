@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progress Experience — معاينة Magiclly</title>
+<style>
+  /* === Magicly tokens — warm-dark (الداشبورد الحقيقي) + indigo-light fallback === */
+  :root{
+    --app-bg:#0D0906; --card-primary:#161009; --card-secondary:#1D1510;
+    --accent:#DC4C4C; --accent-highlight:#F2745C;
+    --text:#F3F0EC; --muted:#9A958F; --muted2:#7A7470;
+    --rule:rgba(243,240,236,.08); --rule2:rgba(243,240,236,.14);
+    --shade:rgba(0,0,0,.45); --r:16px; --r2:20px; --r3:24px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--app-bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,"Noto Sans Arabic",sans-serif;line-height:1.6}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;direction:ltr}
+  a{color:inherit;text-decoration:none}
+  /* Proof bar */
+  .proof{position:sticky;top:0;z-index:50;background:rgba(220,76,76,.10);border-bottom:1px solid rgba(220,76,76,.15);backdrop-filter:blur(8px)}
+  .proofInner{max-width:1120px;margin:0 auto;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .badge{background:var(--accent);color:#fff;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800}
+  .pill{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.06);border-radius:999px;padding:4px 10px;font-size:11px;color:var(--muted)}
+  .wrap{max-width:1120px;margin:0 auto;padding:24px 16px}
+  @media(min-width:768px){.wrap{padding:28px 24px}}
+  /* Header */
+  .pageH{font-size:24px;font-weight:900;letter-spacing:-.02em;line-height:1.2}
+  .pageD{font-size:13px;color:var(--muted);margin-top:6px}
+  /* Tabs for states */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 16px}
+  .tab{border:1px solid var(--rule);background:rgba(255,255,255,.04);color:var(--muted);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;transition:.15s}
+  .tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(220,76,76,.25)}
+  .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* Cards */
+  .card{background:var(--card-primary);border:1px solid var(--rule);border-radius:var(--r2);box-shadow:0 8px 28px var(--shade);overflow:hidden}
+  .cardPad{padding:16px}
+  @media(min-width:768px){.cardPad{padding:20px}}
+  .subTitle{font-size:11px;letter-spacing:.08em;font-weight:800;color:var(--muted);text-transform:uppercase}
+  /* Progress bar */
+  .track{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;position:relative}
+  .fill{height:100%;border-radius:999px;background:var(--accent);transition:width .7s cubic-bezier(.22,1,.36,1)}
+  .fillTeal{background:#2DD4BF}
+  .fillAmber{background:#FB923C}
+  /* Grid */
+  .grid2{display:grid;gap:14px}
+  @media(min-width:768px){.grid2{grid-template-columns:1fr 1fr}}
+  .grid3{display:grid;gap:14px}
+  @media(min-width:768px){.grid3{grid-template-columns:1fr 1fr 1fr}}
+  @media(min-width:1024px){.mainGrid{display:grid;grid-template-columns:1.35fr .85fr;gap:14px}}
+  /* History bars */
+  .hGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end}
+  .hCol{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .hBar{width:100%;max-width:36px;border-radius:8px 8px 4px 4px;background:rgba(220,76,76,.18);min-height:6px;transition:height .5s}
+  .hBar.on{background:var(--accent)}
+  .hLabel{font-size:10px;color:var(--muted)}
+  /* Buttons */
+  .btn{border-radius:999px;padding:10px 16px;font-size:13px;font-weight:800;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:8px;justify-content:center;transition:.15s}
+  .btnPrimary{background:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(220,76,76,.22)}
+  .btnPrimary:hover{filter:brightness(1.07);transform:translateY(-1px)}
+  .btnPrimary:active{transform:scale(.98)}
+  .btnGhost{background:rgba(255,255,255,.06);border-color:var(--rule);color:var(--text)}
+  .btnGhost:hover{background:rgba(255,255,255,.09)}
+  /* Status */
+  .statusOk{background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.18);color:#5EEAD4}
+  .statusWarn{background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.18);color:#FDBA74}
+  .statusDone{background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.18);color:#C4B5FD}
+  /* Anim */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .enter{animation:fadeUp .45s cubic-bezier(.22,1,.36,1) both}
+  .enter2{animation:fadeUp .45s .06s both}
+  .enter3{animation:fadeUp .45s .12s both}
+  @media(prefers-reduced-motion:reduce){.enter,.enter2,.enter3{animation:none!important}}
+  /* Mobile frame */
+  .phone{width:375px;max-width:100%;margin:0 auto;background:#0D0906;border:1px solid rgba(255,255,255,.08);border-radius:28px;overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,.55)}
+  .phoneTop{height:18px;display:flex;justify-content:center;align-items:center}
+  .notch{width:86px;height:6px;border-radius:999px;background:rgba(255,255,255,.16)}
+  .phoneInner{padding:12px;display:flex;flex-direction:column;gap:12px}
+  /* Empty */
+  .empty{border:1px dashed rgba(255,255,255,.14);background:rgba(255,255,255,.02);border-radius:16px;padding:20px;text-align:center}
+</style>
+</head>
+<body>
+<div class="proof">
+  <div class="proofInner">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="badge">Preview — Progress Experience</span>
+      <span class="pill mono">preview/progress-preview.html</span>
+      <span style="font-size:12px;color:var(--text);opacity:.85" class="hideMobile"> standalone · mock داخل المعاينة فقط · لا Supabase</span>
+    </div>
+    <span class="pill">Professional SaaS · لا gaming</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- Page header proof -->
+  <div class="enter">
+    <p class="subTitle">Progress Experience · تقدمك الدراسي</p>
+    <h1 class="pageH" style="margin:6px 0 0">معاينة الحالات الأربع — نفس التوكنز الحقيقية</h1>
+    <p class="pageD">الهدف: الطالب يفهم خلال ثوانٍ <b style="color:var(--text)">أنا فين؟ أنجزت قد إيه؟ إيه اللي ناقص؟ وماشي على خطتي؟</b> — بدون أرقام وهمية في الإنتاج، والصيغة <span class="mono" dir="ltr">completed / planned * 100</span> مع حماية 0.</p>
+  </div>
+
+  <div class="tabs enter2" role="tablist" aria-label="حالات المعاينة">
+    <button class="tab" role="tab" aria-selected="true" data-state="active" onclick="show('active')">1 · طالب نشط (24/34)</button>
+    <button class="tab" role="tab" aria-selected="false" data-state="empty" onclick="show('empty')">2 · جديد (0/0)</button>
+    <button class="tab" role="tab" aria-selected="false" data-state="done" onclick="show('done')">3 · مكتمل (30/30)</button>
+    <button class="tab" role="tab" aria-selected="false" data-state="mobile" onclick="show('mobile')">4 · موبايل 375</button>
+  </div>
+
+  <!-- ========== STATE 1: ACTIVE ========== -->
+  <section id="state-active" class="enter3" aria-label="حالة طالب نشط">
+    <div class="card">
+      <div class="cardPad" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;border-bottom:1px solid var(--rule)">
+        <div>
+          <h2 class="pageH" style="font-size:22px">تقدمك الدراسي</h2>
+          <p class="pageD" style="margin:6px 0 0">تابع إنجازك واعرف الخطوة التالية في رحلتك.</p>
+          <p style="margin-top:8px;font-size:12px;display:inline-flex;align-items:center;gap:6px;background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.18);color:#5EEAD4;border-radius:999px;padding:4px 10px">● مستمر بشكل ممتاز</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pill mono">24 / 34</span>
+          <span class="pill">🔥 7 أيام</span>
+        </div>
+      </div>
+
+      <!-- Overall + Plan -->
+      <div class="cardPad" style="display:flex;flex-direction:column;gap:14px">
+        <div class="mainGrid">
+          <!-- Overall -->
+          <div class="card" style="background:var(--card-secondary)">
+            <div class="cardPad">
+              <p class="subTitle">التقدم العام</p>
+              <div style="display:flex;align-items:baseline;gap:10px;margin-top:10px">
+                <span style="font-size:42px;font-weight:900;letter-spacing:-.03em;line-height:1" class="mono">71%</span>
+                <span style="font-size:12px;color:var(--muted)">24 من 34 يوم مكتمل</span>
+              </div>
+              <div class="track" style="margin-top:14px" aria-label="التقدم العام 71%"><div class="fill" style="width:71%"></div></div>
+              <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--muted)"><span class="mono">0%</span><span class="mono">100%</span></div>
+            </div>
+          </div>
+          <!-- Study Plan -->
+          <div class="card" style="background:var(--card-secondary)">
+            <div class="cardPad">
+              <p class="subTitle">خطة الدراسة</p>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
+                <div style="text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--rule);border-radius:14px;padding:12px 8px">
+                  <div class="mono" style="font-size:22px;font-weight:900">34</div><div style="font-size:11px;color:var(--muted)">مخطط لها</div>
+                </div>
+                <div style="text-align:center;background:rgba(45,212,191,.10);border:1px solid rgba(45,212,191,.18);border-radius:14px;padding:12px 8px">
+                  <div class="mono" style="font-size:22px;font-weight:900;color:#5EEAD4">24</div><div style="font-size:11px;color:var(--muted)">مكتملة</div>
+                </div>
+                <div style="text-align:center;background:rgba(251,146,60,.10);border:1px solid rgba(251,146,60,.18);border-radius:14px;padding:12px 8px">
+                  <div class="mono" style="font-size:22px;font-weight:900;color:#FDBA74">10</div><div style="font-size:11px;color:var(--muted)">متبقية</div>
+                </div>
+              </div>
+              <div class="track" style="margin-top:14px"><div class="fill" style="width:71%"></div></div>
+              <p style="margin-top:8px;font-size:12px;color:var(--muted)">متبقي <b style="color:var(--text)">10 أيام</b> لإكمال الخطة.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today + Streak + Status -->
+        <div class="grid3">
+          <div class="card" style="background:var(--card-secondary)">
+            <div class="cardPad">
+              <p class="subTitle">إنجاز اليوم</p>
+              <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+                <span style="width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:rgba(45,212,191,.14);color:#5EEAD4">✓</span>
+                <div><div style="font-weight:800">مكتمل</div><div style="font-size:12px;color:var(--muted)">أكملت مهمة اليوم — أحسنت 👌</div></div>
+              </div>
+              <div class="track" style="margin-top:12px"><div class="fill fillTeal" style="width:100%"></div></div>
+            </div>
+          </div>
+          <div class="card" style="background:var(--card-secondary)">
+            <div class="cardPad">
+              <p class="subTitle">السلسلة</p>
+              <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+                <span style="width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:rgba(251,146,60,.14)">🔥</span>
+                <div><div class="mono" style="font-weight:900;font-size:18px">7 أيام متتالية</div><div style="font-size:12px;color:var(--muted)">استمر — لا تكسر السلسلة</div></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:6px"><span style="height:6px;flex:1;border-radius:999px;background:var(--accent)"></span><span style="height:6px;flex:1;border-radius:999px;background:var(--accent)"></span><span style="height:6px;flex:1;border-radius:999px;background:rgba(255,255,255,.12)"></span><span style="height:6px;flex:1;border-radius:999px;background:rgba(255,255,255,.12)"></span></div>
+            </div>
+          </div>
+          <div class="card statusOk">
+            <div class="cardPad">
+              <p class="subTitle" style="color:inherit;opacity:.9">الحالة</p>
+              <div style="margin-top:10px;font-weight:900">أنت ماشي على خطتك 👌</div>
+              <p style="margin-top:6px;font-size:12px;opacity:.9">لا تأخر — استمر بنفس الوتيرة.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Next Action — الأهم -->
+        <div class="card" style="border-color:rgba(220,76,76,.22);box-shadow:0 10px 30px rgba(220,76,76,.12)">
+          <div class="cardPad" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--accent);color:#fff;font-size:18px">🎯</span>
+            <div style="flex:1;min-width:220px">
+              <p class="subTitle">خطوتك التالية</p>
+              <h3 style="margin:6px 0 4px;font-size:16px;font-weight:900">أكمل مذاكرة اليوم — فيزياء: الحركة الموجية</h3>
+              <p style="font-size:12px;color:var(--muted)">الهدف الحالي: مراجعة درس اليوم + حل 3 مسائل</p>
+              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <span class="pill">اليوم 25 من 34</span><span class="pill mono">71%</span><span class="pill">20 دقيقة</span>
+              </div>
+            </div>
+            <a class="btn btnPrimary" href="/lesson/mock-id" aria-label="ابدأ الآن — الانتقال للدرس الحالي">ابدأ الآن <span aria-hidden>←</span></a>
+          </div>
+        </div>
+
+        <!-- Breakdown + History -->
+        <div class="grid2">
+          <div class="card" style="background:var(--card-secondary)">
+            <div class="cardPad">
+              <p class="subTitle">تقدم المواد</p>
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+                <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px"><span>الفيزياء</span><span class="mono">18 / 24 · 75%</span></div><div class="track"><div class="fill" style="width:75%"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px"><span>الرياضيات</span><span class="mono">4 / 6 · 67%</span></div><div class="track"><div class="fill fillTeal" style="width:67%"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px"><span>الكيمياء</span><span class="mono">2 / 4 · 50%</span></div><div class="track"><div class="fill fillAmber" style="width:50%"></div></div></div>
+              </div>
+              <p style="margin-top:10px;font-size:11px;color:var(--muted)">مصدر التقسيم: <span class="mono">study_configs + study_days</span> — لا تخمين.</p>
+            </div>
+          </div>
+          <div class="card" style="background:var(--card-secondary)">
+            <div class="cardPad">
+              <p class="subTitle">هذا الأسبوع</p>
+              <div class="hGrid" style="margin-top:14px">
+                <div class="hCol"><div class="hBar on" style="height:42px"></div><span class="hLabel">سبت</span><span style="font-size:10px;color:var(--muted)">✓</span></div>
+                <div class="hCol"><div class="hBar on" style="height:38px"></div><span class="hLabel">أحد</span><span style="font-size:10px;color:var(--muted)">✓</span></div>
+                <div class="hCol"><div class="hBar on" style="height:48px"></div><span class="hLabel">إثنين</span><span style="font-size:10px;color:#5EEAD4">✓ 25د</span></div>
+                <div class="hCol"><div class="hBar" style="height:10px"></div><span class="hLabel">ثلاثاء</span><span style="font-size:10px;color:var(--muted)">—</span></div>
+                <div class="hCol"><div class="hBar on" style="height:36px"></div><span class="hLabel">أربعاء</span><span style="font-size:10px;color:var(--muted)">✓</span></div>
+                <div class="hCol"><div class="hBar on" style="height:44px"></div><span class="hLabel">خميس</span><span style="font-size:10px;color:var(--muted)">✓</span></div>
+                <div class="hCol"><div class="hBar" style="height:8px"></div><span class="hLabel">جمعة</span><span style="font-size:10px;color:var(--muted)">—</span></div>
+              </div>
+              <p style="margin-top:10px;font-size:11px;color:var(--muted)">مصدر السجل: <span class="mono">activity_log</span> — أيام بلا نشاط تظهر — وليس 0% وهمي.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== STATE 2: EMPTY ========== -->
+  <section id="state-empty" hidden aria-label="حالة مستخدم جديد">
+    <div class="card">
+      <div class="cardPad" style="border-bottom:1px solid var(--rule)">
+        <h2 class="pageH" style="font-size:22px">تقدمك الدراسي</h2>
+        <p class="pageD">تابع إنجازك واعرف الخطوة التالية في رحلتك.</p>
+        <p style="margin-top:8px;font-size:12px;display:inline-flex;gap:6px;background:rgba(255,255,255,.06);border:1px solid var(--rule);color:var(--muted);border-radius:999px;padding:4px 10px">● بانتظار أول خطة</p>
+      </div>
+      <div class="cardPad" style="display:flex;flex-direction:column;gap:14px">
+        <div class="empty">
+          <div style="width:48px;height:48px;border-radius:16px;display:grid;place-items:center;margin:0 auto;background:rgba(220,76,76,.12);color:var(--accent);font-size:20px">📚</div>
+          <h3 style="margin:14px 0 6px;font-weight:900">لم تبدأ خطتك بعد</h3>
+          <p style="font-size:13px;color:var(--muted);max-width:520px;margin:0 auto">أنشئ خطة بسيطة وابدأ متابعة تقدمك. التقدم الحالي <span class="mono">0%</span> — هذا طبيعي قبل البداية، وليس فشلًا.</p>
+          <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <a class="btn btnPrimary" href="/dashboard/create">ابدأ الآن — أنشئ خطتك <span aria-hidden>←</span></a>
+            <a class="btn btnGhost" href="/assessment">تحديد المستوى</a>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <span class="pill mono">planned = 0 → 0% (لا NaN)</span>
+            <span class="pill mono">remaining = 0</span>
+            <span class="pill">لا أرقام وهمية</span>
+          </div>
+        </div>
+        <div class="grid3">
+          <div class="card" style="background:var(--card-secondary);opacity:.7"><div class="cardPad"><p class="subTitle">التقدم العام</p><div class="mono" style="font-size:28px;font-weight:900;margin-top:8px">—</div><p style="font-size:12px;color:var(--muted)">سيظهر هنا بعد إنشاء الخطة</p></div></div>
+          <div class="card" style="background:var(--card-secondary);opacity:.7"><div class="cardPad"><p class="subTitle">إنجاز اليوم</p><div style="margin-top:8px;font-weight:800">لا مهام بعد</div><p style="font-size:12px;color:var(--muted)">ابدأ خطتك لترى مهام اليوم</p></div></div>
+          <div class="card" style="background:var(--card-secondary);opacity:.7"><div class="cardPad"><p class="subTitle">السلسلة</p><div class="mono" style="font-weight:900;margin-top:8px">—</div><p style="font-size:12px;color:var(--muted)">ابدأ وتظهر سلسلتك</p></div></div>
+        </div>
+        <div class="card" style="background:rgba(255,255,255,.03);border-style:dashed"><div class="cardPad" style="display:flex;gap:12px;align-items:center"><span style="width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.06)">💡</span><div><div style="font-weight:800">سجل تقدمك سيظهر هنا مع استمرار الدراسة.</div><div style="font-size:12px;color:var(--muted)">هذا الأسبوع — 7 أعمدة فارغة بانتظار أول نشاط.</div></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== STATE 3: COMPLETED ========== -->
+  <section id="state-done" hidden aria-label="حالة خطة مكتملة">
+    <div class="card">
+      <div class="cardPad" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;border-bottom:1px solid var(--rule)">
+        <div>
+          <h2 class="pageH" style="font-size:22px">تقدمك الدراسي</h2>
+          <p class="pageD">تابع إنجازك واعرف الخطوة التالية في رحلتك.</p>
+          <p style="margin-top:8px;font-size:12px;display:inline-flex;gap:6px;background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.18);color:#C4B5FD;border-radius:999px;padding:4px 10px">● أكملت خطتك 🎉</p>
+        </div>
+        <span class="pill mono">30 / 30 · 100%</span>
+      </div>
+      <div class="cardPad" style="display:flex;flex-direction:column;gap:14px">
+        <div class="card" style="background:var(--card-secondary);border-color:rgba(124,92,255,.18)">
+          <div class="cardPad">
+            <p class="subTitle">التقدم العام</p>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-top:10px">
+              <span class="mono" style="font-size:42px;font-weight:900;color:#C4B5FD">100%</span>
+              <span style="font-size:12px;color:var(--muted)">30 من 30 يوم مكتمل</span>
+            </div>
+            <div class="track" style="margin-top:14px"><div class="fill" style="width:100%;background:#7C5CFF"></div></div>
+            <p style="margin-top:8px;font-size:12px;color:var(--muted)">مبروك — خطة مكتملة. أنشئ خطة جديدة أو راجع ما تعلمته.</p>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card statusDone"><div class="cardPad"><p class="subTitle" style="color:inherit;opacity:.9">الحالة</p><div style="margin-top:8px;font-weight:900">أكملت خطتك الحالية 🎉</div><p style="margin-top:6px;font-size:12px;opacity:.9">جاهز للتحدي التالي — راجع أو ابدأ خطة جديدة.</p></div></div>
+          <div class="card" style="background:var(--card-secondary)"><div class="cardPad"><p class="subTitle">خطة الدراسة</p><div style="display:flex;gap:10px;margin-top:10px"><span class="pill mono">30 مخطط</span><span class="pill mono" style="background:rgba(45,212,191,.12);border-color:rgba(45,212,191,.18);color:#5EEAD4">30 مكتمل</span><span class="pill mono" style="background:rgba(255,255,255,.06)">0 متبقي</span></div><div class="track" style="margin-top:12px"><div class="fill" style="width:100%;background:#7C5CFF"></div></div></div></div>
+        </div>
+        <div class="card" style="border-color:rgba(124,92,255,.22)">
+          <div class="cardPad" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#7C5CFF;color:#fff">🎉</span>
+            <div style="flex:1;min-width:220px"><p class="subTitle">خطوتك التالية</p><h3 style="margin:6px 0 4px;font-weight:900">راجع إنجازك أو ابدأ خطة جديدة</h3><p style="font-size:12px;color:var(--muted)">كل أيام الخطة مكتملة — وقت المراجعة أو التوسّع.</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn btnPrimary" href="/exams">راجع باختبار <span aria-hidden>←</span></a><a class="btn btnGhost" href="/dashboard/create">خطة جديدة</a></div>
+          </div>
+        </div>
+        <!-- Defensive: completed > planned -->
+        <div class="card" style="background:rgba(251,146,60,.08);border-color:rgba(251,146,60,.18)">
+          <div class="cardPad">
+            <p class="subTitle" style="color:#FDBA74">حالة دفاعية — completed &gt; planned</p>
+            <p style="font-size:12px;color:var(--muted);margin-top:6px">لو <span class="mono">24/24</span> ثم أضيف يوم وأُكمل → <span class="mono">25/24</span> = الشريط يُثبّت عند <span class="mono">100%</span> ولا يكسر التخطيط، والرقم الأصلي محفوظ.</p>
+            <div class="track" style="margin-top:10px"><div class="fill fillAmber" style="width:100%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== STATE 4: MOBILE ========== -->
+  <section id="state-mobile" hidden aria-label="معاينة موبايل">
+    <p style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:12px">320 / 375 / 390 / 430 — لا overflow أفقي، لا clipping</p>
+    <div class="phone">
+      <div class="phoneTop"><div class="notch"></div></div>
+      <div class="phoneInner">
+        <div style="padding:4px 2px">
+          <h2 style="font-size:18px;font-weight:900;margin:0">تقدمك الدراسي</h2>
+          <p style="font-size:12px;color:var(--muted);margin:4px 0 0">تابع إنجازك واعرف الخطوة التالية.</p>
+          <span style="margin-top:8px;display:inline-flex;font-size:11px;background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.18);color:#5EEAD4;border-radius:999px;padding:4px 10px">● مستمر بشكل ممتاز</span>
+        </div>
+        <div class="card" style="background:var(--card-secondary)">
+          <div class="cardPad">
+            <p class="subTitle">التقدم العام</p>
+            <div class="mono" style="font-size:32px;font-weight:900;margin-top:6px">71%</div>
+            <div style="font-size:11px;color:var(--muted)">24 من 34 يوم</div>
+            <div class="track" style="margin-top:12px"><div class="fill" style="width:71%"></div></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div class="card" style="background:var(--card-secondary);text-align:center"><div class="cardPad" style="padding:12px 8px"><div class="mono" style="font-weight:900">34</div><div style="font-size:10px;color:var(--muted)">مخطط</div></div></div>
+          <div class="card" style="background:rgba(45,212,191,.10);border-color:rgba(45,212,191,.18);text-align:center"><div class="cardPad" style="padding:12px 8px"><div class="mono" style="font-weight:900;color:#5EEAD4">24</div><div style="font-size:10px;color:var(--muted)">مكتمل</div></div></div>
+          <div class="card" style="background:rgba(251,146,60,.10);border-color:rgba(251,146,60,.18);text-align:center"><div class="cardPad" style="padding:12px 8px"><div class="mono" style="font-weight:900;color:#FDBA74">10</div><div style="font-size:10px;color:var(--muted)">متبقي</div></div></div>
+        </div>
+        <div class="card" style="border-color:rgba(220,76,76,.18)">
+          <div class="cardPad" style="display:flex;gap:10px;align-items:center">
+            <span style="width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:var(--accent);color:#fff">🎯</span>
+            <div style="flex:1"><p class="subTitle">خطوتك التالية</p><div style="font-weight:900;font-size:13px;margin-top:2px">أكمل مذاكرة اليوم</div><div style="font-size:11px;color:var(--muted)">فيزياء · اليوم 25</div></div>
+          </div>
+          <div style="padding:0 12px 12px"><a class="btn btnPrimary" style="width:100%" href="/lesson/mock">ابدأ الآن ←</a></div>
+        </div>
+        <div class="card" style="background:var(--card-secondary)"><div class="cardPad"><p class="subTitle">هذا الأسبوع</p><div class="hGrid" style="margin-top:10px"><div class="hCol"><div class="hBar on" style="height:28px"></div><span class="hLabel">س</span></div><div class="hCol"><div class="hBar on" style="height:24px"></div><span class="hLabel">ح</span></div><div class="hCol"><div class="hBar on" style="height:32px"></div><span class="hLabel">ن</span></div><div class="hCol"><div class="hBar" style="height:8px"></div><span class="hLabel">ث</span></div><div class="hCol"><div class="hBar on" style="height:22px"></div><span class="hLabel">ر</span></div><div class="hCol"><div class="hBar on" style="height:30px"></div><span class="hLabel">خ</span></div><div class="hCol"><div class="hBar" style="height:6px"></div><span class="hLabel">ج</span></div></div></div></div>
+        <div style="display:flex;gap:8px"><div class="card" style="flex:1;background:var(--card-secondary)"><div class="cardPad" style="padding:12px"><p class="subTitle">إنجاز اليوم</p><div style="font-weight:800;margin-top:6px">مكتمل ✓</div></div></div><div class="card" style="flex:1;background:var(--card-secondary)"><div class="cardPad" style="padding:12px"><p class="subTitle">السلسلة</p><div class="mono" style="font-weight:900;margin-top:6px">🔥 7 أيام</div></div></div></div>
+      </div>
+    </div>
+    <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:10px">اختبر 320px — 430px · progress bars + buttons + next action كلها داخل الشاشة</p>
+  </section>
+
+  <!-- Notes -->
+  <div class="card enter" style="margin-top:18px;background:rgba(255,255,255,.02)">
+    <div class="cardPad" style="font-size:12px;color:var(--muted);line-height:1.8">
+      <b style="color:var(--text)">ملاحظات التنفيذ (الإنتاج بدون mock):</b>
+      <ul style="margin:8px 0 0;padding-right:18px">
+        <li><span class="mono">Overall = completed / planned * 100</span> — إذا <span class="mono">planned=0</span> → <span class="mono">0%</span> ولا <span class="mono">NaN</span>، والشريط <span class="mono">0</span></li>
+        <li><span class="mono">remaining = max(0, planned - completed)</span> — لا سالب</li>
+        <li>الشريط يُثبّت عند <span class="mono">100%</span> لو <span class="mono">completed &gt; planned</span> مع حفظ الرقم الأصلي</li>
+        <li>كل الأرقام من <span class="mono">study_days / study_configs / profiles.streak / activity_log</span> — لا تخمين</li>
+        <li>لا migrations — لا schema جديد — لا heavy chart lib — CSS/SVG فقط</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  function show(id){
+    const map={active:'state-active',empty:'state-empty',done:'state-done',mobile:'state-mobile'};
+    Object.values(map).forEach(k=>document.getElementById(k).hidden=true);
+    document.getElementById(map[id]).hidden=false;
+    document.querySelectorAll('.tab').forEach(b=>{
+      const on=b.dataset.state===id;
+      b.setAttribute('aria-selected', on?'true':'false');
+    });
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+</script>
+</body>
+</html>
