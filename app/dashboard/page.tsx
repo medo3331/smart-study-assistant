@@ -55,6 +55,8 @@ import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assist
 import { DashboardStats } from "./components/DashboardStats";
 import { QuickNavigation, buildQuickNavItems } from "./components/QuickNavigation";
 import { TodayFocus } from "./components/TodayFocus";
+// 🎯 First Session — "ماذا تريد أن تفعل اليوم؟" (Control Center entry point)
+import { FirstSession } from "./components/FirstSession";
 // 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
@@ -1584,10 +1586,32 @@ export default function DashboardPage() {
         ) : (
           <>
         {/* ═══════════════════════════════════════════════════════
-            PREVIEW: Control Center extension — Stats + Quick Nav + Focus
-            Added conservatively; old dashboard kept below.
+            🎯 First Session — "ماذا تريد أن تفعل اليوم؟"
+            Control Center entry point: يظهر أولاً، يوجّه النية،
+            ثم Stats + Quick Nav + Focus + باقي الأقسام كما هي.
+            البيانات كلها حقيقية من حالة الصفحة (days/completedCount).
             ═══════════════════════════════════════════════════════ */}
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "0ms" }}>
+        <div className="dashboard-entrance" style={{ animationDelay: "0ms" }}>
+          <FirstSession
+            completedSteps={completedCount}
+            totalSteps={days.length}
+            progressPct={overallProgress}
+            subject={config?.subject ?? ""}
+            currentDayId={(currentTaskForCoach as unknown as { id?: string })?.id ?? null}
+            onContinue={() => {
+              const el = document.getElementById(`day-${currentDayNumber}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                return;
+              }
+              // fallback: لو القسم مطوي أو غير موجود، افتحه
+              const details = document.querySelector("details") as HTMLDetailsElement | null;
+              if (details && !details.open) details.open = true;
+            }}
+            onOpenAi={handleOpenAiAssistant}
+          />
+        </div>
+        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "40ms" }}>
           <DashboardStats
             streak={streak}
             progressPct={days.length > 0 ? overallProgress : null}
