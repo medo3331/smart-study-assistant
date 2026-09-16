@@ -93,8 +93,8 @@ export interface WheelBranchDef {
   note: string;
 }
 
-export function buildWheelBranches(opts: { currentDay?: number | null } = {}): WheelBranchDef[] {
-  const { currentDay } = opts;
+export function buildWheelBranches(opts: { currentDay?: number | null; currentDayId?: string | null } = {}): WheelBranchDef[] {
+  const { currentDay, currentDayId } = opts;
   return [
     { id: "home", label: "الرئيسية", latin: "Home", icon: <Home size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/", note: "صفحة الهبوط الرئيسية" },
     { id: "courses", label: "الكورسات", latin: "Courses", icon: <BookOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/courses", note: "قايمة التراكات (study_configs)" },
@@ -104,9 +104,9 @@ export function buildWheelBranches(opts: { currentDay?: number | null } = {}): W
       latin: "Lesson",
       icon: <GraduationCap size={18} strokeWidth={2} aria-hidden />,
       kind: "link",
-      // ⚠️ مفيش /lesson index — المسار الحقيقي /lesson/[dayId]. من غير خطة: بوابة التوليد.
-      href: currentDay ? `/lesson/${currentDay}` : "/dashboard/create",
-      note: currentDay ? `/lesson/${currentDay} (يوم الخطة الحالي)` : "مفيش خطة بعد → /dashboard/create",
+      // ⚠️ المسار الحقيقي /lesson/[dayId] (UUID من study_days). رقم اليوم (currentDay) للعرض فقط.
+      href: currentDayId ? `/lesson/${currentDayId}` : (currentDay ? `/lesson/${currentDay}` : "/dashboard/create"),
+      note: currentDay ? `يوم ${currentDay}` + (currentDayId ? ` (${currentDayId.slice(0, 8)}...)` : ``) : "مفيش خطة بعد → /dashboard/create",
     },
     { id: "workspace", label: "مساحة العمل", latin: "Workspace", icon: <FolderOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/workspace", note: "الملفات والمذاكرة" },
     { id: "worship", label: "عباداتي", latin: "Worship", icon: <Landmark size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/worship", note: "الصلوات + الأذكار + القرآن" },
@@ -139,6 +139,7 @@ export interface WheelChartPoint {
 export interface MagicWheelProps {
   /* التراك الحالي (من صفحة الداشبورد) */
   currentDay?: number;
+  currentDayId?: string;
   totalDays?: number;
   subject?: string;
   completedSteps?: number;
@@ -267,7 +268,7 @@ function BranchFace({
    =========================================================================== */
 export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   const {
-    currentDay, totalDays, subject, completedSteps, progressPct, currentChapter,
+    currentDay, currentDayId, totalDays, subject, completedSteps, progressPct, currentChapter,
     streak, coursesCount, subjectBreakdown,
     activeChartData, analyticsRange, onChangeRange, weeklyFocusHoursLabel,
     notificationsEnabled, onOpenSettings,
