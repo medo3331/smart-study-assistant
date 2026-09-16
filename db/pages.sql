@@ -144,6 +144,9 @@ create table if not exists public.badges (
   created_at     timestamptz not null default now()
 );
 
+alter table public.badges
+  add column if not exists created_at timestamptz not null default now();
+
 create index if not exists badges_user_created_idx
   on public.badges (user_id, created_at desc);
 
