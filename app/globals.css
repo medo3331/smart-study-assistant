@@ -655,6 +655,11 @@
    Phase 3 — Motion & Micro-interactions
    ========================================================================== */
 
+@keyframes wheelPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.015); }
+}
+
 @keyframes dash-entrance {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
