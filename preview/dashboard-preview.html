@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magicly — Dashboard Preview (Conservative Redesign)</title>
+<style>
+  /* Offline-first: no CDN, system fonts with Arabic fallbacks */
+  :root{
+    --bg:#0D0906; --card:#161009; --card2:#1D1510; --text:#F3F0EC; --muted:#9A958F;
+    --accent:#DC4C4C; --accent2:#F2745C; --rule:rgba(243,240,236,.08); --rule2:rgba(243,240,236,.16);
+    --r:14px; --r2:20px; --r3:24px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,"Noto Sans Arabic",sans-serif;line-height:1.6}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 16px}
+  @media(min-width:768px){.wrap{padding:32px 24px}}
+  /* subtle animations */
+  @keyframes wheelPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.015)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes scaleIn{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  .entr{animation:fadeUp .45s cubic-bezier(.22,1,.36,1) both}
+  .navIn{animation:scaleIn .32s cubic-bezier(.22,1,.36,1) both}
+  .wheelPulse{animation:wheelPulse 2.8s ease-in-out infinite}
+  @media(prefers-reduced-motion:reduce){.entr,.navIn,.wheelPulse{animation:none!important}}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:var(--r2);box-shadow:0 6px 20px rgba(0,0,0,.45)}
+  .card2{background:var(--card2);border:1px solid var(--rule);border-radius:14px}
+  .hoverCard{transition:transform .18s,box-shadow .18s,border-color .18s}
+  .hoverCard:hover{transform:translateY(-2px) scale(1.015);border-color:rgba(220,76,76,.22);box-shadow:0 10px 28px rgba(220,76,76,.10)}
+  .hoverCard:active{transform:scale(.97)}
+  /* header proof */
+  .proof{position:sticky;top:0;z-index:50;background:rgba(220,76,76,.10);border-bottom:1px solid rgba(220,76,76,.15);backdrop-filter:blur(8px)}
+  .proofInner{max-width:1100px;margin:0 auto;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .badge{background:var(--accent);color:#fff;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700}
+  .pill{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.06);border-radius:999px;padding:4px 10px;font-size:11px;color:var(--muted)}
+  /* layout */
+  .main{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+  .rail{width:220px;flex-shrink:0;display:none;flex-direction:column;gap:16px;background:var(--card);border:1px solid var(--rule);border-radius:16px;padding:16px}
+  @media(min-width:1024px){.rail{display:flex}}
+  .layout{display:flex;gap:24px}
+  .statsGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  @media(min-width:1024px){.statsGrid{grid-template-columns:repeat(4,1fr)}}
+  .navGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  @media(min-width:640px){.navGrid{grid-template-columns:repeat(3,1fr)}}
+  @media(min-width:1024px){.navGrid{grid-template-columns:repeat(4,1fr)}}
+  .oldHint{border:1px dashed rgba(243,240,236,.12);background:rgba(255,255,255,.02);border-radius:16px;padding:16px}
+  details{border:1px solid var(--rule);border-radius:16px;background:var(--card);overflow:hidden}
+  details[open] summary{border-bottom:1px solid var(--rule)}
+  summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
+  summary::-webkit-details-marker{display:none}
+</style>
+</head>
+<body>
+<div class="proof">
+  <div class="proofInner">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="badge">Preview Branch ✓</span>
+      <span class="pill mono">dashboard-redesign-preview</span>
+      <span style="font-size:12px;color:#F3F0EC;opacity:.8" class="hideMobile">الـ Dashboard القديم محفوظ + تعديل محافظ</span>
+    </div>
+    <span class="pill">العجلة محفوظة · لا push إلى main</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="layout">
+    <!-- mock rail -->
+    <aside class="rail">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:32px;height:32px;border-radius:10px;background:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px">M</span>
+        <span style="font-weight:700;font-size:13px">Magicly</span>
+        <span style="margin-right:auto;background:rgba(255,255,255,.06);border-radius:999px;padding:2px 8px;font-size:10px;color:var(--muted)">محفوظ</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:12px">
+        <div style="background:rgba(220,76,76,.15);color:var(--accent2);border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center">🏠 الرئيسية</div>
+        <div style="padding:8px 12px;color:var(--muted)">📚 الكورسات</div>
+        <div style="padding:8px 12px;color:var(--muted)">🗂️ مساحة العمل</div>
+        <div style="padding:8px 12px;color:var(--muted)">🕌 عباداتي</div>
+      </div>
+      <div style="margin-top:auto;border:1px solid var(--rule);background:rgba(255,255,255,.02);border-radius:12px;padding:12px;display:flex;gap:8px;align-items:center">
+        <span style="width:32px;height:32px;border-radius:999px;background:rgba(220,76,76,.15);display:grid;place-items:center;font-size:11px">م</span>
+        <div><div style="font-size:12px;font-weight:600">محمد</div><div style="font-size:11px;color:var(--muted)">profiles.name</div></div>
+      </div>
+      <p style="font-size:10px;color:var(--muted);opacity:.7;line-height:1.7">الـ Sidebar لم يُعاد تصميمه — بقي كما هو في main</p>
+    </aside>
+
+    <main class="main" style="flex:1;min-width:0">
+      <!-- note about conservative -->
+      <div style="background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.20);border-radius:16px;padding:16px;display:flex;gap:12px">
+        <span style="width:32px;height:32px;border-radius:10px;background:rgba(16,185,129,.15);display:grid;place-items:center;flex-shrink:0">🧩</span>
+        <div>
+          <div style="font-weight:700;font-size:13px;color:#D1FAE5">تعديل محافظ — ليس استبدال كامل</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.8;margin-top:4px">الـ Dashboard القديم (HeroCard, CurrentStepCard, PersonalAssistant, WeeklyProgress, Achievements …) <b style="color:var(--text)">ما زال موجودًا أدناه</b>. فقط قسم <b style="color:var(--text)">المواد الدراسية</b> تم تصغيره داخل عنصر قابل للطي، وأُضيفت 3 أقسام خفيفة بعد العجلة.</div>
+        </div>
+      </div>
+
+      <!-- 1 Header (old Hero still below, but new lightweight proof header for preview) -->
+      <section class="entr" style="animation-delay:0ms;padding:0 4px">
+        <h1 style="font-size:22px;font-weight:800;margin:0">أهلاً، محمد 👋</h1>
+        <p style="color:var(--muted);font-size:13px;margin:6px 0 0">جاهز تكمل رحلتك اليوم؟</p>
+        <p style="display:inline-flex;gap:6px;align-items:center;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 10px;font-size:11px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:50%;background:#10B981;display:inline-block"></span> header حقيقي من <span class="mono" style="color:var(--text)">displayName</span></p>
+      </section>
+
+      <!-- 2 Wheel -->
+      <section class="entr" style="animation-delay:40ms;display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0">
+        <p style="font-size:11px;letter-spacing:.08em;color:var(--muted);opacity:.7">العجلة — نفس الـ component والـ logic</p>
+        <div class="wheelPulse">
+          <div style="width:172px;height:172px;border-radius:50%;padding:3px;background:conic-gradient(from 0deg,#DC4C4C,#E4A158,#67D5A6,#618DE5,#C665E6,#DC4C4C);box-shadow:0 14px 36px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06)">
+            <div style="width:100%;height:100%;border-radius:50%;background:var(--card);border:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+              <span style="font-size:28px">🎡</span>
+              <span style="font-weight:700;font-size:13px">عجلة ماجيك</span>
+              <span style="background:rgba(220,76,76,.15);color:var(--accent2);border-radius:999px;padding:2px 10px;font-size:11px">pulse 1→1.015</span>
+              <span style="font-size:10px;color:var(--muted)">MagicWheelDashboard</span>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--muted)">نفس الـ props: currentDay, progressPct, streak, coursesCount …</p>
+      </section>
+
+      <!-- 3 Stats -->
+      <section class="entr" style="animation-delay:80ms">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
+          <h2 style="font-size:13px;font-weight:700;margin:0">الإحصائيات السريعة</h2>
+          <span style="font-size:11px;color:var(--muted)">بيانات حقيقية — mock للمعاينة فقط</span>
+        </div>
+        <div class="statsGrid" style="margin-top:10px">
+          <div class="card hoverCard" style="padding:16px;display:flex;gap:12px;align-items:center">
+            <span style="width:44px;height:44px;border-radius:12px;background:rgba(220,76,76,.12);color:var(--accent);display:grid;place-items:center;flex-shrink:0">🔥</span>
+            <div><div style="font-size:11px;color:var(--muted)">السلسلة</div><div class="mono" style="font-size:18px;font-weight:700">7 <span style="font-size:11px;color:var(--muted);font-weight:400">يوم</span></div></div>
+          </div>
+          <div class="card hoverCard" style="padding:16px;display:flex;gap:12px;align-items:center">
+            <span style="width:44px;height:44px;border-radius:12px;background:rgba(220,76,76,.12);color:var(--accent);display:grid;place-items:center">📈</span>
+            <div><div style="font-size:11px;color:var(--muted)">التقدم</div><div class="mono" style="font-size:18px;font-weight:700">64<span style="font-size:11px;color:var(--muted)">%</span></div></div>
+          </div>
+          <div class="card hoverCard" style="padding:16px;display:flex;gap:12px;align-items:center">
+            <span style="width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.04);color:var(--muted);display:grid;place-items:center">🔔</span>
+            <div><div style="font-size:11px;color:var(--muted)">الإشعارات</div><div class="mono" style="font-size:18px;font-weight:700;color:var(--muted)">—</div></div>
+          </div>
+          <div class="card hoverCard" style="padding:16px;display:flex;gap:12px;align-items:center">
+            <span style="width:44px;height:44px;border-radius:12px;background:rgba(220,76,76,.12);color:var(--accent);display:grid;place-items:center">📚</span>
+            <div><div style="font-size:11px;color:var(--muted)">الكورسات</div><div class="mono" style="font-size:18px;font-weight:700">5</div></div>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--muted);padding:0 4px;margin-top:8px">المصادر في التطبيق الحقيقي: <span style="color:var(--text)">profiles.streak</span> · <span style="color:var(--text)">overallProgress</span> · <span style="color:var(--text)">fetchCourses()</span> — هذه الأرقام للـ Preview فقط</p>
+      </section>
+
+      <!-- 4 Quick Nav -->
+      <section class="entr" style="animation-delay:120ms">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px;flex-wrap:wrap;gap:8px">
+          <h2 style="font-size:13px;font-weight:700;margin:0">التنقل السريع</h2>
+          <span style="background:rgba(220,76,76,.10);border:1px solid rgba(220,76,76,.20);color:var(--accent2);border-radius:999px;padding:4px 10px;font-size:11px">8 عناصر · 2→3→4 أعمدة</span>
+        </div>
+        <div class="navGrid" style="margin-top:10px">
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:0ms" href="/dashboard/agents"><span style="width:48px;height:48px;border-radius:14px;background:rgba(220,76,76,.10);border:1px solid rgba(220,76,76,.15);color:var(--accent);display:grid;place-items:center;font-size:18px">🤖</span><span style="font-size:13px;font-weight:600">المساعد الذكي</span><span style="font-size:11px;color:var(--muted)">/dashboard/agents ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:60ms" href="/dashboard/workspace"><span style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rule);display:grid;place-items:center">🧰</span><span style="font-size:13px;font-weight:600">مساحة العمل</span><span style="font-size:11px;color:var(--muted)">/workspace ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:120ms" href="/dashboard/courses"><span style="width:48px;height:48px;border-radius:14px;background:rgba(220,76,76,.10);border:1px solid rgba(220,76,76,.15);color:var(--accent);display:grid;place-items:center">📚</span><span style="font-size:13px;font-weight:600">الكورسات</span><span style="font-size:11px;color:#10B981">بديل المواد ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:180ms" href="/dashboard/progress"><span style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rule);display:grid;place-items:center">📊</span><span style="font-size:13px;font-weight:600">التحليلات</span><span style="font-size:11px;color:var(--muted)">/progress ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:240ms" href="/dashboard/achievements"><span style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rule);display:grid;place-items:center">🏆</span><span style="font-size:13px;font-weight:600">الإنجازات</span><span style="font-size:11px;color:var(--muted)">/achievements ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:300ms" href="/shop"><span style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rule);display:grid;place-items:center">🛒</span><span style="font-size:13px;font-weight:600">المتجر</span><span style="font-size:11px;color:var(--muted)">/shop ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:360ms" href="/worship"><span style="width:48px;height:48px;border-radius:14px;background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.15);color:#10B981;display:grid;place-items:center">🕌</span><span style="font-size:13px;font-weight:600">العبادة</span><span style="font-size:11px;color:#10B981">/worship ✓</span></a>
+          <a class="navIn card hoverCard" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;text-decoration:none;color:inherit;animation-delay:420ms" href="#settings"><span style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rule);display:grid;place-items:center">⚙️</span><span style="font-size:13px;font-weight:600">الإعدادات</span><span style="font-size:11px;color:var(--muted)">signal ✓</span></a>
+        </div>
+        <p style="font-size:11px;color:var(--muted);padding:0 4px;margin-top:8px">Entrance: opacity .96→1 + y 8→0, stagger 60ms · Hover scale 1.02 · Click .97 · Offline CSS only</p>
+      </section>
+
+      <!-- 5 Focus -->
+      <section class="entr card" style="animation-delay:160ms;padding:20px;position:relative;overflow:hidden">
+        <div style="position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(to left,transparent,var(--accent) 42%,transparent);opacity:.5"></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="width:36px;height:36px;border-radius:10px;background:rgba(220,76,76,.12);color:var(--accent);display:grid;place-items:center">🎯</span>
+          <span style="font-weight:700;font-size:13px">تركيز اليوم</span>
+          <span class="mono" style="margin-right:auto;font-size:12px;color:var(--accent);font-weight:700" dir="ltr">72%</span>
+        </div>
+        <div style="margin-top:14px">
+          <div style="font-weight:600;font-size:15px">أكمل درس الرياضيات</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">الرياضيات · 3 من 5 مكتمل</div>
+        </div>
+        <div style="height:8px;background:var(--card2);border:1px solid var(--rule);border-radius:999px;overflow:hidden;margin-top:14px">
+          <div style="height:100%;width:72%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px"><span>التقدم الكلي</span><span class="mono" dir="ltr">72%</span></div>
+        <div style="display:flex;gap:12px;margin-top:16px">
+          <a href="/lesson/demo" style="flex:1;background:var(--accent);color:#fff;border-radius:12px;padding:12px;text-align:center;text-decoration:none;font-weight:700;font-size:13px">إكمال المهمة →</a>
+          <span style="display:none;align-items:center;justify-content:center;border:1px solid var(--rule);background:rgba(255,255,255,.04);border-radius:12px;padding:12px 16px;font-size:13px" class="hideMobile">عرض التفاصيل</span>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px">في التطبيق الحقيقي: <span class="mono" style="color:var(--text)">currentTaskForCoach + overallProgress</span> — هذه القيم للـ Preview فقط</p>
+      </section>
+
+      <!-- old dashboard kept -->
+      <div class="oldHint">
+        <p style="font-size:12px;font-weight:700;margin:0">الـ Dashboard القديم — ما زال موجودًا أدناه (مختصر للمعاينة)</p>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 0">الـ Preview Branch لم يحذف الـ Dashboard القديم — فقط أضاف Control Center أعلاه وصغّر قسم المواد. أدناه تمثيل مصغر للمحتوى القديم المحفوظ.</p>
+        <details style="margin-top:12px" open>
+          <summary>📚 المواد الدراسية <span style="font-weight:400;color:var(--muted);font-size:11px">— تم تصغيره داخل details (مفتوح افتراضيًا للمعاينة)</span></summary>
+          <div style="padding:16px;border-top:1px solid var(--rule)">
+            <p style="font-size:12px;color:var(--muted);margin:0 0 12px">هذا هو قسم StudySections القديم — في الـ Preview أصبح قابلًا للطي، والوصول الكامل عبر <b style="color:var(--text)">/dashboard/courses</b>. البيانات نفسها محفوظة.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+              <div class="card2" style="padding:12px"><div style="font-weight:600;font-size:13px">رياضيات</div><div style="font-size:11px;color:var(--muted)">5 أيام · 64% مكتمل</div></div>
+              <div class="card2" style="padding:12px"><div style="font-weight:600;font-size:13px">فيزياء</div><div style="font-size:11px;color:var(--muted)">4 أيام · 25% مكتمل</div></div>
+              <div class="card2" style="padding:12px"><div style="font-weight:600;font-size:13px">كيمياء</div><div style="font-size:11px;color:var(--muted)">3 أيام · 0% جديد</div></div>
+            </div>
+          </div>
+        </details>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="card" style="padding:14px"><div style="font-size:12px;font-weight:600">HeroCard</div><div style="font-size:11px;color:var(--muted)">ترحيب + مستوى + سلسلة — محفوظ</div></div>
+          <div class="card" style="padding:14px"><div style="font-size:12px;font-weight:600">CurrentStepCard</div><div style="font-size:11px;color:var(--muted)">الخطوة الحالية + حلقة تقدم — محفوظ</div></div>
+          <div class="card" style="padding:14px"><div style="font-size:12px;font-weight:600">PersonalAssistant</div><div style="font-size:11px;color:var(--muted)">سياق شخصي — محفوظ</div></div>
+          <div class="card" style="padding:14px"><div style="font-size:12px;font-weight:600">WeeklyProgress</div><div style="font-size:11px;color:var(--muted)">نشاط الأسبوع — محفوظ</div></div>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin:12px 0 0">كل هذا المحتوى ما زال يُرندر في <span class="mono" style="color:var(--text)">app/dashboard/page.tsx</span> على branch الـ Preview — فقط أُعيد ترتيبه وتقليل الحيز البصري للمواد.</p>
+      </div>
+
+      <!-- empty state demo -->
+      <div class="card" style="padding:16px">
+        <p style="font-size:12px;font-weight:600;margin:0">حالة Empty لـ Today's Focus (في التطبيق الحقيقي):</p>
+        <div style="margin-top:12px;border:1px solid var(--rule);background:var(--card2);border-radius:14px;padding:16px">
+          <div style="display:flex;gap:10px;align-items:center"><span style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.04);display:grid;place-items:center">🎯</span><span style="font-weight:700;font-size:13px">تركيز اليوم</span></div>
+          <div style="font-weight:600;margin-top:12px">لم تحدد هدفًا لليوم بعد.</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">أنشئ خطتك الأولى — كل تقدمك سيظهر هنا بدل البيانات الوهمية.</div>
+          <a href="/dashboard/create" style="display:inline-block;margin-top:12px;background:var(--accent);color:#fff;border-radius:10px;padding:10px 16px;text-decoration:none;font-weight:700;font-size:13px">ابدأ التخطيط →</a>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted);padding:0 4px">
+        <span>Branch: dashboard-redesign-preview</span><span style="width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.2);align-self:center"></span><span>Base: 43c6c45</span><span style="width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.2);align-self:center"></span><span>Build PASS</span>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
