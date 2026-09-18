@@ -264,6 +264,31 @@ export function softwareApplicationLd() {
   };
 }
 
+/* ─────────────────────── فيديو "إزاي بتشتغل" ───────────────────────
+   اللينك ده **Placeholder** (فيديو اختباري عام من Google) لحد ما الفيديو
+   النهائي يجهز. لما يجهز: غيّر القيمة هنا بس — المصدر الوحيد، فتتحدث
+   معاه مشغّل اللاندينج ووسم JSON-LD مع بعض من غير ما حد يتذكر. */
+export const HOW_IT_WORKS_VIDEO_URL =
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+
+/** البيانات المنظّمة لفيديو قسم "إزاي بتشتغل" على اللاندينج.
+    مكتوب فيه الحقول اللي بنعرفها فعلاً (اسم/وصف/لينك) — من غير
+    uploadDate أو duration مخترَعة عشان الفيديو placeholder لسه. */
+export function howItWorksVideoLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    '@id': `${SITE_URL}/#how-it-works-video`,
+    url: absoluteUrl('/'),
+    name: 'How Magicly Works — إزاي بتشتغل ماجيكلي؟',
+    description:
+      'Video walkthrough of Magicly: upload your notes, and see the plan, summary, flashcards, and quizzes it generates.',
+    contentUrl: HOW_IT_WORKS_VIDEO_URL,
+    embedUrl: HOW_IT_WORKS_VIDEO_URL,
+    inLanguage: ['ar', 'en'],
+  };
+}
+
 /** الأسئلة الشائعة — متولّدة من نفس مصدر الأكورديون (`lib/faq.ts`).
     ⚠️ بتتحط على صفحة `/faq` بس — من نوفمبر ٢٠٢٦ اللاندينج بتعرض ملخّص
     (٥ أسئلة) والعشرة كاملين ظاهرين على `/faq`. قاعدة جوجل إن الـ FAQPage
