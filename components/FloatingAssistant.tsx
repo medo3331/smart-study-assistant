@@ -15,7 +15,9 @@ const pageHint = (pathname: string) => {
 export function FloatingAssistant() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  if (pathname === "/chat") return null;
+  // اللاندينج (/) صفحة نظيفة للزائر: الزرارين العائمين (الدعم والمساعد)
+  // بيظهروا في باقي الصفحات بس — نفس منطق SupportWidget.
+  if (pathname === "/chat" || pathname === "/") return null;
   // 🎴 على صفحات الدروس: نفس الزر بنسخة بنفسجية موحّدة مع نظام الداشبورد/الدرس الجديد
   const onLesson = pathname?.startsWith("/lesson/") ?? false;
   const fabCls = onLesson

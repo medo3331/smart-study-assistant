@@ -1,0 +1,94 @@
+/* ==========================================================================
+   HowItWorksVideo — مشغّل الفيديو في كارت زجاجي (Glassmorphism).
+
+   المواصفات: border-radius 20px، خلفية شفافة + backdrop-blur، وتوهج
+   ذهبي/برتقالي هادي (نفس لغة التوهجات في .landing-page و --glow-gold).
+   ========================================================================== */
+
+.section {
+  padding: 4vh 6vw 8vh;
+  max-width: 1080px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.head h2 {
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  margin: 0;
+}
+
+.lede {
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.8;
+  max-width: 560px;
+  margin: 10px auto 0;
+}
+
+.playerWrap {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* الكارت الزجاجي: الإطار الشفاف اللي حوالين المشغّل نفسه.
+   التوهج الذهبي هو "الغمرة" المطلوبة — قيمته من نفس التوكن اللي
+   بتاخده خلفية اللاندينج عشان يبان نفس العائلة. */
+.glass {
+  width: 100%;
+  max-width: 880px;
+  padding: 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.45),
+    0 0 50px rgba(232, 176, 75, 0.18);
+}
+
+.video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: #000;
+  object-fit: contain;
+}
+
+/* 12px مش 20px عشان الكارت ليه padding 10px — المجموع 20px للزاوية
+   الخارجية (20px = 12 + 10) فالتوهج والأطار بيفضلوا على نفس الاستدارة. */
+
+.openLink {
+  color: var(--muted);
+  font-size: 12.5px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.2s ease;
+}
+
+.openLink:hover,
+.openLink:focus-visible {
+  color: var(--gold-soft);
+}
+
+.openLinkArrow {
+  font-size: 11px;
+}
+
+/* ثيم النهار: الزجاج يبقى فاتح مش غامق (ورقة الملزمة مش خلفية سودا).
+   ⚠️ :global مطلوب عشان CSS Modules ماتغيّرش محلك الـ attribute selector. */
+:global(:root[data-theme='light']) .glass,
+:global(:root[data-theme='mono']) .glass {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(35, 45, 73, 0.16);
+  box-shadow:
+    0 24px 60px rgba(35, 45, 73, 0.16),
+    0 0 44px rgba(232, 176, 75, 0.24);
+}

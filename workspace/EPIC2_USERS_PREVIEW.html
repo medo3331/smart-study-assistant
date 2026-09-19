@@ -1,63 +1,13 @@
-<!-- EPIC-2 — Users Screen Preview (before code edit) -->
+<!-- EPIC-2 — Users Preview -->
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head><meta charset="UTF-8"><title>EPIC-2 Users Preview</title>
-<style>:root{--bg:#0b0e14;--card:#13151f;--accent:#f59e0b;--text:#f1f5f9;--muted:#94a3b8;--danger:#ef4444;--border:#1e2230}body{background:var(--bg);color:var(--text);padding:2rem;font-family:system-ui,sans-serif;line-height:1.6}.header{border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:2rem}h1{font-size:1.6rem;color:var(--accent)}h2{font-size:1rem;margin-top:1.5rem;color:#f59e0b;border-right:3px solid #f59e0b;padding-right:.5rem}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1rem}.note{background:#f59e0b15;border:1px solid #f59e0b55;border-radius:8px;padding:.75rem;color:#f59e0b;font-size:.82rem}.tag{display:inline-block;padding:.15rem .4rem;border-radius:6px;font-size:.7rem;font-weight:bold}.tag-ban{background:#ef444422;color:#ef4444}.tag-active{background:#10b98122;color:#10b981}.table{width:100%;border-collapse:collapse;font-size:.82rem}.table th{color:var(--muted);text-align:right;padding:.5rem .25rem;border-bottom:1px solid var(--border)}.table td{padding:.5rem .25rem;border-bottom:1px solid var(--border)}.input-row{display:flex;flex-direction:column;gap:.25rem;margin-top:.5rem}label{font-size:.8rem;color:var(--muted)}input,select{background:#0b0f19;border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;color:var(--text);font-size:.9rem}</style></head>
+<style>:root{--bg:#0b0e14;--card:#13151f;--accent:#f59e0b;--text:#f1f5f9;--muted:#94a3b8;--border:#1e2230}body{background:var(--bg);color:var(--text);padding:2rem;font-family:system-ui,sans-serif;line-height:1.6}.header{border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:2rem}h1{font-size:1.5rem;color:var(--accent)}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.table{width:100%;border-collapse:collapse;font-size:.82rem}.table th{color:var(--muted);text-align:right;padding:.5rem .25rem;border-bottom:1px solid var(--border);font-weight:600}.table td{padding:.5rem .25rem;border-bottom:1px solid var(--border);color:var(--text)}.tag{display:inline-block;padding:.15rem .4rem;border-radius:6px;font-size:.7rem;font-weight:bold}.tag-ban{background:#ef444422;color:#ef4444}.tag-active{background:#10b98122;color:#10b981}.note{background:#10b98115;border:1px solid #10b98155;border-radius:8px;padding:.75rem;color:#10b981;font-size:.82rem}</style></head>
 <body>
-<div class="header"><h1>👥 EPIC-2 — Users Preview (قبل التنفيذ)</h1><p style="font-size:.85rem;color:var(--muted);margin-top:.25rem">Search: name / email (NO User Code — EPIC-6 لم يبدأ). Filter: subscription status + ban status. Ban: requires reason text. Audit: mandatory.</p></div>
-
-<div class="card">
-<h2>🔍 البحث والفلاتر</h2>
-<p style="font-size:.75rem;color:var(--muted)">بحث بالاسم أو الإيميل فقط. لا يوجد حقل User Code (EPIC-6 لم يبدأ بعد).</p>
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem;align-items:center;">
-  <input type="text" placeholder="ابحث بالاسم..." style="flex:1;min-width:180px;"/>
-  <input type="text" placeholder="ابحث بالإيميل..." style="flex:1;min-width:180px;"/>
-  <select style="width:140px;"><option>كل الحالات</option><option>نشط</option><option>محظور</option></select>
-  <select style="width:160px;"><option>كل الخطط</option><option>Free</option><option>Pro</option><option>Ultra</option><option>Trial</option></select>
-</div>
-</div>
-
-<div class="card">
-<h2>📋 نتائج البحث (معاينة)</h2>
-<table class="table">
-<thead><tr><th>الاسم</th><th>الإيميل</th><th>الخطة</th><th>الحالة</th><th>إجراء</th></tr></thead>
-<tbody>
-<tr><td>محمد خالد</td><td>mohamed@ex.com</td><td><span style="background:#f59e0b22;color:#f59e0b;padding:.1rem .3rem;border-radius:4px;font-size:.7rem">Pro</span></td><td><span style="color:#10b981">نشط</span></td><td>عرض / حظر</td></tr>
-<tr><td>سارة محمود</td><td>sara@ex.com</td><td>Free</td><td><span style="color:#ef4444">محظور</span></td><td>عرض / فك</td></tr>
-<tr><td>عمر حسين</td><td>omar@ex.com</td><td><span style="background:#60a5fa22;color:#60a5fa;padding:.1rem .3rem;border-radius:4px;font-size:.7rem">Ultra</span></td><td><span style="color:#10b981">نشط (Trial)</span></td><td>عرض / حظر</td></tr>
-</tbody>
-</table>
-</div>
-
+<div class="header"><h1>👥 EPIC-2 — Users Preview (قبل التنفيذ)</h1><p style="font-size:.8rem;color:var(--muted);margin-top:.25rem">Search: User Code / Email / Status. Detail: Plan / Ban / Audit. RBAC: users.read (all), users.ban (owner/admin), audit.read (owner/admin).</p></div>
 <div class="grid">
-<div class="card">
-<h2>🔐 إجراءات الأدمن</h2>
-<p style="font-size:.75rem;color:var(--muted)">Permission: <code>users.ban</code> / <code>users.unban</code> — Owner ONLY (NOT admin/support per auth-roles fix)</p>
-<div style="margin-top:.75rem;">
-  <label style="font-size:.75rem;color:var(--muted)">سبب الحظر (إجباري)</label>
-  <input type="text" placeholder="سبب الحظر..." style="width:100%;margin-top:.25rem;"/>
-  <button style="margin-top:.5rem;background:#ef4444;color:#fff;border:none;border-radius:8px;padding:.5rem 1rem;font-weight:bold;font-size:.85rem;cursor:pointer;">🚫 حظر + تسجيل Audit BLOCKED</button>
+<div class="card"><h2>🔍 بحث المستخدمين</h2><p style="font-size:.75rem;color:var(--muted)">بحث بـ: User Code / Email / حالة الاشتراك / حالة الحظر</p><table class="table"><thead><tr><th>الكود</th><th>الإيميل</th><th>الخطة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody><tr><td><span style="font-family:monospace;color:var(--accent)">MAG-A1X</span></td><td>ahmed@ex.com</td><td><span style="background:#f59e0b22;color:#f59e0b;padding:.1rem .3rem;border-radius:4px;font-size:.7rem">Pro</span></td><td><span style="color:#10b981">نشط</span></td><td>عرض / حظر</td></tr><tr><td><span style="font-family:monospace">MAG-B2Y</span></td><td>sara@ex.com</td><td>Free</td><td><span style="color:#ef4444">محظور</span></td><td>فك حظر</td></tr></tbody></table></div>
+<div class="card"><h2>📋 تفاصيل المستخدم (User Detail)</h2><p style="font-size:.75rem;color:var(--muted)">عند الضغط على "عرض" — يظهر: البروفايل الحالي، الاشتراك الحالي، سجل النشاط، زر حظر/فك (مع Audit)</p><div class="note">Audit recording: كل عملية حظر (`users.ban`) أو فك (`users.unban`) تسجل في `audit_log` مع `actor = admin`, `resource = user_code`, `result = PASS/FAIL`.</div></div>
 </div>
-<div class="note" style="margin-top:.5rem;">Audit: <code>users.ban</code> (sensitive) → <code>audit_log</code> (actor=admin, resource=user_email, result=PASS/BLOCKED). أي محاولة من غير Owner → <strong>BLOCKED صريح + Audit BLOCKED</strong> (مش صمت).</div>
-</div>
-
-<div class="card">
-<h2>📋 تفاصيل المستخدم</h2>
-<p style="font-size:.75rem;color:var(--muted)">عند الضغط على "عرض" — يظهر: البروفايل الحالي (EPIC-1), حالة الاشتراك (EPIC-2 Subscriptions), سجل نشاط بسيط (placeholder لو مش متاح).</p>
-<div style="font-size:.75rem;color:var(--text);line-height:1.8;margin-top:.5rem;">
-  <strong>البروفايل:</strong> <code>profiles.persona</code> (student/grad/freelancer) → <code>profiles.role</code> (generated)<br/>
-  <strong>الاشتراك:</strong> <code>entitlements(kind='plan', value)</code> + <code>subscription_activations</code> (manual)<br/>
-  <strong>النشاط:</strong> placeholder (عدد الرفعات/الدروس — متاح من P0-3 assessment persistence إذا متاح)
-</div>
-</div>
-</div>
-
-<div class="note">
-<strong>ملاحظات قبل التنفيذ (موثقة):</strong><br>
-• لا يوجد بحث بـ User Code هنا (EPIC-6 لم يبدأ). البحث محدود: اسم + إيميل فقط.<br>
-• <code>users.ban</code> / <code>users.unban</code>: Owner ONLY (أضفنا في auth-roles.ts). أي محاولة من Admin → BLOCKED صريح + Audit BLOCKED.<br>
-• <code>plans.manage</code>: Owner ONLY (أضفنا في auth-roles.ts — مش Admin).<br>
-• Audit: نفس الآلية (`recordAuditLog`) — `action: users.ban`, `resource_type: user`, `resource_id: email/code`, `result: PASS/FAIL/BLOCKED`.<br>
-• Preview-First: هذه معاينة — التنفيذ يبدأ فقط بعد موافقتك.
-</div>
+<div class="card"><h2>🔐 RBAC Guards (Users)</h2><table class="table"><thead><tr><th>Permission</th><th>Allowed</th></tr></thead><tbody><tr><td>users.read</td><td>owner, admin, support</td></tr><tr><td>users.ban / users.unban</td><td>owner, admin (NOT support)</td></tr><tr><td>audit.read</td><td>owner, admin (NOT support — confirmed)</td></tr></tbody></table></div>
 </body></html>
