@@ -1,0 +1,106 @@
+<!-- EPIC-2 Admin Panel Preview — Preview-First Workflow (before any code edit) -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EPIC-2 Admin Panel — Preview</title>
+<style>
+:root{--bg:#0b0e14;--card:#13151f;--accent:#f59e0b;--accent-2:#10b981;--text:#f1f5f9;--muted:#94a3b8;--danger:#ef4444;--border:#1e2230}
+*{box-sizing:border-box;font-family:system-ui,sans-serif;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);padding:2rem;line-height:1.6}
+.header{border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:2rem}
+h1{font-size:1.6rem;color:var(--accent)}
+h2{font-size:1.1rem;margin-top:2rem;color:var(--accent-2);border-right:3px solid var(--accent-2);padding-right:.75rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
+.stat{font-size:2rem;font-weight:bold;color:var(--text)}
+.stat-label{font-size:.85rem;color:var(--muted)}
+.tag{display:inline-block;padding:.15rem .5rem;border-radius:6px;font-size:.75rem;font-weight:bold;text-transform:uppercase}
+.tag-owner{background:#f59e0b22;color:#f59e0b}
+.tag-admin{background:#60a5fa22;color:#60a5fa}
+.tag-support{background:#10b98122;color:#10b981}
+.table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.5rem}
+.table th{color:var(--muted);text-align:right;padding:.5rem .25rem;border-bottom:1px solid var(--border);font-weight:600}
+.table td{padding:.5rem .25rem;border-bottom:1px solid var(--border);color:var(--text)}
+.note{background:#f59e0b15;border:1px solid #f59e0b55;border-radius:8px;padding:.75rem 1rem;color:var(--accent);font-size:.85rem;margin-top:2rem}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📋 EPIC-2 Preview — لوحة التحكم + RBAC + Audit Log</h1>
+  <p>المعاينة قبل تعديل أي كود — <strong>افتراضات افتراضية للنقاط المفتوحة (لم تُجب)</strong></p>
+</div>
+
+<div class="card">
+  <h2>📊 Dashboard (افتراضي — أرقام أولوية)</h2>
+  <div class="grid">
+    <div><div class="stat">1,247</div><div class="stat-label">مستخدم نشط اليوم</div></div>
+    <div><div class="stat">83</div><div class="stat-label">طلبات AI هذا الأسبوع</div></div>
+    <div><div class="stat">312</div><div class="stat-label">رفع ملفات اليوم</div></div>
+    <div><div class="stat">Pro</div><div class="stat-label">أكثر الخطط استخدامًا</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>👥 Users (بحث + إجراءات)</h2>
+  <p style="font-size:.8rem;color:var(--muted)">بحث: اسم / إيميل / User Code / واتساب / حالة اشتراك / حالة حظر</p>
+  <table class="table">
+    <thead><tr><th>الكود</th><th>الاسم</th><th>الدور</th><th>الخطة</th><th>الحالة</th><th>إجراء</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag tag-owner">MAG-A1X</span></td><td>أحمد خالد</td><td><span class="tag">Pro</span></td><td>نشط</td><td>عرض / تعديل</td></tr>
+      <tr><td><span class="tag">MAG-B2Y</span></td><td>سارة محمود</td><td><span class="tag">Free</span></td><td>محظور</td><td>فك حظر</td></tr>
+      <tr><td><span class="tag">MAG-C3Z</span></td><td>عمر حسين</td><td><span class="tag">Ultra</span></td><td>نشط (Trial)</td><td>تمديد Trial</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>🔐 RBAC — الأدوار + الصلاحيات</h2>
+  <table class="table">
+    <thead><tr><th>الدور</th><th>الوصف</th><th>صلاحيات</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag tag-owner">Owner</span></td><td>كل الصلاحيات + إدارة الأدوار</td><td>كل المفاتيح</td></tr>
+      <tr><td><span class="tag tag-admin">Admin</span></td><td>إدارة مستخدمين/اشتراكات/مكافآت</td><td>بدون حذف Owner أو إعدادات حساسة</td></tr>
+      <tr><td><span class="tag tag-support">Support</span></td><td>مشاهدة + تعديل محدود</td><td>تفعيل خطة / حل ملفات / حظر وفق قواعد</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>📝 Audit Log (إلزامي)</h2>
+  <p style="font-size:.8rem;color:var(--muted)">كل عملية حساسة: actor, action, resource, timestamp, result</p>
+  <table class="table">
+    <thead><tr><th>الوقت</th><th>الفاعل</th><th>الإجراء</th><th>المورد</th><th>النتيجة</th></tr></thead>
+    <tbody>
+      <tr><td>2026-09-19 14:32</td><td>owner</td><td>users.ban</td><td>user:mag-b2y</td><td>PASS</td></tr>
+      <tr><td>2026-09-19 14:28</td><td>admin</td><td>plans.manage</td><td>plan:pro</td><td>PASS</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>⚠️ افتراضات افتراضية (النقاط المفتوحة لم تُجب)</h2>
+  <ul style="font-size:.85rem;color:var(--muted);margin-top:.5rem;line-height:2;">
+    <li>Dashboard: أرقام أولية (مستخدمين نشطين + طلبات + رفع + خطط أكثر استخدامًا)</li>
+    <li>Support: <strong>يشوف Audit Log</strong> (افتراضي محافظ)</li>
+    <li>CSV Export: <strong>من أول نسخة</strong> (مش مؤجل)</li>
+    <li>سقف تخزين Ultra: <strong>20GB إجمالي</strong> + 1GB/ملف</li>
+    <li>Reset يومي: <strong>منتصف الليل (توقيت مصر)</strong></li>
+    <li>Bulk edit: <strong>أكتر من حقل مرة واحدة</strong> مسموح</li>
+    <li>File versioning عند Replace: <strong>مؤجل</strong> للنسخ القادمة</li>
+    <li>Override مؤقت للشخصية (وقت الامتحان): <strong>مؤجل</strong> لـ EPIC-5</li>
+    <li>سؤال العمر: <strong>اختياري</strong> في onboarding (جزء من EPIC-5)</li>
+  </ul>
+</div>
+
+<div class="note">
+  <strong>ملاحظات قبل التنفيذ:</strong><br>
+  • DB prerequisites: جدول <code>audit_log</code> غير موجود → يجب إنشاؤه أولاً<br>
+  • جدول <code>site_admins</code> موجود لكن بدون RBAC permission keys → يحتاج تمديد<br>
+  • دعم <code>support</code> role غير موجود حاليًا → إضافة في schema<br>
+  • <code>user_codes</code> (EPIC-6) غير موجود → لازم يتضاف في نفس الـbatch أو بعده مباشرة<br>
+  • Preview-First: هذه المعاينة أولاً — سيتم تنفيذ الكود بعد تأكيد المستخدم
+</div>
+</body>
+</html>

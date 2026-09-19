@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { recordAuditLog } from "./audit-log-record";
 
 export async function addAdminByEmail(email: string) {
   const supabase = await createClient();
@@ -37,8 +38,21 @@ export async function addAdminByEmail(email: string) {
     user_id: target.id,
     role: "admin",
     added_at: new Date().toISOString(),
+    permissions: '{users.read,trial.manage,files.moderate,audit.read,subscriptions.manage}',
   });
   if (insertError) throw new Error("فشل إضافة Admin: " + insertError.message);
+
+  // EPIC-2 Audit Log (mandatory for sensitive actions)
+  await recordAuditLog({
+    actor: target.id,
+    actor_email: target.email ?? null,
+    action: "admins.manage",
+    resource_type: "admin",
+    resource_id: target.id,
+    details: { email: target.email, role_given: "admin", permissions_given: "default_support" },
+    result: "PASS",
+  });
+
   return { ok: true, message: "تمت إضافة Admin", userId: target.id, email: target.email };
 }
 
@@ -61,6 +75,18 @@ export async function removeAdminById(userId: string) {
   const privileged = createServiceClient();
   const { error } = await privileged.from("site_admins").delete().eq("user_id", userId);
   if (error) throw new Error("فشل إزالة Admin: " + error.message);
+
+  // EPIC-2 Audit Log
+  await recordAuditLog({
+    actor: (user as any)?.id || null,
+    actor_email: (user as any)?.email || null,
+    action: "admins.manage",
+    resource_type: "admin",
+    resource_id: userId,
+    details: { removed_user_id: userId, removed_by_email: (user as any)?.email || null },
+    result: "PASS",
+  });
+
   return { ok: true, message: "تمت إزالة Admin", userId };
 }
 

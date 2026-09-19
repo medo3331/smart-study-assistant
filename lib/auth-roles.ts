@@ -125,3 +125,120 @@ export async function getAdminRole(
     return null;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔐 EPIC-2 — RBAC Permission System (added 2026-09-19)
+// Note: site_admins.permissions column needs DB execution first (`db/epic2-admin-rbac-audit-schema.sql`).
+// This code handles both old schema (no permissions column) and new schema gracefully.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** مفاتيح الصلاحيات حسب المستند EPIC-2 (§1.3). */
+export type AdminPermissionKey =
+  | "users.read" | "users.ban" | "users.unban" | "users.impersonate"
+  | "plans.manage" | "trial.manage" | "models.manage" | "rewards.manage"
+  | "admins.manage" | "files.moderate" | "audit.read"
+  | "subscriptions.manage";
+
+export const ADMIN_PERMISSION_KEYS: AdminPermissionKey[] = [
+  "users.read", "users.ban", "users.unban", "users.impersonate",
+  "plans.manage", "trial.manage", "models.manage", "rewards.manage",
+  "admins.manage", "files.moderate", "audit.read", "subscriptions.manage",
+];
+
+/** أي العمليات تعتبر حساسة وتحتاج تسجيل في audit_log. */
+export const SENSITIVE_ACTIONS: AdminPermissionKey[] = [
+  "users.ban", "users.unban", "users.impersonate",
+  "plans.manage", "trial.manage", "models.manage",
+  "admins.manage", "subscriptions.manage",
+];
+
+export interface AdminPermissionRecord {
+  key: AdminPermissionKey;
+  allowed_roles: ("owner" | "admin" | "support")[];
+  is_sensitive: boolean;
+}
+
+export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRecord> = {
+  "users.read":         { key: "users.read", allowed_roles: ["owner","admin","support"], is_sensitive: false },
+  "users.ban":          { key: "users.ban", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "users.unban":        { key: "users.unban", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "users.impersonate":  { key: "users.impersonate", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "plans.manage":       { key: "plans.manage", allowed_roles: ["owner"], is_sensitive: true },
+  "trial.manage":       { key: "trial.manage", allowed_roles: ["owner"], is_sensitive: true },
+  "models.manage":      { key: "models.manage", allowed_roles: ["owner"], is_sensitive: true },
+  "rewards.manage":     { key: "rewards.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "admins.manage":      { key: "admins.manage", allowed_roles: ["owner"], is_sensitive: true },
+  "files.moderate":     { key: "files.moderate", allowed_roles: ["owner","admin","support"], is_sensitive: true },
+  "audit.read":         { key: "audit.read", allowed_roles: ["owner","admin","support"], is_sensitive: false },
+  "subscriptions.manage": { key: "subscriptions.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
+};
+
+/** قراءة الصلاحيات من جدول site_admins (مع دعم الـpermissions column الجديد). */
+export async function getAdminPermissions(
+  supabase: SupabaseClient,
+  userId: string | null,
+  role: AdminRole
+): Promise<AdminPermissionKey[]> {
+  if (!userId || role === null) return [];
+
+  // Owner: كل الصلاحيات
+  if (role === "owner") return [...ADMIN_PERMISSION_KEYS];
+
+  try {
+    const { data } = await supabase
+      .from("site_admins")
+      .select("permissions, role")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    // إذا الـ permissions column موجود (بعد تنفيذ SQL)
+    const permsArray: string[] = data?.permissions || [];
+    if (permsArray.length > 0) {
+      return permsArray.filter((p): p is AdminPermissionKey =>
+        ADMIN_PERMISSION_KEYS.includes(p as AdminPermissionKey)
+      );
+    }
+
+    // إذا الـ column غير موجود بعد → افتراضي حسب الدور
+    // Admin: كل شيء ما عدا models.manage و admins.manage و plans.manage و trial.manage (Owner-only)
+    // Support: users.read + files.moderate + audit.read + subscriptions.manage (لا trial.manage ولا plans.manage)
+    if (data?.role === "admin") {
+      return ADMIN_PERMISSION_KEYS.filter(
+        (k) => k !== "models.manage" && k !== "admins.manage" && k !== "plans.manage" && k !== "trial.manage"
+      );
+    }
+    // Support (يمثل بـ admin + permissions خاص) — افتراضي محدود بدون plans.manage أو trial.manage
+    return [
+      "users.read", "files.moderate", "audit.read", "subscriptions.manage"
+    ];
+  } catch {
+    return [];
+  }
+}
+
+/** فحص إذا كان الأدمن يملك صلاحية معينة. */
+export async function hasPermission(
+  supabase: SupabaseClient,
+  userId: string | null,
+  userEmail: string | null,
+  permissionKey: AdminPermissionKey
+): Promise<boolean> {
+  const role = await getAdminRole(supabase, userId, userEmail);
+  if (role === "owner") return true;
+  if (role === null) return false;
+  const perms = await getAdminPermissions(supabase, userId, role);
+  const record = ADMIN_PERMISSION_MAP[permissionKey];
+  // إذا الـ permission مسموح للدور حسب الخريطة
+  if (record && record.allowed_roles.includes(role as "owner" | "admin")) {
+    // إذا الـ permissions array موجود، نتحقق من وجود المفتاح فيه أيضًا
+    if (perms.length > 0) return perms.includes(permissionKey);
+    // إذا لم يتم تنفيذ SQL بعد → نعتمد على الخريطة الافتراضية
+    return true;
+  }
+  return false;
+}
+
+/** فحص إذا كانت العملية تحتاج تسجيل في Audit Log. */
+export function isSensitivePermission(key: AdminPermissionKey): boolean {
+  return SENSITIVE_ACTIONS.includes(key);
+}
