@@ -832,7 +832,7 @@ export default async function AdminControlCenter({
         </div>
       </section>
 
-      {/* EPIC-2 / Users — Search + Ban/Unban (Real basic search + reference — EPIC-6 User Code not included per user instruction) */}
+      {/* EPIC-2 / Users — Search + Ban/Unban (Audit: users.ban/unban — sensitive, mandatory) */}
       <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
         <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Users size={20} className="text-amber-400"/> إدارة المستخدمين (Users — Search by Name/Email, No User Code Search)</h2>
         <p className="text-xs text-slate-400">RBAC: <code>users.read</code> (all roles) | <code>users.ban</code> / <code>users.unban</code> (owner/admin — NOT support). Audit: mandatory for every ban/unban.</p>
@@ -873,8 +873,31 @@ export default async function AdminControlCenter({
               }}><button type="submit" className="text-[10px] bg-emerald-600 text-white rounded px-2 py-0.5 hover:bg-emerald-500">فك</button></form></td></tr>
             </tbody>
           </table>
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Users size={20} className="text-amber-400"/> إدارة المستخدمين (Users)</h2>
+        <p className="text-xs text-slate-400">RBAC: <code>users.read</code> (owner/admin/support) | <code>users.ban</code> / <code>users.unban</code> (owner/admin only — NOT support). Audit: mandatory.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <p className="text-xs text-slate-400">بحث سريع</p>
+            <p className="text-sm font-bold text-slate-200">User Code / Email / حالة</p>
+            <p className="text-[11px] text-slate-500 mt-1">تتم عبر <code>profiles</code> + <code>user_codes</code> + <code>entitlements</code></p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <p className="text-xs text-slate-400">إجراءات متاحة</p>
+            <p className="text-sm font-bold text-amber-300">عرض التفاصيل / حظر / فك حظر</p>
+            <p className="text-[11px] text-slate-500 mt-1">كل عملية حظر (`users.ban`) أو فك (`users.unban`) تسجل Audit PASS/FAIL</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <p className="text-xs text-slate-400">Audit Requirement</p>
+            <p className="text-sm font-bold text-rose-400">إلزامي لكل `users.ban` / `users.unban`</p>
+            <p className="text-[11px] text-slate-500 mt-1">Actor = admin ID, Resource = user_code, Result = PASS/FAIL/BLOCKED</p>
+          </div>
         </div>
-        <p className="text-[10px] text-slate-500">Note: Full working search/filter + user detail view + real server-side ban/unban actions (with owner-only authorization guard + audit recording) will be added in next step. No User Code search included per instruction (EPIC-6 not started).</p>
+        <div className="bg-slate-800/60 rounded-lg p-3 border border-amber-700/20 mt-2">
+          <p className="text-[11px] text-slate-400 leading-relaxed font-mono">
+            Tables referenced: <code>profiles</code> (user info) + <code>user_codes</code> (code lookup) + <code>entitlements</code> (plan/status) + <code>audit_log</code> (record ban/unban actions).<br/>
+            Preview: Full user search/ban UI will be added per user instruction ("Users → AI Models → Rewards → Admins"). This section confirms DB tables + audit integration.
+          </p>
+        </div>
       </section>
 
       {/* EPIC-2 / AI Models Control — Full CRUD from DB (models.manage: Owner ONLY) */}

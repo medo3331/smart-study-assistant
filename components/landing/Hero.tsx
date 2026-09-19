@@ -24,13 +24,17 @@ export default function Hero() {
     { key: 'nav_help', href: '#capabilities' },
   ];
 
-  /* خطوات ٣ بالترتيب الصحيح لـ RTL: 1 يمين ← 2 نص ← 3 شمال.
-     (ارفع ← يولّد ← ابدأ). الموكاب كان عكس كده، بس ده الأصح للقارئ العربي. */
+  /* خطوات ٣ — الترتيب بيحدده اتجاه الصفحة: في RTL 1 يمين ← 3 شمال،
+     وفي LTR 1 شمال ← 3 يمين (نفس الـ flex، الميرور جاي من dir على <html>). */
   const steps = [
-    { id: 1, title: 'ارفع ملزمتك' },
-    { id: 2, title: 'يولّد لك خطتك' },
-    { id: 3, title: 'ابدأ المذاكرة' },
+    { id: 1, title: t.hero_step1 },
+    { id: 2, title: t.hero_step2 },
+    { id: 3, title: t.hero_step3 },
   ];
+
+  /* ترتيب كبسولات الثقة على الصفحة الحالية — نفس الترتيب بالظبط عشان
+     AR مايتغيرش. (trust2 ← trust1 ← trust3) */
+  const trustPills = [t.trust2, t.trust1, t.trust3];
 
   /* قائمة الموبايل: على الشاشات الصغيرة اللينكات بتختفي (CSS) ويظهر
      زر الهامبرجر، وده بيفتح لستة تحت النافبار بنفس اللينكات. */
@@ -38,17 +42,20 @@ export default function Hero() {
   const closeMenu = () => setMenuOpen(false);
 
   return (
-    <section dir="rtl" id="top" className={styles.hero}>
-      {/* نفس ترتيب الموكاب: أزرار يسار ← لينكات نص ← لوجو يمين.
+    <section id="top" className={styles.hero}>
+      {/* نفس ترتيب الموكاب: أزرار يسار ← لينكات نص ← لوجو يمين (في RTL).
           الأزرار كلها مربوطة بروابط حقيقية عشان تفضل شغّالة (مش ميتة
           زي الموكاب). EN/☀ اتبدّلوا بـ TopControls (لغة+ثيم شغّالين). */}
       <nav className={styles.nav}>
         <div className={styles.navActions}>
-          <Link href={startHref} className={`${styles.btnPrimary} ${styles.navStart}`}>
-            ابدأ مجاناً
+          <Link
+            href={startHref}
+            className={`${styles.btnPrimary} ${styles.navStart} cta-pulse`}
+          >
+            {t.nav_start}
           </Link>
           <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
-            تسجيل الدخول
+            {t.nav_login}
           </Link>
           <TopControls />
           {/* زر الهامبرجر — يظهر على الموبايل بس (CSS). */}
@@ -103,33 +110,38 @@ export default function Hero() {
 
       <div className={styles.heroContent}>
         <div className={styles.copy}>
-          {/* الجملة الجديدة: «لو المذاكرة صعبة، ماجيكلي هيسهّلها عليك».
-              الجزء الملوّن (ماجيكلي) بيتحرّك بمعرف morphWord. */}
+          {/* الجملة مقسومة لثلاث من القاموس (hero_title_a/mark/b):
+              مقدمة ثابتة + الكلمة المتحرّكة (morphWord) + جزء ملون في
+              السطر التاني. الأنيميشن نفسه في Hero.module.css. */}
           <h1 className={styles.title}>
             <span className={styles.morphWrap}>
-              <span className={styles.morphIntro}>لو المذاكرة صعبة،&nbsp;</span>
-              <span className={styles.morphWord}>ماجيكلي</span>
+              <span className={styles.morphIntro}>
+                {t.hero_title_a}
+                {'\u00A0'}
+              </span>
+              <span className={styles.morphWord}>{t.hero_title_mark}</span>
             </span>
             <br />
             <span className={styles.highlight} style={{ fontFamily: 'var(--font-playfair-display-src)' }}>
-              هيسهّلها عليك.
+              {t.hero_title_b}
             </span>
           </h1>
-          <p className={styles.description}>
-            كل أدوات المذاكرة اللي محتاجها في مكان واحد — ارفع ملزمتك، وخلّي ماجيكلي يبني خطتك ويتابع معاك.
-          </p>
+          <p className={styles.description}>{t.hero_subtitle}</p>
           <div className={styles.ctaRow}>
-            <Link href={startHref} className={styles.btnPrimary}>
-              ابدأ خطتك مجاناً
+            <Link href={startHref} className={`${styles.btnPrimary} cta-pulse`}>
+              {t.hero_cta}
             </Link>
             <Link href="/features" className={styles.btnGhost}>
-              جرّب من غير حساب
+              {t.hero_cta_secondary}
             </Link>
           </div>
           <div className={styles.trust}>
-            <span><i>✓</i> بالعربي والإنجليزي</span>
-            <span><i>✓</i> يدعم PDF والصور</span>
-            <span><i>✓</i> من غير بطاقة ائتمان</span>
+            {trustPills.map((pill) => (
+              <span key={pill}>
+                <i aria-hidden="true">✓</i>
+                {pill}
+              </span>
+            ))}
           </div>
         </div>
         <div className={styles.previewCard}>
