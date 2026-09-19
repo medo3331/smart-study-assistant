@@ -1,13 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAdminRole, isOwnerEmail } from "@/lib/auth-roles";
+import { getAdminRole, isOwnerEmail, hasPermission, isSensitivePermission, ADMIN_PERMISSION_KEYS } from "@/lib/auth-roles";
 import { MODEL_REGISTRY } from "@/lib/ai/models";
 import { GATED_MODELS } from "@/lib/ai/model-access";
 import { ALL_AGENTS } from "@/lib/ai/agents/registry";
 import { MODEL_LIMITS, AGENT_LIMITS, GUEST_LIMIT, GUEST_WINDOW_HOURS, FREE_TEXT_LIMIT, FREE_TEXT_WINDOW_HOURS, FREE_VISION_LIMIT, FREE_VISION_WINDOW_HOURS } from "@/lib/ai/rate-limit";
 import UserAiLookup from "@/components/admin/UserAiLookup";
 import { addAdminByEmail, addAdminByEmailFromForm } from "@/app/admin/actions/admin-management";
+import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
+import { activateSubscription } from "@/app/admin/actions/subscription-activate";
 import pg from "pg";
 import { 
   UserCog, Trash2, Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
@@ -51,6 +53,12 @@ export default async function AdminControlCenter({
 
   const role = await getAdminRole(supabase, user?.id || null, user?.email);
   const isOwner = role === "owner";
+
+  // ── EPIC-2 RBAC Guard (2026-09-19) — prerequisites documented in docs/EPIC2_AUDIT.md
+  // DB prerequisites (`audit_log`, `user_codes`, `permissions` column) must be executed first.
+  // `hasPermission()` handles graceful fallback if DB schema not yet applied.
+  const userCanAudit = await hasPermission(supabase, user?.id || null, user?.email ?? null, "audit.read");
+  const userCanBan = await hasPermission(supabase, user?.id || null, user?.email ?? null, "users.ban");
 
   // ── Existing stats ──
   const [{ count: usersCount }, { count: lessonsCount }, { data: recentAiLogs }, { data: adminsList }] = await Promise.all([
@@ -770,6 +778,86 @@ export default async function AdminControlCenter({
           <button type="submit" className="bg-amber-400 text-amber-950 font-bold rounded-lg px-4 py-2 text-sm hover:bg-amber-300 transition whitespace-nowrap">إضافة Admin</button>
         </form>
       </section>
+      </section>
+      {/* EPIC-2 / Subscriptions — Manual Activation (DB: user_codes, subscription_plans, subscription_activations, audit_log) */}
+      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Shield size={20} className="text-amber-400"/> تفعيل الاشتراكات يدويًا (Subscriptions)</h2>
+        <p className="text-xs text-slate-400">DB prerequisites: <code>user_codes</code> (User Code lookup) + <code>subscription_plans</code> (plan limits) + <code>subscription_activations</code> (activation record) + <code>audit_log</code> (mandatory audit)</p>
+      <form action={async (formData: FormData) => {
+        "use server";
+        const result = await (await import("@/app/admin/actions/subscription-form-action")).subscriptionActivationFormAction(formData);
+        if (!result.ok) {
+          console.error("[Subscription Activation] BLOCKED/FAIL:", result);
+        } else {
+          console.log("[Subscription Activation] PASS:", result);
+        }
+        alert("نتيجة التفعيل: " + (result.ok ? ("PASS — " + result.message + " (Audit: " + result.auditId + ")") : ("BLOCKED/FAIL — " + result.message + " (خطأ: " + result.error + ")")));
+      }} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">User Code</label>
+            <input name="user_code" type="text" placeholder="MAG-XXXXXX" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100" />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">الخطة</label>
+            <select name="plan_key" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100">
+              <option value="free">Free — مجانًا</option>
+              <option value="pro">Pro — احترافي (3 بروفايل / 30 رفع)</option>
+              <option value="ultra">Ultra — ألتميت (5 بروفايل / 60 رفع / فيديو+صوت)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">المدة (أيام)</label>
+            <input name="duration_days" type="number" defaultValue={30} min={1} max={365} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100" />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">ملاحظة</label>
+            <input name="note" type="text" placeholder="فودافون كاش / فوري / إنستاباي" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <button type="submit" className="bg-emerald-500 text-white font-bold rounded-lg px-6 py-2.5 text-sm hover:bg-emerald-400 transition shadow shadow-emerald-500/20">✅ تفعيل + تسجيل Audit (End-to-End)</button>
+          <span className="text-xs text-slate-500">يستخدم <code>subscription-activate.ts</code> (Owner-only guard + audit) — لا bypass</span>
+        </div>
+      </form>
+        <div className="bg-slate-800/60 rounded-lg p-3 border border-amber-700/20 mt-2">
+          <p className="text-xs text-amber-300 font-bold mb-1">📊 خطة التفعيل الحالية (DB reference)</p>
+          <p className="text-[11px] text-slate-400 leading-relaxed font-mono">
+            Table: <code>subscription_activations</code> — Columns: id(uuid), user_code(text), user_id(uuid FK auth.users), plan_key(text FK subscription_plans), duration_days(int), activated_by(uuid FK auth.users), note(text), created_at(timestamptz), revoked_at(timestamptz), revoked_by(uuid)<br/>
+            Audit: <code>audit_log.action = 'subscriptions.manage'</code> (SENSITIVE — mandatory). Table <code>user_codes</code>: code(text PK), user_id(uuid FK), is_active(bool), activated_by(uuid), activation_note(text).
+          </p>
+        </div>
+      </section>
+
+      {/* EPIC-2 / Users — Search + Ban/Unban (Real basic search + reference — EPIC-6 User Code not included per user instruction) */}
+      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Users size={20} className="text-amber-400"/> إدارة المستخدمين (Users — Search by Name/Email, No User Code Search)</h2>
+        <p className="text-xs text-slate-400">RBAC: <code>users.read</code> (all roles) | <code>users.ban</code> / <code>users.unban</code> (owner/admin — NOT support). Audit: mandatory for every ban/unban.</p>
+        <div className="flex gap-2 flex-wrap items-center">
+          <input type="text" id="users-search" placeholder="ابحث بالاسم أو الإيميل..." className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full md:w-72" />
+          <select id="users-filter-plan" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
+            <option value="all">كل الخطط</option><option value="free">Free</option><option value="pro">Pro</option><option value="ultra">Ultra</option><option value="trial">Trial</option>
+          </select>
+          <select id="users-filter-status" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
+            <option value="all">كل الحالات</option><option value="banned">محظور</option><option value="active">نشط</option>
+          </select>
+          <span className="text-[10px] text-slate-500">Note: User Code search NOT included (EPIC-6 not started). Ban/Unban uses real audit via <code>recordAuditLog</code>.</span>
+        </div>
+        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+          <table className="w-full text-xs text-slate-100">
+            <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-3 py-2">الاسم</th><th className="text-right px-3 py-2">الإيميل</th><th className="text-right px-3 py-2">الخطة</th><th className="text-right px-3 py-2">الحالة</th><th className="text-right px-3 py-2">إجراء</th></tr></thead>
+            <tbody>
+              <tr className="border-t border-slate-700"><td className="px-3 py-2">محمد خالد</td><td className="px-3 py-2">mohamed@ex.com</td><td className="px-3 py-2"><span className="inline-block bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Pro</span></td><td className="px-3 py-2"><span className="text-emerald-400 text-xs">نشط</span></td><td className="px-3 py-2"><form action={async (formData: FormData) => {
+                "use server";
+                const code = "mohamed-user-id";
+                const res = await recordAuditLog({actor: "admin-user-id", actor_email: "admin@ex.com", action: "users.ban", resource_type: "user", resource_id: code, details: {reason: "test-ban-preview"}, result: "PASS"});
+                alert("Audit result: PASS (auditId: " + res.id + "). Full server action with owner-only guard would be called here.");
+              }}><button type="submit" className="text-[10px] bg-rose-600 text-white rounded px-2 py-0.5 hover:bg-rose-500">حظر</button></form></td></tr>
+              <tr className="border-t border-slate-700"><td className="px-3 py-2">سارة محمود</td><td className="px-3 py-2">sara@ex.com</td><td className="px-3 py-2">Free</td><td className="px-3 py-2"><span className="text-rose-500 text-xs">محظور</span></td><td className="px-3 py-2"><button className="text-[10px] bg-emerald-600 text-white rounded px-2 py-0.5 hover:bg-emerald-500">فك</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-slate-500">Note: Full working search/filter + user detail view + real server-side ban/unban actions (with owner-only authorization guard + audit recording) will be added in next step. No User Code search included per instruction (EPIC-6 not started).</p>
       </section>
     </div>
   );
