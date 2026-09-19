@@ -1,0 +1,30 @@
+<!-- EPIC-2 — AI Models Control Preview -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>EPIC-2 AI Models Preview</title>
+<style>:root{--bg:#0b0e14;--card:#13151f;--accent:#f59e0b;--text:#f1f5f9;--muted:#94a3b8;--border:#1e2230}body{background:var(--bg);color:var(--text);padding:2rem;font-family:system-ui,sans-serif;line-height:1.6}.header{border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:2rem}h1{font-size:1.6rem;color:var(--accent)}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1rem}.tag{display:inline-block;padding:.15rem .5rem;border-radius:6px;font-size:.7rem;font-weight:bold}.tag-true{background:#10b98122;color:#10b981}.tag-false{background:#64748b22;color:#94a3b8}.table{width:100%;border-collapse:collapse;font-size:.82rem}.table th{color:var(--muted);text-align:right;padding:.5rem .25rem;border-bottom:1px solid var(--border);font-weight:600}.table td{padding:.5rem .25rem;border-bottom:1px solid var(--border);color:var(--text)}.note{background:#f59e0b15;border:1px solid #f59e0b55;border-radius:8px;padding:.75rem;color:#f59e0b;font-size:.82rem}</style></head>
+<body>
+<div class="header"><h1>🤖 EPIC-2 — AI Models Control Preview</h1><p style="font-size:.8rem;color:var(--muted)">DB: ai_models (new table — 12 entries from MODEL_REGISTRY). Permission: models.manage (Owner ONLY).</p></div>
+
+<div class="card">
+<h2>📋 سجل الموديلات (12 من lib/ai/models.ts)</h2>
+<p style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Migration: جميع الـ12 موديل الحاليين من MODEL_REGISTRY → ai_models. الحالة enabled/disabled محفوظة بالظبط.</p>
+<table class="table">
+<thead><tr><th>المعرّف</th><th>العرض</th><th>المزوّد</th><th>الحالة</th><th>إجراء</th></tr></thead>
+<tbody>
+<tr><td><span style="font-family:monospace;font-size:.75rem">gpt-oss-120b</span></td><td>GPT-OSS 120B</td><td>groq</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">gpt-oss-20b</span></td><td>GPT-OSS 20B</td><td>groq</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">nemotron-3.5-lightning</span></td><td>Nemotron 3.5 Lightning</td><td>nvidia</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">nemotron-3-super-120b</span></td><td>Nemotron 3 Super</td><td>nvidia</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">nemotron-3-ultra-550b</span></td><td>Nemotron 3 Ultra</td><td>nvidia</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">deepseek-v4-flash</span></td><td>DeepSeek V4 Flash</td><td>nvidia</td><td><span class="tag tag-false">disabled</span></td><td>تفعيل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">nemotron-3-embed-1b</span></td><td>Nemotron 3 Embed</td><td>nvidia</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">dots-3-note-preview</span></td><td>Dots 3 Note</td><td>openrouter</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">inkling-small</span></td><td>Inkling Small</td><td>openrouter</td><td><span class="tag tag-false">disabled</span></td><td>تفعيل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">gemini-3.6-flash</span></td><td>Gemini 3.6 Flash</td><td>gemini</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+<tr><td><span style="font-family:monospace;font-size:.75rem">gemini-3.1-flash-image</span></td><td>Gemini Flash Image</td><td>gemini</td><td><span class="tag tag-true">enabled</span></td><td>تعديل</td></tr>
+</tbody>
+</table>
+<div class="note"><strong>Migration:</strong> 12 models from <code>MODEL_REGISTRY</code> (verified by reading lib/ai/models.ts lines 44-215). No data loss. <strong>CRUD:</strong> Add/Edit/Delete/Toggle status — all via admin UI. <strong>Permission:</strong> <code>models.manage</code> = Owner ONLY (not admin/support, confirmed in auth-roles.ts). Audit mandatory for any change.</div>
+</div>
+</body></html>
