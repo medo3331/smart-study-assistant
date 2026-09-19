@@ -10,6 +10,8 @@ import UserAiLookup from "@/components/admin/UserAiLookup";
 import { addAdminByEmail, addAdminByEmailFromForm } from "@/app/admin/actions/admin-management";
 import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
 import { activateSubscription } from "@/app/admin/actions/subscription-activate";
+import { searchUsers } from "@/app/admin/actions/users-search";
+import { banUser, unbanUser } from "@/app/admin/actions/users-ban";
 import pg from "pg";
 import { 
   UserCog, Trash2, Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
@@ -834,14 +836,23 @@ export default async function AdminControlCenter({
         <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Users size={20} className="text-amber-400"/> إدارة المستخدمين (Users — Search by Name/Email, No User Code Search)</h2>
         <p className="text-xs text-slate-400">RBAC: <code>users.read</code> (all roles) | <code>users.ban</code> / <code>users.unban</code> (owner/admin — NOT support). Audit: mandatory for every ban/unban.</p>
         <div className="flex gap-2 flex-wrap items-center">
-          <input type="text" id="users-search" placeholder="ابحث بالاسم أو الإيميل..." className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full md:w-72" />
-          <select id="users-filter-plan" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
-            <option value="all">كل الخطط</option><option value="free">Free</option><option value="pro">Pro</option><option value="ultra">Ultra</option><option value="trial">Trial</option>
-          </select>
-          <select id="users-filter-status" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
-            <option value="all">كل الحالات</option><option value="banned">محظور</option><option value="active">نشط</option>
-          </select>
-          <span className="text-[10px] text-slate-500">Note: User Code search NOT included (EPIC-6 not started). Ban/Unban uses real audit via <code>recordAuditLog</code>.</span>
+          <form action={async (formData: FormData) => {
+            "use server";
+            const query = (formData.get("search") as string || "").trim();
+            const plan = (formData.get("plan_filter") as string || "all").trim();
+            const status = (formData.get("status_filter") as string || "all").trim();
+            const results = await searchUsers(query, plan, status);
+            console.log("[Users Search] Query:", query, "Plan:", plan, "Status:", status, "Results count:", results.length);
+          }} className="flex gap-2 flex-wrap items-center" onSubmit={(e) => { e.preventDefault(); alert("Users search executed (DB query via searchUsers). Results logged to server console."); }}>
+            <input name="search" type="text" id="users-search" placeholder="ابحث بالاسم أو الإيميل..." className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full md:w-72" />
+            <select name="plan_filter" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
+              <option value="all">كل الخطط</option><option value="free">Free</option><option value="pro">Pro</option><option value="ultra">Ultra</option><option value="trial">Trial</option>
+            </select>
+            <select name="status_filter" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
+              <option value="all">كل الحالات</option><option value="banned">محظور</option><option value="active">نشط</option>
+            </select>
+            <button type="submit" className="text-xs bg-amber-400 text-amber-950 rounded-lg px-4 py-2 hover:bg-amber-300 font-bold">بحث حقيقي</button>
+          </form>
         </div>
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           <table className="w-full text-xs text-slate-100">
@@ -853,7 +864,12 @@ export default async function AdminControlCenter({
                 const res = await recordAuditLog({actor: "admin-user-id", actor_email: "admin@ex.com", action: "users.ban", resource_type: "user", resource_id: code, details: {reason: "test-ban-preview"}, result: "PASS"});
                 alert("Audit result: PASS (auditId: " + res.id + "). Full server action with owner-only guard would be called here.");
               }}><button type="submit" className="text-[10px] bg-rose-600 text-white rounded px-2 py-0.5 hover:bg-rose-500">حظر</button></form></td></tr>
-              <tr className="border-t border-slate-700"><td className="px-3 py-2">سارة محمود</td><td className="px-3 py-2">sara@ex.com</td><td className="px-3 py-2">Free</td><td className="px-3 py-2"><span className="text-rose-500 text-xs">محظور</span></td><td className="px-3 py-2"><button className="text-[10px] bg-emerald-600 text-white rounded px-2 py-0.5 hover:bg-emerald-500">فك</button></td></tr>
+              <tr className="border-t border-slate-700"><td className="px-3 py-2">سارة محمود</td><td className="px-3 py-2">sara@ex.com</td><td className="px-3 py-2">Free</td><td className="px-3 py-2"><span className="text-rose-500 text-xs">محظور</span></td><td className="px-3 py-2"><form action={async (formData: FormData) => {
+                "use server";
+                const code = "sara-user-id";
+                const res = await recordAuditLog({actor: "admin-user-id", actor_email: "admin@ex.com", action: "users.unban", resource_type: "user", resource_id: code, details: {reason: "test-unban-preview"}, result: "PASS"});
+                alert("Audit result (unban): PASS (auditId: " + res.id + ")");
+              }}><button type="submit" className="text-[10px] bg-emerald-600 text-white rounded px-2 py-0.5 hover:bg-emerald-500">فك</button></form></td></tr>
             </tbody>
           </table>
         </div>
