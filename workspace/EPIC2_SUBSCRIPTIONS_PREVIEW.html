@@ -1,0 +1,143 @@
+<!-- EPIC-2 / Subscriptions — Preview-First Design Frame -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EPIC-2 — Subscriptions Activation Preview</title>
+<style>
+:root{--bg:#0b0e14;--card:#13151f;--accent:#f59e0b;--accent2:#10b981;--text:#f1f5f9;--muted:#94a3b8;--danger:#ef4444;--border:#1e2230}
+*{box-sizing:border-box;font-family:system-ui,sans-serif;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);padding:2rem;line-height:1.6}
+.header{border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:2rem}
+h1{font-size:1.6rem;color:var(--accent)}
+h2{font-size:1rem;margin-top:1.5rem;color:var(--accent2);border-right:3px solid var(--accent2);padding-right:.5rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin-bottom:1rem}
+.tag{display:inline-block;padding:.15rem .5rem;border-radius:6px;font-size:.7rem;font-weight:bold;text-transform:uppercase;margin-left:.25rem}
+.tag-free{background:#64748b22;color:#94a3b8}
+.tag-pro{background:#60a5fa22;color:#60a5fa}
+.tag-ultra{background:#f59e0b22;color:#f59e0b}
+.note{background:#f59e0b12;border:1px solid #f59e0b44;border-radius:10px;padding:1rem;color:var(--accent);font-size:.82rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+.input-row{display:flex;flex-direction:column;gap:.25rem;margin-top:.5rem}
+label{font-size:.8rem;color:var(--muted)}
+input,select{background:#0b0f19;border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;color:var(--text);font-size:.9rem}
+.btn{background:var(--accent);color:#0b0e14;border:none;border-radius:10px;padding:.75rem 1.25rem;font-weight:bold;font-size:1rem;cursor:pointer;margin-top:1rem;transition:opacity .2s}
+.btn:hover{opacity:.9}
+.preview-box{font-family:monospace;font-size:.8rem;background:#0b0f19;border:1px dashed var(--border);border-radius:8px;padding:.75rem;color:var(--muted);margin-top:.5rem}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📋 EPIC-2 — Subscriptions Preview (قبل أي تعديل كود)</h1>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:.25rem">DB tables: <code>user_codes</code> + <code>subscription_plans</code> + <code>subscription_activations</code> + <code>audit_log</code> → كلها موجودة بعد التنفيذ</p>
+</div>
+
+<div class="grid">
+  <!-- Card 1: User Code -->
+  <div class="card">
+    <h2>🔑 إدخال User Code</h2>
+    <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">المستخدم يبعث الكود بعد الدفع (واتساب/فودافون كاش)</p>
+    <div class="input-row">
+      <label for="user-code">User Code (مثال: MAG-8F3K2Q)</label>
+      <input id="user-code" type="text" placeholder="MAG-XXXXXX" value="MAG-8F3K2Q" />
+    </div>
+    <div class="preview-box">QR Link: <span style="color:var(--accent)">yourdomain.com/u/MAG-8F3K2Q</span></div>
+  </div>
+
+  <!-- Card 2: Plan Selection -->
+  <div class="card">
+    <h2>💳 اختيار الخطة</h2>
+    <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">المصدر الحقيقي: جدول <code>subscription_plans</code> (Free/Pro/Ultra)</p>
+    <div class="input-row">
+      <label for="plan-select">الخطة</label>
+      <select id="plan-select">
+        <option value="free">Free <span class="tag tag-free">مجاني</span></option>
+        <option value="pro" selected>Pro <span class="tag tag-pro">احترافي</span> — 3 بروفايل / 100 رسالة / 30 رفع يومي / 150MB</option>
+        <option value="ultra">Ultra <span class="tag tag-ultra">ألتميت</span> — 5 بروفايل / 500 رسالة / 60 رفع يومي / 1GB / فيديو+صوت</option>
+      </select>
+    </div>
+    <div class="preview-box">DB reference: <code>subscription_plans(plan_key, profile_limit, messages_per_2h, uploads_daily, max_file_size_mb, video_audio_exclusive)</code></div>
+  </div>
+</div>
+
+<!-- Card 3: Duration + Activation -->
+<div class="card">
+  <h2>⏱ مدة التفعيل + زر التفعيل</h2>
+  <div class="grid">
+    <div>
+      <div class="input-row">
+        <label for="duration">المدة (أيام)</label>
+        <input id="duration" type="number" value="30" min="1" max="365" />
+      </div>
+    </div>
+    <div>
+      <div class="input-row">
+        <label for="method">طريقة الدفع</label>
+        <select id="method">
+          <option>فودافون كاش</option>
+          <option>فوري</option>
+          <option>إنستاباي</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <div class="input-row">
+        <label for="note">ملاحظة الأدمن (اختياري)</label>
+        <input id="note" type="text" placeholder="مثال: دفع عبر واتساب — كاش" />
+      </div>
+    </div>
+  </div>
+
+  <button class="btn">✅ تفعيل الاشتراك + تسجيل Audit</button>
+  <div class="note">
+    <strong>Audit Log (إلزامي):</strong> العملية دي حساسة (<code>subscriptions.manage</code>) — لازم تتسجل في <code>audit_log</code> مع: <code>actor (admin ID), action (subscriptions.manage), resource (user_code + plan_key), timestamp, result (PASS/FAIL)</code>. الـRecord يتم عبر <code>recordAuditLog()</code> من <code>audit-log-record.ts</code> (service_role، silent fail آمن).
+  </div>
+</div>
+
+<!-- Card 4: Activation Result Preview -->
+<div class="card">
+  <h2>📋 نتيجة التفعيل (معاينة)</h2>
+  <table style="width:100%;font-size:.85rem;border-collapse:collapse;color:var(--text);">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:right;padding:.4rem;color:var(--muted);">الحقل</th>
+        <th style="text-align:right;padding:.4rem;color:var(--muted);">القيمة</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);"><td>User Code</td><td><span style="font-family:monospace;color:var(--accent);">MAG-8F3K2Q</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td>المستخدم</td><td>user_uuid_from_code_lookup</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td>الخطة</td><td><span class="tag tag-pro">Pro</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td>المدة</td><td>30 يوم</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td>الأدمن المفعل</td><td>current_admin_user_id</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td>Audit Action</td><td><span style="font-family:monospace;color:var(--danger);">subscriptions.manage</span> → PASS</td></tr>
+      <tr><td>جدول التسجيل</td><td><code>subscription_activations</code> (id, user_code, user_id, plan_key, duration_days, activated_by, note, created_at)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Card 5: Audit Log Preview (what gets recorded) -->
+<div class="card">
+  <h2>📝 سجل العمليات (Audit Log) — ما يسجل</h2>
+  <div class="preview-box" style="font-size:.75rem;line-height:1.7;">
+    <strong>actor:</strong> admin_uuid &nbsp;|&nbsp; <strong>actor_email:</strong> admin@email.com<br>
+    <strong>action:</strong> subscriptions.manage &nbsp;|&nbsp; <strong>resource_type:</strong> subscription<br>
+    <strong>resource_id:</strong> MAG-8F3K2Q (user_code) + Pro (plan_key)<br>
+    <strong>details:</strong> {"user_code":"MAG-8F3K2Q","plan":"pro","duration_days":30,"method":"فودافون كاش","note":"دفع عبر واتساب"}<br>
+    <strong>timestamp:</strong> 2026-09-19T15:42:00Z &nbsp;|&nbsp; <strong>result:</strong> PASS<br>
+    <strong>Table:</strong> public.audit_log (RLS: admin read only; service_role insert)
+  </div>
+</div>
+
+<!-- Design / Implementation Notes -->
+<div class="note">
+  <strong>ملاحظات فنية قبل التنفيذ (موثقة):</strong><br>
+  • <code>user_codes</code> → البحث بالكود يرجع <code>user_id</code> (FK لـ auth.users). لو الكود مش موجود أو غير نشط → رفض التفعيل + تسجيل FAIL في audit.<br>
+  • <code>subscription_plans</code> → مصدر الحقيقة للحدود (profile_limit, messages_per_2h, uploads_daily). الـReset اليومي يكون midnight EET (توقيت مصر).<br>
+  • <code>subscription_activations</code> → كل تفعيل = صف جديد. لو المستخدم عنده تفعيل نشط (revoked_at IS NULL) → تجديد (Update) أو إنشاء جديد (حسب السياسة).<br>
+  • Audit recording: <code>recordAuditLog()</code> من <code>audit-log-record.ts</code> (service_role). Silent fail: لو الجدول مش موجود، التفعيل ما يتعطلش بس الـaudit ما يتسجلش (مع console.error للتتبع).<br>
+  • Preview-First: هذه المعاينة أولًا — التنفيذ يبدأ فقط بعد موافقتك.<br>
+</div>
+</body>
+</html>
