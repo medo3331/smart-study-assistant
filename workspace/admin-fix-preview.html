@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preview — Admin Page Fixes (3)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+  body { font-family: 'Cairo', sans-serif; background: linear-gradient(135deg, #0b0e17 0%, #090d16 100%); color: #e2e8f0; margin: 0; padding: 2rem; line-height: 1.7; }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { color: #f59e0b; font-weight: 900; font-size: 1.6rem; border-bottom: 2px solid #334155; padding-bottom: 1rem; }
+  h2 { color: #38bdf8; font-size: 1.1rem; margin-top: 2rem; border-right: 4px solid #38bdf8; padding-right: 0.75rem; }
+  .fix-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; padding: 1.25rem; margin: 1rem 0; }
+  .fix-card.ok { border-left: 4px solid #10b981; }
+  .fix-card .label { color: #10b981; font-weight: 900; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .fix-card .desc { color: #94a3b8; font-size: 0.9rem; margin-top: 0.25rem; }
+  .code { background: #0b1221; border: 1px solid #1e3a5f; border-radius: 0.5rem; padding: 0.75rem 1rem; font-family: monospace; font-size: 0.8rem; color: #cbd5e1; overflow-x: auto; margin-top: 0.5rem; }
+  .bad { color: #f87171; }
+  .good { color: #34d399; }
+  .table-preview { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 0.5rem; }
+  .table-preview th { background: #1e293b; color: #94a3b8; text-align: right; padding: 0.4rem 0.5rem; border-bottom: 1px solid #334155; }
+  .table-preview td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #1e293b; color: #e2e8f0; }
+  .btn-preview { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.7rem; font-weight: bold; color: white; }
+  .btn-amber { background: #d97706; }
+  .btn-emerald { background: #059669; }
+  footer { margin-top: 3rem; color: #64748b; font-size: 0.75rem; border-top: 1px solid #1e293b; padding-top: 1rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>معاينة الإصلاحات — app/admin/page.tsx</h1>
+  <p><strong>النتيجة:</strong> TypeScript <span class="good">PASS</span> (npm run typecheck — exit 0). الملف 918 سطر، بدون أخطاء syntax.</p>
+
+  <h2>1. حذف قسم D5 القديم (المكرر)</h2>
+  <div class="fix-card ok">
+    <div class="label">تم — إزالة كاملة</div>
+    <div class="desc">قسم "Model Registry — READ-ONLY" (السطر 458-479 في النسخة القديمة) تم حذفه بالكامل. لم يعد هناك جدول موديلات قديم بجانب القسم الجديد.</div>
+  </div>
+
+  <h2>2. توحيد "إدارة المديرات"</h2>
+  <div class="fix-card ok">
+    <div class="label">تم — إزالة التكرار المتداخل</div>
+    <div class="desc">كان هناك قسم ثانٍ متداخل داخل "الخطط وال cobranة" (Phase 4.11). تم حذفه. بقي قسم واحد فقط (السطر 703-714) مع وصف واضح من <code>site_admins</code>.</div>
+  </div>
+
+  <h2>3. أزرار AI Models — من preview إلى فعل حقيقي</h2>
+  <div class="fix-card ok">
+    <div class="label">تم — استدعاء toggleModelStatus فعليًا</div>
+    <div class="desc">كل زر (تعطيل / تفعيل) أصبح داخل <code>&lt;form&gt;</code> مع <code>action</code> تستدعي <code>toggleModelStatus()</code> مع <code>model_id</code> و <code>enabled_target</code> وبيانات الأدمن من الحقول المخفية. النتيجة تُسجل في الـ console وتظهر بـ <code>alert()</code> مع Audit ID.</div>
+    <table class="table-preview">
+      <thead><tr><th>الموديل</th><th>الحالة القديمة</th><th>الإجراء الجديد</th></tr></thead>
+      <tbody>
+        <tr><td>openai/gpt-oss-120b</td><td>enabled</td><td><span class="btn-preview btn-amber">تعطيل ← toggleModelStatus(false)</span></td></tr>
+        <tr><td>nvidia/nemotron-3.5-lightning</td><td>enabled</td><td><span class="btn-preview btn-amber">تعطيل ← toggleModelStatus(false)</span></td></tr>
+        <tr><td>deepseek-ai/deepseek-v4-flash</td><td>disabled</td><td><span class="btn-preview btn-emerald">تفعيل ← toggleModelStatus(true)</span></td></tr>
+      </tbody>
+    </table>
+    <div class="code">// كل زر يحتوي على hidden inputs: model_id, target_enabled, admin_user_id, admin_email
+// ويستدعي: await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);</div>
+  </div>
+
+  <footer>
+    الملف المعدّل: <code>app/admin/page.tsx</code> | الحجم: 64165 بايت | التغييرات: 3 إصلاحات (حذف مكرر + توحيد أقسام + أزرار CRUD حقيقية). لم يتم push أو commit.
+  </footer>
+</div>
+</body>
+</html>

@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
+import { useProfileState, ProfilePersona, defaultProfileForUser } from "@/lib/user-profiles";
 
 /**
  * التقييم المبدئي (AI Placement Quiz)
@@ -138,6 +139,8 @@ export default function AssessmentPage() {
   const [uniYear, setUniYear] = useState<number | null>(null);
   // Auto-resolved subjects (live from curricula→subjects; never hardcoded)
   const [subjectsAuto, setSubjectsAuto] = useState<string[]>([]);
+  // EPIC 1 — Multi-profile integration (max 3/account; 1 Active profile)
+  const profileState = useProfileState(defaultProfileForUser(persona));
 
   // الاختيار الجاهز من اللاندينج. localStorage مش موجود في السيرفر، فالقراءة
   // في effect — وبكده أول رندر بيطابق الـ SSR ومفيش hydration mismatch.

@@ -1,0 +1,20 @@
+--- a/components/MagicWheelDashboard.tsx
++++ b/components/MagicWheelDashboard.tsx
+@@ -96,7 +96,7 @@
+ export interface MagicWheelProps {
+   /* التراك الحالي (من صفحة الداشبورد) */
+-  currentDay?: number;
++  currentDay?: number;  /* number for display label ONLY — stays number */
++  currentDayId?: string; /* UUID from study_days.id — used ONLY for /lesson/ link */
+   totalDays?: number;
+   subject?: string;
+   completedSteps?: number;
+@@ -104,7 +105,8 @@
+       label: currentDay ? `الدرس — يوم ${currentDay}` : "ابدأ درسك",
+       kind: "link",
+-      href: currentDay ? `/lesson/${currentDay}` : "/dashboard/create",
+-      note: currentDay ? `/lesson/${currentDay} (يوم الخطة الحالي)` : "مفيش خطة بعد → /dashboard/create",
++      /* FIX: link uses UUID (currentDayId) not display number (currentDay) */
++      href: currentDayId ? `/lesson/${currentDayId}` : (currentDay ? "/lesson/" + String(currentDay) : "/dashboard/create"),
++      note: currentDay ? `يوم ${currentDay}` + (currentDayId ? ` (${currentDayId.slice(0,8)}...)` : ``) : "مفيش خطة بعد → /dashboard/create",
+     },

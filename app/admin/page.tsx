@@ -455,29 +455,6 @@ export default async function AdminControlCenter({
         </div>
       </section>
 
-      {/* D5 Model Management */}
-      <section className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-        <h2 className="text-lg font-bold flex items-center gap-2 text-slate-200"><Cpu size={20} className="text-blue-400"/> Model Registry — {allModels.length} موديل</h2>
-        <p className="text-xs text-slate-400">READ-ONLY — لا يوجد enable/disable من Admin (يتطلب تعديل الكود). العرض للمراقبة فقط.</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead className="bg-slate-800 text-slate-300 border-b border-slate-700">
-              <tr><th className="p-2">الموديل</th><th className="p-2">المزود</th><th className="p-2">الحالة</th><th className="p-2">الوصول</th></tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {allModels.map(m=>(
-                <tr key={m.id} className="hover:bg-slate-800/40">
-                  <td className="p-2 font-mono text-slate-200">{m.id}</td>
-                  <td className="p-2 text-slate-400">{m.provider}</td>
-                  <td className="p-2">{m.enabled ? <span className="text-emerald-400">enabled</span> : <span className="text-rose-400">disabled</span>}</td>
-                  <td className="p-2">{GATED_MODELS[m.id] ? <span className="text-amber-400">gated (advanced-study)</span> : <span className="text-emerald-400">free</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       {/* D9 Agent Monitoring */}
       <section className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <h2 className="text-lg font-bold flex items-center gap-2 text-slate-200"><Bot size={20} className="text-purple-400"/> Agent Registry — {agents.length} agents</h2>
@@ -756,31 +733,6 @@ export default async function AdminControlCenter({
             <p className="text-xs text-slate-500">Admin can grant via service-role (secure)</p>
           </div>
         </div>
-      {/* Phase 4.11 Real Admin Controls — server-side only, owner-only, no fake buttons */}
-      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
-        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><UserCog size={20} className="text-amber-400"/> إدارة المديرات</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
-            <p className="text-xs text-slate-400">المسؤولون الحاليون</p>
-            <p className="text-sm font-bold text-amber-300">{adminsList?.data ? (adminsList.data as any[]).length : 0} متاحون</p>
-            <p className="text-xs text-slate-500">من site_admins — يقرأ من السيرفر فقط</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
-            <p className="text-xs text-slate-400">إضافة مدير جديد</p>
-            <p className="text-sm font-bold text-emerald-400">متاح عبر Admin فقط</p>
-            <p className="text-xs text-slate-500">يتم التحقق من المالك عبر isOwnerEmail</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4 border border-amber-700/30">
-            <p className="text-xs text-slate-400">إلغاء صلاحية</p>
-            <p className="text-sm font-bold text-rose-400">متاح عبر Admin فقط</p>
-            <p className="text-xs text-slate-500">لا يمكن إزالة Owner</p>
-          </div>
-        </div>
-        <form action={addAdminByEmailFromForm} className="flex gap-2 items-center mt-2">
-          <input name="email" type="email" placeholder="email@domain.com" required className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full" />
-          <button type="submit" className="bg-amber-400 text-amber-950 font-bold rounded-lg px-4 py-2 text-sm hover:bg-amber-300 transition whitespace-nowrap">إضافة Admin</button>
-        </form>
-      </section>
       </section>
       {/* EPIC-2 / Subscriptions — Manual Activation (DB: user_codes, subscription_plans, subscription_activations, audit_log) */}
       <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 mb-6">
@@ -903,10 +855,59 @@ export default async function AdminControlCenter({
             <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-2 py-1">المعرّف</th><th className="text-right px-2 py-1">الاسم</th><th className="text-right px-2 py-1">المزوّد</th><th className="text-right px-2 py-1">الحالة</th><th className="text-right px-2 py-1">إجراء</th></tr></thead>
             <tbody>
               <tr className="border-t border-slate-700"><td className="px-2 py-1 font-mono">openai/gpt-oss-120b</td><td className="px-2 py-1">GPT-OSS 120B</td><td className="px-2 py-1">groq</td><td className="px-2 py-1"><span className="text-emerald-400">enabled</span></td><td className="px-2 py-1">
-                <button className="text-[9px] bg-amber-600 text-white rounded px-1.5 py-0.5 hover:bg-amber-500">تعطيل (preview — uses toggleModelStatus)</button>
+                <form action={async (formData: FormData) => {
+                  "use server";
+                  const modelId = formData.get("model_id") as string;
+                  const enabledTarget = formData.get("target_enabled") === "true";
+                  const adminId = (formData.get("admin_user_id") as string) || "";
+                  const adminEmail = (formData.get("admin_email") as string) || null;
+                  const res = await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);
+                  console.log("[AI Model Toggle]", { modelId, enabledTarget, ok: res.ok, auditId: res.auditId, msg: res.message });
+                  alert("نتيجة التفعيل: " + (res.ok ? ("PASS — " + res.message + (res.auditId ? " (Audit: " + res.auditId + ")" : "")) : ("BLOCKED/FAIL — " + res.message + " (خطأ: " + (res.error || "unknown") + ")")));
+                }} className="inline">
+                  <input type="hidden" name="model_id" value="openai/gpt-oss-120b" />
+                  <input type="hidden" name="target_enabled" value="false" />
+                  <input type="hidden" name="admin_user_id" value={user?.id || ""} />
+                  <input type="hidden" name="admin_email" value={user?.email || ""} />
+                  <button type="submit" className="text-[9px] bg-amber-600 text-white rounded px-1.5 py-0.5 hover:bg-amber-500">تعطيل</button>
+                </form>
               </td></tr>
-              <tr className="border-t border-slate-700"><td className="px-2 py-1 font-mono">nvidia/nemotron-3.5-lightning</td><td className="px-2 py-1">Nemotron 3.5 Lightning</td><td className="px-2 py-1">nvidia</td><td className="px-2 py-1"><span className="text-emerald-400">enabled</span></td><td className="px-2 py-1"><button className="text-[9px] bg-amber-600 text-white rounded px-1.5 py-0.5 hover:bg-amber-500">تعطيل (preview)</button></td></tr>
-              <tr className="border-t border-slate-700"><td className="px-2 py-1 font-mono">deepseek-ai/deepseek-v4-flash</td><td className="px-2 py-1">DeepSeek V4 Flash</td><td className="px-2 py-1">nvidia</td><td className="px-2 py-1"><span className="text-slate-500">disabled</span></td><td className="px-2 py-1"><button className="text-[9px] bg-emerald-600 text-white rounded px-1.5 py-0.5 hover:bg-emerald-500">تفعيل (preview)</button></td></tr>
+              <tr className="border-t border-slate-700"><td className="px-2 py-1 font-mono">nvidia/nemotron-3.5-lightning</td><td className="px-2 py-1">Nemotron 3.5 Lightning</td><td className="px-2 py-1">nvidia</td><td className="px-2 py-1"><span className="text-emerald-400">enabled</span></td><td className="px-2 py-1">
+                <form action={async (formData: FormData) => {
+                  "use server";
+                  const modelId = formData.get("model_id") as string;
+                  const enabledTarget = formData.get("target_enabled") === "true";
+                  const adminId = (formData.get("admin_user_id") as string) || "";
+                  const adminEmail = (formData.get("admin_email") as string) || null;
+                  const res = await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);
+                  console.log("[AI Model Toggle]", { modelId, enabledTarget, ok: res.ok, auditId: res.auditId, msg: res.message });
+                  alert("نتيجة التفعيل: " + (res.ok ? ("PASS — " + res.message + (res.auditId ? " (Audit: " + res.auditId + ")" : "")) : ("BLOCKED/FAIL — " + res.message + " (خطأ: " + (res.error || "unknown") + ")")));
+                }} className="inline">
+                  <input type="hidden" name="model_id" value="nvidia/nemotron-3.5-lightning" />
+                  <input type="hidden" name="target_enabled" value="false" />
+                  <input type="hidden" name="admin_user_id" value={user?.id || ""} />
+                  <input type="hidden" name="admin_email" value={user?.email || ""} />
+                  <button type="submit" className="text-[9px] bg-amber-600 text-white rounded px-1.5 py-0.5 hover:bg-amber-500">تعطيل</button>
+                </form>
+              </td></tr>
+              <tr className="border-t border-slate-700"><td className="px-2 py-1 font-mono">deepseek-ai/deepseek-v4-flash</td><td className="px-2 py-1">DeepSeek V4 Flash</td><td className="px-2 py-1">nvidia</td><td className="px-2 py-1"><span className="text-slate-500">disabled</span></td><td className="px-2 py-1">
+                <form action={async (formData: FormData) => {
+                  "use server";
+                  const modelId = formData.get("model_id") as string;
+                  const enabledTarget = formData.get("target_enabled") === "true";
+                  const adminId = (formData.get("admin_user_id") as string) || "";
+                  const adminEmail = (formData.get("admin_email") as string) || null;
+                  const res = await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);
+                  console.log("[AI Model Toggle]", { modelId, enabledTarget, ok: res.ok, auditId: res.auditId, msg: res.message });
+                  alert("نتيجة التفعيل: " + (res.ok ? ("PASS — " + res.message + (res.auditId ? " (Audit: " + res.auditId + ")" : "")) : ("BLOCKED/FAIL — " + res.message + " (خطأ: " + (res.error || "unknown") + ")")));
+                }} className="inline">
+                  <input type="hidden" name="model_id" value="deepseek-ai/deepseek-v4-flash" />
+                  <input type="hidden" name="target_enabled" value="true" />
+                  <input type="hidden" name="admin_user_id" value={user?.id || ""} />
+                  <input type="hidden" name="admin_email" value={user?.email || ""} />
+                  <button type="submit" className="text-[9px] bg-emerald-600 text-white rounded px-1.5 py-0.5 hover:bg-emerald-500">تفعيل</button>
+                </form>
+              </td></tr>
             </tbody>
           </table>
           <p className="text-[9px] text-slate-500 mt-1">Note: Full CRUD (add/edit/delete) + migration of all 12 MODELS from lib/ai/models.ts to DB ai_models implemented. Permission: <code>models.manage</code> (Owner ONLY). Audit mandatory.</p>

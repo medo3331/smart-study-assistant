@@ -28,6 +28,7 @@ import type {
   ThemeColor,
 } from "./components/types";
 
+import { useProfileState, ProfilePersona, defaultProfileForUser } from "@/lib/user-profiles";
 import { HeroSection } from "./components/HeroSection";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
@@ -115,6 +116,10 @@ export default function DashboardPage() {
   const [trackName, setTrackName] = useState<string | null>(null);
   const [facultyName, setFacultyName] = useState<string | null>(null);
   const [departmentName, setDepartmentName] = useState<string | null>(null);
+
+  // EPIC 1 — Multi-profile integration (max 3/account; 1 Active profile)
+  const { profiles, activeProfile, switchActiveProfile, addProfile, removeProfile } = useProfileState();
+  const activePersona = activeProfile.persona;
 
   // Fetch stage code + grade/track names for experience resolver
   useEffect(() => {

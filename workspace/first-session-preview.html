@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>First Session — ماذا تريد أن تفعل اليوم؟ | Magicly Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={ corePlugins:{ preflight:false } }</script>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif}
+  .mono{font-family:'JetBrains Mono',monospace}
+  /* === توكنز الداشبورد الحقيقية — كما هي في الكود === */
+  :root{
+    --card-primary: rgba(13,16,41,0.72);
+    --card-secondary: rgba(255,255,255,0.04);
+    --rule: rgba(255,255,255,0.07);
+    --shade: rgba(0,0,0,0.35);
+    --text: #E7E9F5;
+    --muted: #9AA0C0;
+    --muted-2: #7B81A0;
+    --accent: #7C5CFF;
+    --accent-highlight: #A78BFA;
+    --accent-soft: rgba(124,92,255,0.12);
+    --amber: #FB923C;
+    --amber-soft: rgba(251,146,60,0.12);
+    --teal: #2DD4BF;
+    --teal-soft: rgba(45,212,191,0.12);
+    --app-bg: #07091A;
+  }
+  body{background: var(--app-bg); color: var(--text);}
+  /* خلفية الداشبورد الحقيقية: تدرج خافت + شبكة خفيفة */
+  .app-bg{
+    background:
+      radial-gradient(900px 600px at 85% -10%, rgba(124,92,255,0.14) 0%, transparent 60%),
+      radial-gradient(700px 500px at -10% 30%, rgba(45,212,191,0.08) 0%, transparent 60%),
+      linear-gradient(180deg, #0A0C1E 0%, #07091A 55%, #06081A 100%);
+    min-height: 100vh;
+  }
+  .glass{
+    background: var(--card-primary);
+    border: 1px solid var(--rule);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 30px var(--shade);
+  }
+  .glass-hover{transition: transform .18s cubic-bezier(.22,.8,.36,1), box-shadow .18s, border-color .18s, background .18s}
+  .glass-hover:hover{transform: translateY(-2px); box-shadow: 0 12px 36px rgba(0,0,0,0.45); border-color: rgba(124,92,255,0.18)}
+  .glass-hover:active{transform: scale(0.98)}
+  /* Intent cards — كل كارت له لون أيقونة مميز لكن الإطار موحّد */
+  .intent-card{
+    background: var(--card-primary);
+    border: 1px solid var(--rule);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    padding: 18px;
+    display:flex; flex-direction:column; gap:12px;
+    cursor:pointer;
+    transition: all .18s cubic-bezier(.22,.8,.36,1);
+    text-align: right;
+    position:relative; overflow:hidden;
+  }
+  .intent-card::after{
+    content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background: radial-gradient(320px 200px at 85% 0%, rgba(124,92,255,0.06), transparent 70%);
+    opacity:0; transition: opacity .2s;
+  }
+  .intent-card:hover{transform: translateY(-3px); border-color: rgba(124,92,255,0.22); box-shadow: 0 14px 40px rgba(0,0,0,0.45)}
+  .intent-card:hover::after{opacity:1}
+  .intent-card:active{transform: scale(0.97)}
+  .intent-card:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  .icon-box{
+    width:44px; height:44px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; font-size:20px; line-height:1;
+  }
+  /* Top accent line — نفس اللي في HeroCard/CurrentStepCard */
+  .top-hairline{
+    position:absolute; top:0; left:0; right:0; height:1px;
+    background: linear-gradient(to left, transparent, var(--accent) 42%, transparent);
+    opacity:.5; pointer-events:none;
+  }
+  /* Motion respects reduced-motion */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeScale{from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)}}
+  .enter{animation: fadeUp .45s cubic-bezier(.22,1,.36,1) both}
+  .enter-2{animation: fadeUp .45s cubic-bezier(.22,1,.36,1) .06s both}
+  .enter-3{animation: fadeUp .45s cubic-bezier(.22,1,.36,1) .12s both}
+  .card-enter{animation: fadeScale .38s cubic-bezier(.22,1,.36,1) both}
+  @media (prefers-reduced-motion:reduce){
+    .enter,.enter-2,.enter-3,.card-enter{animation:none !important}
+    .glass-hover,.intent-card{transition:none !important}
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-thumb{background: rgba(124,92,255,.22); border-radius:99px}
+</style>
+</head>
+<body class="app-bg">
+
+<!-- ===== شريط الموافقة — Preview-First ===== -->
+<div class="sticky top-0 z-50 border-b" style="border-color: rgba(251,146,60,0.15); background: rgba(251,146,60,0.07); backdrop-filter: blur(12px);">
+  <div class="mx-auto max-w-[1120px] px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+    <div class="flex items-center gap-2">
+      <span class="inline-flex h-6 items-center rounded-full px-2.5 font-bold" style="background:#FB923C; color:#231402;">معاينة أولية</span>
+      <span class="hidden sm:inline" style="color:#C7CBE6">First Session — بانتظار موافقتك، لم يتم تعديل أي كود بعد</span>
+      <span class="sm:hidden" style="color:#C7CBE6">بانتظار الموافقة</span>
+    </div>
+    <div class="flex items-center gap-2" style="color:#9AA0C0">
+      <span class="hidden md:inline">Preview-First · لا يتم الحفظ إلا بعد "اعتمد"</span>
+      <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1" style="border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);">
+        <span class="h-2 w-2 rounded-full" style="background:#22c55e"></span> 375 / 768 / 1024 / 1120
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="mx-auto max-w-[1120px] px-4 py-6 md:px-6 md:py-8">
+
+  <!-- ===== هيدر الشرح ===== -->
+  <div class="enter mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div>
+      <p class="mono text-[11px] tracking-[0.14em] font-semibold" style="color: var(--accent-highlight)">FIRST SESSION · EPIC 1</p>
+      <h1 class="mt-1 text-[22px] md:text-[26px] font-bold leading-tight" style="color: var(--text)">ماذا تريد أن تفعل اليوم؟</h1>
+      <p class="mt-1.5 text-sm leading-6 max-w-[560px]" style="color: var(--muted)">بدل 8 اختيارات متفرقة — 5 مسارات واضحة. الطالب يختار نيّته، والمنصّة توصّله مباشرة. تظهر بقوّة في أول زيارة، وتتحوّل لشريط خفيف بعدها.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold" style="background: rgba(124,92,255,0.12); color: var(--accent-highlight); border:1px solid rgba(124,92,255,0.18)">🎯 الدور الآن — First Session</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs" style="background: rgba(255,255,255,0.04); color: var(--muted); border:1px solid var(--rule)">حالة حقيقية فقط — لا أرقام وهمية</span>
+    </div>
+  </div>
+
+  <!-- ===== تبويب الحالتين ===== -->
+  <div class="enter-2 mb-5 flex gap-2">
+    <button id="tab-first" onclick="showTab('first')" class="rounded-full px-4 py-2 text-sm font-bold transition" style="background: var(--accent); color: white; border:1px solid var(--accent)">أول زيارة · كامل</button>
+    <button id="tab-returning" onclick="showTab('returning')" class="rounded-full px-4 py-2 text-sm font-semibold transition" style="background: rgba(255,255,255,0.06); color: var(--muted); border:1px solid var(--rule)">زيارة راجعة · مصغّر</button>
+    <button id="tab-mobile" onclick="showTab('mobile')" class="rounded-full px-4 py-2 text-sm font-semibold transition hidden sm:inline-flex" style="background: rgba(255,255,255,0.06); color: var(--muted); border:1px solid var(--rule)">📱 موبايل 375px</button>
+  </div>
+
+  <!-- ===== الحالة A: أول زيارة — الكارت الكامل ===== -->
+  <div id="panel-first" class="space-y-5">
+    <!-- Mock sidebar + main layout — كما في الداشبورد الحقيقي -->
+    <div class="flex gap-6">
+      <!-- Sidebar mock — desktop only (نفس شكل الداشبورد) -->
+      <aside class="hidden lg:flex w-[220px] shrink-0 flex-col rounded-[20px] p-4 gap-4" style="background: var(--card-primary); border:1px solid var(--rule); backdrop-filter: blur(20px);">
+        <div class="flex items-center gap-2.5">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl font-bold text-white" style="background: var(--accent)">M</span>
+          <span class="text-sm font-bold" style="color: var(--text)">Magicly</span>
+          <span class="mr-auto mono text-[10px] px-1.5 py-0.5 rounded" style="background: rgba(124,92,255,0.12); color: var(--accent-highlight); border:1px solid rgba(124,92,255,0.15)">Control Center</span>
+        </div>
+        <nav class="flex flex-col gap-1 text-sm" style="color: var(--muted)">
+          <span class="flex items-center gap-2 rounded-xl px-3 py-2 font-semibold" style="background: rgba(124,92,255,0.12); color: var(--text); border:1px solid rgba(124,92,255,0.15)"><span>◉</span> مساحتك</span>
+          <span class="flex items-center gap-2 px-3 py-2 opacity-60"><span>◇</span> المواد</span>
+          <span class="flex items-center gap-2 px-3 py-2 opacity-60"><span>◇</span> المساعد الذكي</span>
+          <span class="flex items-center gap-2 px-3 py-2 opacity-60"><span>◇</span> الامتحانات</span>
+          <span class="flex items-center gap-2 px-3 py-2 opacity-60"><span>◇</span> التقدّم</span>
+        </nav>
+        <div class="mt-auto rounded-2xl p-3 flex items-center gap-3" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+          <span class="h-8 w-8 rounded-full flex items-center justify-center text-sm" style="background: var(--amber-soft);">👋</span>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold" style="color: var(--text)">أحمد · ثانوية عامة</p>
+            <p class="mono text-[11px]" style="color: var(--muted)">Lv 4 · 3 أيام متتالية</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <div class="flex-1 min-w-0 space-y-5">
+
+        <!-- ترحيب مصغر فوق First Session — كما في HeroCard لكن أخف -->
+        <div class="enter glass rounded-[20px] p-4 flex items-center gap-3">
+          <span class="h-10 w-10 rounded-full flex items-center justify-center text-lg shrink-0" style="background: var(--amber-soft); border:1px solid rgba(251,146,60,0.15)">👋</span>
+          <div class="min-w-0">
+            <p class="text-sm font-bold" style="color: var(--text)">أهلاً بك، أحمد</p>
+            <p class="text-xs" style="color: var(--muted)">الخطة: فيزياء · خطوة 3 من 14 · تقدّم 21%</p>
+          </div>
+          <span class="mr-auto hidden sm:inline-flex items-center gap-1.5 mono text-[11px] px-2.5 py-1 rounded-full" style="background: rgba(251,146,60,0.12); color: var(--amber); border:1px solid rgba(251,146,60,0.15)">🔥 3 أيام</span>
+        </div>
+
+        <!-- ====== First Session Card — القطعة الأساسية ====== -->
+        <section aria-label="ماذا تريد أن تفعل اليوم" class="enter-2 relative overflow-hidden rounded-[24px] p-5 sm:p-6" style="background: var(--card-primary); border:1px solid var(--rule); backdrop-filter: blur(20px); box-shadow: 0 10px 36px var(--shade);">
+          <div class="top-hairline"></div>
+          <!-- غسلة خفيفة -->
+          <div aria-hidden class="pointer-events-none absolute inset-0" style="background: radial-gradient(520px 360px at 90% 0%, rgba(124,92,255,0.07) 0%, transparent 65%);"></div>
+
+          <div class="relative">
+            <!-- Header -->
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2.5">
+                  <span class="flex h-9 w-9 items-center justify-center rounded-xl" style="background: rgba(124,92,255,0.12); color: var(--accent); border:1px solid rgba(124,92,255,0.14)">🎯</span>
+                  <h2 class="text-[18px] sm:text-[20px] font-bold leading-none" style="color: var(--text)">ماذا تريد أن تفعل اليوم؟</h2>
+                </div>
+                <p class="mt-2 text-sm leading-5 max-w-[520px]" style="color: var(--muted)">اختر نيّتك — نوصّلك مباشرة بدون لفّ. يمكنك تغيير اختيارك في أي وقت.</p>
+              </div>
+              <button onclick="toast('تم التخطي → الانتقال للداشبورد')" class="hidden sm:inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition hover:brightness-110 active:scale-[0.98]" style="background: rgba(255,255,255,0.06); color: var(--muted); border:1px solid var(--rule)">تخطّي · اذهب للداشبورد <span aria-hidden>←</span></button>
+            </div>
+
+            <!-- 5 Intent Cards — Grid: 1 col mobile, 2 tablet, 3 desktop + 2 in second row -->
+            <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
+              <!-- 1 — أذاكر -->
+              <button class="intent-card card-enter" style="animation-delay: 0ms" onclick="toast('📚 أذاكر → متابعة الدرس الحالي / فتح مادة')">
+                <div class="flex items-start justify-between gap-3">
+                  <span class="icon-box" style="background: rgba(124,92,255,0.14); color: var(--accent); border:1px solid rgba(124,92,255,0.15)">📚</span>
+                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 mono text-[10px] font-semibold" style="background: rgba(124,92,255,0.10); color: var(--accent-highlight); border:1px solid rgba(124,92,255,0.12)">الأكثر اختيارًا</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-[15px] font-bold" style="color: var(--text)">أذاكر</p>
+                  <p class="mt-1 text-xs leading-5" style="color: var(--muted)">ابدأ درسًا جديدًا أو أكمل من حيث توقفت</p>
+                </div>
+                <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color: var(--accent)">ابدأ الآن <span aria-hidden>←</span></span>
+              </button>
+
+              <!-- 2 — أراجع -->
+              <button class="intent-card card-enter" style="animation-delay: 45ms" onclick="toast('🔄 أراجع → مراجعة سريعة + بطاقات')">
+                <span class="icon-box" style="background: rgba(45,212,191,0.12); color: var(--teal); border:1px solid rgba(45,212,191,0.14)">🔄</span>
+                <div class="flex-1">
+                  <p class="text-[15px] font-bold" style="color: var(--text)">أراجع</p>
+                  <p class="mt-1 text-xs leading-5" style="color: var(--muted)">مراجعة ما ذاكرته وتثبيت المعلومات</p>
+                </div>
+                <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color: var(--teal)">مراجعة سريعة <span aria-hidden>←</span></span>
+              </button>
+
+              <!-- 3 — أختبر نفسي -->
+              <button class="intent-card card-enter" style="animation-delay: 90ms" onclick="toast('📝 أختبر نفسي → امتحان / بنك الأسئلة')">
+                <span class="icon-box" style="background: rgba(251,146,60,0.13); color: var(--amber); border:1px solid rgba(251,146,60,0.14)">📝</span>
+                <div class="flex-1">
+                  <p class="text-[15px] font-bold" style="color: var(--text)">أختبر نفسي</p>
+                  <p class="mt-1 text-xs leading-5" style="color: var(--muted)">اختبر فهمك بأسئلة ذكية وتقييم فوري</p>
+                </div>
+                <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color: var(--amber)">ابدأ الاختبار <span aria-hidden>←</span></span>
+              </button>
+
+              <!-- 4 — أفهم حاجة صعبة -->
+              <button class="intent-card card-enter" style="animation-delay: 135ms" onclick="toast('🧠 أفهم حاجة صعبة → المساعد الذكي + شرح')">
+                <span class="icon-box" style="background: rgba(167,139,250,0.14); color: var(--accent-highlight); border:1px solid rgba(167,139,250,0.15)">🧠</span>
+                <div class="flex-1">
+                  <p class="text-[15px] font-bold" style="color: var(--text)">أفهم حاجة صعبة</p>
+                  <p class="mt-1 text-xs leading-5" style="color: var(--muted)">اشرح لي نقطة معيّنة ببساطة وأمثلة</p>
+                </div>
+                <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color: var(--accent-highlight)">اسأل المساعد <span aria-hidden>←</span></span>
+              </button>
+
+              <!-- 5 — أكمل خطتي — مميز (accent border) -->
+              <button class="intent-card card-enter sm:col-span-2 lg:col-span-2" style="animation-delay: 180ms; border-color: rgba(124,92,255,0.22); background: linear-gradient(180deg, rgba(124,92,255,0.08), var(--card-primary));" onclick="toast('🎯 أكمل خطتي → الخطوة الحالية (CurrentStepCard)')">
+                <div class="flex items-center gap-3">
+                  <span class="icon-box" style="background: var(--accent); color: white; border-color: transparent">🎯</span>
+                  <div class="text-right">
+                    <p class="text-[15px] font-bold" style="color: var(--text)">أكمل خطتي</p>
+                    <p class="text-xs" style="color: var(--muted)">متابعة الخطة الحالية — الخطوة 3 من 14</p>
+                  </div>
+                  <span class="mr-auto hidden sm:inline-flex items-center gap-1 rounded-full px-2.5 py-1 mono text-[11px] font-bold" style="background: var(--accent); color: white">21% ← تابع</span>
+                </div>
+                <!-- progress mini -->
+                <div class="mt-1 h-1.5 rounded-full overflow-hidden" style="background: rgba(255,255,255,0.07)">
+                  <div class="h-full rounded-full" style="width:21%; background: var(--accent)"></div>
+                </div>
+                <span class="sm:hidden inline-flex items-center gap-1 text-xs font-semibold" style="color: var(--accent)">تابع خطتي <span aria-hidden>←</span></span>
+              </button>
+            </div>
+
+            <!-- Footer hint -->
+            <div class="mt-4 flex flex-wrap items-center gap-2 text-xs" style="color: var(--muted-2)">
+              <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full" style="background: var(--accent)"></span> اختيارك يوجّهك مباشرة — بدون أسئلة إضافية</span>
+              <span class="hidden sm:inline opacity-40">·</span>
+              <span>يمكنك تغييره من الداشبورد في أي وقت</span>
+              <button onclick="toast('تخطي')" class="sm:hidden mr-auto rounded-full px-3 py-1.5 font-semibold" style="background: rgba(255,255,255,0.06); border:1px solid var(--rule); color: var(--muted)">تخطّي</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Hint: ما تحته في الداشبورد الحقيقي -->
+        <div class="glass rounded-[16px] p-3.5 flex items-center gap-3 text-xs enter-3" style="color: var(--muted)">
+          <span class="h-7 w-7 rounded-full flex items-center justify-center shrink-0" style="background: rgba(255,255,255,0.05); border:1px solid var(--rule)">↓</span>
+          <span>بعد الاختيار: <b style="color: var(--text)">HeroCard → CurrentStepCard → TodayFocus → QuickNavigation</b> — نفس ترتيب الـ Control Center الحالي، بدون أي بلوك جديد.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== الحالة B: زائر راجع — شريط مصغّر ===== -->
+  <div id="panel-returning" class="hidden space-y-5">
+    <div class="flex gap-6">
+      <aside class="hidden lg:flex w-[220px] shrink-0 flex-col rounded-[20px] p-4 gap-4" style="background: var(--card-primary); border:1px solid var(--rule); backdrop-filter: blur(20px);">
+        <div class="flex items-center gap-2.5">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl font-bold text-white" style="background: var(--accent)">M</span>
+          <span class="text-sm font-bold" style="color: var(--text)">Magicly</span>
+        </div>
+        <nav class="flex flex-col gap-1 text-sm" style="color: var(--muted)">
+          <span class="flex items-center gap-2 rounded-xl px-3 py-2 font-semibold" style="background: rgba(124,92,255,0.12); color: var(--text); border:1px solid rgba(124,92,255,0.15)"><span>◉</span> مساحتك</span>
+          <span class="flex items-center gap-2 px-3 py-2 opacity-60"><span>◇</span> المواد</span>
+          <span class="flex items-center gap-2 px-3 py-2 opacity-60"><span>◇</span> المساعد</span>
+        </nav>
+      </aside>
+      <div class="flex-1 min-w-0 space-y-5">
+        <!-- الشريط المصغّر — يظهر للراجعين بدل الكارت الكامل -->
+        <section aria-label="اختصار النية — شريط مصغر" class="relative overflow-hidden rounded-[20px] p-4 flex flex-wrap items-center gap-3" style="background: var(--card-primary); border:1px solid var(--rule); backdrop-filter: blur(20px); box-shadow: 0 8px 30px var(--shade);">
+          <div class="top-hairline"></div>
+          <span class="flex h-8 w-8 items-center justify-center rounded-xl shrink-0" style="background: rgba(124,92,255,0.12); color: var(--accent)">🎯</span>
+          <div class="min-w-0">
+            <p class="text-sm font-bold" style="color: var(--text)">تكمل إيه النهاردة؟</p>
+            <p class="text-xs" style="color: var(--muted)">اختيار سريع — يوصّلك مباشرة</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mr-auto">
+            <button onclick="toast('📚 أذاكر')" class="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:brightness-110 active:scale-95" style="background: rgba(124,92,255,0.12); color: var(--accent-highlight); border:1px solid rgba(124,92,255,0.16)">📚 أذاكر</button>
+            <button onclick="toast('🔄 أراجع')" class="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:brightness-110 active:scale-95" style="background: rgba(45,212,191,0.10); color: var(--teal); border:1px solid rgba(45,212,191,0.14)">🔄 أراجع</button>
+            <button onclick="toast('📝 أختبر')" class="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:brightness-110 active:scale-95" style="background: rgba(251,146,60,0.10); color: var(--amber); border:1px solid rgba(251,146,60,0.14)">📝 أختبر</button>
+            <button onclick="toast('🧠 أفهم')" class="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:brightness-110 active:scale-95" style="background: rgba(167,139,250,0.10); color: var(--accent-highlight); border:1px solid rgba(167,139,250,0.14)">🧠 أفهم</button>
+            <button onclick="toast('🎯 أكمل خطتي')" class="rounded-full px-3.5 py-1.5 text-xs font-bold transition hover:brightness-110 active:scale-95" style="background: var(--accent); color: white; border:1px solid var(--accent)">🎯 أكمل خطتي</button>
+          </div>
+        </section>
+        <div class="glass rounded-[16px] p-4 text-xs leading-6" style="color: var(--muted)">
+          <p class="font-semibold" style="color: var(--text)">سلوك الظهور:</p>
+          <ul class="mt-1.5 space-y-1 list-disc pr-5">
+            <li>أول زيارة (أو لا تقدّم بعد): الكارت الكامل أعلاه يظهر كأول بلوك في الداشبورد.</li>
+            <li>بعد اختيار واحد أو الضغط "تخطّي": تُحفظ <span class="mono" style="color: var(--text)">localStorage.firstSessionDismissed = 1</span> — في الزيارات التالية يظهر هذا الشريط المصغّر فقط.</li>
+            <li>الشريط قابل للطيّ (dismiss) نهائيًا — لا يزعج المستخدم الراجع.</li>
+            <li>لا pop-up ولا modal يحجب الداشبورد — كل شيء inline وقابل للـ scroll.</li>
+          </ul>
+        </div>
+        <!-- Preview of real dashboard below -->
+        <div class="glass rounded-[20px] p-4">
+          <p class="text-xs font-semibold" style="color: var(--muted)">تحته مباشرة — نفس الداشبورد الحالي:</p>
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <div class="rounded-2xl p-4 text-center" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+              <p class="mono text-lg font-bold" style="color: var(--text)">21%</p>
+              <p class="text-xs" style="color: var(--muted)">تقدّم الخطة</p>
+            </div>
+            <div class="rounded-2xl p-4 text-center" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+              <p class="mono text-lg font-bold" style="color: var(--amber)">🔥 3 أيام</p>
+              <p class="text-xs" style="color: var(--muted)">السلسلة</p>
+            </div>
+          </div>
+          <div class="mt-3 rounded-2xl p-4" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+            <p class="text-sm font-bold" style="color: var(--text)">الخطوة الحالية — فيزياء: الحركة</p>
+            <p class="text-xs mt-1" style="color: var(--muted)">تابع من حيث توقفت · زر "تابع الخطوة" هو الـ CTA الأساسي</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== الحالة C: موبايل 375px ===== -->
+  <div id="panel-mobile" class="hidden">
+    <div class="flex justify-center">
+      <div class="w-[375px] shrink-0 rounded-[28px] p-3" style="background: #0B0D24; border:1px solid rgba(255,255,255,0.07); box-shadow: 0 20px 60px rgba(0,0,0,0.55);">
+        <!-- phone notch -->
+        <div class="mx-auto h-1.5 w-16 rounded-full mb-3" style="background: rgba(255,255,255,0.12)"></div>
+        <!-- phone header -->
+        <div class="rounded-[18px] p-3 flex items-center gap-2.5 mb-3" style="background: var(--card-primary); border:1px solid var(--rule)">
+          <span class="h-8 w-8 rounded-full flex items-center justify-center text-sm" style="background: var(--amber-soft)">👋</span>
+          <div>
+            <p class="text-xs font-bold" style="color: var(--text)">أهلاً، أحمد</p>
+            <p class="text-[11px]" style="color: var(--muted)">فيزياء · 3 / 14</p>
+          </div>
+          <span class="mr-auto mono text-[11px] px-2 py-1 rounded-full" style="background: rgba(251,146,60,0.12); color: var(--amber); border:1px solid rgba(251,146,60,0.12)">21%</span>
+        </div>
+        <!-- First Session — موبايل: كارت عمودي + grid 2 أعمدة -->
+        <div class="rounded-[22px] p-4 relative overflow-hidden" style="background: var(--card-primary); border:1px solid var(--rule);">
+          <div class="top-hairline"></div>
+          <div class="flex items-center gap-2">
+            <span class="h-8 w-8 rounded-xl flex items-center justify-center text-sm" style="background: rgba(124,92,255,0.12); color: var(--accent)">🎯</span>
+            <p class="text-[15px] font-bold" style="color: var(--text)">ماذا تريد أن تفعل اليوم؟</p>
+          </div>
+          <p class="mt-1 text-xs leading-5" style="color: var(--muted)">اختر نيّتك — نوصّلك مباشرة</p>
+          <div class="mt-4 grid grid-cols-2 gap-2.5">
+            <button onclick="toast('📚 أذاكر')" class="rounded-2xl p-3.5 text-right" style="background: rgba(124,92,255,0.08); border:1px solid rgba(124,92,255,0.14)">
+              <span class="text-lg">📚</span>
+              <p class="mt-1 text-sm font-bold" style="color: var(--text)">أذاكر</p>
+              <p class="text-[11px]" style="color: var(--muted)">ابدأ درسًا جديدًا</p>
+            </button>
+            <button onclick="toast('🔄 أراجع')" class="rounded-2xl p-3.5 text-right" style="background: rgba(45,212,191,0.07); border:1px solid rgba(45,212,191,0.12)">
+              <span class="text-lg">🔄</span>
+              <p class="mt-1 text-sm font-bold" style="color: var(--text)">أراجع</p>
+              <p class="text-[11px]" style="color: var(--muted)">ثبّت ما ذاكرته</p>
+            </button>
+            <button onclick="toast('📝 أختبر')" class="rounded-2xl p-3.5 text-right" style="background: rgba(251,146,60,0.07); border:1px solid rgba(251,146,60,0.12)">
+              <span class="text-lg">📝</span>
+              <p class="mt-1 text-sm font-bold" style="color: var(--text)">أختبر نفسي</p>
+              <p class="text-[11px]" style="color: var(--muted)">اختبر فهمك</p>
+            </button>
+            <button onclick="toast('🧠 أفهم')" class="rounded-2xl p-3.5 text-right" style="background: rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.13)">
+              <span class="text-lg">🧠</span>
+              <p class="mt-1 text-sm font-bold" style="color: var(--text)">أفهم حاجة صعبة</p>
+              <p class="text-[11px]" style="color: var(--muted)">اشرح لي ببساطة</p>
+            </button>
+            <button onclick="toast('🎯 أكمل خطتي')" class="col-span-2 rounded-2xl p-3.5 flex items-center gap-3 text-right" style="background: var(--accent); border:1px solid var(--accent)">
+              <span class="h-10 w-10 rounded-xl flex items-center justify-center text-lg shrink-0" style="background: rgba(255,255,255,0.18)">🎯</span>
+              <div>
+                <p class="text-sm font-bold text-white">أكمل خطتي</p>
+                <p class="text-xs text-white/80">الخطوة 3 من 14 · 21%</p>
+              </div>
+              <span class="mr-auto text-white/90">←</span>
+            </button>
+          </div>
+          <button onclick="toast('تخطي')" class="mt-3 w-full rounded-full py-2.5 text-xs font-semibold" style="background: rgba(255,255,255,0.06); color: var(--muted); border:1px solid var(--rule)">تخطّي — اذهب للداشبورد</button>
+        </div>
+        <p class="mt-3 text-center text-[11px]" style="color: var(--muted-2)">375px · شبكة 2 أعمدة · زر "أكمل خطتي" بعرض كامل ومميز</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== جدول التوجيه ===== -->
+  <div class="enter-3 mt-6 glass rounded-[20px] p-5 sm:p-6">
+    <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--text)"><span class="h-7 w-7 rounded-xl flex items-center justify-center text-xs" style="background: rgba(124,92,255,0.12); color: var(--accent)">↗</span> كل اختيار يوجّه إلى مسار موجود — لا صفحات جديدة</h3>
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs leading-5">
+      <div class="rounded-2xl p-3.5" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+        <p class="font-bold" style="color: var(--text)">📚 أذاكر</p>
+        <p style="color: var(--muted)">يscroll إلى <span class="mono" style="color: var(--text)">CurrentStepCard</span> أو يفتح <span class="mono" style="color: var(--text)">/lesson/[id]</span> للخطوة الحالية. لو لا خطة → <span class="mono" style="color: var(--text)">/dashboard/create</span></p>
+      </div>
+      <div class="rounded-2xl p-3.5" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+        <p class="font-bold" style="color: var(--text)">🔄 أراجع</p>
+        <p style="color: var(--muted)">يفتح <span class="mono" style="color: var(--text)">StudySections</span> (مراجعة) + بطاقات. مستقبلًا: صفحة مراجعة مخصصة — الآن نفس القسم.</p>
+      </div>
+      <div class="rounded-2xl p-3.5" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+        <p class="font-bold" style="color: var(--text)">📝 أختبر نفسي</p>
+        <p style="color: var(--muted)"><span class="mono" style="color: var(--text)">/exams</span> أو <span class="mono" style="color: var(--text)">/assessment</span> — بنك الأسئلة الحقيقي، لا أسئلة وهمية.</p>
+      </div>
+      <div class="rounded-2xl p-3.5" style="background: rgba(255,255,255,0.04); border:1px solid var(--rule)">
+        <p class="font-bold" style="color: var(--text)">🧠 أفهم حاجة صعبة</p>
+        <p style="color: var(--muted)"><span class="mono" style="color: var(--text)">/chat</span> أو <span class="mono" style="color: var(--text)">/ai-study-assistant</span> مع سياق المادة الحالية.</p>
+      </div>
+      <div class="rounded-2xl p-3.5" style="background: rgba(124,92,255,0.08); border:1px solid rgba(124,92,255,0.15)">
+        <p class="font-bold" style="color: var(--text)">🎯 أكمل خطتي ⭐</p>
+        <p style="color: var(--muted)"><span class="mono" style="color: var(--text)">CurrentStepCard</span> مباشرة — نفس زر "تابع الخطوة" الحالي. الـ CTA الأساسي، مميز بصريًا.</p>
+      </div>
+    </div>
+    <div class="mt-4 flex flex-wrap gap-2 text-xs">
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5" style="background: rgba(34,197,94,0.10); color: #4ade80; border:1px solid rgba(34,197,94,0.15)">✓ لا DB جديد</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5" style="background: rgba(34,197,94,0.10); color: #4ade80; border:1px solid rgba(34,197,94,0.15)">✓ لا endpoint جديد</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5" style="background: rgba(34,197,94,0.10); color: #4ade80; border:1px solid rgba(34,197,94,0.15)">✓ كل الأرقام من حالة الداشبورد (days/profiles)</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5" style="background: rgba(34,197,94,0.10); color: #4ade80; border:1px solid rgba(34,197,94,0.15)">✓ يحترم prefers-reduced-motion</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5" style="background: rgba(34,197,94,0.10); color: #4ade80; border:1px solid rgba(34,197,94,0.15)">✓ RTL + لوحة مفاتيح + aria-label</span>
+    </div>
+  </div>
+
+  <!-- ===== ملاحظات التنفيذ ===== -->
+  <div class="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="glass rounded-[20px] p-5">
+      <h4 class="text-sm font-bold flex items-center gap-2" style="color: var(--text)"><span>🧩</span> منطق الظهور المقترح</h4>
+      <pre class="mt-3 mono text-xs leading-5 p-3 rounded-xl overflow-x-auto" style="background: rgba(0,0,0,0.25); border:1px solid var(--rule); color: #C7CBE6" dir="ltr">// FirstSession.tsx — pure client, no new DB
+const dismissed = localStorage.getItem('firstSessionDismissed') === '1';
+const hasProgress = completedCount > 0 || days.length > 0;
+const showFull = !dismissed && !hasProgress; // أول زيارة
+const showMini = dismissed || hasProgress;     // راجع أو عنده تقدّم
+
+// onChoose(intent) → router.push(target) + localStorage.setItem('firstSessionDismissed','1')
+// onSkip()         → localStorage.setItem('firstSessionDismissed','1') + scroll to dashboard
+// Accessible: role="group" aria-label="ماذا تريد أن تفعل اليوم" + focus ring on cards</pre>
+    </div>
+    <div class="glass rounded-[20px] p-5">
+      <h4 class="text-sm font-bold flex items-center gap-2" style="color: var(--text)"><span>📐</span> التوافق مع الـ Roadmap</h4>
+      <ul class="mt-3 space-y-2 text-xs leading-5" style="color: var(--muted)">
+        <li class="flex gap-2"><span style="color: #4ade80">✓</span><span><b style="color: var(--text)">لا يتعارض</b> مع Dashboard الحالي — يُضاف كأول بلوك قبل <span class="mono" style="color: var(--text)">HeroCard</span>، وباقي الصفحة كما هي.</span></li>
+        <li class="flex gap-2"><span style="color: #4ade80">✓</span><span>يمهّد لـ <b style="color: var(--text)">Progress Experience</b> (الخطوة 2) — نفس نسبة <span class="mono" style="color: var(--text)">overallProgress</span> تُستخدم في كارت "أكمل خطتي".</span></li>
+        <li class="flex gap-2"><span style="color: #4ade80">✓</span><span>يمهّد لـ <b style="color: var(--text)">AI Assistant Integration</b> — اختيار "أفهم حاجة صعبة" يمرّر سياق المادة للمساعد.</span></li>
+        <li class="flex gap-2"><span style="color: #4ade80">✓</span><span>لا يسبق <b style="color: var(--text)">Gamification</b> — لا XP/Coins/Wheel هنا.</span></li>
+        <li class="flex gap-2"><span style="color: #9AA0C0">—</span><span>الملفات المقترحة: <span class="mono" style="color: var(--text)">app/dashboard/components/FirstSession.tsx</span> (جديد) + سطر واحد في <span class="mono" style="color: var(--text)">page.tsx</span>.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Approval actions -->
+  <div class="mt-6 flex flex-wrap items-center gap-3">
+    <span class="text-xs" style="color: var(--muted)">بعد الموافقة: سأُنشئ <span class="mono" style="color: var(--text)">FirstSession.tsx</span> بنفس التوكنز + أربطه في <span class="mono" style="color: var(--text)">page.tsx</span> كأول بلوك، مع نفس منطق الـ localStorage أعلاه — بدون تعديل أي بلوك موجود.</span>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden pointer-events-none">
+  <div class="rounded-full px-4 py-2.5 text-sm font-semibold shadow-xl flex items-center gap-2" style="background: #1A1D3A; color: #E7E9F5; border:1px solid rgba(255,255,255,0.08)">
+    <span id="toast-text"></span>
+  </div>
+</div>
+
+<script>
+  function showTab(which){
+    const panels = {first: 'panel-first', returning: 'panel-returning', mobile: 'panel-mobile'};
+    const tabs = {first: 'tab-first', returning: 'tab-returning', mobile: 'tab-mobile'};
+    Object.entries(panels).forEach(([k,id])=>{
+      document.getElementById(id).classList.toggle('hidden', k !== which);
+    });
+    Object.entries(tabs).forEach(([k,id])=>{
+      const el = document.getElementById(id);
+      if(k === which){
+        el.style.background = 'var(--accent)';
+        el.style.color = 'white';
+        el.style.borderColor = 'var(--accent)';
+      } else {
+        el.style.background = 'rgba(255,255,255,0.06)';
+        el.style.color = 'var(--muted)';
+        el.style.borderColor = 'var(--rule)';
+      }
+    });
+  }
+  let toastTimer=null;
+  function toast(msg){
+    const wrap = document.getElementById('toast');
+    document.getElementById('toast-text').textContent = msg + '  ·  (معاينة فقط)';
+    wrap.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> wrap.classList.add('hidden'), 2200);
+  }
+</script>
+</body>
+</html>

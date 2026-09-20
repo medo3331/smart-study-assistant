@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ماجيكلي - landing page mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #0d0d0d;
+    color: #e0e0e0;
+    line-height: 1.6;
+  }
+  a { color: #ffb400; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  .hero { background: #111; padding: 60px 20px; position: relative; overflow: hidden; }
+  .hero h1 { font-size: 2.8rem; margin-bottom: 1rem; color: #ffb400; }
+  .hero p { font-size: 1.2rem; margin-bottom: 2rem; max-width: 600px; color: #ccc; }
+  .hero .cta { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .hero .btn { padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  .hero .btn-primary { background: #ffb400; color: #0d0d0d; }
+  .hero .btn-ghost { background: transparent; color: #ffb400; border: 2px solid #ffb400; }
+  .steps { display: flex; justify-content: center; gap: 20px; margin-top: 30px; }
+  .step { text-align: center; }
+  .stepNum { background: #ffb400; color: #0d0d0d; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-bottom: 8px; }
+  .stepLine { width: 2px; height: 40px; background: #ffb400; margin: 0 auto; }
+  .social-proof { text-align: center; padding: 40px 20px; background: #151515; }
+  .social-proof .count { font-size: 2.2rem; color: #ffb400; margin-bottom: 1rem; }
+  .testimonials { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+  .testimonial { background: #1e1e1e; padding: 20px; border-radius: 8px; max-width: 300px; border-left: 4px solid #ffb400; }
+  .roles { padding: 60px 20px; }
+  .roles h2 { text-align: center; margin-bottom: 30px; color: #ffb400; }
+  .roles-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .role-card { background: #1e1e1e; padding: 24px; border-radius: 10px; border: 1px solid #2a2a2a; }
+  .role-card h3 { margin-top: 12px; color: #ffb400; }
+  .role-card p { color: #ccc; margin-bottom: 12px; }
+  .role-card ul { list-style: none; padding: 0; margin-bottom: 16px; }
+  .role-card li { padding: 4px 0; color: #ddd; }
+  .role-card .role-link { color: #ffb400; font-weight: 600; }
+  .capabilities, .feature-grid, .faq, .closing-cta { padding: 60px 20px; }
+  .capabilities h2, .feature-grid h2, .faq h2, .closing-cta h2 { text-align: center; margin-bottom: 30px; color: #ffb400; }
+  .faq-items { max-width: 800px; margin: 0 auto; }
+  .faq-item { background: #1e1e1e; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .faq-question { padding: 16px 20px; background: #252525; color: #ffb400; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .faq-answer { padding: 0 20px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; color: #ddd; }
+  .faq-item.active .faq-answer { max-height: 200px; }
+  .closing-cta { text-align: center; background: #151515; }
+  .closing-cta h2 { font-size: 2rem; margin-bottom: 1rem; }
+  .closing-cta .btn { margin: 0 8px; }
+  .closing-cta .trust { display: block; margin-top: 12px; font-size: 0.9rem; color: #aaa; }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Hero -->
+  <section class="hero" id="top">
+    <h1>
+      <span>للوصل لهدفك بسرعة،</span>
+      <span style="color:#ffb400;">ماجيكلي</span>
+      <span>هيوّفرلك كل الأدوات اللي محتاجها.</span>
+    </h1>
+    <p class="description">
+      كل أدوات المذاكرة اللي محتاجها في مكان واحد — ارفع ملزمتك، وخلّي ماجيكلي يبني خطتك الشخصية ويتابع تقدمك خطوة بخطوة.
+    </p>
+    <div class="cta">
+      <a href="/login?next=/assessment" class="btn btn-primary">ابدأ مجاناً الآن</a>
+      <a href="/features" class="btn btn-ghost">استكشف المميزات</a>
+    </div>
+    <!-- Steps -->
+    <div class="steps">
+      <div class="step"><div class="stepNum">1</div><span>ارفع ملزمتك</span></div>
+      <div class="stepLine"></div>
+      <div class="step"><div class="stepNum">2</div><span>يولّد لك خطتك</span></div>
+      <div class="stepLine"></div>
+      <div class="step"><div class="stepNum">3</div><span>ابدأ المذاكرة</span></div>
+    </div>
+  </section>
+
+  <!-- Social Proof -->
+  <section class="social-proof" id="social">
+    <div class="count">+5,000 طالب</div>
+    <p>يثقون بماجيكلي لتحسين نتائجهم الدراسية</p>
+    <div class="testimonials">
+      <div class="testimonial">
+        <p>"ماجيكلي غيرّ طريقة مذاكرتي helt، بفضل الخطط المخصّصة بوجهت دروسي في نصف الوقت."</p>
+        <p>— أحمد، طالب ثانوية عامة</p>
+      </div>
+      <div class="testimonial">
+        <p>"المنصة سهلة الاستعمال وتدعم PDF والصور، ومعاه أقدّر أجهّز امتحاناتى بسرعة."</p>
+        <p>— سارة، طالبة جامعية</p>
+      </div>
+      <div class="testimonial">
+        <p>"بفضل ماجيكلي، حسّنت درجتي في matematik من 65% إلى 92% في شهرين."</p>
+        <p>— علي، طالب كلية هندسة</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roles -->
+  <section class="roles" id="roles">
+    <h2>منصة واحدة. <span>لكل مسارك.</span></h2>
+    <p>ماجيكلي بيتكيف حسب مين إنت — مش نفس التجربة للجميع.</p>
+    <div class="roles-grid">
+      <div class="role-card">
+        <div style="font-size:2rem;">🎓</div>
+        <h3>طالب</h3>
+        <p>خطط مذاكرة ذكية تتكيف مع مستوى وفقراتك، مع شرح فوري واختبارات تفاعلية.</p>
+        <ul>
+          <li>ملخصات ذكية حسب materia</li>
+          <li>مساعد ذكاء اصطناعي 24/7</li>
+          <li>اختبارات وتقييم مستمر</li>
+          <li>جدول مرن مع تذكيرات</li>
+        </ul>
+        <div class="role-link">استكشف ←</div>
+      </div>
+      <div class="role-card">
+        <div style="font-size:2rem;">💼</div>
+        <h3>خريج</h3>
+        <p>بناء مهارات مهنية وإعداد سيرة ذاتية احترافية مع توجيه لمقابلات عمل وفرص تدريب.</p>
+        <ul>
+          <li>إعداد سيرة ذاتية محسّنة</li>
+          <li>إرشاد مهني مخصص</li>
+          <li>تدريب مقابلات وأسئلة شائعة</li>
+          <li>دروس مهارات تقنية وليّنة</li>
+        </ul>
+        <div class="role-link">استكشف ←</div>
+      </div>
+      <div class="role-card">
+        <div style="font-size:2rem;">🚀</div>
+        <h3>فريلانسر</h3>
+        <p>إدارة مشاريع عملاء، تنظيم وقت، وإcreation عروض احترافية لزيادة الدخل.</p>
+        <ul>
+          <li>مولد عروض الأسعار والعقود</li>
+          <li>لوحة تحكم للمشاريع والمهام</li>
+          <li>مساعد كتابة ذكي للتواصل مع العملاء</li>
+          <li>تتبع الوقت والفواتير</li>
+        </ul>
+        <div class="role-link">استكشف ←</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Capabilities (unchanged placeholder) -->
+  <section class="capabilities" id="capabilities">
+    <h2>إيه اللي <span>ماجيكلي</span> يقدر يعمله؟</h2>
+    <p>Lorem ipsum placeholder...</p>
+  </section>
+
+  <!-- Feature Grid (placeholder) -->
+  <section class="feature-grid" id="features">
+    <h2>المميزات الرئيسية</h2>
+    <p>Lorem ipsum placeholder...</p>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq" id="faq">
+    <h2>الأسئلة الشائعة</h2>
+    <div class="faq-items">
+      <div class="faq-item">
+        <div class="faq-question">هل ماجيكلي مجاني؟ <span>+</span></div>
+        <div class="faq-answer">نعم، توجد خطة مجانية كاملة مع جميع الميزات الأساسية. هناك ook خطة احترافية للميزات المتقدمة.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question">هل يدعم ملفات PDF والصور؟ <span>+</span></div>
+        <div class="faq-answer">نعم، يمكنك رفع PDF والصور وسيقوم ماجيكلي باستخراج النصوص وإنشاء ملخصات وأسئلة منها.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question">هل مناسب للمرحلة الثانوية؟ <span>+</span></div>
+        <div class="faq-answer">نعم، المنصة تغطي المناهج من الإعدادي до الثانوي مع محتوى مخصص لكل مستوى.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question">هل أحتاج بطاقة ائتمان للتسجيل؟ <span>+</span></div>
+        <div class="faq-answer">لا، التسجيل مجاني ولا يتطلب بطاقة ائتمان. يمكنك البدء فورًا ببريدك الإلكتروني فقط.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question">هل يمكنني استخدامه باللغه الإنجليزية؟ <span>+</span></div>
+        <div class="faq-answer">نعم، يدعم العربية والإنجليزية تمامًا مع 전환 سلس بين اللغتين.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Closing CTA -->
+  <section class="closing-cta" id="cta">
+    <h2>جاهز تبدأ رحلتك؟</h2>
+    <p>انضم لآلاف الطلاب اللي غيرّوا طريقة مذاكرتهم مع ماجيكلي.</p>
+    <div>
+      <a href="/login?next=/assessment" class="btn btn-primary">ابدأ مجاناً الآن</a>
+      <a href="/features" class="btn btn-ghost">استكشف المميزات</a>
+    </div>
+    <div class="trust">بدون بطاقة ائتمان • ابدأ في أقل من دقيقة</div>
+  </section>
+</div>
+</body>
+</html>

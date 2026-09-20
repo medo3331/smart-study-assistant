@@ -104,9 +104,9 @@ export function buildWheelBranches(opts: { currentDay?: number | null; currentDa
       latin: "Lesson",
       icon: <GraduationCap size={18} strokeWidth={2} aria-hidden />,
       kind: "link",
-      // ⚠️ المسار الحقيقي /lesson/[dayId] (UUID من study_days). رقم اليوم (currentDay) للعرض فقط.
-      href: currentDayId ? `/lesson/${currentDayId}` : (currentDay ? `/lesson/${currentDay}` : "/dashboard/create"),
-      note: currentDay ? `يوم ${currentDay}` + (currentDayId ? ` (${currentDayId.slice(0, 8)}...)` : ``) : "مفيش خطة بعد → /dashboard/create",
+      // FIX: link uses UUID (currentDayId) not display number (currentDay)
+      href: currentDayId ? `/lesson/${currentDayId}` : (currentDay ? "/lesson/" + String(currentDay) : "/dashboard/create"),
+      note: currentDay ? `يوم ${currentDay}` + (currentDayId ? ` (UUID: ${currentDayId.slice(0,8)}...)` : ``) : "مفيش خطة بعد → /dashboard/create",
     },
     { id: "workspace", label: "مساحة العمل", latin: "Workspace", icon: <FolderOpen size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/workspace", note: "الملفات والمذاكرة" },
     { id: "worship", label: "عباداتي", latin: "Worship", icon: <Landmark size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/worship", note: "الصلوات + الأذكار + القرآن" },
@@ -138,8 +138,8 @@ export interface WheelChartPoint {
 
 export interface MagicWheelProps {
   /* التراك الحالي (من صفحة الداشبورد) */
-  currentDay?: number;
-  currentDayId?: string;
+  currentDay?: number;  /* number for display label ONLY — stays number */
+  currentDayId?: string; /* UUID from study_days.id — used ONLY for /lesson/ link */
   totalDays?: number;
   subject?: string;
   completedSteps?: number;
@@ -284,7 +284,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   /* أقل من 640px (زي ما البريف بيعمل) → شبكة عمودية بدل الدائرة */
   const isVertical = useMediaQuery("(max-width: 640px)");
 
-  const branches = buildWheelBranches({ currentDay });
+  const branches = buildWheelBranches({ currentDay, currentDayId });
 
   /* الإعدادات: إجراء مش مسار. من جوه الداشبورد بنفتح الدرج على طول؛ من أي
      صفحة تانية بنكتب النية في sessionStorage وننقل — نفس مفتاح/فورمات
