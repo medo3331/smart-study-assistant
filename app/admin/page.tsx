@@ -67,6 +67,21 @@ export default async function AdminControlCenter({
   const userCanAudit = await hasPermission(supabase, user?.id || null, user?.email ?? null, "audit.read");
   const userCanBan = await hasPermission(supabase, user?.id || null, user?.email ?? null, "users.ban");
 
+  // ── EPIC-2 / Rewards — load data for display (read-only actions)
+  let rewardsWinners: any[] = [];
+  let mostActive: any[] = [];
+  let rewardsDataError: string | null = null;
+  try {
+    const [winnersRes, activeRes] = await Promise.all([
+      getRewardsHistory(10),
+      getMostActiveUsers(10),
+    ]);
+    rewardsWinners = winnersRes || [];
+    mostActive = activeRes || [];
+  } catch (e: any) {
+    rewardsDataError = e?.message || "تعذر جلب بيانات المكافآت";
+  }
+
   // ── Existing stats ──
   const [{ count: usersCount }, { count: lessonsCount }, { data: recentAiLogs }, { data: adminsList }] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
@@ -555,7 +570,20 @@ export default async function AdminControlCenter({
             <table className="w-full text-[11px] text-slate-200">
               <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-3 py-2">المتلقي</th><th className="text-right px-3 py-2">نوع المكافأة</th><th className="text-right px-3 py-2">القيمة</th><th className="text-right px-3 py-2">التاريخ</th></tr></thead>
               <tbody>
-                <tr><td colSpan={4} className="p-3 text-center text-slate-500">سجل المكافآت يظهر من قاعدة البيانات عند الاتصال.</td></tr>
+                {rewardsDataError ? (
+                  <tr><td colSpan={4} className="p-3 text-center text-rose-400 text-[10px]">{rewardsDataError}</td></tr>
+                ) : rewardsWinners.length === 0 ? (
+                  <tr><td colSpan={4} className="p-3 text-center text-slate-500 text-[10px]">لا توجد مكافآت مسجلة بعد.</td></tr>
+                ) : (
+                  rewardsWinners.map((w: any) => (
+                    <tr key={w.id} className="border-t border-slate-700/40 hover:bg-slate-800/30">
+                      <td className="px-3 py-2 text-[10px] text-slate-300">{w.recipient_display_name || w.recipient_user_id?.slice(0,8)+"..."}</td>
+                      <td className="px-3 py-2 text-[10px] text-amber-300 font-mono">{w.reward_type}</td>
+                      <td className="px-3 py-2 text-[10px] text-slate-200">{w.reward_value}</td>
+                      <td className="px-3 py-2 text-[10px] text-slate-500">{w.created_at ? new Date(w.created_at).toLocaleDateString("ar-EG") : "—"}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -565,10 +593,20 @@ export default async function AdminControlCenter({
         <div>
           <h3 className="text-sm font-bold text-emerald-300 mb-2">🔥 الأكثر نشاطًا (من ai_credit_ledger + coin_ledger)</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 text-xs text-slate-400">
-              <p className="font-bold text-slate-200">مؤشر النشاط</p>
-              <p>AI Credits (24h) + Coins Earns (24h)</p>
-            </div>
+            {rewardsDataError ? (
+              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-xs text-rose-400">{rewardsDataError}</div>
+            ) : mostActive.length === 0 ? (
+              <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 text-xs text-slate-500">لا توجد بيانات نشاط متاحة.</div>
+            ) : (
+              mostActive.slice(0, 3).map((a: any) => (
+                <div key={a.user_id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 text-xs space-y-1">
+                  <p className="font-bold text-slate-200">{a.display_name || a.email || a.user_id?.slice(0,8)+"..."}</p>
+                  <p className="text-emerald-300">AI Credits (24h): <span className="font-mono text-white">{a.ai_credits_24h}</span></p>
+                  <p className="text-amber-300">Coins Earns (24h): <span className="font-mono text-white">{a.coin_earns_24h}</span></p>
+                  <p className="text-slate-500 text-[10px]">Score: {a.total_activity_score}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
