@@ -166,7 +166,7 @@ export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRec
   "plans.manage":       { key: "plans.manage", allowed_roles: ["owner"], is_sensitive: true },
   "trial.manage":       { key: "trial.manage", allowed_roles: ["owner"], is_sensitive: true },
   "models.manage":      { key: "models.manage", allowed_roles: ["owner"], is_sensitive: true },
-  "rewards.manage":     { key: "rewards.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "rewards.manage":     { key: "rewards.manage", allowed_roles: ["owner"], is_sensitive: true },
   "admins.manage":      { key: "admins.manage", allowed_roles: ["owner"], is_sensitive: true },
   "files.moderate":     { key: "files.moderate", allowed_roles: ["owner","admin","support"], is_sensitive: true },
   "audit.read":         { key: "audit.read", allowed_roles: ["owner","admin","support"], is_sensitive: false },

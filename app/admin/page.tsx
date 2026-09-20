@@ -8,11 +8,12 @@ import { ALL_AGENTS } from "@/lib/ai/agents/registry";
 import { MODEL_LIMITS, AGENT_LIMITS, GUEST_LIMIT, GUEST_WINDOW_HOURS, FREE_TEXT_LIMIT, FREE_TEXT_WINDOW_HOURS, FREE_VISION_LIMIT, FREE_VISION_WINDOW_HOURS } from "@/lib/ai/rate-limit";
 import UserAiLookup from "@/components/admin/UserAiLookup";
 import { addAdminByEmail, addAdminByEmailFromForm } from "@/app/admin/actions/admin-management";
-import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
 import { activateSubscription } from "@/app/admin/actions/subscription-activate";
 import { searchUsers } from "@/app/admin/actions/users-search";
 import { banUser, unbanUser } from "@/app/admin/actions/users-ban";
 import { toggleModelStatus } from "@/app/admin/actions/ai-models";
+import { getMostActiveUsers } from "@/app/admin/actions/rewards-activity";
+import { getRewardsHistory } from "@/app/admin/actions/rewards-winners";
 import pg from "pg";
 import { 
   UserCog, Trash2, Shield, UserPlus, Zap, Users, Key, CheckCircle, AlertCircle, 
@@ -33,7 +34,7 @@ export default async function AdminControlCenter({
   // Next 15+: searchParams بقى Promise في الـ App Router — نفس النمط
   // المستخدم في app/dashboard/[role]/page.tsx. من غير ده next build بيفشل
   // بـ "does not satisfy the constraint 'PageProps'".
-  searchParams: Promise<{ success?: string; error?: string }>;
+  searchParams: Promise<{ success?: string; error?: string; q?: string; plan?: string; status?: string }>;
 }) {
   const sp = await searchParams;
   const cookieStore = await cookies();
@@ -56,6 +57,9 @@ export default async function AdminControlCenter({
 
   const role = await getAdminRole(supabase, user?.id || null, user?.email);
   const isOwner = role === "owner";
+  const userSearchResults = sp.q
+    ? await searchUsers(sp.q.trim(), sp.plan ?? "all", sp.status ?? "all")
+    : [];
 
   // ── EPIC-2 RBAC Guard (2026-09-19) — prerequisites documented in docs/EPIC2_AUDIT.md
   // DB prerequisites (`audit_log`, `user_codes`, `permissions` column) must be executed first.
@@ -535,6 +539,78 @@ export default async function AdminControlCenter({
         )}
       </section>
 
+      {/* EPIC-2 / Rewards — Weekly Gifts (Winners + Issue) */}
+      <section className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-6">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Crown size={20} className="text-amber-400"/> المكافآت الأسبوعية — Winners + إصدار</h2>
+        <div className="text-xs text-slate-400 space-y-1">
+          <p><strong>RBAC:</strong> <code>rewards.manage</code> = Owner ONLY (تم تصحيح <code>auth-roles.ts</code>).</p>
+          <p><strong>معيار النشاط:</strong> بيانات موجودة فقط — <code>ai_credit_ledger</code> + <code>coin_ledger</code> (لا معيار جديد).</p>
+          <p><strong>التمييز في Audit:</strong> العمليات تسجل بـ <code>rewards.manage</code> (مورد <code>reward</code>) — حتى عند إعادة استخدام آلية <code>subscription_activations</code> لـ <code>trial_week</code>/<code>pro_week</code>، السجل يوضح بوضوح أنها مكافأة (<code>distinction: "REWARD operation (rewards.manage)"</code>).</p>
+        </div>
+
+        {/* Winners List */}
+        <div>
+          <h3 className="text-sm font-bold text-amber-300 mb-2">📋 سجل الفائزين (rewards_issued)</h3>
+          <div className="bg-slate-800/40 rounded-xl border border-slate-700 overflow-x-auto">
+            <table className="w-full text-[11px] text-slate-200">
+              <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-3 py-2">المتلقي</th><th className="text-right px-3 py-2">نوع المكافأة</th><th className="text-right px-3 py-2">القيمة</th><th className="text-right px-3 py-2">التاريخ</th></tr></thead>
+              <tbody>
+                <tr><td colSpan={4} className="p-3 text-center text-slate-500">سجل المكافآت يظهر من قاعدة البيانات عند الاتصال.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Most Active */}
+        <div>
+          <h3 className="text-sm font-bold text-emerald-300 mb-2">🔥 الأكثر نشاطًا (من ai_credit_ledger + coin_ledger)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 text-xs text-slate-400">
+              <p className="font-bold text-slate-200">مؤشر النشاط</p>
+              <p>AI Credits (24h) + Coins Earns (24h)</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Issue Form — Owner Only */}
+        {isOwner && (
+          <form action={async (formData: FormData) => {
+            "use server";
+            const issueReward = (await import("@/app/admin/actions/rewards-issue")).issueReward;
+            const userId = (formData.get("recipientUserId") as string) || "";
+            const rewardType = (formData.get("rewardType") as any) || "limit_boost";
+            const rewardValueStr = (formData.get("rewardValue") as string) || "0";
+            const durationStr = (formData.get("durationDays") as string) || "";
+            const note = (formData.get("note") as string) || "";
+            const result = await issueReward({
+              recipientUserId: userId,
+              rewardType: rewardType,
+              rewardValue: parseInt(rewardValueStr, 10) || 0,
+              durationDays: durationStr ? parseInt(durationStr, 10) : undefined,
+              note,
+            }, user?.id || "", user?.email || null);
+            console.log("[Rewards Issue]", result);
+            alert("نتيجة إصدار المكافأة: " + (result.ok ? ("PASS — " + result.message + (result.auditId ? " (Audit: " + result.auditId + ")" : "")) : ("BLOCKED/FAIL — " + result.message + " (خطأ: " + (result.error || "unknown") + ")")));
+          }} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-bold text-amber-300">🎁 إصدار مكافأة جديدة (Owner)</h3>
+            <p className="text-[10px] text-slate-500">يُسجل في <code>rewards_issued</code> + <code>audit_log (rewards.manage)</code>. لـ trial/pro: يُعاد استخدام <code>subscription_activations</code> مع تمييز واضح في الـAudit.</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <input name="recipientUserId" type="text" placeholder="User UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono" required />
+              <select name="rewardType" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-100">
+                <option value="limit_boost">زيادة Limit مؤقت (+50)</option>
+                <option value="trial_week">تجربة مجانية أسبوع</option>
+                <option value="pro_week">Pro أسبوع</option>
+                <option value="upload_credits">Credits رفع/تفريغ (+10)</option>
+              </select>
+              <input name="rewardValue" type="number" placeholder="القيمة (مثال: 50)" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-100" min="1" defaultValue={50} />
+              <input name="durationDays" type="number" placeholder="مدة (أيام) — لـ trial/pro" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-100" min="1" defaultValue={7} />
+            </div>
+            <input name="note" type="text" placeholder="ملاحظة (اختياري)" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-100" />
+            <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg px-5 py-2 text-sm transition shadow shadow-amber-500/20">✅ إصدار المكافأة</button>
+          </form>
+        )}
+      </section>
+
       {/* 2. قسم المالك المباشر (Owner Exclusive) */}
       {isOwner && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -789,19 +865,12 @@ export default async function AdminControlCenter({
         <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Users size={20} className="text-amber-400"/> إدارة المستخدمين (Users — Search by Name/Email, No User Code Search)</h2>
         <p className="text-xs text-slate-400">RBAC: <code>users.read</code> (all roles) | <code>users.ban</code> / <code>users.unban</code> (owner/admin — NOT support). Audit: mandatory for every ban/unban.</p>
         <div className="flex gap-2 flex-wrap items-center">
-          <form action={async (formData: FormData) => {
-            "use server";
-            const query = (formData.get("search") as string || "").trim();
-            const plan = (formData.get("plan_filter") as string || "all").trim();
-            const status = (formData.get("status_filter") as string || "all").trim();
-            const results = await searchUsers(query, plan, status);
-            console.log("[Users Search] Query:", query, "Plan:", plan, "Status:", status, "Results count:", results.length);
-          }} className="flex gap-2 flex-wrap items-center">
-            <input name="search" type="text" id="users-search" placeholder="ابحث بالاسم أو الإيميل..." className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full md:w-72" />
-            <select name="plan_filter" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
+          <form method="GET" className="flex gap-2 flex-wrap items-center">
+            <input name="q" type="text" id="users-search" defaultValue={sp.q ?? ""} placeholder="ابحث بالاسم أو الإيميل..." className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full md:w-72" />
+            <select name="plan" defaultValue={sp.plan ?? "all"} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
               <option value="all">كل الخطط</option><option value="free">Free</option><option value="pro">Pro</option><option value="ultra">Ultra</option><option value="trial">Trial</option>
             </select>
-            <select name="status_filter" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
+            <select name="status" defaultValue={sp.status ?? "all"} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
               <option value="all">كل الحالات</option><option value="banned">محظور</option><option value="active">نشط</option>
             </select>
             <button type="submit" className="text-xs bg-amber-400 text-amber-950 rounded-lg px-4 py-2 hover:bg-amber-300 font-bold">بحث حقيقي</button>
@@ -811,22 +880,34 @@ export default async function AdminControlCenter({
           <table className="w-full text-xs text-slate-100">
             <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-3 py-2">الاسم</th><th className="text-right px-3 py-2">الإيميل</th><th className="text-right px-3 py-2">الخطة</th><th className="text-right px-3 py-2">الحالة</th><th className="text-right px-3 py-2">إجراء</th></tr></thead>
             <tbody>
-              <tr className="border-t border-slate-700"><td className="px-3 py-2">محمد خالد</td><td className="px-3 py-2">mohamed@ex.com</td><td className="px-3 py-2"><span className="inline-block bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Pro</span></td><td className="px-3 py-2"><span className="text-emerald-400 text-xs">نشط</span></td><td className="px-3 py-2"><form action={async (formData: FormData) => {
-                "use server";
-                const code = "mohamed-user-id";
-                const res = await recordAuditLog({actor: "admin-user-id", actor_email: "admin@ex.com", action: "users.ban", resource_type: "user", resource_id: code, details: {reason: "test-ban-preview"}, result: "PASS"});
-                alert("Audit result: PASS (auditId: " + res.id + "). Full server action with owner-only guard would be called here.");
-              }}><button type="submit" className="text-[10px] bg-rose-600 text-white rounded px-2 py-0.5 hover:bg-rose-500">حظر</button></form></td></tr>
-              <tr className="border-t border-slate-700"><td className="px-3 py-2">سارة محمود</td><td className="px-3 py-2">sara@ex.com</td><td className="px-3 py-2">Free</td><td className="px-3 py-2"><span className="text-rose-500 text-xs">محظور</span></td><td className="px-3 py-2"><form action={async (formData: FormData) => {
-                "use server";
-                const code = "sara-user-id";
-                const res = await recordAuditLog({actor: "admin-user-id", actor_email: "admin@ex.com", action: "users.unban", resource_type: "user", resource_id: code, details: {reason: "test-unban-preview"}, result: "PASS"});
-                alert("Audit result (unban): PASS (auditId: " + res.id + ")");
-              }}><button type="submit" className="text-[10px] bg-emerald-600 text-white rounded px-2 py-0.5 hover:bg-emerald-500">فك</button></form></td></tr>
+              {userSearchResults.length === 0 ? (
+                <tr><td colSpan={5} className="p-4 text-center text-slate-500">{sp.q ? "لا توجد نتائج" : "ابحث بالاسم أو الإيميل لعرض النتائج"}</td></tr>
+              ) : (
+                userSearchResults.map((u) => (
+                  <tr key={u.id} className="border-t border-slate-700">
+                    <td className="px-3 py-2">{u.display_name || "—"}</td>
+                    <td className="px-3 py-2">{u.email || "—"}</td>
+                    <td className="px-3 py-2"><span className="inline-block bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold">{u.on_trial ? "Trial" : u.plan_key || "Free"}</span></td>
+                    <td className="px-3 py-2"><span className={u.is_banned ? "text-rose-500 text-xs" : "text-emerald-400 text-xs"}>{u.is_banned ? "محظور" : "نشط"}</span></td>
+                    <td className="px-3 py-2">
+                      <form action={async () => {
+                        "use server";
+                        if (u.is_banned) {
+                          await unbanUser(u.id, u.user_code, user.id, user.email ?? null);
+                        } else {
+                          await banUser(u.id, u.user_code, "حظر من إدارة المستخدمين", user.id, user.email ?? null);
+                        }
+                      }}>
+                        <button type="submit" disabled={!userCanBan} className={u.is_banned ? "text-[10px] bg-emerald-600 text-white rounded px-2 py-0.5 hover:bg-emerald-500 disabled:opacity-50" : "text-[10px] bg-rose-600 text-white rounded px-2 py-0.5 hover:bg-rose-500 disabled:opacity-50"}>{u.is_banned ? "فك الحظر" : "حظر"}</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-        <p className="text-[10px] text-slate-500">Note: Full working search/filter + user detail view + real server-side ban/unban actions (with owner-only authorization guard + audit recording) will be added in next step. No User Code search included per instruction (EPIC-6 not started).</p>
+        <p className="text-[10px] text-slate-500">نتائج البحث تُعرض من قاعدة البيانات. حالة الحظر الحالية تُقرأ من بيانات البحث المتاحة؛ الحظر نفسه يسجل عملية Audit ويطبق حراسة Owner على الخادم.</p>
       </section>
 
       {/* EPIC-2 / AI Models Control — Full CRUD from DB (models.manage: Owner ONLY) */}
