@@ -628,7 +628,8 @@ export default async function AdminControlCenter({
               note,
             }, user?.id || "", user?.email || null);
             console.log("[Rewards Issue]", result);
-            alert("نتيجة إصدار المكافأة: " + (result.ok ? ("PASS — " + result.message + (result.auditId ? " (Audit: " + result.auditId + ")" : "")) : ("BLOCKED/FAIL — " + result.message + " (خطأ: " + (result.error || "unknown") + ")")));
+            if (result.ok) redirect("/admin?success=" + encodeURIComponent(result.message || "تم إصدار المكافأة"));
+            else redirect("/admin?error=" + encodeURIComponent(result.message || "فشل إصدار المكافأة"));
           }} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3">
             <h3 className="text-sm font-bold text-amber-300">🎁 إصدار مكافأة جديدة (Owner)</h3>
             <p className="text-[10px] text-slate-500">يُسجل في <code>rewards_issued</code> + <code>audit_log (rewards.manage)</code>. لـ trial/pro: يُعاد استخدام <code>subscription_activations</code> مع تمييز واضح في الـAudit.</p>
@@ -860,7 +861,8 @@ export default async function AdminControlCenter({
         } else {
           console.log("[Subscription Activation] PASS:", result);
         }
-        alert("نتيجة التفعيل: " + (result.ok ? ("PASS — " + result.message + " (Audit: " + result.auditId + ")") : ("BLOCKED/FAIL — " + result.message + " (خطأ: " + result.error + ")")));
+        if (result.ok) redirect("/admin?success=" + encodeURIComponent(result.message || "تم التفعيل"));
+        else redirect("/admin?error=" + encodeURIComponent(result.message || "فشل التفعيل"));
       }} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
@@ -982,7 +984,8 @@ export default async function AdminControlCenter({
                   const adminEmail = (formData.get("admin_email") as string) || null;
                   const res = await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);
                   console.log("[AI Model Toggle]", { modelId, enabledTarget, ok: res.ok, auditId: res.auditId, msg: res.message });
-                  alert("نتيجة التفعيل: " + (res.ok ? ("PASS — " + res.message + (res.auditId ? " (Audit: " + res.auditId + ")" : "")) : ("BLOCKED/FAIL — " + res.message + " (خطأ: " + (res.error || "unknown") + ")")));
+                  if (res.ok) redirect("/admin?success=" + encodeURIComponent(res.message || "تم التبديل"));
+                  else redirect("/admin?error=" + encodeURIComponent(res.message || "فشل التبديل"));
                 }} className="inline">
                   <input type="hidden" name="model_id" value="openai/gpt-oss-120b" />
                   <input type="hidden" name="target_enabled" value="false" />
@@ -1000,7 +1003,8 @@ export default async function AdminControlCenter({
                   const adminEmail = (formData.get("admin_email") as string) || null;
                   const res = await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);
                   console.log("[AI Model Toggle]", { modelId, enabledTarget, ok: res.ok, auditId: res.auditId, msg: res.message });
-                  alert("نتيجة التفعيل: " + (res.ok ? ("PASS — " + res.message + (res.auditId ? " (Audit: " + res.auditId + ")" : "")) : ("BLOCKED/FAIL — " + res.message + " (خطأ: " + (res.error || "unknown") + ")")));
+                  if (res.ok) redirect("/admin?success=" + encodeURIComponent(res.message || "تم التبديل"));
+                  else redirect("/admin?error=" + encodeURIComponent(res.message || "فشل التبديل"));
                 }} className="inline">
                   <input type="hidden" name="model_id" value="nvidia/nemotron-3.5-lightning" />
                   <input type="hidden" name="target_enabled" value="false" />
@@ -1018,7 +1022,8 @@ export default async function AdminControlCenter({
                   const adminEmail = (formData.get("admin_email") as string) || null;
                   const res = await toggleModelStatus(modelId, enabledTarget, adminId, adminEmail);
                   console.log("[AI Model Toggle]", { modelId, enabledTarget, ok: res.ok, auditId: res.auditId, msg: res.message });
-                  alert("نتيجة التفعيل: " + (res.ok ? ("PASS — " + res.message + (res.auditId ? " (Audit: " + res.auditId + ")" : "")) : ("BLOCKED/FAIL — " + res.message + " (خطأ: " + (res.error || "unknown") + ")")));
+                  if (res.ok) redirect("/admin?success=" + encodeURIComponent(res.message || "تم التبديل"));
+                  else redirect("/admin?error=" + encodeURIComponent(res.message || "فشل التبديل"));
                 }} className="inline">
                   <input type="hidden" name="model_id" value="deepseek-ai/deepseek-v4-flash" />
                   <input type="hidden" name="target_enabled" value="true" />
