@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Playfair_Display } from 'next/font/google';
+import { useLanguage } from '@/lib/i18n/LanguageProvider';
 import styles from './Capabilities.module.css';
 import PreviewCard from './PreviewCard';
 
@@ -13,14 +14,6 @@ const playfair = Playfair_Display({
   display: 'swap',
   variable: '--font-playfair-display-src',
 });
-
-const tabs = [
-  { id: 'learn', label: '📖 تعلم' },
-  { id: 'search', label: '🔍 بحث' },
-  { id: 'create', label: '✨ إنشاء' },
-  { id: 'solve', label: '🧩 حل' },
-  { id: 'plan', label: '🗓️ خطط' },
-];
 
 /* ⚠️ المسارات دي لازم تفضل حقيقية: /learning /search /create /solve /plan
    مش موجودة في المشروع، فاتوجّهنا للمسارات الموجودة فعلاً عشان مايبقاش
@@ -33,41 +26,20 @@ const tabHrefs: Record<string, string> = {
   plan: '/lesson',
 };
 
-const tabContent: Record<string, { title: string; desc: string; items: string[]; cta: string }> = {
-  learn: {
-    title: 'اتعلم أي حاجة بالطريقة الذكية',
-    desc: 'احصل على دروس مخصصة، فيديوهات، ملاحظات، واختبارات تفاعلية اتصمّمت ليك انت بالذات.',
-    items: ['دروس تفاعلية', 'شرح بالذكاء الاصطناعي', 'تدريب واختبار مستمر'],
-    cta: 'شوفها بنفسك',
-  },
-  search: {
-    title: 'بحث فعال وجاف',
-    desc: 'اكتشف الكتب والمقالات والموارد بسرعة وسهولة باستخدام محركات البحث المتقدمة ومجالات المعرفة.',
-    items: ['محركات بحث ذكية', 'فلاتر متقدمة', 'مخزن مرجعي ضخم'],
-    cta: 'جرب الآن',
-  },
-  create: {
-    title: 'إنشاء محتوى مبتكر',
-    desc: 'استخدم الأدوات الذكية لإنشاء أسئلة، ملخصات، ملاحظات، ورسوم بيانية بسهولة وسرعة.',
-    items: ['مولّد ملخصات', 'أسلوب مخصص', 'تنسيقات متعددة'],
-    cta: 'ابدأ الإنشاء',
-  },
-  solve: {
-    title: 'حل مسائل معقدة',
-    desc: 'يمكنك استخدام ماجيكلي لحل المسائل الصعبة، المسائل الرياضية والعلمية خطوة بخطوة.',
-    items: ['حل مسائل رياضية', 'شرح مفصل', 'دعم لغات متعددة'],
-    cta: 'حل الآن',
-  },
-  plan: {
-    title: 'تخطيط دراسي متكامل',
-    desc: 'ابني جدولاً زمنياً دراسياً مخصصاً يناسب أهدافك ومستواك، مع تتبع التقدم يومياً.',
-    items: ['جدول مرن', 'تذكير تلقائي', 'تقييم دوري'],
-    cta: 'خطط الآن',
-  },
-};
-
 export default function Capabilities() {
+  const { t } = useLanguage();
   const [active, setActive] = useState('learn');
+  const tabs = [
+    { id: 'learn', label: t.cap_learn_label }, { id: 'search', label: t.cap_search_label },
+    { id: 'create', label: t.cap_create_label }, { id: 'solve', label: t.cap_solve_label }, { id: 'plan', label: t.cap_plan_label },
+  ];
+  const tabContent: Record<string, { title: string; desc: string; items: string[]; cta: string }> = {
+    learn: { title: t.cap_learn_title, desc: t.cap_learn_desc, items: [t.cap_learn_i1, t.cap_learn_i2, t.cap_learn_i3], cta: t.cap_learn_cta },
+    search: { title: t.cap_search_title, desc: t.cap_search_desc, items: [t.cap_search_i1, t.cap_search_i2, t.cap_search_i3], cta: t.cap_search_cta },
+    create: { title: t.cap_create_title, desc: t.cap_create_desc, items: [t.cap_create_i1, t.cap_create_i2, t.cap_create_i3], cta: t.cap_create_cta },
+    solve: { title: t.cap_solve_title, desc: t.cap_solve_desc, items: [t.cap_solve_i1, t.cap_solve_i2, t.cap_solve_i3], cta: t.cap_solve_cta },
+    plan: { title: t.cap_plan_title, desc: t.cap_plan_desc, items: [t.cap_plan_i1, t.cap_plan_i2, t.cap_plan_i3], cta: t.cap_plan_cta },
+  };
 
   const content = tabContent[active];
   const href = tabHrefs[active];
@@ -75,7 +47,7 @@ export default function Capabilities() {
   return (
     <section dir="rtl" id="capabilities" className={styles.block}>
       <div className={styles.head}>
-        <h2>إيه اللي <span className={styles.hl}>ماجيكلي</span> يقدر يعمله؟</h2>
+        <h2>{t.caps_title_a} <span className={styles.hl}>{t.caps_title_b}</span> {t.caps_title_c}</h2>
       </div>
       <div className={styles.tabbar}>
         {tabs.map((tab) => (

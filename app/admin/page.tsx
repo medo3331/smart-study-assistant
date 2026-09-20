@@ -796,7 +796,7 @@ export default async function AdminControlCenter({
             const status = (formData.get("status_filter") as string || "all").trim();
             const results = await searchUsers(query, plan, status);
             console.log("[Users Search] Query:", query, "Plan:", plan, "Status:", status, "Results count:", results.length);
-          }} className="flex gap-2 flex-wrap items-center" onSubmit={(e) => { e.preventDefault(); alert("Users search executed (DB query via searchUsers). Results logged to server console."); }}>
+          }} className="flex gap-2 flex-wrap items-center">
             <input name="search" type="text" id="users-search" placeholder="ابحث بالاسم أو الإيميل..." className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full md:w-72" />
             <select name="plan_filter" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-36">
               <option value="all">كل الخطط</option><option value="free">Free</option><option value="pro">Pro</option><option value="ultra">Ultra</option><option value="trial">Trial</option>

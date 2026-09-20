@@ -1,21 +1,19 @@
 'use client';
 
 import styles from './FeatureGrid.module.css';
-
-const items = [
-  { icon: '🤖', title: 'مساعد ذكاء اصطناعي', desc: 'موجود معاك دايمًا يساعدك في أي حاجة.' },
-  { icon: '🧠', title: 'نماذج ذكاء متعددة', desc: 'أفضل نموذج AI مخصص لكل مهمة.' },
-  { icon: '📄', title: 'تحليل PDF والمستندات', desc: 'ارفع، حلّل، لخّص، واتعلم أسرع.' },
-  { icon: '🛠️', title: 'أدوات ذكية', desc: '+50 أداة تساعدك تزود إنتاجيتك.' },
-  { icon: '📈', title: 'تتبع التقدم', desc: 'افضل متحمس وشايف تطورك أول بأول.' },
-  { icon: '🏆', title: 'مكافآت وعملات', desc: 'اكسب عملات وافتح مكافآت مع كل إنجاز.' },
-];
+import { useLanguage } from '@/lib/i18n/LanguageProvider';
 
 export default function FeatureGrid() {
+  const { t } = useLanguage();
+  const items = [
+    { icon: '🤖', title: t.grid1_title, desc: t.grid1_desc }, { icon: '🧠', title: t.grid2_title, desc: t.grid2_desc },
+    { icon: '📄', title: t.grid3_title, desc: t.grid3_desc }, { icon: '🛠️', title: t.grid4_title, desc: t.grid4_desc },
+    { icon: '📈', title: t.grid5_title, desc: t.grid5_desc }, { icon: '🏆', title: t.grid6_title, desc: t.grid6_desc },
+  ];
   return (
     <section dir="rtl" id="features" className={styles.section}>
       <div className={styles.head}>
-        <h2>كل اللي محتاجه، <span className={styles.hl}>في مكان واحد.</span></h2>
+        <h2>{t.grid_title_a} <span className={styles.hl}>{t.grid_title_b}</span></h2>
       </div>
       <div className={styles.grid}>
         {items.map((item) => (

@@ -27,9 +27,9 @@ export default function Hero() {
   /* خطوات ٣ بالترتيب الصحيح لـ RTL: 1 يمين ← 2 نص ← 3 شمال.
      (ارفع ← يولّد ← ابدأ). الموكاب كان عكس كده، بس ده الأصح للقارئ العربي. */
   const steps = [
-    { id: 1, title: 'ارفع ملزمتك' },
-    { id: 2, title: 'يولّد لك خطتك' },
-    { id: 3, title: 'ابدأ المذاكرة' },
+    { id: 1, title: t.hero_step1 },
+    { id: 2, title: t.hero_step2 },
+    { id: 3, title: t.hero_step3 },
   ];
 
   /* قائمة الموبايل: على الشاشات الصغيرة اللينكات بتختفي (CSS) ويظهر
@@ -45,10 +45,10 @@ export default function Hero() {
       <nav className={styles.nav}>
         <div className={styles.navActions}>
           <Link href={startHref} className={`${styles.btnPrimary} ${styles.navStart}`}>
-            ابدأ مجاناً
+            {t.nav_start}
           </Link>
           <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
-            تسجيل الدخول
+            {t.nav_login}
           </Link>
           <TopControls />
           {/* زر الهامبرجر — يظهر على الموبايل بس (CSS). */}
@@ -107,29 +107,29 @@ export default function Hero() {
               الجزء الملوّن (ماجيكلي) بيتحرّك بمعرف morphWord. */}
           <h1 className={styles.title}>
             <span className={styles.morphWrap}>
-              <span className={styles.morphIntro}>لو المذاكرة صعبة،&nbsp;</span>
-              <span className={styles.morphWord}>ماجيكلي</span>
+              <span className={styles.morphIntro}>{t.hero_title_a}&nbsp;</span>
+              <span className={styles.morphWord}>{t.hero_title_mark}</span>
             </span>
             <br />
             <span className={styles.highlight} style={{ fontFamily: 'var(--font-playfair-display-src)' }}>
-              هيسهّلها عليك.
+              {t.hero_title_b}
             </span>
           </h1>
           <p className={styles.description}>
-            كل أدوات المذاكرة اللي محتاجها في مكان واحد — ارفع ملزمتك، وخلّي ماجيكلي يبني خطتك ويتابع معاك.
+            {t.hero_subtitle}
           </p>
           <div className={styles.ctaRow}>
             <Link href={startHref} className={styles.btnPrimary}>
-              ابدأ خطتك مجاناً
+              {t.hero_cta}
             </Link>
             <Link href="/features" className={styles.btnGhost}>
-              جرّب من غير حساب
+              {t.hero_cta_secondary}
             </Link>
           </div>
           <div className={styles.trust}>
-            <span><i>✓</i> بالعربي والإنجليزي</span>
-            <span><i>✓</i> يدعم PDF والصور</span>
-            <span><i>✓</i> من غير بطاقة ائتمان</span>
+            <span><i>✓</i> {t.trust2}</span>
+            <span><i>✓</i> {t.trust1}</span>
+            <span><i>✓</i> {t.trust3}</span>
           </div>
         </div>
         <div className={styles.previewCard}>

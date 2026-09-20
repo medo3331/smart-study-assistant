@@ -264,6 +264,28 @@ export function softwareApplicationLd() {
   };
 }
 
+/* ─────────────────────── فيديو "إزاي بتشتغل" ─────────────────────── */
+export const HOW_IT_WORKS_VIDEO_URL =
+  'https://www.youtube.com/watch?v=n-i4PVpIb3k';
+
+/** البيانات المنظّمة للفيديو الفعلي في قسم "إزاي بتشتغل" على اللاندينج. */
+export function howItWorksVideoLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    '@id': `${SITE_URL}/#how-it-works-video`,
+    url: absoluteUrl('/'),
+    name: 'شرح المنصة | Magicly',
+    description:
+      'A walkthrough of the Magicly study platform and its core study tools.',
+    contentUrl: HOW_IT_WORKS_VIDEO_URL,
+    embedUrl: 'https://www.youtube-nocookie.com/embed/n-i4PVpIb3k',
+    thumbnailUrl: 'https://i.ytimg.com/vi/n-i4PVpIb3k/hqdefault.jpg',
+    uploadDate: '2026-09-20T08:06:27-07:00',
+    inLanguage: ['ar', 'en'],
+  };
+}
+
 /** الأسئلة الشائعة — متولّدة من نفس مصدر الأكورديون (`lib/faq.ts`).
     ⚠️ بتتحط على صفحة `/faq` بس — من نوفمبر ٢٠٢٦ اللاندينج بتعرض ملخّص
     (٥ أسئلة) والعشرة كاملين ظاهرين على `/faq`. قاعدة جوجل إن الـ FAQPage

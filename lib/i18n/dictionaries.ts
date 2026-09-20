@@ -44,6 +44,9 @@ export type Dictionary = {
   features_lede: string;
   /* لينك «شوف كل الميزات» تحت ملخّص اللاندينج (بيودّي /features) */
   features_see_all: string;
+  video_title: string;
+  video_lede: string;
+  video_open: string;
   /* الميزات: اتنين وعشرين مفتاح لاتناشر كارت. الترقيم مقصود إنه يفضل
      ترقيم مش أسماء وصفية — الكارت ممكن يتغير محتواه من غير ما يتغير مكانه. */
   feature1_title: string;
@@ -142,6 +145,9 @@ export type Dictionary = {
   hero_title_a: string;
   hero_title_mark: string;
   hero_title_b: string;
+  hero_step1: string;
+  hero_step2: string;
+  hero_step3: string;
 
   /* الاسم والسطر اللي تحته في النافبار والفوتر. `brand` هو الاسم لوحده
      (وهو اللي بيتكتب في حقوق النشر)، و `brand_tagline` سطر وصفي جنبه
@@ -402,6 +408,24 @@ export type Dictionary = {
   onboard_level_note: string;
   onboard_done_title: string;
   onboard_done_lede: string;
+
+  roles_title_a: string; roles_title_b: string; roles_lede: string;
+  role1_title: string; role1_desc: string; role1_f1: string; role1_f2: string; role1_f3: string;
+  role2_title: string; role2_desc: string; role2_f1: string; role2_f2: string; role2_f3: string;
+  role3_title: string; role3_desc: string; role3_f1: string; role3_f2: string; role3_f3: string;
+  role_explore: string;
+  caps_title_a: string; caps_title_b: string; caps_title_c: string;
+  cap_learn_label: string; cap_learn_title: string; cap_learn_desc: string; cap_learn_i1: string; cap_learn_i2: string; cap_learn_i3: string; cap_learn_cta: string;
+  cap_search_label: string; cap_search_title: string; cap_search_desc: string; cap_search_i1: string; cap_search_i2: string; cap_search_i3: string; cap_search_cta: string;
+  cap_create_label: string; cap_create_title: string; cap_create_desc: string; cap_create_i1: string; cap_create_i2: string; cap_create_i3: string; cap_create_cta: string;
+  cap_solve_label: string; cap_solve_title: string; cap_solve_desc: string; cap_solve_i1: string; cap_solve_i2: string; cap_solve_i3: string; cap_solve_cta: string;
+  cap_plan_label: string; cap_plan_title: string; cap_plan_desc: string; cap_plan_i1: string; cap_plan_i2: string; cap_plan_i3: string; cap_plan_cta: string;
+  grid_title_a: string; grid_title_b: string;
+  grid1_title: string; grid1_desc: string; grid2_title: string; grid2_desc: string; grid3_title: string; grid3_desc: string;
+  grid4_title: string; grid4_desc: string; grid5_title: string; grid5_desc: string; grid6_title: string; grid6_desc: string;
+  closing_title_a: string; closing_title_b: string; closing_cta: string; closing_cta2: string;
+  preview_lesson_label: string; preview_lesson_topic: string; preview_video: string; preview_play: string;
+  preview_ask1: string; preview_ask2: string; preview_tools: string; preview_nav_lesson: string; preview_nav_sources: string; preview_nav_videos: string;
 };
 
 export const dictionaries: Record<'ar' | 'en', Dictionary> = {
@@ -449,6 +473,10 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     features_lede:
       'اسأل بالعربي أو بالإنجليزي — المصطلحات التقنية بتفضل زي ما هي في المراجع، والشرح بيوصلك باللغة اللي مريحاك.',
     features_see_all: 'شوف كل الميزات',
+    video_title: 'إزاي بتشتغل ماجيكلي؟',
+    video_lede:
+      'شوف في دقايق بسيطة إزاي ملفك بيتحوّل لمذاكرة كاملة — من الرفع لأول كويز.',
+    video_open: 'افتح الفيديو',
     feature1_title: 'يفهم ملفاتك',
     feature1_desc: 'ارفع PDF أو Word مرة واحدة، ويفضل مرجع دايم تسأل فيه من غير ما ترفعه تاني.',
     feature2_title: 'خطة على قد وقتك',
@@ -534,9 +562,12 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     outcome3_title: 'خطة تخلي البداية أسهل',
     outcome3_desc: 'قسّم مذاكرتك لخطوات يومية صغيرة تقدر تلتزم بها.',
 
-    hero_title_a: 'المذاكرة صعبة وتقيلة؟',
-    hero_title_mark: 'سهّلناها عليك',
-    hero_title_b: '',
+    hero_title_a: 'لو المذاكرة صعبة،',
+    hero_title_mark: 'ماجيكلي',
+    hero_title_b: 'هيسهّلها عليك.',
+    hero_step1: 'ارفع ملزمتك',
+    hero_step2: 'يولّد لك خطتك',
+    hero_step3: 'ابدأ المذاكرة',
     brand: 'ماجيكلي',
     brand_tagline: 'للمذاكرة بسحر',
 
@@ -772,6 +803,22 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     onboard_level_note: 'السؤال ده بيظهر لاختيار «طالب» فقط — باقي الأدوار بيتسجلوا على طول.',
     onboard_done_title: 'جاهز! جهزنا ماجيكلي على مقاسك',
     onboard_done_lede: 'بنودّيك على داشبورد دورك. لحد ما النسخ المتخصصة تجهز، الكل بينزل على الداشبورد الحالي بدون أي كسر.',
+
+    roles_title_a: 'منصة واحدة.', roles_title_b: 'لكل مسارك.', roles_lede: 'ماجيكلي بيتكيف حسب مين إنت — مش نفس التجربة للجميع.',
+    role1_title: 'طالب', role1_desc: 'شريكك في المذاكرة — يشرحلك، يذكّرك، ويختبرك.', role1_f1: 'ملخصات ذكية', role1_f2: 'مساعد ذكاء اصطناعي', role1_f3: 'اختبارات وبطاقات مراجعة',
+    role2_title: 'خريج', role2_desc: 'ابني مهاراتك ووصّل لفرصتك المهنية بخطوات واضحة.', role2_f1: 'إعداد السيرة الذاتية', role2_f2: 'إرشاد مهني', role2_f3: 'تدريب مقابلات',
+    role3_title: 'فريلانسر', role3_desc: 'نظّم شغلك وعملاءك ونمّي مشروعك الحر.', role3_f1: 'مولّد عروض الأسعار', role3_f2: 'إدارة مشاريع', role3_f3: 'مساعد كتابة ذكي', role_explore: 'استكشف',
+    caps_title_a: 'إيه اللي', caps_title_b: 'ماجيكلي', caps_title_c: 'يقدر يعمله؟',
+    cap_learn_label: '📖 تعلم', cap_learn_title: 'اتعلم أي حاجة بالطريقة الذكية', cap_learn_desc: 'احصل على دروس مخصصة، فيديوهات، ملاحظات، واختبارات تفاعلية اتصمّمت ليك انت بالذات.', cap_learn_i1: 'دروس تفاعلية', cap_learn_i2: 'شرح بالذكاء الاصطناعي', cap_learn_i3: 'تدريب واختبار مستمر', cap_learn_cta: 'شوفها بنفسك',
+    cap_search_label: '🔍 بحث', cap_search_title: 'بحث فعال وجاف', cap_search_desc: 'اكتشف الكتب والمقالات والموارد بسرعة وسهولة باستخدام محركات البحث المتقدمة ومجالات المعرفة.', cap_search_i1: 'محركات بحث ذكية', cap_search_i2: 'فلاتر متقدمة', cap_search_i3: 'مخزن مرجعي ضخم', cap_search_cta: 'جرب الآن',
+    cap_create_label: '✨ إنشاء', cap_create_title: 'إنشاء محتوى مبتكر', cap_create_desc: 'استخدم الأدوات الذكية لإنشاء أسئلة، ملخصات، ملاحظات، ورسوم بيانية بسهولة وسرعة.', cap_create_i1: 'مولّد ملخصات', cap_create_i2: 'أسلوب مخصص', cap_create_i3: 'تنسيقات متعددة', cap_create_cta: 'ابدأ الإنشاء',
+    cap_solve_label: '🧩 حل', cap_solve_title: 'حل مسائل معقدة', cap_solve_desc: 'يمكنك استخدام ماجيكلي لحل المسائل الصعبة، المسائل الرياضية والعلمية خطوة بخطوة.', cap_solve_i1: 'حل مسائل رياضية', cap_solve_i2: 'شرح مفصل', cap_solve_i3: 'دعم لغات متعددة', cap_solve_cta: 'حل الآن',
+    cap_plan_label: '🗓️ خطط', cap_plan_title: 'تخطيط دراسي متكامل', cap_plan_desc: 'ابني جدولاً زمنياً دراسياً مخصصاً يناسب أهدافك ومستواك، مع تتبع التقدم يومياً.', cap_plan_i1: 'جدول مرن', cap_plan_i2: 'تذكير تلقائي', cap_plan_i3: 'تقييم دوري', cap_plan_cta: 'خطط الآن',
+    grid_title_a: 'كل اللي محتاجه،', grid_title_b: 'في مكان واحد.',
+    grid1_title: 'مساعد ذكاء اصطناعي', grid1_desc: 'موجود معاك دايمًا يساعدك في أي حاجة.', grid2_title: 'نماذج ذكاء متعددة', grid2_desc: 'أفضل نموذج AI مخصص لكل مهمة.', grid3_title: 'تحليل PDF والمستندات', grid3_desc: 'ارفع، حلّل، لخّص، واتعلم أسرع.',
+    grid4_title: 'أدوات ذكية', grid4_desc: '+50 أداة تساعدك تزود إنتاجيتك.', grid5_title: 'تتبع التقدم', grid5_desc: 'افضل متحمس وشايف تطورك أول بأول.', grid6_title: 'مكافآت وعملات', grid6_desc: 'اكسب عملات وافتح مكافآت مع كل إنجاز.',
+    closing_title_a: 'أياً كان اللي بتحاول توصله،', closing_title_b: 'ماجيكلي بيوصّلك.', closing_cta: 'ابدأ الآن', closing_cta2: 'استكشف المميزات',
+    preview_lesson_label: 'درس:', preview_lesson_topic: 'بيولوجيا الخلية', preview_video: 'فيديو الدرس', preview_play: 'تشغيل', preview_ask1: 'اشرحلي الجزء ده بطريقة أبسط', preview_ask2: 'النواة زي مخ الخلية، بتتحكم في كل حاجة', preview_tools: 'لخّص · اختبرني · بطاقات', preview_nav_lesson: 'الدرس', preview_nav_sources: 'المصادر', preview_nav_videos: 'الفيديوهات',
   },
   en: {
     dir: 'ltr',
@@ -817,6 +864,10 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     features_lede:
       'Ask in Arabic or English — technical terms stay exactly as the references write them, and the explanation reaches you in whichever language you think in.',
     features_see_all: 'See all features',
+    video_title: 'How Magicly Works',
+    video_lede:
+      'See in a couple of minutes how your file turns into a full study plan — from upload to your first quiz.',
+    video_open: 'Open the video',
     feature1_title: 'Reads what you give it',
     feature1_desc: 'Upload a PDF or Word file once; it stays a reference you can question without re-uploading.',
     feature2_title: 'A plan that fits your time',
@@ -902,9 +953,12 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     outcome3_title: 'A plan that makes starting easier',
     outcome3_desc: 'Break studying into smaller daily steps you can actually keep up with.',
 
-    hero_title_a: 'Studying feels hard and heavy?',
-    hero_title_mark: 'we made it easier',
-    hero_title_b: '',
+    hero_title_a: 'If studying feels hard,',
+    hero_title_mark: 'Magicly',
+    hero_title_b: 'makes it easier.',
+    hero_step1: 'Upload your notes',
+    hero_step2: 'It builds your plan',
+    hero_step3: 'Start studying',
     brand: 'Magicly',
     brand_tagline: 'study with magic',
 
@@ -1140,6 +1194,22 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     onboard_level_note: 'This question appears only for “Student” — other roles continue straight away.',
     onboard_done_title: "All set! Magiclly is tailored to you",
     onboard_done_lede: "We're taking you to your role's dashboard. Until the specialized versions ship, everyone lands on the current dashboard — nothing breaks.",
+
+    roles_title_a: 'One platform.', roles_title_b: 'For your whole path.', roles_lede: 'Magicly adapts to who you are — not the same experience for everyone.',
+    role1_title: 'Student', role1_desc: 'Your study partner — it explains, reminds you, and tests you.', role1_f1: 'Smart summaries', role1_f2: 'AI assistant', role1_f3: 'Quizzes & flashcards',
+    role2_title: 'Graduate', role2_desc: 'Build your skills and reach your career opportunity in clear steps.', role2_f1: 'CV builder', role2_f2: 'Career guidance', role2_f3: 'Interview practice',
+    role3_title: 'Freelancer', role3_desc: 'Organize your work and clients, and grow your freelance business.', role3_f1: 'Proposal generator', role3_f2: 'Project management', role3_f3: 'Smart writing helper', role_explore: 'Explore',
+    caps_title_a: 'What can', caps_title_b: 'Magicly', caps_title_c: 'do for you?',
+    cap_learn_label: '📖 Learn', cap_learn_title: 'Learn anything, the smart way', cap_learn_desc: 'Get personalized lessons, videos, notes, and interactive quizzes designed for you — and only you.', cap_learn_i1: 'Interactive lessons', cap_learn_i2: 'AI-powered explanations', cap_learn_i3: 'Continuous practice & testing', cap_learn_cta: 'See it yourself',
+    cap_search_label: '🔍 Search', cap_search_title: 'Fast, effective search', cap_search_desc: 'Discover books, articles, and resources quickly with advanced search engines and knowledge areas.', cap_search_i1: 'Smart search engines', cap_search_i2: 'Advanced filters', cap_search_i3: 'A huge reference library', cap_search_cta: 'Try it now',
+    cap_create_label: '✨ Create', cap_create_title: 'Create original content', cap_create_desc: 'Use smart tools to create questions, summaries, notes, and diagrams easily and fast.', cap_create_i1: 'Summary generator', cap_create_i2: 'Custom style', cap_create_i3: 'Multiple formats', cap_create_cta: 'Start creating',
+    cap_solve_label: '🧩 Solve', cap_solve_title: 'Solve complex problems', cap_solve_desc: 'Use Magicly to tackle hard problems — math and science — step by step.', cap_solve_i1: 'Math problem solving', cap_solve_i2: 'Detailed explanations', cap_solve_i3: 'Multilingual support', cap_solve_cta: 'Solve it now',
+    cap_plan_label: '🗓️ Plan', cap_plan_title: 'Complete study planning', cap_plan_desc: 'Build a personalized study schedule that fits your goals and level, with daily progress tracking.', cap_plan_i1: 'Flexible schedule', cap_plan_i2: 'Automatic reminders', cap_plan_i3: 'Regular check-ins', cap_plan_cta: 'Plan now',
+    grid_title_a: 'Everything you need,', grid_title_b: 'in one place.',
+    grid1_title: 'AI assistant', grid1_desc: 'Always with you, ready to help with anything.', grid2_title: 'Multiple AI models', grid2_desc: 'The best AI model matched to each task.', grid3_title: 'PDF & document analysis', grid3_desc: 'Upload, analyze, summarize, and learn faster.',
+    grid4_title: 'Smart tools', grid4_desc: '+50 tools to boost your productivity.', grid5_title: 'Progress tracking', grid5_desc: 'Stay motivated and watch your growth, step by step.', grid6_title: 'Rewards & coins', grid6_desc: 'Earn coins and unlock rewards with every achievement.',
+    closing_title_a: "Whatever you're trying to reach,", closing_title_b: 'Magicly gets you there.', closing_cta: 'Start now', closing_cta2: 'Explore features',
+    preview_lesson_label: 'Lesson:', preview_lesson_topic: 'Cell biology', preview_video: 'Lesson video', preview_play: 'Play', preview_ask1: 'Explain this part more simply', preview_ask2: "The nucleus is like the cell's brain — it controls everything", preview_tools: 'Summarize · Quiz me · Cards', preview_nav_lesson: 'Lesson', preview_nav_sources: 'Sources', preview_nav_videos: 'Videos',
   },
 };
 
