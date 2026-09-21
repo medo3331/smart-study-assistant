@@ -13,14 +13,13 @@ export async function subscriptionActivationFormAction(formData: FormData) {
     if (!userCode) return { ok: false, message: "User Code مطلوب", error: "missing_user_code" };
     if (!planKey) return { ok: false, message: "الخطة مطلوبة", error: "missing_plan_key" };
 
-    // Authorization: uses adminUserId from session/auth context.
-    // In production, adminUserId should come from the server session (not hardcoded).
-    // For preview: use a placeholder — real implementation requires session user ID.
-    // The authorization guard inside activateSubscription verifies Owner role.
+    const adminUserId = (formData.get("admin_user_id") as string || "").trim() || "system_owner_placeholder";
+    const adminEmail = (formData.get("admin_email") as string || null);
+
     return await activateSubscription(
       { userCode, planKey, durationDays, note },
-      "system_owner_placeholder",
-      "owner@example.com"
+      adminUserId,
+      adminEmail
     );
   } catch (e: any) {
     return { ok: false, message: "خطأ في التفعيل: " + (e?.message || String(e)), error: String(e) };
