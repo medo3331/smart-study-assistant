@@ -295,6 +295,27 @@ export default async function AdminControlCenter({
         </div>
       </div>
 
+      {/* Quick Navigation — Admin Sections */}
+      <section className="bg-slate-900/80 border border-amber-500/20 rounded-2xl p-6 shadow-xl">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200 mb-4"><Zap size={20} className="text-amber-400"/> التنقل السريع</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          {[
+            { label: "المستخدمين", href: "#users-section", highlight: false },
+            { label: "تفعيل الاشتراكات", href: "#subscriptions", highlight: true },
+            { label: "الخطط والحصص", href: "#plans", highlight: false },
+            { label: "نماذج الذكاء", href: "#ai-models", highlight: false },
+            { label: "المكافآت", href: "#rewards", highlight: false },
+            { label: "سجل العمليات", href: "#audit-log", highlight: false },
+            { label: "الإعدادات", href: "#system-status", highlight: false },
+          ].map((item: any) => (
+            <a key={item.href} href={item.href} className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition shadow-sm hover:shadow-md text-center ${item.highlight ? "bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20 text-amber-300" : "bg-slate-800 border-slate-700 hover:bg-slate-800/80 text-slate-300"}`}>
+              <span className={`text-sm font-bold ${item.highlight ? "text-amber-400" : "text-slate-200"}`}>{item.label}</span>
+              <span className="text-[9px] text-slate-500">انتقال سريع</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
       {/* 1.05 Platform Overview — الاشتراكات الفعلية + أحدث التسجيلات
           ⚠️ مفيش جدول plans/user_subscriptions في المشروع: الباقات بتتحسب من
           entitlements(kind='plan', value='premium'). فمفيش "Pro" و"Ultra" —
