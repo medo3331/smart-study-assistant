@@ -918,15 +918,16 @@ export default async function AdminControlCenter({
         </div>
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           <table className="w-full text-xs text-slate-100">
-            <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-3 py-2">الاسم</th><th className="text-right px-3 py-2">الإيميل</th><th className="text-right px-3 py-2">الخطة</th><th className="text-right px-3 py-2">الحالة</th><th className="text-right px-3 py-2">إجراء</th></tr></thead>
+            <thead className="bg-slate-900 text-amber-300"><tr><th className="text-right px-3 py-2">الاسم</th><th className="text-right px-3 py-2">الإيميل</th><th className="text-right px-3 py-2">كود المستخدم</th><th className="text-right px-3 py-2">الخطة</th><th className="text-right px-3 py-2">الحالة</th><th className="text-right px-3 py-2">إجراء</th></tr></thead>
             <tbody>
               {userSearchResults.length === 0 ? (
-                <tr><td colSpan={5} className="p-4 text-center text-slate-500">{sp.q ? "لا توجد نتائج" : "ابحث بالاسم أو الإيميل لعرض النتائج"}</td></tr>
+                <tr><td colSpan={6} className="p-4 text-center text-slate-500">{sp.q ? "لا توجد نتائج" : "ابحث بالاسم أو الإيميل لعرض النتائج"}</td></tr>
               ) : (
                 userSearchResults.map((u) => (
                   <tr key={u.id} className="border-t border-slate-700">
                     <td className="px-3 py-2">{u.display_name || "—"}</td>
-                    <td className="px-3 py-2">{u.email || "—"}</td>
+                    <td className="px-3 py-2" dir="ltr">{u.email || "—"}</td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-amber-400">{(u as any).public_user_code || "—"}</td>
                     <td className="px-3 py-2"><span className="inline-block bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold">{u.on_trial ? "Trial" : u.plan_key || "Free"}</span></td>
                     <td className="px-3 py-2"><span className={u.is_banned ? "text-rose-500 text-xs" : "text-emerald-400 text-xs"}>{u.is_banned ? "محظور" : "نشط"}</span></td>
                     <td className="px-3 py-2">
