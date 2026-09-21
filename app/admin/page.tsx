@@ -34,7 +34,7 @@ export default async function AdminControlCenter({
   // Next 15+: searchParams بقى Promise في الـ App Router — نفس النمط
   // المستخدم في app/dashboard/[role]/page.tsx. من غير ده next build بيفشل
   // بـ "does not satisfy the constraint 'PageProps'".
-  searchParams: Promise<{ success?: string; error?: string; q?: string; plan?: string; status?: string }>;
+  searchParams: Promise<{ success?: string; error?: string; q?: string; plan?: string; status?: string; sub_lookup?: string }>;
 }) {
   const sp = await searchParams;
   const cookieStore = await cookies();
@@ -669,6 +669,22 @@ export default async function AdminControlCenter({
             <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg px-5 py-2 text-sm transition shadow shadow-amber-500/20">✅ إصدار المكافأة</button>
           </form>
         )}
+      </section>
+
+      {/* EPIC-3 / Subscription Management + User Code */}
+      <section className="bg-slate-900/80 border border-amber-600/20 rounded-2xl p-6 shadow-xl mb-6">
+        <h2 className="text-lg font-bold flex items-center gap-2 text-amber-200"><Shield size={20} className="text-amber-400"/> إدارة الاشتراكات + كود المستخدم</h2>
+        <p className="text-xs text-slate-400">ابحث عن المستخدم عبر <code>public_user_code</code> (مثال: MAG-8F3K2Q) أو UUID. يعرض حالة الاشتراك والخطة الحالية.</p>
+        <form method="GET" className="flex gap-2 flex-wrap items-center pt-2">
+          <input name="sub_lookup" type="text" placeholder="MAG-XXXXXX أو UUID" className="bg-slate-800 border border-amber-600 rounded-lg px-3 py-2 text-xs text-slate-100 w-full md:w-72 font-mono" />
+          <button type="submit" className="text-xs bg-amber-500 text-amber-950 rounded-lg px-4 py-2 hover:bg-amber-400 font-bold">بحث</button>
+        </form>
+        {sp.sub_lookup ? (
+          <div className="bg-slate-800/40 rounded-xl p-4 border border-amber-700/20 text-xs text-slate-300 space-y-2 mt-2">
+            <p className="font-bold text-amber-300">نتائج البحث عن: <span className="font-mono text-amber-400">{sp.sub_lookup}</span></p>
+            <p className="text-slate-500">(عرض بيانات المشترك — يتطلب تنفيذ SQL يدويًا لتفعيل <code>public_user_code</code> بالكامل)</p>
+          </div>
+        ) : null}
       </section>
 
       {/* 2. قسم المالك المباشر (Owner Exclusive) */}
