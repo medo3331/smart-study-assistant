@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAdminRole, isOwnerEmail, hasPermission, isSensitivePermission, ADMIN_PERMISSION_KEYS } from "@/lib/auth-roles";
+import { requireAdminAuth } from "@/lib/admin/auth-check";
 import { MODEL_REGISTRY } from "@/lib/ai/models";
 import { GATED_MODELS } from "@/lib/ai/model-access";
 import { ALL_AGENTS } from "@/lib/ai/agents/registry";
@@ -44,19 +45,10 @@ export default async function AdminControlCenter({
     { cookies: { get: (name) => cookieStore.get(name)?.value } }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, isOwner, role, supabase: adminSupabase } = await requireAdminAuth();
   // DEBUG server-only: auth/user presence for audit (no email/secret leaked)
   console.log("[admin-debug] user present:", !!user, "id present:", !!user?.id, "env OWNER present:", !!process.env.OWNER_EMAIL);
 
-  // ── OWNER-ONLY: Server-side email allowlist — لا NEXT_PUBLIC، لا client check
-  // 1) غير مسجل → /login (pattern موجود في المشروع)
-  if (!user || user.is_anonymous) redirect("/login");
-  // 2) مسجل لكن ليس Owner (مطابقة دقيقة عبر OWNER_EMAIL) → /dashboard
-  // isOwnerEmail يقرأ OWNER_EMAIL Server-only فقط — لا يظهر في bundle/HTML
-  if (!isOwnerEmail(user.email ?? null)) redirect("/dashboard");
-
-  const role = await getAdminRole(supabase, user?.id || null, user?.email);
-  const isOwner = role === "owner";
   const userSearchResults = sp.q
     ? await searchUsers(sp.q.trim(), sp.plan ?? "all", sp.status ?? "all")
     : [];
