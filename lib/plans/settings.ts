@@ -27,11 +27,5 @@ export async function getPlanSettings(): Promise<{ freePeriodEnabled: boolean; p
   };
 }
 
-export async function isAdminOwner(userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const supabase = await createClient();
-  const ownerEmail = (process.env.OWNER_EMAIL ?? "").trim().toLowerCase();
-  if (!ownerEmail) return false;
-  const { data } = await supabase.from("profiles").select("email").eq("id", userId).single().catch(() => ({ data: null }));
-  return (data as any)?.email?.trim().toLowerCase() === ownerEmail;
-}
+// @removed Phase 1.5 — isAdminOwner اتشالت نهائيًا (0 callers).
+// فحص الأدمن الحقيقي: lib/admin/auth-check.ts (getAdminContext/requireAdminPermission).

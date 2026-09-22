@@ -5,7 +5,9 @@
 -- 1) Add public_user_code to profiles (if not exists)
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS public_user_code text UNIQUE;
 
--- 2) Generate a short random code (MAG-XXXXXX: 3 uppercase letters / numbers + dash + 4 chars = 9 chars total, shorter than UUID)
+-- 2) Generate a short random code — canonical format: MAG-XXX-XXXX
+--    (MAG- + 3 [A-Z0-9] + dash + 4 [A-Z0-9] = 12 chars total, shorter than UUID)
+--    Phase 1.5: this is the ONLY canonical format; /u/[code] validates ^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$
 -- Note: This uses a simple plpgsql trigger/function. For production, consider a more robust random generator.
 CREATE OR REPLACE FUNCTION generate_public_user_code()
 RETURNS text AS $$

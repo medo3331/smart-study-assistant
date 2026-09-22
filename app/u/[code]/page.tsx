@@ -4,8 +4,10 @@ export default async function UserPublicPage({ params }: { params: Promise<{ cod
   const sp = await params;
   const code = sp?.code || "";
 
-  // Basic validation: must match MAG-XXXXXX pattern
-  if (!/^MAG-[A-Z0-9]{6}$/i.test(code)) {
+  // Basic validation: must match the canonical generator format MAG-XXX-XXXX
+  // (db/epic6-user-code.sql — generate_public_user_code). Phase 1.5: كان
+  // /^MAG-[A-Z0-9]{6}$/i وده بيرفض كل الأكواد اللي الـtrigger بيولّدها فعليًا.
+  if (!/^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(code)) {
     redirect("/?error=كود_غير_صالح");
   }
 

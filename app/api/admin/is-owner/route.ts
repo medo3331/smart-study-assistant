@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { isOwnerEmail } from "@/lib/auth-roles";
+import { getAdminRole } from "@/lib/auth-roles";
 
 /**
  * GET /api/admin/is-owner
  * Server-only check — does NOT expose OWNER_EMAIL.
- * Returns { isOwner: boolean } for conditional Admin link visibility.
- * Unauthenticated → { isOwner: false } (no 401 to keep link hiding silent).
+ * Returns { isOwner, canAccessAdmin } for conditional Admin link visibility.
+ * Phase 1.5: canAccessAdmin = Owner (env) أو أي دور صالح من site_admins —
+ * قبل كده كان بيرجع الـOwner بس، فالأدمنز المسجلين في site_admins مكانوش
+ * بيشوفوا لينك اللوحة أصلًا رغم إنهم مصرّح لهم بالدخول.
+ * Unauthenticated → { isOwner: false, canAccessAdmin: false } (no 401 to keep link hiding silent).
  */
 export async function GET() {
   const cookieStore = await cookies();
@@ -29,9 +32,9 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user || user.is_anonymous) {
-    return NextResponse.json({ isOwner: false });
+    return NextResponse.json({ isOwner: false, canAccessAdmin: false });
   }
 
-  const isOwner = isOwnerEmail(user.email ?? null);
-  return NextResponse.json({ isOwner });
+  const role = await getAdminRole(supabase, user.id, user.email ?? null);
+  return NextResponse.json({ isOwner: role === "owner", canAccessAdmin: role !== null });
 }

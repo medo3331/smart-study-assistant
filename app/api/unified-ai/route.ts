@@ -43,6 +43,7 @@ import {
   isKnownAgentLimit,
 } from "@/lib/ai/rate-limit";
 import { findModel } from "@/lib/ai/models";
+import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import type { AiTaskType } from "@/lib/ai/types";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
@@ -192,6 +193,10 @@ export async function POST(req: Request) {
       return Boolean(data);
     };
 
+    // Phase 2: تحديث حالة الموديلات من الداتابيز قبل أي حسم —
+    // تبديلات /admin/models (enabled/priority/daily_limit) بتأثر هنا فعليًا.
+    await refreshModelStateCache();
+
     let modelToUse: string = CURRENT_AI_MODEL;
     let resolvedVia: "explicit" | "auto" | "default" = "default";
 
@@ -207,6 +212,13 @@ export async function POST(req: Request) {
       if (!m.enabled) {
         return NextResponse.json(
           { ok: false, error: `الموديل غير متاح حاليًا: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
+          { status: 404 }
+        );
+      }
+      // Phase 2: حالة الداتابيز فوق قيمة السجل — موقوف إداريًا أو تجاوز حده اليومي
+      if (!isModelRuntimeEnabled(m.id, m.enabled)) {
+        return NextResponse.json(
+          { ok: false, error: `الموديل موقوف إداريًا أو تجاوز حده اليومي: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
           { status: 404 }
         );
       }
