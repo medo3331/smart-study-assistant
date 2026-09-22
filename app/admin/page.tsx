@@ -297,7 +297,7 @@ export default async function AdminControlCenter({
             { label: "الخطط والحصص", href: "#plans", highlight: false },
             { label: "نماذج الذكاء", href: "#ai-models", highlight: false },
             { label: "المكافآت", href: "#rewards", highlight: false },
-            { label: "سجل العمليات", href: "#audit-log", highlight: false },
+            { label: "سجل العمليات", href: "/admin/audit-log", highlight: false },
             { label: "الإعدادات", href: "#system-status", highlight: false },
           ].map((item: any) => (
             <a key={item.href} href={item.href} className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition shadow-sm hover:shadow-md text-center ${item.highlight ? "bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20 text-amber-300" : "bg-slate-800 border-slate-700 hover:bg-slate-800/80 text-slate-300"}`}>
