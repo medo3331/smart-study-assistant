@@ -168,8 +168,10 @@
 | 6 | `db/epic3-subscription-quotas.sql` | dc59b3c | `subscription_quotas` |
 | 7 | `db/epic2-file-upload.sql` | b7a5f4c | `files` table |
 | 8 | `db/app-settings-billing.sql` | **Phase 1.5 (new)** | `app_settings` (was missing entirely) |
+| 9 | `db/ai-models-priority-limits.sql` | **Phase 2 (new)** | `ai_models.daily_limit` + positive CHECK |
+| 10 | `db/10-user-code-regenerate-permission.sql` | **Phase 3 (new)** | `admin_permission_keys` reference row for `users.regenerate_code` (idempotent; reference-only table — real enforcement is in `ADMIN_PERMISSION_MAP`) |
 
-Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. `db/epic6-user-code-preview.sql` deleted in Part B (byte-identical duplicate of #5).
+Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10. `db/epic6-user-code-preview.sql` deleted in Part B (byte-identical duplicate of #5).
 
 ### Part B — Fixes executed (in priority order)
 
@@ -235,4 +237,37 @@ All 9 manual SQL files confirmed applied on production Supabase:
 
 Code↔DB column-name alignment re-verified: `lib/ai/model-state.ts:52` selects `model_id, enabled, priority, daily_limit`; `app/admin/actions/ai-models.ts` updates with `.eq("model_id", …)` — matches the live schema (an earlier verification query of mine used `id` and failed; that was a query typo, not a code bug).
 
+
+
+---
+
+## Phase 3 — QR Code (2026-09-23)
+
+### القرارات المتخذة (كل قرار بدليل من الكود/الـDB — مش افتراض)
+
+1. **من يولّد**: التوليد التلقائي موجود أصلًا عند إنشاء الحساب عبر DB trigger `set_public_user_code` (`db/epic6-user-code.sql:42-45` — مؤكد موجود في الـDB الحية في جلسة التحقق). الجديد: فعل إداري `regenerateUserPublicCode` محكوم بـ `users.regenerate_code` (Owner/Admin). **ممنوع للمستخدم العادي** توليد/تغيير كوده: مفيش أي مسار عميل، الهوية بتتقرأ من الجلسة في الغلاف، والفحص server-side جوه الـaction نفسه، وأي محاولة مرفوضة بتتسجّل BLOCKED في audit_log.
+2. **المحتوى المُرمَّز في QR**: رابط كامل `${SITE_URL}/u/<code>` — الدليل: `SITE_URL = 'https://magiclly.com'` (`lib/seo.ts:29`) هو المصدر الكنسي للدومين (مستخدم فعليًا في sitemap/robots/canonical/JSON-LD)، و`/u/[code]` هو المسار العام الفعلي للكود (`app/u/[code]/page.tsx`). مفيش identifier موازٍ — المحتوى هو `public_user_code` نفسه.
+3. **ميكانيكية إعادة التوليد**: `update profiles set public_user_code = null` → الـtrigger (BEFORE INSERT OR UPDATE، يملأ NULL/'') يولّد بالمولّد الكنسي `generate_public_user_code()` — صفر منطق مكرر، مصدر واحد للتنسيق. بعد التحديث بنقرأ الكود الجديد ونتحقق من الصيغة الكنسية `MAG-XXX-XXXX`، وأي انحراف = FAIL + audit. تصادم UNIQUE احتماله ~1/78 مليار وبيترجم لرسالة خطأ واضحة + FAIL audit.
+4. **مكتبة QR**: `qrcode@1.5.4` (npm) — توليد SVG محلي server-side، **بلا API خارجي وبلا أي endpoint جديد** (rendering inline في server components + التحميل عبر data URI — صفر سطح هجوم إضافي).
+5. **بقايا QR قديمة (قاعدة 4)**: لا يوجد — بحث `qrcode|QRCode|qr-code` على الريبو كله = 0 نتائج في الكود (ذِكر توثيقي فقط في docs).
+
+### الملفات
+
+| ملف | نوع | وظيفة |
+|---|---|---|
+| `lib/auth-roles.ts` | تعديل | مفتاح جديد `users.regenerate_code` في الـunion type + `ADMIN_PERMISSION_KEYS` + `SENSITIVE_ACTIONS` + `ADMIN_PERMISSION_MAP` (owner/admin، sensitive) |
+| `app/admin/actions/user-code.ts` | جديد | `regenerateUserPublicCode` — فحص صلاحية + تفريغ العمود (الـtrigger يولّد) + تحقق من الصيغة + audit بـ `action="qr_regenerate"` (PASS/FAIL/BLOCKED) |
+| `app/admin/actions/user-code-form-action.ts` | جديد | غلاف form: الهوية من الجلسة فقط + redirect برسالة (نفس نمط ai-models-form-action) |
+| `app/admin/users/[id]/page.tsx` | جديد | صفحة تفاصيل المستخدم: البيانات + الكود + QR (SVG inline + تحميل) + زر توليد/إعادة توليد محكوم |
+| `app/admin/users/page.tsx` | تعديل | كود المستخدم في نتائج البحث بقى رابط لصفحة التفاصيل |
+| `app/u/[code]/page.tsx` | تعديل | عرض QR عام **قراءة-فقط** (بلا أي زر توليد/تعديل) + تحميل SVG |
+| `db/10-user-code-regenerate-permission.sql` | جديد | **#10 — يحتاج تشغيل يدوي** (idempotent): صف مرجعي للمفتاح الجديد في `admin_permission_keys` |
+| `package.json` / `package-lock.json` | تعديل | +`qrcode`، +`@types/qrcode` (dev) |
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0).
+- `npx next build` (ببيئة الإنتاج الحقيقية) → **PASS**: `Compiled successfully in 32.0s` + `BUILD_OK`، والراوتات الجديدة ظاهرة في مخرجات البناء: `/admin/users`، `/admin/users/[id]`، `/u/[code]`.
+- ⚠️ **حدود التحقق بصراحة**: سلوك الـtrigger على `UPDATE ... = null` مُتحقق منه من تعريفه المؤكد في الـDB الحية (`BEFORE INSERT OR UPDATE` يملأ NULL/'') — لم يُنفَّذ توليد حقيقي على بيانات إنتاج تحوّطًا. أول استخدام فعلي من واجهة الأدمن هيظهر كـ PASS في `audit_log` ويأكد السلسلة كاملة end-to-end.
+- دفع Git: الـhash المؤكد على `origin/progress-experience` موثّق في ملخص الجلسة (نفس أسلوب fetch + rev-parse).
 

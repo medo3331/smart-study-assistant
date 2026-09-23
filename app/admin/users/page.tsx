@@ -108,7 +108,15 @@ export default async function AdminUsersPage({
                 <tr key={u.id} className="border-t border-slate-700">
                   <td className="px-3 py-2">{u.display_name || "—"}</td>
                   <td className="px-3 py-2" dir="ltr">{u.email || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-amber-400">{u.public_user_code || u.user_code || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-[10px]">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="text-amber-400 underline decoration-dotted underline-offset-4 hover:text-amber-300"
+                      title="تفاصيل المستخدم + QR Code (المرحلة 3)"
+                    >
+                      {u.public_user_code || u.user_code || "—"}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2">
                     <span className="inline-block bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold">
                       {u.on_trial ? "Trial" : u.plan_key || "Free"}
