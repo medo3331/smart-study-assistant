@@ -391,3 +391,41 @@ export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
 
 - `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.2 + 4.3 معًا.
 - كل استعلام مُتحقق منه ضد الـDB الحية قبل الكتابة (الأعمدة/الجداول/القيم الفارغة أعلاه).
+
+---
+
+## Phase 4 — 4.4 إدارة المستخدمين (حظر حقيقي + فلاتر + تصدير + استهلاك)
+
+### الفحص المسبق (القاعدة 4 — تجنب تكرار regression 273dec1)
+
+- `git log -- app/admin/users/ app/admin/actions/users-ban.ts app/admin/actions/users-search.ts`: آخر شغل = المرحلة 1 (`6518f28` وما قبله) — لا شغل حديث يُخشى استبداله.
+- الفجوة الموثقة سابقًا في التقرير: `users-search.ts` كان يُرجع `is_banned=false` دايمًا (عمود غير موجود في الاستعلام)، والحظر كان يسجّل audit فقط بدون حالة. أُغلقت بالكامل في هذا البند.
+
+### ما تم
+
+1. **حظر حقيقي (server-side)** — `app/admin/actions/users-ban.ts` أُعيدت كتابته:
+   - `banUser`/`unbanUser` بيقرا `hasPermission("users.ban"/"users.unban")` على السيرفر (owner bypass محفوظ) — مش مجرد إخفاء زر.
+   - الكتابة الحقيقية في `profiles`: `is_banned`, `banned_at`, `ban_reason` (بياخد السبب من نص الحظر).
+   - نجاح/فشل/محجوب → `audit_log` في الحالات الثلاث.
+   - ✅ **متحقق حيًا من DB**: `profiles` يحتوي `is_banned` + `banned_at` + `ban_reason` + `created_at` فعليًا (information_schema)، وعدد المحظورين الآن = **0** (رقم حقيقي — أي حظر لاحق يظهر في الفلتر فورًا). لو الأعمدة سقطت يومًا يظهر خطأ صريح مع السبب — لا PASS مزيف.
+2. **بحث وفلاتر حقيقية على الداتابيز** — `app/admin/actions/users-search.ts` أُعيدت كتابته:
+   - `searchUsers(query, planFilter, statusFilter, codeFilter, createdAfter, createdBefore)` — الفلاتر تُطبَّق في PG (`.eq("is_banned", ...)`, `.not/.is` للكود, `.gte/.lte` للنطاق الزمني) قبل `.limit(50)`.
+   - `is_banned/banned_at/ban_reason` تُقرأ من `profiles` فعليًا.
+   - الفلتر الخطي (plan: free/premium/trial) بعد الـmap (مصدر `entitlements` زي ما هو) — موثّق في الكود.
+   - fallback: لو `created_at` مفقود في `profiles` بيعيد المحاولة بدون الأعمدة الزمنية (الجدول خارج DDL الريبو — نفس درجة الحذر المطبقة في 4.3).
+3. **تصدير CSV حقيقي** — جديد: `app/admin/actions/users-export.ts` + `app/api/admin/users/export/route.ts`:
+   - الفحص الحقيقي `users.read` على السيرفر داخل الـaction (مش على الرابط)، 403 لو ممنوع، 401 لو غير مُوثّق.
+   - نفس فلاتر البحث الحالية، حد أقصى 500 صف، UTF-8 BOM ليفتح Excel عربي صح، escape للفواصل والاقتباسات.
+4. **صفحة المستخدمين** — `app/admin/users/page.tsx`:
+   - فلاتر الخطة/الحالة/الكود/التاريخ بـquery params — نتائج فورية من الـURL (قابلة للمشاركة).
+   - خيارات الخطة صارت `free/premium/trial` (كانت free/pro/ultra — قيم غير موجودة في الفلتر الخطي = تصحيح صامت).
+   - زر CSV + بطاقة "الفجوة أُغلقت" + إزالة تنبيه الفجوة القديم.
+5. **عرض الاستهلاك لكل مستخدم** — جديد: `lib/admin/user-consumption.ts` + بطاقة في `app/admin/users/[id]/page.tsx`:
+   - ملفات (`files.profile_id`) + إجمالي الحجم، رسائل AI (`ai_credit_ledger.reason='ai_reserve'`)، رصيد (`sum(delta)`)، اشتراك نشط (`subscription_activations.revoked_at IS NULL` + انتهاء محسوب من `duration_days`)، خطة حالية (`entitlements`).
+   - كل استعلام معزول في try/catch: جدول ناقص = N/A بسبب واضح في `errors` يُعرض في الواجهة — لا رقم وهمي ولا سقوط لبقية الأرقام.
+   - تمييز انتهاء الصلاحية: منتهٍ = rose غامق، أقرب من 7 أيام = amber، وإلا emerald.
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.4 كلها.
+- البناء الكامل `npx next build` + الدفع + الـhash: في نهاية المرحلة 4 (4.5→4.8 تُبنى معًا؛ أي كسر بناء يوقف كل شيء حسب التعليمات).
