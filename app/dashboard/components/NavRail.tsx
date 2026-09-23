@@ -86,15 +86,15 @@ function useSelfAccount(enabled: boolean): RailAccount | null {
   return account;
 }
 
-/** Owner-only: هل المستخدم الحالي هو الـOwner؟ Server-only check وبدون تسريب Email */
+/** هل يظهر لينك لوحة الأدمن؟ Owner (env) أو أي دور في site_admins — Server-only check وبدون تسريب Email */
 function useIsOwner(): boolean {
   const [isOwner, setIsOwner] = useState(false);
   useEffect(() => {
     let alive = true;
     fetch("/api/admin/is-owner", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { isOwner: false }))
+      .then((r) => (r.ok ? r.json() : { isOwner: false, canAccessAdmin: false }))
       .then((j) => {
-        if (alive) setIsOwner(Boolean(j?.isOwner));
+        if (alive) setIsOwner(Boolean(j?.isOwner || j?.canAccessAdmin));
       })
       .catch(() => {});
     return () => {

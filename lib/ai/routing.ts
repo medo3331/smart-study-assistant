@@ -21,6 +21,7 @@ import {
   paidModelsAllowed,
 } from "./models";
 import { withConcurrencyLimit } from "./queue";
+import { getRuntimePriority, isModelRuntimeEnabled } from "./model-state";
 
 /**
  * AI Boundary (Phase A) — لا coupling مع Economy بعد.
@@ -213,6 +214,9 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
       }
       // البوابة الموحّدة: enabled + free-only + القدرات المطلوبة كلها.
       if (!isModelSelectable(model, allowPaid)) return;
+      // Phase 2: بوابة الداتابيز اللحظية — ai_models.enabled + daily_limit
+      // (الكاش بيتحدث من entry points؛ مفيش حالة = نكمل بقيمة السجل — موثق في model-state.ts).
+      if (!isModelRuntimeEnabled(model.id, model.enabled)) return;
       if (!required.every((capability) => model.capabilities.includes(capability))) return;
       if (candidates.some((c) => c.provider === provider && c.model === model.id)) return;
       candidates.push({ provider, model: model.id });
@@ -235,7 +239,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
       m.provider === primaryProvider &&
       isModelSelectable(m, allowPaid) &&
       required.every((capability) => m.capabilities.includes(capability))
-  ).sort((a, b) => a.priority - b.priority);
+  ).sort((a, b) => getRuntimePriority(a.id, a.priority) - getRuntimePriority(b.id, b.priority));
   for (const model of primaryModels) pushIfEligible(primaryProvider, model.id);
   // المرشّح العام (بدون موديل محدد) بيتقبل فقط لو المزوّد أصله عنده موديل
   // قابل للاختيار — مزوّد كل موديلاته موقوفة/مستثناة ماينفعش يتخطى البوابة

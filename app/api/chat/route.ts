@@ -7,6 +7,8 @@ import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 
@@ -26,6 +28,22 @@ export async function POST(req: Request) {
     // ٢) حدّ استخدام لكل مستخدم عشان فاتورة Groq
     const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
+
+    // ٢.٥) كوتة الاشتراك للرسايل (Phase 1.5) — messages_per_2h كانت موجودة في
+    // الداتابيز من غير أي فرض فعلي. فحص + استهلاك من السيرفر قبل أي شغل غالي.
+    // fail-open موثق لو جداول الكوتا لسه مش متنفذة.
+    const quota = await checkSubscriptionQuota(user.id, "message");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: { message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", code: "MESSAGE_QUOTA_EXCEEDED" } },
+        { status: 429 }
+      );
+    }
+
+    // ٢.٦) تحديث حالة الموديلات من الداتابيز (Phase 2) — تبديلات الأدمن
+    // (enabled/priority/daily_limit في ai_models) بقت بتأثر فعليًا في الراوتر.
+    // TTL ٣٠ ثانية + fail-open موثق، فمفيش ضربة DB مع كل رسالة.
+    await refreshModelStateCache();
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {

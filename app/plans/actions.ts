@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { hasPermission } from "@/lib/auth-roles";
+import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
 
 const FREE_KEY = "billing_free_period_enabled";
 const PAY_KEY = "billing_payments_enabled";
@@ -37,16 +39,24 @@ export async function updateBillingSettings(
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("غير مصرح");
+  if (!user || user.is_anonymous) throw new Error("غير مصرح");
 
-  // Reuse existing admin authorization from admin/page pattern
-  const ownerEmail = (process.env.OWNER_EMAIL ?? "").trim().toLowerCase();
-  const { data: profileRes } = await supabase.from("profiles").select("email").eq("id", user.id).single().catch(() => ({ data: null }));
-  const isOwner = (profileRes as any)?.email?.trim().toLowerCase() === ownerEmail;
-  if (!isOwner) {
-    // Fallback to existing admin check
-    const { data: entData } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: "plan", p_value: "premium" }).catch(() => ({ data: false }));
-    if (!entData) throw new Error("غير مصرح — فقط Admin/Owner");
+  // Phase 1.5 — إغلاق فجوة أمنية: كانت بتقبل أي مستخدم عنده entitlement
+  // "premium" كبديل عن فحص الدور، يعني أي مشترك مدفوع يقدر يقلب إعدادات
+  // الفواتير العامة للمنصة كلها. دلوقتي: صلاحية plans.manage فقط
+  // (Owner حسب ADMIN_PERMISSION_MAP) + تسجيل إجباري في audit_log.
+  const allowed = await hasPermission(supabase, user.id, user.email ?? null, "plans.manage");
+  if (!allowed) {
+    await recordAuditLog({
+      actor: user.id,
+      actor_email: user.email ?? null,
+      action: "plans.manage",
+      resource_type: "billing_settings",
+      resource_id: "app_settings",
+      details: { reason: "forbidden", attempted: input },
+      result: "FAIL",
+    }).catch(() => {});
+    throw new Error("غير مصرح — صلاحية plans.manage مطلوبة (Owner فقط)");
   }
 
   const freeVal = input.freePeriodEnabled === undefined ? true : Boolean(input.freePeriodEnabled);
@@ -59,8 +69,26 @@ export async function updateBillingSettings(
       const { error } = await privileged.from("app_settings").upsert({ key, value, updated_at: new Date().toISOString() }).select();
       if (error) throw new Error("فشل الحفظ: " + error.message);
     }
+    await recordAuditLog({
+      actor: user.id,
+      actor_email: user.email ?? null,
+      action: "plans.manage",
+      resource_type: "billing_settings",
+      resource_id: "app_settings",
+      details: { freePeriodEnabled: freeVal, paymentsEnabled: payVal },
+      result: "PASS",
+    }).catch(() => {});
     return { ok: true, freePeriodEnabled: freeVal, paymentsEnabled: payVal };
   } catch (e: any) {
+    await recordAuditLog({
+      actor: user.id,
+      actor_email: user.email ?? null,
+      action: "plans.manage",
+      resource_type: "billing_settings",
+      resource_id: "app_settings",
+      details: { reason: "db_write_failed", error: e?.message || String(e) },
+      result: "FAIL",
+    }).catch(() => {});
     throw new Error("خطأ في حفظ الإعدادات: " + (e?.message || String(e)));
   }
 }

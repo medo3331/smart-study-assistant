@@ -85,26 +85,17 @@ export async function proxy(request: NextRequest) {
      عليه لأن مالوش حساب أصلًا. */
   const isGuest = !user || user.is_anonymous;
 
-  // ── Admin protection (OWNER-ONLY) — قبل أي منطق آخر
-  // لا import لموديول مشترك هنا (توصية Next للـproxy) — نكرر نفس منطق isOwnerEmail
-  // Server-only: OWNER_EMAIL لا يصل للـclient bundle أبدًا
+  // ── Admin protection — قبل أي منطق آخر
+  // ⚠️ المرحلة 1: الـproxy مسؤول عن **الدخول** بس (مسجّل غير زائر). تصريح الدور
+  // بقى server-side في app/admin/layout.tsx + كل صفحة (requireAdminPermission)
+  // لأن الدور الحقيقي محتاج قراءة site_admins من الداتابيز، وapp/admin/layout
+  // بيشتغل على كل مسار /admin/* — يعني الوصول المباشر بالرابط مرفوض برضه.
   if (isAdminPath(pathname)) {
     if (!user || user.is_anonymous) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       url.search = "";
       url.searchParams.set("next", pathname + search);
-      return redirectWith(url, request);
-    }
-    const ownerRaw = process.env.OWNER_EMAIL || process.env.ADMIN_EMAILS || "";
-    const emailNorm = (user.email || "").trim().toLowerCase();
-    const allowed = ownerRaw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-    const isOwner = emailNorm.length > 0 && allowed.includes(emailNorm);
-    if (!isOwner) {
-      // مسجل لكن ليس Owner → Dashboard (لا 403 حتى لا نكشف وجود الصفحة)
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      url.search = "";
       return redirectWith(url, request);
     }
     return supabaseResponse;

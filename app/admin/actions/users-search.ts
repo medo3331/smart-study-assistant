@@ -9,6 +9,7 @@ export interface UserSearchResult {
   persona: string | null;
   role: string | null;
   user_code: string | null;
+  public_user_code: string | null;
   is_banned: boolean;
   plan_key: string | null;
   on_trial: boolean;
@@ -21,7 +22,7 @@ export async function searchUsers(query: string, planFilter: string, statusFilte
     // Note: EPIC-6 user_codes table is basic; full activation flow separate.
     let baseQuery = privileged
       .from("profiles")
-      .select("id, display_name, email, persona, role, user_codes(code, is_active), entitlements(kind, value, metadata)")
+      .select("id, display_name, email, persona, role, public_user_code, user_codes(code, is_active), entitlements(kind, value, metadata)")
       .or(`display_name.ilike.%${query}%,email.ilike.%${query}%`);
 
     // Note: real filtering by plan/status would require additional joins.
@@ -36,6 +37,7 @@ export async function searchUsers(query: string, planFilter: string, statusFilte
       persona: row.persona,
       role: row.role,
       user_code: row.user_codes?.[0]?.code || null,
+      public_user_code: row.public_user_code || null,
       is_banned: false, // Note: actual ban status requires additional tracking table or field (future enhancement)
       plan_key: row.entitlements?.find?.((e: any) => e.kind === "plan")?.value || null,
       on_trial: row.entitlements?.some?.((e: any) => e.kind === "plan" && e.metadata?.source === "premium_trial_0_5") || false,

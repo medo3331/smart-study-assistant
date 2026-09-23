@@ -134,20 +134,20 @@ export async function getAdminRole(
 
 /** مفاتيح الصلاحيات حسب المستند EPIC-2 (§1.3). */
 export type AdminPermissionKey =
-  | "users.read" | "users.ban" | "users.unban" | "users.impersonate"
+  | "users.read" | "users.ban" | "users.unban" | "users.impersonate" | "users.regenerate_code"
   | "plans.manage" | "trial.manage" | "models.manage" | "rewards.manage"
   | "admins.manage" | "files.moderate" | "audit.read"
   | "subscriptions.manage";
 
 export const ADMIN_PERMISSION_KEYS: AdminPermissionKey[] = [
-  "users.read", "users.ban", "users.unban", "users.impersonate",
+  "users.read", "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
   "plans.manage", "trial.manage", "models.manage", "rewards.manage",
   "admins.manage", "files.moderate", "audit.read", "subscriptions.manage",
 ];
 
 /** أي العمليات تعتبر حساسة وتحتاج تسجيل في audit_log. */
 export const SENSITIVE_ACTIONS: AdminPermissionKey[] = [
-  "users.ban", "users.unban", "users.impersonate",
+  "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
   "plans.manage", "trial.manage", "models.manage",
   "admins.manage", "subscriptions.manage",
 ];
@@ -163,10 +163,11 @@ export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRec
   "users.ban":          { key: "users.ban", allowed_roles: ["owner","admin"], is_sensitive: true },
   "users.unban":        { key: "users.unban", allowed_roles: ["owner","admin"], is_sensitive: true },
   "users.impersonate":  { key: "users.impersonate", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "users.regenerate_code": { key: "users.regenerate_code", allowed_roles: ["owner","admin"], is_sensitive: true },
   "plans.manage":       { key: "plans.manage", allowed_roles: ["owner"], is_sensitive: true },
   "trial.manage":       { key: "trial.manage", allowed_roles: ["owner"], is_sensitive: true },
   "models.manage":      { key: "models.manage", allowed_roles: ["owner"], is_sensitive: true },
-  "rewards.manage":     { key: "rewards.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "rewards.manage":     { key: "rewards.manage", allowed_roles: ["owner"], is_sensitive: true },
   "admins.manage":      { key: "admins.manage", allowed_roles: ["owner"], is_sensitive: true },
   "files.moderate":     { key: "files.moderate", allowed_roles: ["owner","admin","support"], is_sensitive: true },
   "audit.read":         { key: "audit.read", allowed_roles: ["owner","admin","support"], is_sensitive: false },

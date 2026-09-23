@@ -31,9 +31,9 @@ function useIsOwner(): boolean {
   useEffect(() => {
     let alive = true;
     fetch("/api/admin/is-owner", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { isOwner: false }))
+      .then((r) => (r.ok ? r.json() : { isOwner: false, canAccessAdmin: false }))
       .then((j) => {
-        if (alive) setIsOwner(Boolean(j?.isOwner));
+        if (alive) setIsOwner(Boolean(j?.isOwner || j?.canAccessAdmin));
       })
       .catch(() => {});
     return () => {
