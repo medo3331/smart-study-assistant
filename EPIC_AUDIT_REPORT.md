@@ -271,3 +271,42 @@ Code↔DB column-name alignment re-verified: `lib/ai/model-state.ts:52` selects 
 - ⚠️ **حدود التحقق بصراحة**: سلوك الـtrigger على `UPDATE ... = null` مُتحقق منه من تعريفه المؤكد في الـDB الحية (`BEFORE INSERT OR UPDATE` يملأ NULL/'') — لم يُنفَّذ توليد حقيقي على بيانات إنتاج تحوّطًا. أول استخدام فعلي من واجهة الأدمن هيظهر كـ PASS في `audit_log` ويأكد السلسلة كاملة end-to-end.
 - دفع Git: كود المرحلة 3 = commit **eb65ab3** — **مؤكد على `origin/progress-experience`** (ظهر كـ tip في `git rev-parse origin/progress-experience` + `git ls-remote` وقت الدفع، وكل ما بعده في الـlog هو docs-only لهذا التقرير). أي commit توثيقي لاحق لا يمس الكود. ملاحظة تشغيلية: الدفع يتم عبر `git push origin HEAD:progress-experience` لأن فرع `progress-experience` المحلي مسحوب في مسار تاني (`C:/Desktop/...`) وقديم — الدفع المباشر باسم الفرع كان هيتحقق من المرجع المحلي القديم، فالمسار الصريح HEAD→remote هو الآمن.
 
+
+---
+
+## Regression Fix — dashboard/progress (from 273dec1)
+
+### 1) المدى الكامل (بحث منهجي — مش افتراض)
+
+- `git show 273dec1 --stat`: الملف الوحيد بنقصان ضخم هو `app/dashboard/progress/page.tsx` (**+93 −830**).
+- `git diff dc1e918 273dec1 --stat -- app lib components`: الملفات التانية كلها **إضافات** (admin actions ‏+46..+161، `lib/auth-roles.ts` ‏+117، `lib/user-profiles.ts` ‏+65) أو تعديلات صغيرة (`MagicWheelDashboard.tsx` ‏+9 −8، `app/admin/page.tsx` ‏+185 −43 — ده تحسين أدمن مقصود، محمي بقاعدة "لا تلمس admin/*").
+- `git diff --numstat dc1e918 273dec1` مرتّبًا حسب الحذف تنازليًا: الأعلى هو progress/page (−830)، والتالي admin/page (−43) — **لا يوجد ملف ثانٍ بنمط "design restore"**. فحص الحذف الكامل للملفات (`--name-status` حرف D) في `app/ lib/ components/ preview/`: **صفر ملفات محذوفة**.
+- الاعتماديات سليمة: `lib/pages-data.ts` (‏`fetchCourses` سطر 208، `fetchActivityRange` سطر 421)، `app/dashboard/components/types.ts` (‏`StudyDay` سطر 26)، `preview/progress-preview.html`، والتوكنز في `app/globals.css` (‏`--card-primary`/`--accent`/`--muted`/`--text` لكل الثيمات) — كلها موجودة ولم تُمس بعد dc1e918 (آخر تعديل لـ pages-data قبل dc1e918 أصلًا).
+- ملاحظة توثيقية: النسخة `dc1e918:.../app/api/physics/...` و`preview/progress-preview.html` (386 سطر، tsc+build ناجحان وقتها) لم تُمس.
+
+### 2) المقارنة (قبل 273dec1 = نتيجة dc1e918، مقابل الحالي على origin)
+
+| البعد | نسخة dc1e918 (المحذوفة — 856 سطر) | نسخة 273dec1/الحالي (119 سطر) |
+|---|---|---|
+| اسم المكوّن | `ProgressExperiencePage` | `CurriculumProgressPage` |
+| مصدر البيانات | حقيقي: `fetchCourses` + `fetchActivityRange` من `@/lib/pages-data` على `study_configs`/`study_days`/`profiles.streak`/`activity_log` | `/api/curriculum-coverage` (تغطية منهج) |
+| الأقسام | Header + Overall + **Today** + **Plan** + **NextAction** + **Status** (onTrack/behind/completed) + **Breakdown** (per-subject) + **History** (أسبوعي) + **Streak** + Empty/Error/Loading | Coverage Card + شرح حالات + ملاحظة أمان + تنبيه عزل |
+| المنطق | `completed/planned*100` مع zero-guard، `remaining=max(0,planned-completed)`، bar clamped 0-100، `clampPct`، `ARABIC_WEEKDAYS`، `buildWeeklyEmpty` | منطق تغطية منهج مختلف تمامًا |
+| المكوّنات | `OverallProgressCard`، `StudyPlanCard`، `TodayProgressCard`، `StreakCard`، `StatusCard`، `NextActionCard`، `BreakdownCard`، `HistoryCard`، `EmptyState` | `StateCard` فقط |
+
+الخلاصة: 273dec1 **استبدل** تجربة التقدم اليومية (study-days) بتجربة تغطية المنهج (curriculum) — وظيفتان مختلفتان على نفس المسار، والتجربة اليومية هي المفقودة.
+
+### 3) القرار: استرجاع كامل — والسبب
+
+- `git log 273dec1..HEAD -- app/dashboard/progress/page.tsx` = **فارغ**: الملف لم يُلمس إطلاقًا بعد 273dec1 — **صفر تعارض** مع أي شغل لاحق (المراحل 1-3 لم تقترب منه؛ `git diff HEAD -- app/admin/` = صفر حرف).
+- الاعتماديات (pages-data، types، globals tokens) كلها سليمة وموجودة.
+- إذن: الاسترجاع الكامل آمن 100%، وأي "استعادة انتقائية" ممنوعة بنص المهمة (نفس الأسلوب اللي سبب المشكلة). التنفيذ: `git checkout dc1e918 -- app/dashboard/progress/page.tsx` — نسخة byte-identical من dc1e918 (التحقق: `git diff dc1e918 -- <file>` = صفر حرف).
+- لا merge يدوي، لا قرارات دمج — لأنه لا يوجد شيء يُدمج معه.
+
+### 4) التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0) بعد الاسترجاع.
+- `npx next build` (بيئة الإنتاج الحقيقية) → **PASS**: `Compiled successfully in 22.8s` + `BUILD_EXIT_0`، والمسار `○ /dashboard/progress` ظاهر في جدول الراوتات.
+- الدفع: hash مؤكد على `origin/progress-experience` عبر `git fetch` + `git rev-parse` + `git ls-remote` (يُذكر في ملخص الجلسة).
+- النطاق محترم: `app/admin/*` والمراحل 1-3 لم تُمس إطلاقًا.
+
