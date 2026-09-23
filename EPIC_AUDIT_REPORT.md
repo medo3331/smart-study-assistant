@@ -170,8 +170,9 @@
 | 8 | `db/app-settings-billing.sql` | **Phase 1.5 (new)** | `app_settings` (was missing entirely) |
 | 9 | `db/ai-models-priority-limits.sql` | **Phase 2 (new)** | `ai_models.daily_limit` + positive CHECK |
 | 10 | `db/10-user-code-regenerate-permission.sql` | **Phase 3 (new)** | `admin_permission_keys` reference row for `users.regenerate_code` (idempotent; reference-only table — real enforcement is in `ADMIN_PERMISSION_MAP`) |
+| 11 | `db/11-ai-operations-provider-check.sql` | **Phase 4.1 (new)** | widens `ai_operations_provider_check` to `('groq','nvidia','openrouter','gemini')` (idempotent; fixes silent insert failures) |
 
-Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10. `db/epic6-user-code-preview.sql` deleted in Part B (byte-identical duplicate of #5).
+Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11. `db/epic6-user-code-preview.sql` deleted in Part B (byte-identical duplicate of #5).
 
 ### Part B — Fixes executed (in priority order)
 
@@ -309,4 +310,37 @@ Code↔DB column-name alignment re-verified: `lib/ai/model-state.ts:52` selects 
 - `npx next build` (بيئة الإنتاج الحقيقية) → **PASS**: `Compiled successfully in 22.8s` + `BUILD_EXIT_0`، والمسار `○ /dashboard/progress` ظاهر في جدول الراوتات.
 - الدفع: hash مؤكد على `origin/progress-experience` عبر `git fetch` + `git rev-parse` + `git ls-remote` (يُذكر في ملخص الجلسة).
 - النطاق محترم: `app/admin/*` والمراحل 1-3 لم تُمس إطلاقًا.
+
+
+---
+
+## Phase 4 — 4.1 إصلاح قيد ai_operations.provider
+
+### المشكلة (موثقة من جلسة سابقة — القاعدة 5)
+
+القيد الأصلي في `db/ai-operations.sql:5` يسمح بـ `('groq','gemini')` فقط، بينما نوع الكود الفعلي (`lib/ai/types.ts:6`):
+
+```ts
+export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
+```
+
+أي عملية `nvidia`/`openrouter` كانت تفشل عند الـ`insert` **بصمت** — `recordAiOperation` (`lib/ai/operations.ts:82`) مجرد `console.warn` (best-effort بالتصميم)، فتضيع بيانات الاستخدام الفعلية بهدوء. المفارقة: `estimateCost` و`routeCandidates` يتعاملان مع الـ4 فعليًا، والقيد وحده هو اللي كان بيمنع التسجيل.
+
+### الدليل من الـDB الحية (قبل الإصلاح)
+
+- `ai_operations_provider_check`: `CHECK ((provider = ANY (ARRAY['groq'::text, 'gemini'::text])))` — مؤكد.
+- `SELECT DISTINCT provider FROM public.ai_models` → `gemini, openrouter, groq, nvidia` — القيد القديم كان سيمنع تسجيل عمليات 2 من الـ4 الفعليين (`nvidia`/`openrouter`).
+- `SELECT DISTINCT provider FROM public.ai_operations` → **فارغ** (لا صفوف بعد — لا بيانات تاريخية مهددة بالتغيير، فالتوسيع آمن تمامًا ولا يحتاج backfill).
+- `ai_models` لا يحمل أي CHECK على provider — لا تغيير مطلوب هناك.
+
+### الإصلاح
+
+- ملف جديد **`db/11-ai-operations-provider-check.sql`** — **يحتاج تشغيل يدوي** (idempotent): `DROP CONSTRAINT IF EXISTS` + إعادة إنشاء بنفس الاسم `ai_operations_provider_check` مع `('groq','nvidia','openrouter','gemini')` — القائمة مطابقة حرفيًا لـ`AiProviderName`، مش تخمين.
+- مضاف **رقم 11 في القائمة الموحدة** (وترتيب التنفيذ 1→11).
+- ملاحظة: لا كود TypeScript تغيّر — الـtype كان صحيحًا أصلًا؛ المشكلة DB فقط. لا حاجة لتعديل `recordAiOperation` (الـbest-effort مقصود).
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0) — لا تغيير كود، والـmigration لا يمس TypeScript.
+- البناء الكامل + الدفع + الـhash: في نهاية المرحلة 4 (البنود 4.2→4.8 تضيف كودًا وتُبنى كلها معًا؛ كسر البناء في أي بند يوقف كل شيء حسب التعليمات). SQL #11 نفسه مُتحقق منه منطقيًا: `DROP IF EXISTS` + `ADD CONSTRAINT` بنفس الاسم — idempotent وآمن للتكرار، ويُطبَّق يدويًا.
 
