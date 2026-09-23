@@ -5,6 +5,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
+import { requireAdminPermission } from "@/lib/admin/auth-check";
 
 export interface RewardHistoryRow {
   id: string;
@@ -19,7 +20,11 @@ export interface RewardHistoryRow {
   created_at: string;
 }
 
-export async function getRewardsHistory(limit = 20): Promise<RewardHistoryRow[]> {
+export async function getRewardsHistory(limitRaw = 20): Promise<RewardHistoryRow[]> {
+  // Phase 4.8 (RBAC review): الحماية جوه الفعل نفسه — server actions
+  // قابلة للاستدعاء بالـaction ID من أي عميل، فمفيش فايدة من فحص الصفحة فقط.
+  await requireAdminPermission("rewards.manage");
+  const limit = Math.min(Math.max(Math.floor(Number(limitRaw) || 20), 1), 100);
   const supabase = createServiceClient();
   try {
     const { data } = await supabase

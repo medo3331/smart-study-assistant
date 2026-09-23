@@ -22,8 +22,6 @@ export interface AdminNavItem {
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
   icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings";
-  /** لسه هيكل أساسي فقط (بدون منطق كامل)؟ */
-  skeletonOnly?: boolean;
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [

@@ -18,8 +18,6 @@ export interface UserSearchResult {
   created_at: string | null;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * بحث المستخدمين — Phase 4.4: فلاتر حقيقية على الداتابيز عبر service client.
  *
@@ -116,8 +114,4 @@ function mapRows(rows: any[], planFilter: string): UserSearchResult[] {
       if (planFilter === "free") return u.plan_key === "free";
       return true;
     });
-}
-
-export function isValidUuid(v: string): boolean {
-  return UUID_RE.test(v);
 }

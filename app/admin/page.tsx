@@ -96,7 +96,6 @@ export default async function AdminHomePage({
               <span className="text-[11px] text-slate-400 leading-relaxed">{item.description}</span>
               <span className="text-[10px] text-slate-500 font-mono" dir="ltr">
                 {item.permission}
-                {item.skeletonOnly ? " · skeleton" : ""}
               </span>
             </Link>
           ))}

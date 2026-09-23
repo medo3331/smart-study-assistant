@@ -512,3 +512,90 @@ export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
 
 - `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.7.
 - البناء الكامل + الدفع: في نهاية المرحلة 4 (4.8 آخر بند).
+
+---
+
+## Phase 4 — 4.8 المراجعة النهائية: RBAC + التنقل (كل الصفحات)
+
+### الفحص المسبق (القاعدة 4)
+
+- `git log` لملفات المراجعة (nav/auth-roles/rewards actions): آخر شغل قديم — لا شيء حديث يُخشى استبداله.
+
+### مصفوفة الصفحات ↔ الصلاحيات (مطابقة 100% مع nav)
+
+| الصفحة | requireAdminPermission | بند nav (permission) | الحالة |
+|---|---|---|---|
+| `/admin` الرئيسية | `users.read` (HOME) | — (الرئيسية لكل أدمن) | ✅ |
+| `/admin/users` | `users.read` | users.read | ✅ |
+| `/admin/users/[id]` | `users.read` | users.read | ✅ |
+| `/admin/subscriptions` | `subscriptions.manage` | subscriptions.manage | ✅ |
+| `/admin/plans` | `plans.manage` | plans.manage | ✅ |
+| `/admin/models` | `models.manage` | models.manage | ✅ |
+| `/admin/rewards` | `rewards.manage` | rewards.manage | ✅ |
+| `/admin/audit-log` | `audit.read` | audit.read | ✅ |
+| `/admin/files` | `files.moderate` | files.moderate | ✅ |
+| `/admin/settings` | `admins.manage` | admins.manage | ✅ |
+
+### مصفوفة أفعال الكتابة (فحص داخل الفعل + audit)
+
+| الفعل | الفحص في الفعل | audit |
+|---|---|---|
+| `banUser`/`unbanUser` | `hasPermission users.ban/unban` (+owner bypass) | BLOCKED/FAIL/PASS ✅ |
+| `regenerateUserPublicCode` | `hasPermission users.regenerate_code` | PASS/FAIL/BLOCKED ✅ |
+| `exportUsers` + route | `hasPermission users.read` | — (قراءة) ✅ |
+| `activateSubscription` | owner-only | PASS/FAIL/BLOCKED ✅ |
+| `extendSubscription` (4.5) | owner-only | PASS/FAIL/BLOCKED ✅ |
+| `issueReward` | owner (rewards.manage) | PASS/BLOCKED ✅ |
+| `requireModelsManage` (3 أفعال) | `hasPermission models.manage` | PASS/FAIL/BLOCKED ✅ |
+| `updateBillingSettings` | `hasPermission plans.manage` | PASS/FAIL ✅ |
+| `updateFileClassification`/`softDeleteFile`/`restoreFile` (4.7) | `hasPermission files.moderate` (×2 مع الغلاف) | PASS/FAIL/BLOCKED ✅ |
+| `manage-roles` route | فحص الدور | audit ✅ |
+
+### الثغرات المكتشفة وأُصلحت هنا (لا PASS مزيف)
+
+1. **🔥 `getRewardsHistory` + `getMostActiveUsers` كانا بلا أي فحص صلاحية** (server actions بـservice_role = أي عميل بالـaction ID يقرأ إيميلات/نشاط). أُصلح: `requireAdminPermission("rewards.manage")` **جوه الفعل** + تحديد `limit` (1–100).
+2. **حقل ميّت مضلل**: `skeletonOnly` على عنصر الملفات كان بيعرض " · skeleton" في الرئيسية بعد ما الصفحة صارت حقيقية (4.7) — أُزيل الحقل من `AdminNavItem` والعرض من `app/admin/page.tsx`.
+3. **`SENSITIVE_ACTIONS`**: ناقص `rewards.manage` + `files.moderate` بينما `ADMIN_PERMISSION_MAP` يقول `is_sensitive: true` لهما — أُضيفا (اتساق البيانات؛ المصفوفة مرجعية).
+
+### موثّق (لا فجوة)
+
+- `claimPremiumTrial` (`app/plans/actions-trial.ts`) — action موجّه للمستخدم العادي مش مسار أدمن؛ التفويض جوه الـRPC `claim_premium_trial` (security definer بـ`auth.uid()`) — server-authoritative بالتصميم (مذكور في تعليق الفعل نفسه).
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0).
+- `npx next build` + الدفع + hash: أدناه (النتيجة النهائية للمرحلة 4).
+
+---
+
+## Phase 4 — النتيجة النهائية (4.1 → 4.8)
+
+### البناء الكامل (دليل)
+
+- `npx next build` (Next.js 16.2.10 / Turbopack، placeholder `.env.local` مؤقت حُذف بعده — نفس منهج المراحل السابقة):
+  - **✓ Compiled successfully in 24.0s** + **Finished TypeScript in 14.6s** + **0 أخطاء** + **BUILD_EXIT:0**.
+  - كل مسارات اللوحة dynamic (ƒ): `/admin`, `/admin/users`, `/admin/users/[id]`, `/admin/subscriptions`, `/admin/plans`, `/admin/models`, `/admin/rewards`, `/admin/audit-log`, `/admin/files`, `/admin/settings` + `/api/admin/users/export`.
+- **خطأ اكتشفه البناء ولم يكشفه tsc** (أُصلح قبل الدفع — لا PASS مزيف): `users-search.ts` كانت تُصدِّر `isValidUuid` sync من ملف `"use server"` — قيد Next: كل exports لازم async (Turbopack رفض). أُزيلت الدالة (صفر مستهلكين) + `UUID_RE` الميتة، وفُحصت كل ملفات `"use server"` في المشروع: صفر exports غير async متبقية.
+
+### قائمة الـSQL الموحدة (بعد المرحلة 4)
+
+1 → 12 (جديد في المرحلة 4: **#11** `db/11-ai-operations-provider-check.sql` — 4.1، **#12** `db/12-files-deleted-at.sql` — 4.7). كلاهما **manual run** وidempotent. الباقي لم يتغير.
+
+### ملخص البنود
+
+| البند | الحالة | الملفات الرئيسية |
+|---|---|---|
+| 4.1 CHECK توسيع | ✅ | `db/11-…sql` (+#11) |
+| 4.2 تصميم موحّد | ✅ | `app/admin/layout.tsx` (dir="rtl") |
+| 4.3 إحصائيات حقيقية | ✅ | `lib/admin/overview.ts` + `app/admin/page.tsx` |
+| 4.4 مستخدمين (حظر/فلاتر/تصدير/استهلاك) | ✅ | `users-ban/search/export` + `user-consumption.ts` + صفحات users |
+| 4.5 اشتراكات (انتهاء/تمديد owner-only) | ✅ | `subscription-manage.ts` + صفحة الاشتراكات |
+| 4.6 audit-log (فلاتر/pagination/تفاصيل) | ✅ | `audit-log/page.tsx` |
+| 4.7 ملفات (عرض/تصنيف/soft-delete SQL#12) | ✅ | `files/page.tsx` + `files-manage/forms` + `db/12-…sql` (+#12) |
+| 4.8 RBAC/nav نهائي | ✅ | إصلاح 2 server actions بلا فحص + skeletonOnly + SENSITIVE_ACTIONS |
+
+### التحقق النهائي
+
+- `npx tsc --noEmit` → **PASS** (exit 0).
+- `npx next build` → **PASS** (BUILD_EXIT:0، التفاصيل أعلاه).
+- الدفع + hash: `git push origin HEAD:progress-experience` + التأكد بـ`git rev-parse origin/progress-experience` (النتيجة في رسالة التسليم/commit الرافع).
