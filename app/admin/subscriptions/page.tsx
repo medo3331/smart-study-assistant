@@ -31,7 +31,7 @@ export default async function AdminSubscriptionsPage({
     <div className="space-y-6">
       <AdminPageHeader
         title="تفعيل الاشتراكات"
-        subtitle="تفعيل يدوي عبر User Code (MAG-XXXXXX) أو UUID — مع تسجيل إلزامي في audit_log."
+        subtitle="تفعيل يدوي عبر User Code (MAG-XXX-XXXX) أو UUID — مع تسجيل إلزامي في audit_log."
         badge="subscriptions.manage"
         permissionKey="subscriptions.manage"
       />
@@ -54,7 +54,7 @@ export default async function AdminSubscriptionsPage({
             name="sub_lookup"
             type="text"
             defaultValue={sp.sub_lookup ?? ""}
-            placeholder="MAG-XXXXXX أو UUID"
+            placeholder="MAG-XXX-XXXX أو UUID"
             className="bg-slate-800 border border-amber-600 rounded-lg px-3 py-2 text-xs text-slate-100 w-full sm:w-72 font-mono"
           />
           <button type="submit" className="text-xs bg-amber-500 text-amber-950 rounded-lg px-4 py-2 hover:bg-amber-400 font-bold flex items-center gap-1">
@@ -130,7 +130,7 @@ export default async function AdminSubscriptionsPage({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <label className="flex flex-col gap-1">
               <span className="text-xs text-slate-400">User Code</span>
-              <input name="user_code" type="text" placeholder="MAG-XXXXXX" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono" required />
+              <input name="user_code" type="text" placeholder="MAG-XXX-XXXX" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono" required />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs text-slate-400">الخطة</span>

@@ -39,7 +39,7 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
       if (data) userRow = data;
     } catch {}
 
-    // If not found, try by user_code (MAG-XXXXXX)
+    // If not found, try by user_code (MAG-XXX-XXXX)
     if (!userRow) {
       const { data: codeRow } = await supabase.from("user_codes").select("user_id, code, is_active").eq("code", userIdOrCode.trim()).maybeSingle();
       if (codeRow) {

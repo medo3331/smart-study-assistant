@@ -218,4 +218,21 @@ Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. `db/ep
 
 **STOP before Phase 3** (per instruction) — Phase 3 = QR codes on top of the now-unified `MAG-XXX-XXXX` `public_user_code` format.
 
+### Live DB verification (executed 2026-09-23, direct pg via DATABASE_URL)
+
+All 9 manual SQL files confirmed applied on production Supabase:
+
+| # | Object | Verified evidence |
+|---|---|---|
+| 1 | `site_admins` + `audit_log` | both tables exist; `audit_log` has 4 RLS policies (admin read / no client write-update-delete) |
+| 2 | `ai_models` | 13 columns incl. `model_id` PK (text), `enabled`, `priority`; 12 seeded rows matching `MODEL_REGISTRY` exactly (deepseek-v4-flash + inkling-small disabled, rest enabled) |
+| 3+4 | `rewards_issued` + RLS | table exists; 5 policies (admin read/write + no client insert/update/delete) |
+| 5 | `public_user_code` | `profiles.public_user_code` (text) + functions `generate_public_user_code` + `set_public_user_code` |
+| 6 | quota columns | `subscription_plans.messages_per_2h`, `subscription_quotas.messages_24h` |
+| 7 | `files` | table exists + 4 owner RLS policies (note: table name is `files`, not `*upload*`) |
+| 8 | `app_settings` | 2 seed rows (`billing_free_period_enabled=true`, `billing_payments_enabled=false`), RLS enabled, `app_settings_read_all` SELECT policy |
+| 9 | `ai_models.daily_limit` | column `int NULL` + constraint `ai_models_daily_limit_positive CHECK (daily_limit IS NULL OR daily_limit > 0)` |
+
+Code↔DB column-name alignment re-verified: `lib/ai/model-state.ts:52` selects `model_id, enabled, priority, daily_limit`; `app/admin/actions/ai-models.ts` updates with `.eq("model_id", …)` — matches the live schema (an earlier verification query of mine used `id` and failed; that was a query typo, not a code bug).
+
 
