@@ -72,10 +72,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/files",
     label: "إدارة الملفات",
-    description: "مراجعة الملفات المرفوعة وتصنيفها",
+    description: "عرض/تصنيف/حذف ملفات المستخدمين (Phase 4.7)",
     permission: "files.moderate",
     icon: "FolderOpen",
-    skeletonOnly: true,
   },
   {
     href: "/admin/settings",

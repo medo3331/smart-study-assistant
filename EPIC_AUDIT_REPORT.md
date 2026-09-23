@@ -171,8 +171,9 @@
 | 9 | `db/ai-models-priority-limits.sql` | **Phase 2 (new)** | `ai_models.daily_limit` + positive CHECK |
 | 10 | `db/10-user-code-regenerate-permission.sql` | **Phase 3 (new)** | `admin_permission_keys` reference row for `users.regenerate_code` (idempotent; reference-only table — real enforcement is in `ADMIN_PERMISSION_MAP`) |
 | 11 | `db/11-ai-operations-provider-check.sql` | **Phase 4.1 (new)** | widens `ai_operations_provider_check` to `('groq','nvidia','openrouter','gemini')` (idempotent; fixes silent insert failures) |
+| 12 | `db/12-files-deleted-at.sql` | **Phase 4.7 (new)** | `files.deleted_at` + partial index (idempotent; enables admin soft-delete/restore — until manually run, the UI shows "نفّذ SQL #12" instead of pretending) |
 
-Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11. `db/epic6-user-code-preview.sql` deleted in Part B (byte-identical duplicate of #5).
+Recommended execution order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. `db/epic6-user-code-preview.sql` deleted in Part B (byte-identical duplicate of #5).
 
 ### Part B — Fixes executed (in priority order)
 
@@ -444,7 +445,7 @@ export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
    - بطاقتان جديدتان تحت بطاقة الحالة: انتهاء الاشتراك (محسوب = `activation.created_at + duration_days` — الجدول مالهوش عمود expires_at، الانتهاء محسوب كما في الـschema) + انتهاء الامتياز (`entitlements.expires_at`).
    - منطق `expiryInfo`: منتهٍ = rose غامق · ≤7 أيام = amber بعدد الأيام · وإلا emerald بعدد المتبقي · بدون انتهاء/بيانات = fallback صريح (N/A بسببه أو "دائم").
 2. **زر التمديد الفعلي (Owner-only)** — جديد في `subscription-manage.ts: extendSubscription(...)`:
-   - **F검사 الدور**: نفس حماية `activateSubscription` (role=owner || isOwnerEmail) — محاولة غير Owner → `audit_log` **BLOCKED** صريح مش مجرد رفض.
+   - **Fفحص الدور**: نفس حماية `activateSubscription` (role=owner || isOwnerEmail) — محاولة غير Owner → `audit_log` **BLOCKED** صريح مش مجرد رفض.
    - يقبل UUID أو كود MAG، لازم يوجد تفعيل غير ملغٍ (FAIL واضح لو مفيش — التمديد مش تفعيل جديد)، حساب الانتهاء السابق والمتبقي، ثم:
    - **كتابة `subscription_activations`**: صف جديد `duration_days = المتبقي + أيام التمديد` مع note يوثّق التمديد.
    - **كتابة `entitlements.expires_at`**: من الانتهاء الحالي (أو من الآن لو انتهى) + أيام التمديد؛ لو NULL (دائم) بدون تغيير موثّق؛ لو مفيش امتياز نشط → `entitlement_extended=false` صريح (**لا اختراع امتيازات**).
@@ -479,3 +480,35 @@ export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
 
 - `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.6.
 - البناء الكامل + الدفع: في نهاية المرحلة 4 (مع 4.7→4.8).
+
+---
+
+## Phase 4 — 4.7 إدارة الملفات: عرض حقيقي + تصنيف + soft-delete (SQL #12)
+
+### الفحص المسبق (القاعدة 4)
+
+- `git log -- app/admin/files/page.tsx lib/admin/nav.ts`: آخر شغل = `6518f28` (المرحلة 1.5/2) — لا شغل حديث يُخشى استبداله. الصفحة الحالية كانت **skeleton صريح** (باعترافها) — الاستبدال مقصود وهو المطلوب في 4.7.
+
+### SQL جديد (manual run — **#12**)
+
+- `db/12-files-deleted-at.sql`: `files.deleted_at` + partial index — **idempotent**، مُضاف لجدول القائمة الموحدة (#12) وترتيب التنفيذ (1→12).
+- حتى تنفيذه يدويًا: الصفحة بتعرض تنبيه "SQL #12 مطلوب" + الأفعال بترفض برسالة `نفّذ db/12-files-deleted-at.sql` (فحص عمود حقيقي بقراءة probe/information_schema — **لا زر يوهم بالنجاح**).
+
+### ما تم
+
+1. **صفحة كاملة جديدة** — `app/admin/files/page.tsx` (استبدل الـskeleton):
+   - قراءة حقيقية: `service_role` أولًا ثم fallback `DATABASE_URL` (مفيش session fallback لأن RLS بيقرا ملفات المالك فقط = نتائج مضلِّلة). المصدر بيظهر في عنوان البطاقة + بطاقة جاهزية.
+   - **فلاتر query params** تُبنى داخل الاستعلام (server-side): المستخدم (UUID مباشر أو كود MAG → `user_codes`، كود غير موجود = تنبيه صريح) · النوع (6 أنواع من الـCHECK) · من/إلى تاريخ · الحالة (نشط/محذوف/الكل).
+   - **تصنيف لكل صف**: نموذج `classification/stage/grade/subject` معبّى بالقيم الحالية → server action.
+   - **soft-delete/استرجاع لكل صف**: سبب اختياري للكتابة في audit.
+   - **pagination** 50 صفًا بروابط تحافظ على الفلاتر + عرض الإجمالي (`count: exact`).
+   - رابط "صفحة المستخدم" من كل صف → `/admin/users/[id]` ( leo 4.4).
+2. **actions جديدة** — `app/admin/actions/files-manage.ts`:
+   - `updateFileClassification` / `softDeleteFile` / `restoreFile` — كلها: فحص UUID، ثم `hasPermission("files.moderate")` **على السيرفر** (أي رفض → audit BLOCKED)، قيم مُنظّفة (120 حرف، فارغ=NULL)، قراءة قبل الكتابة لتسجيل **before/after** في `details` (بتظهر فورًا في 4.6)، FAIL لكل مسار فشل (ملف غير موجود/محذوف مسبقًا/ليس محذوفًا/عمود ناقص/فشل update).
+3. **غلاف النماذج** — `app/admin/actions/files-forms.ts`: هوية المنفّذ من الجلسة (`requireAdminPermission`) + إعادة توجيه بحفظ الفلاتر (`back_*`) — مفيش أي مسار كلاينت.
+4. **nav**: إزالة `skeletonOnly: true` من عنصر الملفات + وصف محدّث.
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.7.
+- البناء الكامل + الدفع: في نهاية المرحلة 4 (4.8 آخر بند).
