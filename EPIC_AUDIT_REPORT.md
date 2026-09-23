@@ -429,3 +429,30 @@ export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
 
 - `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.4 كلها.
 - البناء الكامل `npx next build` + الدفع + الـhash: في نهاية المرحلة 4 (4.5→4.8 تُبنى معًا؛ أي كسر بناء يوقف كل شيء حسب التعليمات).
+
+---
+
+## Phase 4 — 4.5 اشتراكات: إبراز الانتهاء + زر تمديد فعلي
+
+### الفحص المسبق (القاعدة 4)
+
+- `git log -- app/admin/subscriptions/page.tsx app/admin/actions/subscription-manage.ts`: آخر شغل = `08ec38f` (توثيق/مPlaceholder) + `6518f28` (المرحلة 1.5/2) + `dc59b3c` — لا شغل حديث يُخشى استبداله.
+
+### ما تم
+
+1. **إبراز تاريخ الانتهاء** — `app/admin subscriptions/page.tsx`:
+   - بطاقتان جديدتان تحت بطاقة الحالة: انتهاء الاشتراك (محسوب = `activation.created_at + duration_days` — الجدول مالهوش عمود expires_at، الانتهاء محسوب كما في الـschema) + انتهاء الامتياز (`entitlements.expires_at`).
+   - منطق `expiryInfo`: منتهٍ = rose غامق · ≤7 أيام = amber بعدد الأيام · وإلا emerald بعدد المتبقي · بدون انتهاء/بيانات = fallback صريح (N/A بسببه أو "دائم").
+2. **زر التمديد الفعلي (Owner-only)** — جديد في `subscription-manage.ts: extendSubscription(...)`:
+   - **F검사 الدور**: نفس حماية `activateSubscription` (role=owner || isOwnerEmail) — محاولة غير Owner → `audit_log` **BLOCKED** صريح مش مجرد رفض.
+   - يقبل UUID أو كود MAG، لازم يوجد تفعيل غير ملغٍ (FAIL واضح لو مفيش — التمديد مش تفعيل جديد)، حساب الانتهاء السابق والمتبقي، ثم:
+   - **كتابة `subscription_activations`**: صف جديد `duration_days = المتبقي + أيام التمديد` مع note يوثّق التمديد.
+   - **كتابة `entitlements.expires_at`**: من الانتهاء الحالي (أو من الآن لو انتهى) + أيام التمديد؛ لو NULL (دائم) بدون تغيير موثّق؛ لو مفيش امتياز نشط → `entitlement_extended=false` صريح (**لا اختراع امتيازات**).
+   - **`audit_log` إلزامي** في كل المسارات: FAIL (إدخال/مستخدم/لا اشتراك/فشل insert) · BLOCKED (غير Owner) · PASS (بالتفاصيل: old/new expiry + معرّفي التفعيل + entitlement note). فشل كتابة audit يظهر في رسالة النجاح كتحذير.
+   - نموذج التمديد في الصفحة (Owner فقط؛ غير Owner يشوف تنبيه أن أي محاولة تُسجّل BLOCKED) + إعادة توجيه للحفاظ على نتائج البحث والنتيجة.
+3. تنظيف تنبيه "مؤجل للمرحلة 4" الخاص بالتمديد (أُغلق).
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.5.
+- البناء الكامل + الدفع: في نهاية المرحلة 4 (مع 4.6→4.8).
