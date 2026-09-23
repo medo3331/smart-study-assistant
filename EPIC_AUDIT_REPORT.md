@@ -456,3 +456,26 @@ export type AiProviderName = "groq" | "nvidia" | "openrouter" | "gemini";
 
 - `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.5.
 - البناء الكامل + الدفع: في نهاية المرحلة 4 (مع 4.6→4.8).
+
+---
+
+## Phase 4 — 4.6 سجل العمليات: فلترة حقيقية + تفاصيل كاملة + pagination
+
+### الفحص المسبق (القاعدة 4)
+
+- الصفحة ما عليهاش commits حديثة مختلفة عن المرحلة 1 (آخرها `6518f28`/`08ec38f` توثيق) — لا شغل حديث يُخشى استبداله.
+
+### ما تم — `app/admin/audit-log/page.tsx`
+
+1. **فلاتر query params تُبنى داخل استعلام PG** (server-side — مش فلترة كلاينت):
+   - `action` (نص حر — مثلاً `users.ban`) · `result` (PASS/FAIL/BLOCKED) · `actor` (ilike على `actor_email`) · `rtype` (نوع المورد) · `from`/`to` (من/إلى تاريخ — `to` بيفضلها نهاية اليوم).
+   - مطبقة في **مساري القراءة معًا** (service_role ثم fallback للجلسة) قبل `.order().range()`.
+2. **Pagination حقيقية**: `page` param + `range(offset, offset+99)` + `count: "exact"` → روابط السابق/التالي بتحافظ على الفلاتر (`pageHref`) + عرض الإجمالي المطابق.
+3. **تفاصيل كاملة**: `summarizeDetails` (80 حرف) استُبدلت بـ`formatDetails` (JSON كامل مُنسّق) داخل `<pre>` بسكرول — بيظهر `previous_expiry/new_expiry` من التمديد و`ban_reason` من الحظر وكل ما تسجّله الـactions.
+4. **صادق**: ملاحظة تقول إن before/after الكامل يظهر فقط لو الـaction خزّن الفرق في `details` — لا نعرض فرقًا غير مسجّل كأنه موجود. تنبيه "مؤجل للمرحلة 4" (فلاتر/pagination) أُزيل لأنه نُفِّذ.
+5. الاستعلام الوحيد يظل محميًا بـ`audit.read` على السيرفر (الفلاتر ما بتتجاوزش الصلاحية).
+
+### التحقق
+
+- `npx tsc --noEmit` → **PASS** (exit 0) — يشمل 4.1→4.6.
+- البناء الكامل + الدفع: في نهاية المرحلة 4 (مع 4.7→4.8).
