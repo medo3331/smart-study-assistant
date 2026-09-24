@@ -1374,14 +1374,7 @@ export default function DashboardPage() {
     </PrimaryErrorBoundary>
   );
 
-  const isSecondary = (() => {
-    try {
-      const ctx = eduContext ?? {};
-      if (persona !== "student") return false;
-      if (!primaryStageCode) return false;
-      return primaryStageCode === "SECONDARY";
-    } catch { return false; }
-  })();
+  const isSecondary = false; // تم تعطيله عمدًا: الثانوي فأعلى يستخدم التصميم الكامل (العجلة)
 
   const secondaryDashboardSafe = !isSecondary ? null : (
     <PrimaryErrorBoundary>
@@ -1405,14 +1398,7 @@ export default function DashboardPage() {
     </PrimaryErrorBoundary>
   );
 
-  const isBaccalaureate = (() => {
-    try {
-      const ctx = eduContext ?? {};
-      if (persona !== "student") return false;
-      if (!primaryStageCode) return false;
-      return primaryStageCode === "BACCALAUREATE";
-    } catch { return false; }
-  })();
+  const isBaccalaureate = false; // نفس السبب: البكالوريا فأعلى يستخدم التصميم الكامل (العجلة)
 
   const baccalaureateDashboardSafe = !isBaccalaureate ? null : (
     <PrimaryErrorBoundary>
@@ -1436,14 +1422,7 @@ export default function DashboardPage() {
     </PrimaryErrorBoundary>
   );
 
-  const isUniversity = (() => {
-    try {
-      const ctx: any = eduContext ?? {};
-      if (ctx.universityId) return true;
-      if (primaryStageCode === "UNIVERSITY") return true;
-      return false;
-    } catch { return false; }
-  })();
+  const isUniversity = false; // نفس السبب: الجامعة والخريجين يستخدمون التصميم الكامل (العجلة)
 
   const universityDashboardSafe = !isUniversity ? null : (
     <PrimaryErrorBoundary>
