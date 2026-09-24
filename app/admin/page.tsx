@@ -96,7 +96,6 @@ export default async function AdminHomePage({
               <span className="text-[11px] text-slate-400 leading-relaxed">{item.description}</span>
               <span className="text-[10px] text-slate-500 font-mono" dir="ltr">
                 {item.permission}
-                {item.skeletonOnly ? " · skeleton" : ""}
               </span>
             </Link>
           ))}
@@ -109,8 +108,8 @@ export default async function AdminHomePage({
       </AdminCard>
 
       <AdminCard
-        title="نظرة عامة على المنصة"
-        description="الاشتراكات محسوبة من entitlements(kind='plan', value='premium') — الباقة المتاحة حاليًا premium فقط (مفيش جدول plans/user_subscriptions في المشروع)."
+        title="نظرة عامة على المنصة — إحصائيات حقيقية (المرحلة 4.3)"
+        description="كل رقم من استعلام DB فعلي. مشتركو الخطط من subscription_activations (غير ملغاة)؛ الملفات من files.created_at؛ رسائل اليوم من ai_credit_ledger (reason='ai_reserve') ثم ai_operations كبديل. رقم غير متاح → N/A بسبب المذكور."
         tone="purple"
       >
         {overview.error ? (
@@ -126,6 +125,57 @@ export default async function AdminHomePage({
                 label="نسبة الاشتراك"
                 value={ov && ov.totalUsers ? `${((ov.premium / ov.totalUsers) * 100).toFixed(1)}%` : "N/A"}
                 hint={ov?.totalUsers ? undefined : "N/A — يحتاج إجمالي المستخدمين"}
+              />
+            </div>
+
+            <h3 className="text-sm font-bold text-slate-300 pt-2">مشتركو الخطط (Pro/Ultra) — من subscription_activations</h3>
+            {(ov?.activationsByPlan.length ?? 0) === 0 ? (
+              <AdminNotice>لا توجد اشتراكات مفعّلة غير ملغاة في <code>subscription_activations</code> بعد — الرقم 0 حقيقي مش N/A.</AdminNotice>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {ov!.activationsByPlan.map((a) => (
+                  <AdminStatCard
+                    key={a.plan_key}
+                    label={`مشتركو ${a.plan_key}`}
+                    value={a.users}
+                    hint="المصدر: subscription_activations (revoked_at IS NULL)"
+                    tone="amber"
+                  />
+                ))}
+                <AdminStatCard
+                  label="أكثر خطة استخدامًا"
+                  value={ov?.topPlan ? `${ov.topPlan.plan_key} (${ov.topPlan.users})` : "N/A"}
+                  hint={ov?.topPlan ? "أعلى distinct user_id بين الخطط النشطة" : "N/A — لا اشتراكات نشطة"}
+                  tone="blue"
+                />
+              </div>
+            )}
+
+            <h3 className="text-sm font-bold text-slate-300 pt-2">النشاط اليومي والأسبوعي</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <AdminStatCard
+                label="ملفات اليوم"
+                value={ov?.filesToday ?? "N/A"}
+                hint={ov?.filesToday !== null && ov?.filesToday !== undefined ? "المصدر: files.created_at (آخر 24 ساعة)" : "N/A — يحتاج DATABASE_URL"}
+                tone="blue"
+              />
+              <AdminStatCard
+                label="ملفات آخر 7 أيام"
+                value={ov?.filesWeek ?? "N/A"}
+                hint={ov?.filesWeek !== null && ov?.filesWeek !== undefined ? "المصدر: files.created_at (آخر 7 أيام)" : "N/A — يحتاج DATABASE_URL"}
+                tone="purple"
+              />
+              <AdminStatCard
+                label="رسائل اليوم"
+                value={ov?.messagesToday ?? "N/A"}
+                hint={
+                  ov?.messagesTodaySource === "ai_credit_ledger"
+                    ? "المصدر: ai_credit_ledger (reason='ai_reserve', آخر 24 ساعة)"
+                    : ov?.messagesTodaySource === "ai_operations"
+                      ? "المصدر البديل: ai_operations (آخر 24 ساعة)"
+                      : "N/A — يحتاج DATABASE_URL"
+                }
+                tone="emerald"
               />
             </div>
 

@@ -1,8 +1,23 @@
 import { redirect } from "next/navigation";
-import { Search } from "lucide-react";
+import { CalendarClock, Search } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
-import { getSubscriptionStatus } from "@/app/admin/actions/subscription-manage";
+import { getSubscriptionStatus, extendSubscription } from "@/app/admin/actions/subscription-manage";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard } from "@/components/admin/ui";
+
+/**
+ * تمييز انتهاء الصلاحية (المرحلة 4.5): منتهٍ = rose غامق، أقرب من 7 أيام = amber،
+ * وإلا emerald — نفس منطق app/admin/users/[id]/page.tsx.
+ */
+function expiryInfo(iso: string | null, fallback: string): { label: string; cls: string } {
+  if (!iso) return { label: fallback, cls: "text-slate-400" };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { label: iso, cls: "text-slate-400" };
+  const label = d.toISOString().slice(0, 10);
+  const diff = d.getTime() - Date.now();
+  if (diff <= 0) return { label: `${label} — منتهٍ`, cls: "text-rose-400 font-bold" };
+  if (diff <= 7 * 86400_000) return { label: `${label} — يقارب الانتهاء (${Math.ceil(diff / 86400_000)} يوم)`, cls: "text-amber-300 font-bold" };
+  return { label: `${label} — ساري (${Math.ceil(diff / 86400_000)} يوم متبقٍ)`, cls: "text-emerald-300" };
+}
 
 /**
  * 💳 تفعيل الاشتراكات — اتنقلت من الصفحة الموحّدة (المرحلة 1).
@@ -100,10 +115,85 @@ export default async function AdminSubscriptionsPage({
 
             <AdminNotice tone="default">
               آخر تفعيل بواسطة: <code dir="ltr">{status.activation_activated_by ?? "—"}</code> · ملاحظة: {status.activation_note || "—"}
-              <br />
-              ⚠️ إبراز تاريخ الانتهاء + زر &quot;تمديد&quot; الفعلي مؤجلان للمرحلة 4 (التمديد لازم يعدّل
-              <code> subscription_activations</code> و<code>entitlements.expires_at</code> ويسجّل audit).
             </AdminNotice>
+
+            {/* Phase 4.5: إبراز حقيقي لتواريخ الانتهاء (activation + entitlements) — منتهٍ = rose، ≤7 أيام = amber */}
+            {(() => {
+              const actIso =
+                status.activation_created_at && status.activation_duration_days
+                  ? new Date(new Date(status.activation_created_at).getTime() + status.activation_duration_days * 86400_000).toISOString()
+                  : null;
+              const actInfo = expiryInfo(actIso, "N/A — مفيش تفعيل مسجّل");
+              const entInfo = expiryInfo(
+                status.entitlement_expires_at,
+                status.entitlement_value ? "دائم (expires_at NULL — بدون انتهاء)" : "N/A — مفيش امتياز خطة نشط"
+              );
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-3">
+                    <p className="text-slate-500 mb-1">انتهاء الاشتراك (activation + duration)</p>
+                    <p className={actInfo.cls}>{actInfo.label}</p>
+                  </div>
+                  <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-3">
+                    <p className="text-slate-500 mb-1">
+                      انتهاء الامتياز (entitlements{status.entitlement_value ? `: ${status.entitlement_value}` : ""})
+                    </p>
+                    <p className={entInfo.cls}>{entInfo.label}</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Phase 4.5: زر التمديد الفعلي — يكتب subscription_activations + entitlements.expires_at + audit */}
+            {canActivate ? (
+              <form
+                action={async (formData: FormData) => {
+                  "use server";
+                  const lookup = String(formData.get("lookup") || sp.sub_lookup || "");
+                  const days = Number(formData.get("duration_days") || 0);
+                  const extNote = String(formData.get("ext_note") || "");
+                  const result = await extendSubscription(lookup, days, extNote, user.id, user.email ?? null);
+                  const back = "/admin/subscriptions?sub_lookup=" + encodeURIComponent(lookup);
+                  if (result.ok) redirect(back + "&success=" + encodeURIComponent(result.message));
+                  redirect(back + "&error=" + encodeURIComponent(result.message));
+                }}
+                className="flex flex-wrap items-end gap-2 border-t border-slate-700 pt-3"
+              >
+                <input type="hidden" name="lookup" value={sp.sub_lookup ?? ""} />
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-slate-400">أيام التمديد (1–365)</span>
+                  <input
+                    name="duration_days"
+                    type="number"
+                    defaultValue={30}
+                    min={1}
+                    max={365}
+                    required
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-32"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 grow">
+                  <span className="text-[11px] text-slate-400">ملاحظة (سبب التمديد)</span>
+                  <input
+                    name="ext_note"
+                    type="text"
+                    placeholder="تجديد دفعة / إصلاح اشتراك…"
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-sm"
+                >
+                  <CalendarClock size={14} /> تمديد + تسجيل Audit
+                </button>
+              </form>
+            ) : (
+              <AdminNotice tone="amber">
+                التمديد محجوز لـ <strong>Owner</strong> فقط (نفس حماية <code>activateSubscription</code>) — أي محاولة
+                من غير Owner بتسجّل <code>audit_log</code> بنتيجة <strong>BLOCKED</strong>.
+              </AdminNotice>
+            )}
           </div>
         ) : null}
       </AdminCard>
