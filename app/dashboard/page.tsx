@@ -1285,17 +1285,8 @@ export default function DashboardPage() {
 
   const heatmapColors = HEATMAP_COLORS[theme];
 
-  // Primary experience check — isolated, no impact on other personas/grades
-  const isPrimary = (() => {
-    try {
-      // persona is loaded from profiles.persona; primaryStageCode from education_stages
-      const ctx = eduContext ?? {};
-      // persona state is "persona" variable
-      if (persona !== "student") return false;
-      if (!primaryStageCode) return false;
-      return isPrimaryExperience({ persona, stageId: ctx.stageId, gradeId: ctx.gradeId } as any, primaryStageCode);
-    } catch { return false; }
-  })();
+  // Primary experience check — DISABLED: unified design for all stages
+  const isPrimary = false;
 
   // Primary: handlers to link subject/lesson + AI assistant (real study)
   const handlePrimarySubjectAi = (subjectName: string) => {
@@ -1344,14 +1335,7 @@ export default function DashboardPage() {
     </PrimaryErrorBoundary>
   );
 
-  const isPreparatory = (() => {
-    try {
-      const ctx = eduContext ?? {};
-      if (persona !== "student") return false;
-      if (!primaryStageCode) return false;
-      return primaryStageCode === "PREPARATORY";
-    } catch { return false; }
-  })();
+  const isPreparatory = false; // DISABLED: unified design for all stages
 
   const preparatoryDashboardSafe = !isPreparatory ? null : (
     <PrimaryErrorBoundary>
