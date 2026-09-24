@@ -30,7 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const roleLabel = isOwner ? "المالك (Owner)" : role === "admin" ? "أدمن (Admin)" : "غير مصرّح";
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg,#090d16)] text-white dir-rtl">
+    <div className="min-h-screen bg-[var(--app-bg,#090d16)] text-white" dir="rtl">
       <nav className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur border-b border-slate-800 px-4 sm:px-6 py-3 space-y-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <Link href="/admin" className="text-amber-400 font-extrabold text-base sm:text-lg flex items-center gap-2">

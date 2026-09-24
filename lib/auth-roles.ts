@@ -148,8 +148,8 @@ export const ADMIN_PERMISSION_KEYS: AdminPermissionKey[] = [
 /** أي العمليات تعتبر حساسة وتحتاج تسجيل في audit_log. */
 export const SENSITIVE_ACTIONS: AdminPermissionKey[] = [
   "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
-  "plans.manage", "trial.manage", "models.manage",
-  "admins.manage", "subscriptions.manage",
+  "plans.manage", "trial.manage", "models.manage", "rewards.manage",
+  "admins.manage", "files.moderate", "subscriptions.manage",
 ];
 
 export interface AdminPermissionRecord {

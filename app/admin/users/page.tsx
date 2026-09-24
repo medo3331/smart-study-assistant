@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { UserSearch, Users } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { hasPermission } from "@/lib/auth-roles";
@@ -11,16 +11,25 @@ import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/compo
  * 👥 إدارة المستخدمين — اتنقلت من الصفحة الموحّدة (المرحلة 1).
  *
  * RBAC حقيقي على السيرفر: الصفحة محتاجة users.read، والحظر/فك الحظر بيتحقق
- * منه تاني جوه banUser/unbanUser (owner/admin فقط) ويسجّل audit_log.
+ * منه تاني جوه banUser/unbanUser ويسجّل audit_log.
  *
- * ⚠️ فجوة معروفة (موثقة، مش مخفية): حالة الحظر مش متخزنة في الداتابيز —
- * users-search.ts بيرجّع is_banned=false دايمًا، والحظر حاليًا بيسجّل Audit
- * (PASS) من غير تعديل حالة. الإصلاح في المرحلة 4 (تعديل users-search + عمود حالة).
+ * Phase 4.4: فلاتر حقيقية عبر query params (الخطة/الحالة/الكود/التاريخ) تُطبَّق
+ * على الداتابيز في searchUsers، + تصدير CSV حقيقي، + is_banned حقيقي من
+ * profiles (الفجوة الموثقة أُغلقت — banUser بيكتب is_banned/banned_at/ban_reason).
  */
 export default async function AdminUsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; plan?: string; status?: string; success?: string; error?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    plan?: string;
+    status?: string;
+    code?: string;
+    after?: string;
+    before?: string;
+    success?: string;
+    error?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const { user, supabase } = await requireAdminPermission("users.read");
@@ -30,7 +39,23 @@ export default async function AdminUsersPage({
     hasPermission(supabase, user.id, user.email ?? null, "users.unban"),
   ]);
 
-  const userSearchResults = sp.q ? await searchUsers(sp.q.trim(), sp.plan ?? "all", sp.status ?? "all") : [];
+  const plan = sp.plan ?? "all";
+  const status = sp.status ?? "all";
+  const code = sp.code ?? "all";
+  const userSearchResults = await searchUsers(
+    (sp.q ?? "").trim(),
+    plan,
+    status,
+    code,
+    sp.after || null,
+    sp.before || null
+  );
+
+  const exportHref =
+    `/api/admin/users/export?q=${encodeURIComponent(sp.q ?? "")}` +
+    `&plan=${encodeURIComponent(plan)}&status=${encodeURIComponent(status)}` +
+    `&code=${encodeURIComponent(code)}&after=${encodeURIComponent(sp.after ?? "")}` +
+    `&before=${encodeURIComponent(sp.before ?? "")}`;
 
   return (
     <div className="space-y-6">
@@ -44,15 +69,14 @@ export default async function AdminUsersPage({
       {sp.success ? <AdminNotice tone="emerald">تم: {sp.success}</AdminNotice> : null}
       {sp.error ? <AdminNotice tone="rose">خطأ: {sp.error}</AdminNotice> : null}
 
-      <AdminNotice tone="amber" title="فجوة معروفة (مش مخفية)">
-        حالة الحظر الحالية مش متخزنة في الداتابيز بعد: <code>users-search.ts</code> بيرجّع <code>is_banned = false</code> دايمًا،
-        والحظر حاليًا بيسجّل عملية في <code>audit_log</code> من غير تعديل حالة المستخدم. الإصلاح مدرج في المرحلة 4
-        (عمود حالة/جدول حظر + تعديل الاستعلام). لحد ساعتها الزر بيسجّل Audit ويقول النتيجة بصراحة.
+      <AdminNotice tone="emerald" title="الفجوة الموثقة أُغلقت (المرحلة 4.4)">
+        حالة الحظر الآن حقيقية من الداتابيز: <code>banUser</code> يكتب <code>is_banned/banned_at/ban_reason</code> في
+        <code>profiles</code>، و<code>searchUsers</code> يقرأها. فلتر "محظور" يعرض المحظورين فعلًا.
       </AdminNotice>
 
       <AdminCard
         title="بحث المستخدمين"
-        description="البحث حقيقي على profiles (الاسم/الإيميل) عبر server action. الفلاتر plan/status معروضة لكن التحقق منها كامل مؤجل للمرحلة 4 (فلترة query params فعلية على الداتابيز)."
+        description="بحث حقيقي على profiles (الاسم/الإيميل/الكود) + فلاتر فعلية على الداتابيز: الخطة، الحالة، وجود الكود، نطاق تاريخ التسجيل. النتائج فورية من الـURL (query params) — انسخ الرابط لمشاركة نفس البحث."
         tone="amber"
       >
         <form method="GET" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
@@ -62,35 +86,70 @@ export default async function AdminUsersPage({
               name="q"
               type="text"
               defaultValue={sp.q ?? ""}
-              placeholder="ابحث بالاسم أو الإيميل..."
+              placeholder="اسم / إيميل / MAG-XXX-XXXX..."
               className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] text-slate-400">الخطة</span>
-            <select name="plan" defaultValue={sp.plan ?? "all"} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100">
+            <select name="plan" defaultValue={plan} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100">
               <option value="all">كل الخطط</option>
-              <option value="free">Free</option>
-              <option value="pro">Pro</option>
-              <option value="ultra">Ultra</option>
-              <option value="trial">Trial</option>
+              <option value="free">مجاني</option>
+              <option value="premium">Premium</option>
+              <option value="trial">تجربة</option>
             </select>
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] text-slate-400">الحالة</span>
-            <select name="status" defaultValue={sp.status ?? "all"} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100">
-              <option value="all">كل الحالات</option>
-              <option value="banned">محظور</option>
+            <select name="status" defaultValue={status} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100">
+              <option value="all">الكل</option>
               <option value="active">نشط</option>
+              <option value="banned">محظور</option>
             </select>
           </label>
-          <button type="submit" className="text-sm bg-amber-400 text-amber-950 rounded-lg px-4 py-2 hover:bg-amber-300 font-bold">
-            بحث
-          </button>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-slate-400">كود المستخدم</span>
+            <select name="code" defaultValue={code} className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100">
+              <option value="all">الكل</option>
+              <option value="with_code">عنده كود</option>
+              <option value="without_code">بدون كود</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-slate-400">مسجّل من (تاريخ)</span>
+            <input
+              name="after"
+              type="date"
+              defaultValue={sp.after ?? ""}
+              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-slate-400">مسجّل حتى (تاريخ)</span>
+            <input
+              name="before"
+              type="date"
+              defaultValue={sp.before ?? ""}
+              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2 rounded-lg text-sm">
+              بحث
+            </button>
+            <a
+              href={exportHref}
+              className="inline-flex items-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-sm"
+              title="تصدير نفس نتائج البحث الحالية كـ CSV (بحد أقصى 500 صف)"
+            >
+              CSV
+            </a>
+          </div>
         </form>
 
+
         {userSearchResults.length === 0 ? (
-          <AdminNotice>{sp.q ? "لا توجد نتائج لهذا البحث." : "اكتب اسمًا أو إيميل واضغط بحث لعرض النتائج من الداتابيز."}</AdminNotice>
+          <AdminNotice>لا توجد نتائج لهذه الفلاتر. عدّل البحث أو الفلاتر لعرض النتائج من الداتابيز.</AdminNotice>
         ) : (
           <AdminTableWrap>
             <thead>
