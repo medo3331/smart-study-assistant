@@ -4,6 +4,7 @@ import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
+import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /* ==========================================================================
    توليد عرض تقديمي
