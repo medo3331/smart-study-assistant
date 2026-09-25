@@ -23,6 +23,7 @@ import { LessonModeTabs } from "./components/LessonModeTabs";
 import { LessonProgressPanel } from "./components/LessonProgressPanel";
 import LessonVideoPlayer from "@/components/lesson/LessonVideoPlayer";
 import { VideoCandidate } from "@/lib/lesson/video-server";
+import { SpecializationTools } from "@/components/lesson/SpecializationTools";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -292,6 +293,7 @@ export default function LessonDetailPage() {
   const [videoLoading, setVideoLoading] = useState(false);
   // Step 3 — education context for smart video (stage + grade + track/faculty → query = مادة + شعبة/مسار + درس)
   const [eduVideoCtx, setEduVideoCtx] = useState<{ stage?: string; grade?: string; track?: string; faculty?: string }>({});
+  const [userProfileField, setUserProfileField] = useState<string | null>(null);
 
   // Phase 1.4 — Independent video load (never blocks page render)
   useEffect(() => {
@@ -395,6 +397,7 @@ export default function LessonDetailPage() {
 
       const { data: profile } = await supabase.from("profiles").select("xp, education_stage_id, education_grade_id, education_track_id, faculty_name, edu_year, field").eq("id", user.id).maybeSingle();
       setProfileXp((profile as { xp?: number } | null)?.xp || 0);
+      setUserProfileField((profile as { field?: string | null } | null)?.field ?? null);
       // Step 3 — resolve education labels for smart video (مادة + شعبة/مسار + درس)
       try {
         const p = profile as { education_stage_id?: string | null; education_grade_id?: string | null; education_track_id?: string | null; faculty_name?: string | null; edu_year?: number | null } | null;
@@ -825,6 +828,28 @@ export default function LessonDetailPage() {
             context={{ subject: config?.subject || dayRow?.topic || "", lesson: dayRow?.topic || "", grade: dayRow?.learning_style || "" }}
           />
         </Reveal>
+
+        {/* Wave 1 — Lesson Specialization Tools Extension Slot */}
+        <SpecializationTools
+          ctx={{
+            lesson: {
+              dayId,
+              topic: dayRow.topic,
+              description: dayRow.description,
+              subject: config?.subject || dayRow.topic || "",
+              learningStyle: dayRow.learning_style,
+            },
+            profile: {
+              stage: eduVideoCtx.stage,
+              grade: eduVideoCtx.grade,
+              track: eduVideoCtx.track,
+              faculty: eduVideoCtx.faculty,
+              field: userProfileField,
+            },
+            planProgress,
+            supabase,
+          }}
+        />
 
         {/* ─── التبويبات الموحّدة: نفس learning_style الموجود ─── */}
         <div className="flex justify-center sm:justify-start">
