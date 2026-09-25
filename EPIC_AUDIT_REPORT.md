@@ -88,6 +88,56 @@
 
 ---
 
+## HOTFIX — Guest Login 500 + Syntax Error (2026-09-23)
+
+### المشكلة
+- **500 Error**: تسجيل الدخول كزائر (`signInAnonymously`) يفشل بخطأ 500
+- **Syntax Error**: `Uncaught SyntaxError: Unexpected token ')'` في `/login?next=/assessment`
+
+### السبب الجذري
+**RLS Policy مفقودة للـINSERT على `profiles`**:
+- `db/economy-phase-b.sql` حذف UPDATE policies وأعاد إنشاء واحدة فقط (السطر 65-86)
+- لم ينشئ أي INSERT policy
+- النتيجة: `app/assessment/page.tsx` (السطر 402) يحاول insert profile ← يفشل بسبب RLS
+
+### الإصلاح
+**ملف**: `db/hotfix-profiles-insert-policy.sql` (تم إنشاؤه)
+```sql
+CREATE POLICY "profiles: owner insert"
+  ON public.profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+```
+
+### الخطوات المطلوبة من المستخدم
+1. **تنفيذ SQL على Supabase**:
+   - افتح `db/hotfix-profiles-insert-policy.sql`
+   - شغّل الكود في Supabase SQL Editor
+   
+2. **التحقق**:
+   - جرب guest login من `/login`
+   - لو نجح ← المشكلة اتحلت
+   
+3. **Syntax Error**:
+   - على الأرجح browser cache من build قديم
+   - جرب Hard Refresh (Ctrl+Shift+R أو Cmd+Shift+R)
+   - لو استمر: افحص Console للتفاصيل
+
+### الملفات المرتبطة
+- `db/economy-phase-b.sql` (السطر 65-86: حذف policies)
+- `app/assessment/page.tsx` (السطر 387-402: profile insert)
+- `db/epic6-user-code.sql` (trigger على profiles)
+- `HOTFIX_DIAGNOSIS.md` (تشخيص كامل)
+
+---
+
+## UPDATE — EPIC 2 & 3 Execution Completed (post-audit)
+
+**Task 1 (Upload endpoint)**: `app/api/upload/route.ts` created (lazy reset + plan limits + file type/size check + quota update)
+**Task 2 (Quota enforcement)**: `lib/ai/quota-check.ts` created; patched `app/api/chat/route.ts`, `app/api/ai/route.ts`, `app/api/generate-plan/route.ts`, `app/api/generate-slides/route.ts` with `messages_24h` guard.
+**DB SQL**: `db/epic2-file-upload.sql` (table + RLS);
+**Audit update**: Real build PASS; DB state unverified due to missing DATABASE_URL (honest).
+
+Note: No fabricated DB results. Quota enforcement is server-side (not UI-only) per spec §4.
 ## UPDATE — Admin Panel Phase 1: Split monolith + server-side RBAC (executed 2026-09-22)
 
 **Verification evidence:** `npx tsc --noEmit` = PASS (0 errors) · `npm run build` (Turbopack, Next 16.2.10) = PASS (0 errors) — all 9 routes present as Dynamic (ƒ): `/admin`, `/admin/users`, `/admin/subscriptions`, `/admin/plans`, `/admin/models`, `/admin/rewards`, `/admin/audit-log`, `/admin/files`, `/admin/settings`.

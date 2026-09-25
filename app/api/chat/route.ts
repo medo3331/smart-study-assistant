@@ -25,6 +25,13 @@ export async function POST(req: Request) {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
+    // ٢) حدّ الاستخدام — Quota enforcement (EPIC-2/3) — lazy reset + messages_24h
+    const { checkSubscriptionQuota } = await import("@/lib/ai/quota-check");
+    const quota = await checkSubscriptionQuota(user.id);
+    if (!quota.ok || !quota.allowed) {
+      return NextResponse.json({ error: { message: "تم تجاوز حد الاستخدام اليومي (" + quota.messages_24h + "/" + (quota.plan_key === "pro" ? 100 : quota.plan_key === "ultra" ? 500 : 20) + ")" } }, { status: 429 });
+    }
+
     // ٢) حدّ استخدام لكل مستخدم عشان فاتورة Groq
     const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;

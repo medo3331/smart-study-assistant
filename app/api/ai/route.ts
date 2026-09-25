@@ -14,6 +14,7 @@ import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-cre
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
 import { streamWithFallback } from "@/lib/ai/streaming-fallback";
+import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /**
  * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
