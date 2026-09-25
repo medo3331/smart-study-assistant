@@ -80,5 +80,58 @@ export async function checkSubscriptionQuota(userId: string): Promise<QuotaCheck
     };
   } catch (e: any) {
     return { ok: false, allowed: false, messages_24h: 0, uploads_today: 0, plan_key: "free", last_reset_at: null, error: e?.message || String(e) };
+    const planKey = typeof ent?.value === "string" && ent.value ? ent.value : "free";
+
+    // 3) الحدود من subscription_plans، مع fallback مطابق للـseeds لو الجدول مش متاح
+    const { data: planRow } = await privileged
+      .from("subscription_plans")
+      .select("messages_per_2h, uploads_daily")
+      .eq("plan_key", planKey)
+      .maybeSingle();
+
+    let limit: number;
+    if (kind === "message") {
+      const per2h = typeof planRow?.messages_per_2h === "number"
+        ? planRow.messages_per_2h
+        : (FALLBACK_MESSAGES_PER_2H[planKey] ?? FALLBACK_MESSAGES_PER_2H.free);
+      limit = per2h * WINDOWS_PER_DAY; // حد يومي مكافئ — قرار موثق أعلى الملف
+    } else {
+      limit = typeof planRow?.uploads_daily === "number"
+        ? planRow.uploads_daily
+        : (FALLBACK_UPLOADS_DAILY[planKey] ?? FALLBACK_UPLOADS_DAILY.free);
+    }
+
+    // 4) فرض الحد
+    if (used >= limit) {
+      return {
+        allowed: false,
+        kind,
+        planKey,
+        used,
+        limit,
+        resetAt,
+        reasonAr: kind === "message"
+          ? `وصلت لحد رسايل باقتك (${limit} رسالة/يوم). الكوتا بتتجدد كل 24 ساعة، أو رقّي باقتك لحد أعلى.`
+          : `وصلت لحد الرفع اليومي لباقتك (${limit} ملفات).`,
+      };
+    }
+
+    // 5) استهلاك 1 من الكوتا (upsert على user_id)
+    const nextMessages = kind === "message" ? used + 1 : (quotaRow?.messages_24h ?? 0);
+    const nextUploads = kind === "upload" ? used + 1 : (quotaRow?.uploads_today ?? 0);
+    await privileged.from("subscription_quotas").upsert({
+      user_id: userId,
+      plan_key: planKey,
+      messages_24h: nextMessages,
+      uploads_today: nextUploads,
+      last_reset_at: resetAt ?? now.toISOString(),
+      updated_at: now.toISOString(),
+    }, { onConflict: "user_id" });
+
+    return { allowed: true, kind, planKey, used: used + 1, limit, resetAt };
+  } catch (e) {
+    // fail-open موثق: لو جداول الكوتا مش متنفذة بعد، الشات/الرفع ميقعوش.
+    console.warn("[quota-check] subscription quota unavailable — allowing (fail-open, documented):", e);
+    return { allowed: true, kind, planKey: "unknown", used: 0, limit: -1, resetAt: null };
   }
 }

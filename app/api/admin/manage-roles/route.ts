@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getAdminRole } from "@/lib/auth-roles";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
 
 export async function POST(req: Request) {
   const cookieStore = cookies();
@@ -30,11 +31,30 @@ export async function POST(req: Request) {
       const service = createServiceClient();
       const { error } = await service.from("site_admins").delete().eq("user_id", targetUserId).neq("role", "owner");
       if (error) throw error;
+      // EPIC-2: أي تغيير صلاحيات لازم يتسجل في audit_log (كان ناقص في الراوت قبل كده)
+      await recordAuditLog({
+        actor: user?.id ?? null,
+        actor_email: user?.email ?? null,
+        action: "admins.manage",
+        resource_type: "admin",
+        resource_id: targetUserId,
+        details: { operation: "revoke", removed_user_id: targetUserId },
+        result: "PASS",
+      });
     } catch (e) {
       const msg = (e as { message?: string })?.message || "فشل السحب";
-      return NextResponse.redirect(new URL(`/admin?error=${encodeURIComponent(msg)}`, req.url));
+      await recordAuditLog({
+        actor: user?.id ?? null,
+        actor_email: user?.email ?? null,
+        action: "admins.manage",
+        resource_type: "admin",
+        resource_id: targetUserId,
+        details: { operation: "revoke", reason: "db_delete_failed", error: msg },
+        result: "FAIL",
+      });
+      return NextResponse.redirect(new URL(`/admin/settings?error=${encodeURIComponent(msg)}`, req.url));
     }
-    return NextResponse.redirect(new URL("/admin?success=1", req.url));
+    return NextResponse.redirect(new URL("/admin/settings?success=تم+سحب+الصلاحية", req.url));
   }
 
   // منح صلاحية أدمن (grant)
@@ -62,10 +82,28 @@ export async function POST(req: Request) {
   try {
     const { error } = await service.from("site_admins").upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id" });
     if (error) throw error;
+    await recordAuditLog({
+      actor: user?.id ?? null,
+      actor_email: user?.email ?? null,
+      action: "admins.manage",
+      resource_type: "admin",
+      resource_id: userId,
+      details: { operation: "grant", granted_role: "admin", target_email: targetEmail },
+      result: "PASS",
+    });
   } catch (e) {
     const msg = (e as { message?: string })?.message || "فشل المنح";
-    return NextResponse.redirect(new URL(`/admin?error=${encodeURIComponent(msg)}`, req.url));
+    await recordAuditLog({
+      actor: user?.id ?? null,
+      actor_email: user?.email ?? null,
+      action: "admins.manage",
+      resource_type: "admin",
+      resource_id: userId,
+      details: { operation: "grant", reason: "db_upsert_failed", error: msg, target_email: targetEmail },
+      result: "FAIL",
+    });
+    return NextResponse.redirect(new URL(`/admin/settings?error=${encodeURIComponent(msg)}`, req.url));
   }
 
-  return NextResponse.redirect(new URL("/admin?success=1", req.url));
+  return NextResponse.redirect(new URL("/admin/settings?success=تم+منح+الصلاحية", req.url));
 }

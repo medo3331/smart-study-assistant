@@ -6,6 +6,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
+import { requireAdminPermission } from "@/lib/admin/auth-check";
 
 export interface ActivityRow {
   user_id: string;
@@ -16,7 +17,11 @@ export interface ActivityRow {
   total_activity_score: number;
 }
 
-export async function getMostActiveUsers(limit = 10): Promise<ActivityRow[]> {
+export async function getMostActiveUsers(limitRaw = 10): Promise<ActivityRow[]> {
+  // Phase 4.8 (RBAC review): فحص داخل الفعل (server action قابلة للاستدعاء
+  // بالـaction ID من أي عميل — فحص الصفحة وحده مش كفاية) + تحديد limit.
+  await requireAdminPermission("rewards.manage");
+  const limit = Math.min(Math.max(Math.floor(Number(limitRaw) || 10), 1), 100);
   const supabase = createServiceClient();
   // Use pgQuery for aggregate counts (same pattern as admin/page.tsx Phase E)
   // Note: We rely on the DB being reachable; if not, we return empty and handle gracefully.
