@@ -89,7 +89,11 @@ export type ActiveSpecialization = LessonSpecialization | null;
 
 /**
  * Resolve active specialization based on lesson subject (not student profile).
- * In Wave 1: the registry is empty, so resolution always yields null.
+ *
+ * Wave 1: the registry was empty, so resolution always yielded null.
+ * Wave 2A: specializations register themselves, and a registered specialization
+ * is returned ONLY when the lesson subject matches its domain. An unmatched
+ * subject resolves to `null` (see the fix note at the end of this function).
  */
 export function resolveActiveSpecialization(context?: SpecializationContext): ActiveSpecialization {
   if (!context?.lesson?.subject) {
@@ -116,9 +120,15 @@ export function resolveActiveSpecialization(context?: SpecializationContext): Ac
     return SpecializationRegistry.get("programming") ?? null;
   }
 
-  // Fallback: check registry priority if any registered
-  return SpecializationRegistry.get("language") ??
-    SpecializationRegistry.get("programming") ??
-    SpecializationRegistry.get("medical") ??
-    null;
+  // 4. Subject matches no specialization domain.
+  //
+  // Wave 2A (fix): this previously returned the first *registered*
+  // specialization regardless of subject, so registering "medical" would have
+  // made the medical tools panel appear on EVERY lesson that did not match
+  // medical/language/programming. That is exactly the false-positive
+  // regression this file is supposed to prevent.
+  //
+  // Unmatched subject now resolves to null: the lesson shell renders nothing
+  // extra, which is the correct Wave 1 behaviour for a generic lesson.
+  return null;
 }
