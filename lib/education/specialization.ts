@@ -103,7 +103,42 @@ export function resolveActiveSpecialization(context?: SpecializationContext): Ac
   const subject = context.lesson.subject.trim();
 
   // 1. Medical lesson check (subject-based with word boundaries)
-  const isMedical = /\bmed(icine|ical)?\b/i.test(subject) || /طب|صيدلة|تشريح|علاج|pathology/i.test(subject);
+  //
+  // Wave 2A final patch — Arabic transliterations.
+  //
+  // Where the list came from: the user-facing medical track in
+  // `app/dashboard/career/tracks.ts` (id `medicine`, field `medical`). The
+  // onboarding subject itself is a FREE-TEXT field (PersonaPicker.tsx /
+  // assessment/page.tsx are plain <input type="text">), so there is no closed
+  // list of subject names anywhere in the system — these are the names the app
+  // itself shows a medical-track user.
+  //
+  // Only unambiguous medical terms are included. Deliberately EXCLUDED, each
+  // documented as a follow-up rather than silently guessed:
+  //   - "أحياء" / "بيولوجي"     → also a core secondary-school subject; a
+  //                                 general biology student must not get medical
+  //                                 tools. Covered properly later via the
+  //                                 faculty/college chosen in the study plan,
+  //                                 not by text matching.
+  //   - clinical words ("قراءة التحاليل", "قراءة الأشعة", "الفحص الإكلينيكي")
+  //                             → these also appear in nursing/general
+  //                                 contexts. Wave 2A is proving the
+  //                                 architecture, not maximal coverage, and
+  //                                 every term added needs its own regression
+  //                                 test to stay safe.
+  const isMedical =
+    /\bmed(icine|ical)?\b/i.test(subject) ||
+    /طب|صيدلة|تشريح|علاج|pathology/i.test(subject) ||
+    // Arabic transliterations of the medical-track names above.
+    /فسيولوجي|باثولوجي|فارماكولوجي/i.test(subject) ||
+    // Multi-word terms, matched as whole phrases rather than bare stems.
+    //
+    // `(ال)?` — the article must be a GROUP. Bare `ال?` parses as a required
+    // "ا" plus an optional "ل", which would only ever match the articulated
+    // form and silently drop "كيمياء حيوية".
+    /ال?أنسجة/.test(subject) ||
+    /(ال)?مصطلح\W+(ال)?طبي/.test(subject) ||
+    /(ال)?كيمياء\W+(ال)?حيوية/.test(subject);
   if (isMedical) {
     return SpecializationRegistry.get("medical") ?? null;
   }
