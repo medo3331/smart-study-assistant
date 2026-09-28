@@ -48,7 +48,7 @@ export function LessonNotes({ dayId }: { dayId: string }) {
         const res = await fetch("/api/lesson/notes", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lessonId, content }),
+          body: JSON.stringify({ lessonId: dayId, content }),
         });
         if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
