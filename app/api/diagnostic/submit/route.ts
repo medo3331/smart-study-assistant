@@ -196,7 +196,13 @@ export async function POST(req: Request) {
   // 5) Load the bank so the pure scorer can compare against the truth.
   const { data: bankRows, error: bankError } = await supabase
     .from("diagnostic_question_bank")
-    .select("id, subject_id, unit_id, topic_id, question_type, correct_option_index")
+    // ⚠️ topic:diagnostic_topics(name) is NOT optional. Without it the
+    //    scorer receives topic_id (a UUID) and uses it AS the topic name,
+    //    so weak_topics come back as GUIDs and the replan matches against
+    //    them instead of the real names. The live smoke test caught this.
+    .select(
+      "id, subject_id, unit_id, topic_id, topic_name:diagnostic_topics(name), question_type, correct_option_index"
+    )
     .in("id", stored.map((a) => a.question_id))
     .eq("subject_id", session.subject_id);
 
@@ -259,24 +265,31 @@ export async function POST(req: Request) {
     );
   }
 
-  // 9) Per-session recommendation rows. UNIQUE(session_id, weak_topic) makes
-  //    this an upsert, so a replay cannot create duplicates.
+  // 9) Recommendation rows go through a SECURITY DEFINER function, not a
+  //    direct table write. A recommendation is an OUTPUT of scoring: the
+  //    client may read its own, but it must not author one. The RPC also
+  //    makes the write idempotent -- ON CONFLICT (session_id, weak_topic)
+  //    DO NOTHING -- so an internal replay cannot duplicate a row, which is
+  //    what a PostgREST upsert would have needed UPDATE permission for.
+  //
+  //    NOTE: source_content_type is the real column. The 1.2E migration file
+  //    declares content_refs jsonb, but the table in production has
+  //    source_content_type / _id / _title instead -- PostgREST answered
+  //    PGRST204 on the first live run. The live schema wins; we are not
+  //    reshaping the table to match a stale migration.
   if (weakTopics.length > 0) {
-    const { error: recError } = await supabase
-      .from("diagnostic_recommendations")
-      .upsert(
-        weakTopics.map((w) => ({
-          session_id: sessionId,
-          weak_topic: w.topic,
-          accuracy: w.accuracy,
-          content_available: false,
-          content_refs: [],
-          recommendation_text:
-            `مستواك في «${w.topic}» ${Math.round(w.accuracy * 100)}% — راجعه قبل الامتحان.`,
-          priority: w.priority,
-        })),
-        { onConflict: "session_id,weak_topic" }
-      );
+    const { error: recError } = await supabase.rpc("write_diagnostic_recommendations", {
+      p_session_id: sessionId,
+      p_items: weakTopics.map((w) => ({
+        weak_topic: w.topic,
+        accuracy: w.accuracy,
+        content_available: false,
+        source_content_type: "none",
+        recommendation_text:
+          `مستواك في «${w.topic}» ${Math.round(w.accuracy * 100)}% \u2014 \u0631\u0627\u062c\u0639\u0647 \u0642\u0628\u0644 \u0627\u0644\u0627\u0645\u062a\u062d\u0627\u0646.`,
+        priority: w.priority,
+      })),
+    });
 
     if (recError) {
       return NextResponse.json(
@@ -284,7 +297,7 @@ export async function POST(req: Request) {
           ...buildResult(result, weakTopics, sessionId),
           mastery_updated: true,
           plan_updated: false,
-          warning: "التوصيات متسجلتش. Repeat الطلب هيكمّلها.",
+          warning: "\u0627\u0644\u062a\u0648\u0635\u064a\u0627\u062a \u0645\u062a\u0633\u062c\u0644\u062a\u0634. Repeat \u0627\u0644\u0637\u0644\u0628 \u0647\u064a\u0643\u0645\u0651\u0644\u0647\u0627.",
         },
         { status: 202 }
       );
@@ -336,21 +349,32 @@ export async function POST(req: Request) {
       const replan = replanExamPlan({ days }, weakTopics, daysLeft, today);
 
       if (replan.changed) {
+        // ⚠️ A synthetic day carries a placeholder id like
+        //    "synthetic-review-<topic>" because the planner is pure and must
+        //    not depend on a database. exam_plan_days.id is uuid, so those
+        //    placeholders have to be swapped for a real UUID before the write
+        //    -- the first live run failed with 22P02 on exactly this.
+        const existingIds = new Set(days.map((d) => d.id));
+        const toInsert: Record<string, unknown>[] = [];
+
+        for (const d of replan.days) {
+          const isReal = existingIds.has(d.id);
+          toInsert.push({
+            // Insert new days, keep real ids for the ones already stored.
+            id: isReal ? d.id : crypto.randomUUID(),
+            plan_id: planId,
+            user_id: user.id,
+            day_number: d.dayNumber,
+            study_date: d.studyDate,
+            kind: d.kind,
+            title: d.title,
+            description: d.description,
+          });
+        }
+
         const { error: applyError } = await supabase
           .from("exam_plan_days")
-          .upsert(
-            replan.days.map((d) => ({
-              id: d.id,
-              plan_id: planId,
-              user_id: user.id,
-              day_number: d.dayNumber,
-              study_date: d.studyDate,
-              kind: d.kind,
-              title: d.title,
-              description: d.description,
-            })),
-            { onConflict: "id" }
-          );
+          .upsert(toInsert, { onConflict: "id" });
 
         planUpdated = !applyError;
         if (applyError) {

@@ -494,6 +494,16 @@ comment on function public.refresh_topic_mastery(uuid) is
 revoke all on function public.refresh_topic_mastery(uuid) from public;
 grant execute on function public.refresh_topic_mastery(uuid) to authenticated;
 
+-- ---------------------------------------------------------------------------
+-- STEP 4e MOVED. It lives in its own file now:
+--   db/phase2-diagnostic-recommendations-rls.sql
+-- Reason: the file you are reading was already applied to production before
+-- the live smoke test found the diagnostic_recommendations problems. The
+-- repo has to record what actually happened, so the follow-up is a separate
+-- migration rather than a retrofitted block in a file that pretends to
+-- describe production.
+-- ---------------------------------------------------------------------------
+
 -- ============================================================================
 -- ROLLBACK
 -- ============================================================================

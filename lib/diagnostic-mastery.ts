@@ -63,6 +63,20 @@ export interface BankQuestion {
   unit_id: string | null;
   /** FK → diagnostic_topics.id — **nullable**. السطر ده مهم جدًا. */
   topic_id: string | null;
+  /**
+   * اسم الموضوع من diagnostic_topics.name — اللي بنجمع بيه وبنعرضه.
+   *
+   * ⚠️ Supabase يرجّع الـrelation كـ**object متداخل**، مش string:
+   *      topic_name:diagnostic_topics(name)  →  { name: "التكامل" }
+   *   فالدالة normaliseTopicName() بتفضّل الحقل جوّه لو كان object.
+   *
+   * ⚠️ مينفعش نرجع للـid كأنه اسم: أي topic_id موجود هيتقدّم على
+   *   الـname لو رجعنا له، ونعرض GUIDs للطالب وفي عناوين الخطة.
+   *   الـlive smoke test كشف ده أول مرة.
+   *
+   * undefined = السؤال من غير topic أصلاً.
+   */
+  topic_name?: string | { name?: string | null } | null;
   question_type: "mcq" | "true_false";
   /** 0-based. حد app-level: لازم يكون < options_json.length. */
   correct_option_index: number;
@@ -184,7 +198,28 @@ export interface MasteryDelta {
    ------------------------------------------------------------------------- */
 
 /**
- * الحكم على سؤال واحد — المصدر الوحيد للحقيقة.
+ * Reads a topic label out of whatever Supabase handed back.
+ *
+ * WARNING: `topic_name:diagnostic_topics(name)` does NOT return a string.
+ * It returns the relation as a nested object -- { name: "..." } -- so a
+ * straight assignment put that object into TopicStat.topic, and the first
+ * live smoke test died on `a.topic.localeCompare is not a function`. Accept
+ * both shapes rather than trusting what PostgREST sends today.
+ */
+export function normaliseTopicName(
+  topic_name: BankQuestion["topic_name"]
+): string | null {
+  if (topic_name == null) return null;
+  if (typeof topic_name === "string") return topic_name.trim() || null;
+  if (typeof topic_name === "object") {
+    const inner = (topic_name as { name?: unknown }).name;
+    if (typeof inner === "string" && inner.trim()) return inner.trim();
+  }
+  return null;
+}
+
+/**
+ * الحكم على سؤال واحد -- المصدر الوحيد للحقيقة.
  *
  * `selected === correct` هو كل الحل. مفيش مرجع تاني.
  */
@@ -274,9 +309,10 @@ export function scoreDiagnosticSession(
         a.selected_option_index,
         q.correct_option_index
       ),
-      // topic_id nullable في الـSQL — لازم نتعامل مع null صراحةً
-      // وإلا هنحط undefined كمفتاح موضوع.
-      topic: q.topic_id ?? UNTAGGED_TOPIC,
+      // Normalise first: the relation may arrive as a string or as
+      // { name }. Only then do we decide between the name, the id, and the
+      // untagged bucket. The id is the last resort, never the label.
+      topic: normaliseTopicName(q.topic_name) ?? q.topic_id ?? UNTAGGED_TOPIC,
       unit_id: q.unit_id,
     });
   }

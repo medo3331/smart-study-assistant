@@ -13,6 +13,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { scoreDiagnosticSession, normaliseTopicName, UNTAGGED_TOPIC } from "@/lib/diagnostic-mastery";
 
 const root = join(__dirname, "..");
 
@@ -21,6 +22,7 @@ function codeOnly(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 }
 
+const masteryCode = codeOnly(readFileSync(join(root, "lib", "diagnostic-mastery.ts"), "utf8"));
 const startSrc = readFileSync(
   join(root, "app", "api", "diagnostic", "start", "route.ts"),
   "utf8"
@@ -33,8 +35,17 @@ const migrationSql = readFileSync(
   join(root, "db", "phase2-diagnostic-security.sql"),
   "utf8"
 );
+// The recommendations follow-up was split into its own file because the
+// main migration had already been applied to production when the live smoke
+// test found the problem. Testing the right file matters: asserting against a
+// combined string would pass even if the split file were never written.
+const recsSql = readFileSync(
+  join(root, "db", "phase2-diagnostic-recommendations-rls.sql"),
+  "utf8"
+);
 
 const startCode = codeOnly(startSrc);
+const replannerCode = codeOnly(readFileSync(join(root, "lib", "exam-plan-replanner.ts"), "utf8"));
 const submitCode = codeOnly(submitSrc);
 
 /** Returns the source between two markers, or "" when either is missing. */
@@ -156,8 +167,11 @@ describe("FAILURE SAFETY: what is atomic and what is retry-safe", () => {
     expect(fn).not.toMatch(/set\s+attempts\s*=\s*u\.attempts\s*\+/);
   });
 
-  it("recommendations are upserted on the unique key", () => {
-    expect(submitCode).toContain('"session_id,weak_topic"');
+  it("recommendations are written through the idempotent RPC", () => {
+    // Not a PostgREST upsert: that would have required granting
+    // authenticated UPDATE on the table. The RPC carries
+    // ON CONFLICT (session_id, weak_topic) DO NOTHING instead.
+    expect(submitCode).toMatch(/rpc\(\s*"write_diagnostic_recommendations"/);
   });
 
   it("the planner update reports partial success honestly", () => {
@@ -301,11 +315,7 @@ describe("CONTRACT: the API never writes answers directly", () => {
     // The only writes allowed are into diagnostic_sessions (the aggregate
     // score), diagnostic_recommendations (the audit rows) and
     // exam_plan_days (the plan). None of them is diagnostic_answers.
-    for (const table of [
-      "diagnostic_sessions",
-      "diagnostic_recommendations",
-      "exam_plan_days",
-    ]) {
+    for (const table of ["diagnostic_sessions", "exam_plan_days"]) {
       expect(submitCode).toContain(`.from("${table}")`);
     }
 
@@ -399,5 +409,261 @@ describe("SECURITY: the audit trail is read-only for the client", () => {
   it("the only writer is the SECURITY DEFINER RPC", () => {
     expect(submitCode).toMatch(/rpc\(\s*"submit_diagnostic_answers"/);
     expect(submitCode).not.toMatch(/"diagnostic_answers"\)\s*\.\s*insert/);
+  });
+});
+
+describe("REGRESSION: weak topics must be names, not UUIDs", () => {
+  // Caught by the Phase 2 live smoke test. The scorer was fed topic_id and
+  // used it as the topic label, so weak_topics came back as GUIDs and the
+  // replan string-matched against them — silently doing nothing.
+
+  it("the submit route joins the topic name explicitly", () => {
+    expect(submitCode).toContain("topic_name:diagnostic_topics(name)");
+  });
+
+  it("the scorer prefers the name over the id", () => {
+    // q.topic_name ?? q.topic_id — the name must come first, or a
+    // populated topic_id will always win and we regress to GUIDs.
+    expect(masteryCode).toMatch(/normaliseTopicName\(q\.topic_name\)\s*\?\?\s*q\.topic_id\s*\?\?\s*UNTAGGED_TOPIC/);
+  });
+
+  it("a populated name beats a populated id", () => {
+    const r = scoreDiagnosticSession(
+      [{ question_id: "q1", selected_option_index: 1 }],
+      [
+        {
+          id: "q1",
+          subject_id: "s",
+          unit_id: null,
+          topic_id: "29714054-c603-413c-9631-5b3d661b3bd7",
+          topic_name: "الهندسة الفراغية",
+          question_type: "mcq",
+          correct_option_index: 1,
+        },
+      ]
+    );
+    expect(r.topic_performance[0].topic).toBe("الهندسة الفراغية");
+    expect(r.topic_performance[0].topic).not.toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it("a null name falls back to the id, then to UNTAGGED_TOPIC", () => {
+    const withId = scoreDiagnosticSession(
+      [{ question_id: "q1", selected_option_index: 1 }],
+      [
+        {
+          id: "q1", subject_id: "s", unit_id: null,
+          topic_id: "abc-123", topic_name: null,
+          question_type: "mcq", correct_option_index: 1,
+        },
+      ]
+    );
+    expect(withId.topic_performance[0].topic).toBe("abc-123");
+
+    const untagged = scoreDiagnosticSession(
+      [{ question_id: "q1", selected_option_index: 1 }],
+      [
+        {
+          id: "q1", subject_id: "s", unit_id: null,
+          topic_id: null, topic_name: null,
+          question_type: "mcq", correct_option_index: 1,
+        },
+      ]
+    );
+    expect(untagged.topic_performance[0].topic).toBe(UNTAGGED_TOPIC);
+  });
+
+  it("no topic label is ever a bare UUID", () => {
+    const r = scoreDiagnosticSession(
+      [
+        { question_id: "q1", selected_option_index: 1 },
+        { question_id: "q2", selected_option_index: 1 },
+      ],
+      [
+        { id: "q1", subject_id: "s", unit_id: null, topic_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          topic_name: "النهايات", question_type: "mcq", correct_option_index: 1 },
+        { id: "q2", subject_id: "s", unit_id: null, topic_id: "ffffffff-1111-2222-3333-444444444444",
+          topic_name: "المتتاليات", question_type: "mcq", correct_option_index: 1 },
+      ]
+    );
+    for (const t of r.topic_performance) {
+      expect(t.topic).not.toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    }
+  });
+});
+
+describe("REGRESSION: the topic relation arrives as an object", () => {
+  // The first live run also died on `a.topic.localeCompare is not a
+  // function`: PostgREST returns diagnostic_topics(name) as { name: "..." }
+  // because the FK is declared, so the alias is an embedded resource.
+
+  it("normaliseTopicName unwraps the nested object", () => {
+    expect(normaliseTopicName({ name: "التكامل" })).toBe("التكامل");
+  });
+
+  it("normaliseTopicName passes a plain string through", () => {
+    expect(normaliseTopicName("النهايات")).toBe("النهايات");
+  });
+
+  it("normaliseTopicName returns null for anything unusable", () => {
+    expect(normaliseTopicName(null)).toBeNull();
+    expect(normaliseTopicName(undefined)).toBeNull();
+    expect(normaliseTopicName({})).toBeNull();
+    expect(normaliseTopicName({ name: null })).toBeNull();
+    expect(normaliseTopicName("   ")).toBeNull();
+  });
+
+  it("a nested-object relation produces a usable string label", () => {
+    const r = scoreDiagnosticSession(
+      [{ question_id: "q1", selected_option_index: 1 }],
+      [
+        {
+          id: "q1",
+          subject_id: "s",
+          unit_id: null,
+          topic_id: "f3a31dca-c488-44ec-abd6-a10e0a0a4f27",
+          topic_name: { name: "التكامل" },
+          question_type: "mcq",
+          correct_option_index: 1,
+        },
+      ]
+    );
+    expect(typeof r.topic_performance[0].topic).toBe("string");
+    expect(r.topic_performance[0].topic).toBe("التكامل");
+  });
+
+  it("aggregation survives a mixed batch of shapes", () => {
+    // Real payloads are not uniform; the sort must not throw.
+    const r = scoreDiagnosticSession(
+      [
+        { question_id: "a", selected_option_index: 1 },
+        { question_id: "b", selected_option_index: 0 },
+        { question_id: "c", selected_option_index: 1 },
+      ],
+      [
+        { id: "a", subject_id: "s", unit_id: null, topic_id: "t1",
+          topic_name: { name: "النهايات" }, question_type: "mcq", correct_option_index: 1 },
+        { id: "b", subject_id: "s", unit_id: null, topic_id: "t2",
+          topic_name: "المتتاليات", question_type: "mcq", correct_option_index: 1 },
+        { id: "c", subject_id: "s", unit_id: null, topic_id: null,
+          topic_name: null, question_type: "mcq", correct_option_index: 1 },
+      ]
+    );
+    expect(r.topic_performance).toHaveLength(3);
+    const topics = r.topic_performance.map((t) => t.topic);
+    expect(topics).toContain("النهايات");
+    expect(topics).toContain("المتتاليات");
+    expect(topics).toContain(UNTAGGED_TOPIC);
+    expect(topics.every((t) => typeof t === "string")).toBe(true);
+  });
+});
+
+
+describe("SECURITY: recommendations are server-authored", () => {
+  // Found by the live smoke test. "diag_recs: user insert" was granted to
+  // role PUBLIC, which includes anon: anyone who knew a session_id could
+  // author a recommendation. A recommendation is an OUTPUT of scoring, so
+  // the client gets read access and nothing more.
+
+  it("the public INSERT policy is dropped", () => {
+    expect(recsSql).toContain(
+      'drop policy if exists "diag_recs: user insert"'
+    );
+  });
+
+  it("INSERT/UPDATE/DELETE are revoked from public, anon and authenticated", () => {
+    expect(recsSql).toContain(
+      "revoke insert, update, delete on public.diagnostic_recommendations from public, anon, authenticated"
+    );
+  });
+
+  it("authenticated is NOT granted UPDATE back for upsert convenience", () => {
+    // The tempting shortcut was "just give authenticated UPDATE so the
+    // PostgREST upsert works". That reopens the audit trail. The write moved
+    // into a SECURITY DEFINER function instead.
+    const rollbackStart = recsSql.indexOf("-- ROLLBACK");
+    const live = recsSql.slice(0, rollbackStart);
+    expect(live).not.toMatch(
+      /^\s*grant\s+(insert|update|delete)[^;]*diagnostic_recommendations[^;]*to\s+(authenticated|anon|public)\s*;/im
+    );
+  });
+
+  it("the read policy is owner-scoped and kept", () => {
+    expect(recsSql).toContain('create policy "diag_recs: user reads"');
+    expect(recsSql).toContain("where user_id = auth.uid()");
+  });
+
+  it("the only writer is a SECURITY DEFINER RPC", () => {
+    expect(recsSql).toContain(
+      "create or replace function public.write_diagnostic_recommendations"
+    );
+    expect(recsSql).toContain("security definer");
+    expect(recsSql).toContain("set search_path = public, pg_temp");
+  });
+
+  it("the writer is idempotent and validates ownership", () => {
+    // Slice from the CREATE, not from the first mention in the header prose.
+    const fn = recsSql.slice(
+      recsSql.indexOf("create or replace function public.write_diagnostic_recommendations")
+    );
+    expect(fn).toContain("on conflict (session_id, weak_topic) do nothing");
+    expect(fn).toContain("auth.uid()");
+    expect(fn).not.toMatch(/p_user_id/);
+  });
+
+  it("the writer is granted to authenticated only, not public", () => {
+    expect(recsSql).toContain(
+      "revoke all on function public.write_diagnostic_recommendations(uuid, jsonb) from public"
+    );
+    expect(recsSql).toContain(
+      "grant execute on function public.write_diagnostic_recommendations(uuid, jsonb) to authenticated"
+    );
+  });
+
+  it("the route calls the RPC instead of writing the table", () => {
+    expect(submitCode).toContain('rpc("write_diagnostic_recommendations"');
+    expect(submitCode).not.toMatch(
+      /\.from\(["']diagnostic_recommendations["']\)[\s\S]{0,60}?\.(?:insert|upsert|update|delete)\s*\(/
+    );
+  });
+
+  it("the route writes the columns the live table actually has", () => {
+    // The 1.2E migration file declares content_refs jsonb; production has
+    // source_content_type / _id / _title. PostgREST answered PGRST204 on
+    // the first live run. The live schema wins.
+    expect(submitCode).toContain("source_content_type");
+    expect(submitCode).not.toContain("content_refs");
+  });
+});
+
+
+describe("REGRESSION: a synthetic plan day needs a real uuid", () => {
+  // Second live failure: the planner is pure, so a day it invents for a weak
+  // topic has a placeholder id like "synthetic-review-<topic>".
+  // exam_plan_days.id is uuid, and PostgREST rejected the whole batch with
+  // 22P02 -- which meant the replan silently did nothing.
+
+  it("the planner marks invented days with a non-uuid placeholder", () => {
+    expect(replannerCode).toContain("synthetic-review-");
+  });
+
+  it("the route swaps placeholders for a generated uuid", () => {
+    expect(submitCode).toMatch(/crypto\.randomUUID\(\)/);
+    expect(submitCode).toContain("existingIds");
+  });
+
+  it("the route only replaces ids it did not read from the database", () => {
+    // Rows that came back from the plan query keep their real id, otherwise
+    // the upsert would insert duplicates instead of updating.
+    expect(submitCode).toMatch(/isReal\s*\?\s*d\.id\s*:\s*crypto\.randomUUID\(\)/);
+  });
+
+  it("no placeholder reaches the database", () => {
+    // The mapping is the only place ids are chosen, so guarding it is enough.
+    const block = submitCode.slice(
+      submitCode.indexOf("const toInsert"),
+      submitCode.indexOf("onConflict")
+    );
+    expect(block).toContain("crypto.randomUUID()");
+    expect(block).not.toContain("synthetic-review-");
   });
 });
