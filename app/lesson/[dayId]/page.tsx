@@ -171,8 +171,13 @@ function SmartContentViewer({ topic, subject, edu }: { topic: string; subject: s
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // NOTE: /api/chat does NOT read `systemInstruction` from the request body —
+          // it builds the system prompt server-side (lib/ai/prompt-builder.ts +
+          // lib/magicly-ai.ts). This string is currently dead weight. It is kept in
+          // sync with the server tone so the two do not drift apart, but changing it
+          // alone changes nothing about the model's behaviour.
           systemInstruction:
-            "أنت أستاذ جامعي خبير في شرح المواد التقنية والعلمية بأسلوب واضح ومتعمق. اكتب بالعربية الفصحى المبسطة، مع الإبقاء على المصطلحات التقنية والمعادلات والرموز بالإنجليزية زي ما هي متعارف عليها في المراجع العلمية (متكتبش المصطلح العلمي بالعربي لو مفيش ترجمة شائعة ليه). استخدم تنسيق Markdown بسيط: **نص عريض** للمصطلحات المهمة، وقوائم نقطية (- أو *) للنقاط، وعناوين فرعية لو الشرح طويل. خلي الشرح عملي ومفيد فعلاً مش سطحي، لكن من غير حشو زيادة عن اللزوم.",
+            "أنت مساعد تعليمي يكتب شرحاً واضحاً للمادة. اكتب بالعربية الفصحى المبسطة، مع الإبقاء على المصطلحات التقنية والمعادلات والرموز بالإنجليزية زي ما هي متعارف عليها في المراجع العلمية (متكتبش المصطلح العلمي بالعربي لو مفيش ترجمة شائعة ليه). استخدم تنسيق Markdown بسيط: **نص عريض** للمصطلحات المهمة، وقوائم نقطية (- أو *) للنقاط، وعناوين فرعية لو الشرح طويل. أسلوبك: هدوء واحترام ووضوح، بلا مبالغة ولا ألقاب حماسية ولا ختام تشجيعي ثابت. خلي الشرح عملي ومفيد فعلاً مش سطحي، لكن من غير حشو زيادة عن اللزوم.",
           messages: [{ role: "user", content: modePrompt }],
         }),
       });
@@ -570,7 +575,11 @@ export default function LessonDetailPage() {
       if (eduVideoCtx.faculty) eduParts.push(eduVideoCtx.faculty);
       const eduCtx = eduParts.length ? ` | سياق الطالب: ${eduParts.join(" — ")}` : "";
 
-      const systemInstruction = `أنت أستاذ جامعي خبير، بترد على أسئلة الطالب بشكل تفاعلي ومتعمق. المادة/المشروع: "${config.subject}" | الدرس الحالي: "${dayRow.topic}" (${dayRow.description})${eduCtx}. النمط المطلوب: ${styleGuide} اكتب بالعربية مع الإبقاء على المصطلحات والمعادلات التقنية بالإنجليزية زي المراجع العلمية. استخدم **نص عريض** وقوائم نقطية لو الإجابة فيها أكتر من نقطة، وكن دقيقًا ومفيدًا فعليًا مش سطحي.`;
+      // NOTE: /api/chat does NOT read `systemInstruction` from the request body — the
+      // system prompt is built server-side (lib/ai/prompt-builder.ts + lib/magicly-ai.ts).
+      // Kept in sync with the server tone so the two do not drift, but changing it
+      // alone changes nothing about the model's behaviour.
+      const systemInstruction = `أنت مساعد تعليمي تجيب على أسئلة الطالب في مادة "${config.subject}" | الدرس الحالي: "${dayRow.topic}" (${dayRow.description})${eduCtx}. النمط المطلوب: ${styleGuide} اكتب بالعربية مع الإبقاء على المصطلحات والمعادلات التقنية بالإنجليزية زي المراجع العلمية. استخدم **نص عريض** وقوائم نقطية لو الإجابة فيها أكتر من نقطة، وكن دقيقًا ومفيدًا فعليًا مش سطحيًا. أسلوبك: هدوء واحترام ووضوح، بلا مبالغة ولا ألقاب حماسية ولا ختام تشجيعي ثابت.`;
 
       const response = await fetch("/api/chat", {
         method: "POST",
