@@ -86,10 +86,34 @@ describe("generateEducationalImage fallback chain", () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("REPLICATE_API_TOKEN", "");
     vi.stubEnv("STABILITY_API_KEY", "");
-    // مفيش نت في الساندبوكس → حتى المزوّد المجاني هيفشل → الرسالة النهائية
+
+    // ⚠️ This used to depend on the sandbox having no network: the comment
+    //    said "مفيش نت في الساندبوكس" and the paid keys were emptied to make
+    //    the free provider the last one standing, so it was assumed Pollinations
+    //    would fail too. On a machine with a connection it succeeds, the
+    //    promise resolves, and the test fails — not flakily, every time. It
+    //    was testing the network rather than the fallback chain.
+    //
+    //    So the failure is now explicit: every fetch throws, which is what
+    //    "all providers failed" actually means. Deterministic everywhere, and
+    //    the next case in this file already used exactly this technique for
+    //    the success path.
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     await expect(generateEducationalImage({ prompt: "صورة تجريبية" })).rejects.toThrow(
       "عذراً، تعذر توليد الصورة حاليا"
     );
+
+    // The fallback has to actually be walked, not short-circuited: the free
+    // provider is tried and fails, and the paid ones are tried only if their
+    // keys are present. With the keys emptied the chain should have hit
+    // Pollinations at least once before giving up.
+    expect(fetchMock).toHaveBeenCalled();
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("pollinations"))).toBe(true);
   }, 30000);
 
   it("uses Pollinations when it responds — free, zero cost, base64 data URL", async () => {

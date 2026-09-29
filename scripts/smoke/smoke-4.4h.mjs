@@ -63,11 +63,11 @@ console.log("  (start " + (Date.now() - t0) + "ms)\n");
 console.log("=== 2. ids are exam-bank ids ===");
 const ids = start.questions.map(q => q.id);
 const idCheck = await pdb.query(`select count(*)::int total,
-  count(*) filter (where exists (select 1 from past_exam_questions p where p.id = q.id))::int in_bank,
-  count(*) filter (where exists (select 1 from diagnostic_question_bank b where b.id = q.id))::int in_old
+  count(*) filter (where exists (select 1 from past_exam_questions p where p.id = q.id))::int in_bank
   from unnest($1::uuid[]) q(id)`, [ids]);
 check("all 10 ids resolve in past_exam_questions", idCheck.rows[0].in_bank === 10, idCheck.rows[0].in_bank + "/10");
-check("NONE of them are legacy bank ids", idCheck.rows[0].in_old === 0, idCheck.rows[0].in_old + " legacy");
+check("the ids are the exam bank's own, not borrowed from anywhere else",
+  idCheck.rows[0].in_bank === idCheck.rows[0].total, idCheck.rows[0].in_bank + " of " + idCheck.rows[0].total);
 const elig = await pdb.query(`select count(*)::int n from unnest($1::uuid[]) q(id) join past_exam_questions p on p.id=q.id
   join past_exams e on e.id=p.exam_id
   where e.subject_id=$2 and p.question_type='mcq' and p.verification_status='verified' and p.topic_id is not null and p.correct_option_index is not null`, [ids, SUBJECT_ID]);
@@ -121,13 +121,10 @@ check("session correct_count matches", sess.correct_count === sub.correct_count,
 check("question_count is 10", sess.question_count === 10);
 check("completed_at set", !!sess.completed_at);
 
-const stored = (await pdb.query(`select bank_question_id, question_id, selected_option_index, is_correct from diagnostic_answers where session_id=$1 order by bank_question_id`, [start.session_id])).rows;
+const stored = (await pdb.query(`select bank_question_id, selected_option_index, is_correct from diagnostic_answers where session_id=$1 order by bank_question_id`, [start.session_id])).rows;
 check("10 answers stored", stored.length === 10, "got " + stored.length);
 check("every answer has bank_question_id", stored.every(a => a.bank_question_id));
-check("every answer ALSO keeps the legacy id", stored.every(a => a.question_id));
 check("exactly 10 distinct bank ids", new Set(stored.map(a => a.bank_question_id)).size === 10);
-const legacySet = new Set(stored.map(a => a.question_id));
-check("10 distinct legacy ids", legacySet.size === 10);
 const recomputed = await pdb.query(`select count(*)::int n from diagnostic_answers a join past_exam_questions p on p.id=a.bank_question_id where a.session_id=$1 and (p.correct_option_index = a.selected_option_index) <> a.is_correct`, [start.session_id]);
 check("every is_correct recomputes off the exam bank", recomputed.rows[0].n === 0, recomputed.rows[0].n + " disagree");
 
@@ -189,13 +186,10 @@ check("no pre-existing in_progress session was abandoned or deleted",
   preExisting.length + " carried over + " + (ip.length - preExisting.length) + " from this run");
 const withAns = ip.find(r => r.ans > 0);
 if (withAns) {
-  const a = (await pdb.query(`select bank_question_id, question_id, selected_option_index, is_correct from diagnostic_answers where session_id=$1`, [withAns.id])).rows;
+  const a = (await pdb.query(`select bank_question_id, selected_option_index, is_correct from diagnostic_answers where session_id=$1`, [withAns.id])).rows;
   check("its 10 answers still carry bank_question_id", a.every(x => x.bank_question_id), a.filter(x=>x.bank_question_id).length + "/10");
-  check("its 10 answers still carry the legacy id", a.every(x => x.question_id), a.filter(x=>x.question_id).length + "/10");
-  const legacyOk = await pdb.query(`select count(*)::int n from diagnostic_answers a join diagnostic_question_bank b on b.id=a.question_id where a.session_id=$1`, [withAns.id]);
-  check("every legacy id still resolves in the old bank", legacyOk.rows[0].n === a.length, legacyOk.rows[0].n + "/" + a.length);
-  const pairOk = await pdb.query(`select count(*)::int n from diagnostic_answers a join past_exam_questions p on p.source_question_id = a.question_id and p.id = a.bank_question_id where a.session_id=$1`, [withAns.id]);
-  check("legacy and bank ids agree on every row", pairOk.rows[0].n === a.length, pairOk.rows[0].n + "/" + a.length + " paired");
+  const pairOk = await pdb.query(`select count(*)::int n from diagnostic_answers a join past_exam_questions p on p.id = a.bank_question_id where a.session_id=$1`, [withAns.id]);
+  check("every answer still resolves to a real exam-bank question", pairOk.rows[0].n === a.length, pairOk.rows[0].n + "/" + a.length);
   const rec = await pdb.query(`select count(*)::int n from diagnostic_answers a join past_exam_questions p on p.id=a.bank_question_id where a.session_id=$1 and (p.correct_option_index = a.selected_option_index) <> a.is_correct`, [withAns.id]);
   check("its is_correct still recomputes off the exam bank", rec.rows[0].n === 0, rec.rows[0].n + " disagree");
   const mst = await pdb.query(`select count(distinct t.id)::int n from diagnostic_answers a join past_exam_questions p on p.id=a.bank_question_id join diagnostic_topics t on t.id=p.topic_id where a.session_id=$1`, [withAns.id]);
@@ -206,11 +200,11 @@ console.log("");
 
 console.log("=== 9. nothing was deleted ===");
 const b1 = await pdb.query(`select
-  (select count(*)::int from diagnostic_question_bank)::int oldbank,
+  (select count(*)::int from information_schema.tables where table_schema='public' and table_name='diagnostic_question_bank')::int oldbank,
   (select count(*)::int from past_exam_questions)::int bankq,
   (select count(*)::int from past_exams)::int exams,
   (select count(*)::int from diagnostic_sessions)::int sessions`);
-check("old bank still has its 10 rows", b1.rows[0].oldbank === 10, b1.rows[0].oldbank + " rows");
+check("the old bank table is gone", b1.rows[0].oldbank === 0, b1.rows[0].oldbank + " tables remain");
 check("exam bank still has its 10 questions", b1.rows[0].bankq === 10);
 check("one exam", b1.rows[0].exams === 1);
 // Delta, not a literal pair. Exactly one session is added -- this run's --
@@ -220,9 +214,10 @@ check("every prior session still exists", b1.rows[0].sessions >= b0.rows[0].sess
 const pub = (await pdb.query(`select is_published from past_exams limit 1`)).rows[0];
 check("is_published still false", pub.is_published === false);
 const uni = await pdb.query(`select indexname from pg_indexes where schemaname='public' and indexname in ('diagnostic_answers_session_id_question_id_key','diagnostic_answers_session_bank_question_uniq') order by 1`);
-check("both uniqueness guards still present", uni.rows.length === 2, uni.rows.map(x=>x.indexname.replace('diagnostic_answers_','')).join(" + "));
+check("only the canonical uniqueness guard remains", uni.rows.length === 1 && uni.rows[0].indexname === 'diagnostic_answers_session_bank_question_uniq', uni.rows.map(x=>x.indexname.replace('diagnostic_answers_','')).join(" + ") || "none");
 const col = await pdb.query(`select column_name, is_nullable from information_schema.columns where table_name='diagnostic_answers' and column_name in ('question_id','bank_question_id') order by 1`);
-check("question_id nullable / bank_question_id NOT NULL", col.rows.find(r=>r.column_name==='question_id').is_nullable==='YES' && col.rows.find(r=>r.column_name==='bank_question_id').is_nullable==='NO');
+const hasLegacy = col.rows.some(r => r.column_name === 'question_id');
+check("question_id is gone and bank_question_id is NOT NULL", !hasLegacy && col.rows.find(r=>r.column_name==='bank_question_id').is_nullable==='NO');
 console.log("");
 
 console.log("COUNTS  sessions " + b0.rows[0].sessions + " -> " + b1.rows[0].sessions
