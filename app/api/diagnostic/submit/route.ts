@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-guard";
+import { createServiceClient } from "@/lib/supabase/admin";
 import {
   scoreDiagnosticSession,
   detectWeakTopics,
@@ -212,32 +213,57 @@ export async function POST(req: Request) {
 
   // 5) Load the exam bank so the pure scorer can compare against the truth.
   //
-  // Phase 4.4-G. The lookup is keyed on bank_question_id — the canonical id
-  // the RPC already wrote — so the scorer and the RPC read the same rows from
-  // the same place. Reading diagnostic_question_bank here would have left the
-  // two disagreeing: the RPC scoring from the exam bank while this returned
-  // an empty result, which the scorer would have read as "every answer wrong".
+  // Phase 4.4-H. This reads with the SERVICE-ROLE client, and that is not a
+  // convenience — the live smoke test showed the user client returns nothing
+  // here and the student gets a wrong answer rather than an error.
+  //
+  // What happened: the public read policy on past_exam_questions requires the
+  // exam to be published, and that exam is deliberately unpublished while its
+  // year and sitting are still contradicted. So the subject lookup returned an
+  // empty list, `.in("exam_id", [])` matched no rows, and the scorer received
+  // an empty bank. An empty bank is not an error to scoreDiagnosticSession —
+  // an unmatched answer is counted WRONG, so ten correct answers produced
+  // 0/10 and every topic collapsed into UNTAGGED_TOPIC. The database still
+  // held is_correct = true for 7 of the 10; the route reported 0. A silent
+  // wrong answer is worse than the 500 this replaced.
+  //
+  // Why the elevated read is sound: these are not rows chosen from the open
+  // sea. `stored` is this session's own answers, already written by
+  // submit_diagnostic_answers, which verified for every one of them that the
+  // question is verified, carries a topic, and belongs to an exam in this
+  // session's subject. This step re-reads rows the RPC has already
+  // authenticated, so it inherits that check rather than replacing it. The
+  // subject filter is still applied here — the RPC's guarantee is not
+  // something to assume, and the query that decides what a student is told
+  // they scored should not depend on another function having been written
+  // correctly.
+  //
+  // What is NOT elevated: the session read, the ownership check, the answer
+  // read and every write all still go through the caller's own client.
   //
   // ⚠️ topic:diagnostic_topics(name) is NOT optional. Without it the scorer
   //    receives topic_id (a UUID) and uses it AS the topic name, so weak_topics
   //    come back as GUIDs and the replan matches against them instead of the
   //    real names. The live smoke test caught this. unit_id is reached through
   //    the same relation because past_exam_questions has no such column.
-  //
-  // ⚠️ The subject is enforced here as well as in the RPC. Redundant on
-  //    purpose: this is the query that decides what the student is told they
-  //    scored, and a filter that exists only in another function is a filter
-  //    one refactor away from being optional.
-  const { data: bankRows, error: bankError } = await supabase
+  let admin;
+  try {
+    admin = createServiceClient();
+  } catch {
+    return NextResponse.json(
+      { error: "مش قادرين نقرأ بنك الأسئلة." },
+      { status: 500 }
+    );
+  }
+
+  const { data: bankRows, error: bankError } = await admin
     .from("past_exam_questions")
-    .select(
-      "id, correct_option_index, question_type, topic_id, topic_name:diagnostic_topics(name), unit_id:diagnostic_topics(unit_id)"
-    )
+    .select("id, correct_option_index, question_type, topic_id")
     .in("id", stored.map((a) => a.bank_question_id))
     .in(
       "exam_id",
       (
-        await supabase
+        await admin
           .from("past_exams")
           .select("id")
           .eq("subject_id", session.subject_id)
@@ -251,7 +277,47 @@ export async function POST(req: Request) {
     );
   }
 
-  const questions = (bankRows ?? []) as BankQuestion[];
+  const rows = (bankRows ?? []) as Array<{
+    id: string;
+    correct_option_index: number;
+    question_type: string;
+    topic_id: string | null;
+  }>;
+
+  // Topics come from a second flat query rather than a PostgREST embed.
+  //
+  // The embed was tried first: `unit_id:diagnostic_topics(unit_id)` does not
+  // produce a scalar. PostgREST returns the whole related row wrapped for a
+  // to-one relation, and the type came back as { unit_id: any }[] — an
+  // array — which the old `(bankRows as BankQuestion[])` cast silently
+  // accepted. TypeScript caught it only after the service client was added;
+  // a cast is exactly the thing that hides a wrong shape.
+  //
+  // Two flat queries with an explicit join in JS cannot be wrong in the same
+  // way, and the topic name is the field that actually matters: the scorer
+  // falls back to topic_id when the name is missing, and weak_topics would
+  // come back as GUIDs for the replan to match against. The live smoke test
+  // caught that once already; it should not be reachable again.
+  const topicIds = [...new Set(rows.map((r) => r.topic_id).filter(Boolean))] as string[];
+  const topics = new Map<string, { name: string; unit_id: string | null }>();
+  if (topicIds.length > 0) {
+    const { data: topicRows } = await admin
+      .from("diagnostic_topics")
+      .select("id, name, unit_id")
+      .in("id", topicIds);
+    for (const t of topicRows ?? []) {
+      topics.set(t.id, { name: t.name, unit_id: t.unit_id ?? null });
+    }
+  }
+
+  const questions: BankQuestion[] = rows.map((r) => ({
+    id: r.id,
+    unit_id: r.topic_id ? topics.get(r.topic_id)?.unit_id ?? null : null,
+    topic_id: r.topic_id,
+    topic_name: r.topic_id ? topics.get(r.topic_id)?.name ?? null : null,
+    question_type: r.question_type as BankQuestion["question_type"],
+    correct_option_index: r.correct_option_index,
+  }));
 
   // 6) Pure scoring. `is_correct` on `stored` is ignored on purpose — we
   //    re-derive it from correct_option_index so the score cannot depend on
