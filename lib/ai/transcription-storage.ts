@@ -36,7 +36,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { createServiceClient } from "@/lib/supabase/admin";
+import { createServiceClient, isServiceKeyConfigured } from "@/lib/supabase/admin";
 import {
   ALLOWED_LECTURE_EXTENSIONS,
   ALLOWED_LECTURE_MIME_TYPES,
@@ -61,13 +61,16 @@ const UPLOAD_URL_TTL_SECONDS = 2 * 60 * 60;
  *  وبعدين بنحذف الملف. مش رابط عام. */
 const READ_URL_TTL_SECONDS = 60 * 60;
 
-/** هل التخزين مهيّأ؟ (URL + service key موجودين في البيئة)
- *  الواجهة بتستخدم ده عشان ترجع للمسار القديم بدل ما تفشل صامتة. */
+/** هل التخزين مهيّأ؟ (URL + مفتاح سيرفر موجودين في البيئة)
+ *  الواجهة بتستخدم ده عشان ترجع للمسار القديم بدل ما تفشل صامتة.
+ *
+ *  ⚠️ بننادي `isServiceKeyConfigured()` من `lib/supabase/admin.ts` بدل ما
+ *  نقرا المتغيّرات بأنفسنا: كده مصدر الحقيقة للمفتاح **واحد** في
+ *  المشروع كله: نفس قاعدته (الجديد الأول ثم القديم) ونفس الـ trim.
+ *  لو فضلنا نقرا `SUPABASE_SERVICE_ROLE_KEY` هنا، كان الـ storage هيفتكر
+ *  إن البيئة مهيّأة والعميل يفشل فعلاً بسبب مفتاح مختلف. */
 export function isStorageConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
-  );
+  return isServiceKeyConfigured();
 }
 
 function storage() {
