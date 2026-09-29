@@ -225,3 +225,135 @@ comment on function public.write_diagnostic_recommendations(uuid, jsonb) is
 revoke all on function public.write_diagnostic_recommendations(uuid, jsonb) from public;
 grant execute on function public.write_diagnostic_recommendations(uuid, jsonb) to authenticated;
 
+
+-- ---------------------------------------------------------------------------
+-- STEP 5 — apply a replan atomically
+-- ---------------------------------------------------------------------------
+-- ❗ Found while building the Phase 3 UI. The route was applying a replan
+--    with a PostgREST upsert on exam_plan_days, which cannot work: the
+--    replanner RENUMBERS days, and UNIQUE(plan_id, day_number) is enforced
+--    per row as the write lands. Moving day 2 to day 1 collides with the
+--    row that still holds 1 at that instant — the database answered
+--        23505 duplicate key value violates unique constraint
+--          "exam_plan_days_plan_id_day_number_key"
+--    The live smoke test passed only because the plan it exercised happened
+--    to need an insert rather than a renumber. A real reorder has always
+--    failed.
+--
+--    A two-phase rename cannot be done from the client either: it would need
+--    the same collision in reverse. So the whole write is one plpgsql
+--    function — atomic, and free to renumber inside a single statement's
+--    visibility rules.
+--
+--    The function still verifies ownership from the session row, so this
+--    stays a server-side path like every other write in Phase 2.
+
+create or replace function public.apply_exam_plan_replan(
+  p_plan_id uuid,
+  p_days jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user uuid;
+  v_item jsonb;
+  v_rows integer := 0;
+begin
+  -- Ownership comes from the plan row, never from a parameter.
+  select ep.user_id into v_user
+  from public.exam_plans ep
+  where ep.id = p_plan_id and ep.user_id = auth.uid();
+
+  if v_user is null then
+    raise exception 'plan_not_found_or_not_yours'
+      using errcode = 'no_data_found';
+  end if;
+
+  if p_days is null or jsonb_typeof(p_days) <> 'array' then
+    raise exception 'days_must_be_an_array' using errcode = '22023';
+  end if;
+
+  -- Phase 1: park every existing row on a negative, collision-free slot.
+  --          Negative numbers cannot clash with the positive day_number the
+  --          planner assigns, and there is no unique index on day_number
+  --          alone to trip over.
+  with parked as (
+    select id, row_number() over (order by day_number) as n
+    from public.exam_plan_days
+    where plan_id = p_plan_id
+  )
+  update public.exam_plan_days d
+  set day_number = -parked.n
+  from parked
+  where d.id = parked.id;
+
+  -- Phase 2: write the planner's output. Rows that already existed keep
+  --          their id and are updated; invented days arrive without an id
+  --          and get one here, so the uuid column is never handed a
+  --          placeholder string.
+  for v_item in select value from jsonb_array_elements(p_days)
+  loop
+    if jsonb_typeof(v_item) <> 'object' then
+      raise exception 'each_day_must_be_an_object' using errcode = '22023';
+    end if;
+
+    insert into public.exam_plan_days (
+      id, plan_id, user_id, day_number, study_date, kind, title, description
+    )
+    values (
+      -- gen_random_uuid() for a day the planner invented. Passing NULL
+      -- would hit the NOT NULL on id: the column default only applies
+      -- when the column is omitted entirely, not when it is explicitly
+      -- NULL, so nullif(...)::uuid alone fails with 23502 on every new day.
+      coalesce(nullif(v_item ->> 'id', '')::uuid, gen_random_uuid()),
+      p_plan_id,
+      v_user,
+      (v_item ->> 'day_number')::smallint,
+      (v_item ->> 'study_date')::date,
+      coalesce(nullif(v_item ->> 'kind', ''), 'content'),
+      v_item ->> 'title',
+      v_item ->> 'description'
+    )
+    on conflict (id) do update
+      set day_number  = excluded.day_number,
+          study_date  = excluded.study_date,
+          kind        = excluded.kind,
+          title       = excluded.title,
+          description = excluded.description;
+  end loop;
+
+  -- Anything the planner dropped (a quarantine we could not fit) is removed
+  -- rather than left parked on a negative number.
+  delete from public.exam_plan_days
+  where plan_id = p_plan_id and day_number < 0;
+
+  select count(*) into v_rows
+  from public.exam_plan_days
+  where plan_id = p_plan_id;
+
+  return jsonb_build_object('days_stored', v_rows);
+end;
+$$;
+
+comment on function public.apply_exam_plan_replan(uuid, jsonb) is
+  'Phase 3 — applies a replan atomically. Two-phase renumber (park on negative slots, then write) because UNIQUE(plan_id, day_number) is per-row and a PostgREST upsert collides with itself on every real reorder.';
+
+revoke all on function public.apply_exam_plan_replan(uuid, jsonb) from public;
+grant execute on function public.apply_exam_plan_replan(uuid, jsonb) to authenticated;
+
+-- ============================================================================
+-- VERIFICATION — add to the list above
+-- ============================================================================
+-- 7. The planner's writer exists:
+--    select proname, prosecdef from pg_proc
+--     where proname = 'apply_exam_plan_replan';
+--
+-- 8. A reorder no longer collides — run it through the UI or a session:
+--    select day_number, study_date, title from public.exam_plan_days
+--     where plan_id = '<plan>' order by day_number;
+--    EXPECTED: contiguous 1..n, no gaps, no duplicates, chronological dates.
+--
+-- ============================================================================

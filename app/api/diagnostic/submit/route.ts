@@ -349,32 +349,36 @@ export async function POST(req: Request) {
       const replan = replanExamPlan({ days }, weakTopics, daysLeft, today);
 
       if (replan.changed) {
-        // ⚠️ A synthetic day carries a placeholder id like
-        //    "synthetic-review-<topic>" because the planner is pure and must
-        //    not depend on a database. exam_plan_days.id is uuid, so those
-        //    placeholders have to be swapped for a real UUID before the write
-        //    -- the first live run failed with 22P02 on exactly this.
+        // ⚠️ WHY A FUNCTION AND NOT AN UPSERT.
+        // The planner RENUMBERS days, and UNIQUE(plan_id, day_number) is
+        // enforced per row as each write lands. Moving day 2 onto day 1
+        // collides with the row that still holds 1 at that instant, so a
+        // PostgREST upsert fails with 23505 on every real reorder — the
+        // replan silently did nothing. The live smoke test passed only
+        // because its plan happened to need an insert, not a renumber.
+        // apply_exam_plan_replan() parks the rows on negative slots first,
+        // so the whole reorder is collision-free and atomic.
+        //
+        // Invented days arrive without an id so the function assigns a real
+        // uuid; the planner's "synthetic-review-<topic>" placeholder never
+        // reaches the database.
         const existingIds = new Set(days.map((d) => d.id));
-        const toInsert: Record<string, unknown>[] = [];
 
-        for (const d of replan.days) {
-          const isReal = existingIds.has(d.id);
-          toInsert.push({
-            // Insert new days, keep real ids for the ones already stored.
-            id: isReal ? d.id : crypto.randomUUID(),
-            plan_id: planId,
-            user_id: user.id,
-            day_number: d.dayNumber,
-            study_date: d.studyDate,
-            kind: d.kind,
-            title: d.title,
-            description: d.description,
-          });
-        }
-
-        const { error: applyError } = await supabase
-          .from("exam_plan_days")
-          .upsert(toInsert, { onConflict: "id" });
+        const { error: applyError } = await supabase.rpc("apply_exam_plan_replan", {
+          p_plan_id: planId,
+          p_days: replan.days.map((d) => {
+            const isReal = existingIds.has(d.id);
+            return {
+              // null, not the placeholder: the function generates the uuid.
+              id: isReal ? d.id : null,
+              day_number: d.dayNumber,
+              study_date: d.studyDate,
+              kind: d.kind,
+              title: d.title,
+              description: d.description,
+            };
+          }),
+        });
 
         planUpdated = !applyError;
         if (applyError) {

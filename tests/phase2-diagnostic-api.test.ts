@@ -315,9 +315,9 @@ describe("CONTRACT: the API never writes answers directly", () => {
     // The only writes allowed are into diagnostic_sessions (the aggregate
     // score), diagnostic_recommendations (the audit rows) and
     // exam_plan_days (the plan). None of them is diagnostic_answers.
-    for (const table of ["diagnostic_sessions", "exam_plan_days"]) {
-      expect(submitCode).toContain(`.from("${table}")`);
-    }
+    // exam_plan_days is written through apply_exam_plan_replan() now, so the
+    // route's own direct writes are the session row only.
+    expect(submitCode).toContain('.from("diagnostic_sessions")');
 
     // And there must be at least one write, or this test proves nothing.
     const writes = submitCode.match(/\.(?:insert|upsert|update)\s*\(/g) ?? [];
@@ -636,34 +636,96 @@ describe("SECURITY: recommendations are server-authored", () => {
 });
 
 
-describe("REGRESSION: a synthetic plan day needs a real uuid", () => {
-  // Second live failure: the planner is pure, so a day it invents for a weak
-  // topic has a placeholder id like "synthetic-review-<topic>".
-  // exam_plan_days.id is uuid, and PostgREST rejected the whole batch with
-  // 22P02 -- which meant the replan silently did nothing.
+describe("REGRESSION: a synthetic plan day never reaches the uuid column", () => {
+  // The planner is pure, so a day it invents carries a placeholder id like
+  // "synthetic-review-<topic>". exam_plan_days.id is uuid, and the first
+  // attempt sent that string and the whole batch failed with 22P02.
 
-  it("the planner marks invented days with a non-uuid placeholder", () => {
+  it("the planner still marks invented days with a non-uuid placeholder", () => {
     expect(replannerCode).toContain("synthetic-review-");
   });
 
-  it("the route swaps placeholders for a generated uuid", () => {
-    expect(submitCode).toMatch(/crypto\.randomUUID\(\)/);
-    expect(submitCode).toContain("existingIds");
+  it("the route sends null for an invented day, not the placeholder", () => {
+    expect(submitCode).toMatch(/id:\s*isReal\s*\?\s*d\.id\s*:\s*null/);
   });
 
-  it("the route only replaces ids it did not read from the database", () => {
-    // Rows that came back from the plan query keep their real id, otherwise
-    // the upsert would insert duplicates instead of updating.
-    expect(submitCode).toMatch(/isReal\s*\?\s*d\.id\s*:\s*crypto\.randomUUID\(\)/);
-  });
-
-  it("no placeholder reaches the database", () => {
-    // The mapping is the only place ids are chosen, so guarding it is enough.
+  it("the placeholder string is never sent to the database", () => {
     const block = submitCode.slice(
-      submitCode.indexOf("const toInsert"),
-      submitCode.indexOf("onConflict")
+      submitCode.indexOf("p_days:"),
+      submitCode.indexOf("apply_exam_plan_replan")
     );
-    expect(block).toContain("crypto.randomUUID()");
     expect(block).not.toContain("synthetic-review-");
+  });
+
+  it("the database generates the uuid, not the route", () => {
+    // gen_random_uuid() in SQL rather than crypto.randomUUID() in TS: the
+    // function is SECURITY DEFINER, so the id is minted where the row is
+    // written and the client never influences it.
+    const fn = recsSql.slice(recsSql.indexOf("create or replace function public.apply_exam_plan_replan"));
+    expect(fn).toContain("gen_random_uuid()");
+  });
+});
+
+describe("REGRESSION: a reorder cannot collide with itself", () => {
+  // Found while building the Phase 3 UI. replanExamPlan RENUMBERS days, and
+  // UNIQUE(plan_id, day_number) is checked per row as each write lands. A
+  // PostgREST upsert moving day 2 onto day 1 therefore failed with:
+  //     23505 duplicate key value violates unique constraint
+  //         "exam_plan_days_plan_id_day_number_key"
+  // The live smoke test passed only because its plan happened to need an
+  // insert, not a renumber — every real reorder has been failing.
+  //
+  // The fix is a SECURITY DEFINER function that parks the existing rows on
+  // negative slots first, so nothing can collide while the write lands.
+
+  it("the route calls apply_exam_plan_replan, not a table upsert", () => {
+    expect(submitCode).toMatch(/rpc\(\s*"apply_exam_plan_replan"/);
+    expect(submitCode).not.toMatch(
+      /\.from\(["']exam_plan_days["']\)[\s\S]{0,80}?\.(?:insert|upsert|update)\s*\(/
+    );
+  });
+
+  it("invented days send a null id so the database assigns the uuid", () => {
+    // The planner's "synthetic-review-<topic>" placeholder is not a uuid and
+    // must never reach the column.
+    expect(submitCode).toMatch(/id:\s*isReal\s*\?\s*d\.id\s*:\s*null/);
+    expect(submitCode).not.toMatch(/id:\s*isReal\s*\?\s*d\.id\s*:\s*d\.id/);
+  });
+
+  it("the function parks rows on negative slots before writing", () => {
+    // Phase 1 of the two-phase renumber: negatives cannot clash with the
+    // positive numbers the planner assigns.
+    const fn = recsSql.slice(recsSql.indexOf("create or replace function public.apply_exam_plan_replan"));
+    expect(fn).toContain("set day_number = -parked.n");
+  });
+
+  it("the function generates a uuid instead of relying on the column default", () => {
+    // id is NOT NULL and the default only applies when the column is OMITTED,
+    // not when it is explicitly NULL. nullif(...)::uuid alone therefore raised
+    // 23502 on every new day.
+    const fn = recsSql.slice(recsSql.indexOf("create or replace function public.apply_exam_plan_replan"));
+    expect(fn).toMatch(/coalesce\(\s*nullif\(v_item\s*->>\s*'id',\s*''\)\s*::uuid,\s*gen_random_uuid\(\)\s*\)/);
+  });
+
+  it("rows the planner dropped are removed, not left parked", () => {
+    const fn = recsSql.slice(recsSql.indexOf("create or replace function public.apply_exam_plan_replan"));
+    expect(fn).toContain("day_number < 0");
+  });
+
+  it("the function verifies ownership from the plan row", () => {
+    const fn = recsSql.slice(recsSql.indexOf("create or replace function public.apply_exam_plan_replan"));
+    expect(fn).toContain("auth.uid()");
+    expect(fn).not.toMatch(/p_user_id/);
+  });
+
+  it("the function is SECURITY DEFINER and granted to authenticated only", () => {
+    const fn = recsSql.slice(recsSql.indexOf("create or replace function public.apply_exam_plan_replan"));
+    expect(fn).toContain("security definer");
+    expect(recsSql).toContain(
+      "revoke all on function public.apply_exam_plan_replan(uuid, jsonb) from public"
+    );
+    expect(recsSql).toContain(
+      "grant execute on function public.apply_exam_plan_replan(uuid, jsonb) to authenticated"
+    );
   });
 });
