@@ -44,17 +44,26 @@ import { diffDaysISO, todayISO, type ExamPlanDay } from "@/lib/exam-plans";
   non-idempotent step, which is exactly why it goes last.
    ========================================================================== */
 
-/** The only shape the client is allowed to send. */
+/**
+ * The only shape the client is allowed to send.
+ *
+ * `bank_question_id` is the exam bank's id, the same value
+ * /api/diagnostic/start returns as `id` and the same one
+ * submit_diagnostic_answers reads. The legacy `question_id` is not accepted
+ * as a fallback: a dual-key contract would keep the retired bank's ids
+ * reachable, and the point of the switch is that they stop being usable.
+ */
 interface ClientAnswer {
-  question_id: string;
+  bank_question_id: string;
   selected_option_index: number;
 }
 
 /**
- * Reads ONLY `question_id` and `selected_option_index`.
+ * Reads ONLY `bank_question_id` and `selected_option_index`.
  *
- * A client that smuggles `is_correct: true` has it dropped here — and
- * again in the SQL function. Two independent layers, deliberately.
+ * A client that smuggles `is_correct: true` has it dropped here — and again
+ * in the SQL function. Two independent layers, deliberately. So does a
+ * `correct_option_index`, and a `question_id`, which is simply never read.
  */
 function parseAnswers(raw: unknown): ClientAnswer[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -62,17 +71,21 @@ function parseAnswers(raw: unknown): ClientAnswer[] | null {
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return null;
     const rec = item as Record<string, unknown>;
-    const questionId = rec.question_id;
+    const bankQuestionId = rec.bank_question_id;
     const selected = rec.selected_option_index;
-    if (typeof questionId !== "string" || !questionId) return null;
+    if (typeof bankQuestionId !== "string" || !bankQuestionId) return null;
     if (typeof selected !== "number" || !Number.isInteger(selected)) return null;
-    out.push({ question_id: questionId, selected_option_index: selected });
+    out.push({
+      bank_question_id: bankQuestionId,
+      selected_option_index: selected,
+    });
   }
   return out;
 }
 
 interface AnswerRow {
   question_id: string;
+  bank_question_id: string;
   selected_option_index: number;
   is_correct: boolean;
 }
@@ -175,7 +188,11 @@ export async function POST(req: Request) {
   //    client's payload. Scoring works from here on.
   const { data: answerRows, error: answerError } = await supabase
     .from("diagnostic_answers")
-    .select("question_id, selected_option_index, is_correct")
+    // bank_question_id is what the scorer keys on and what the exam bank is
+    // looked up by. question_id is still read so AnswerRow stays honest about
+    // the row's shape, but nothing below uses it — the legacy id is not a
+    // fallback path, and reading it here would invite someone to.
+    .select("question_id, bank_question_id, selected_option_index, is_correct")
     .eq("session_id", sessionId);
 
   if (answerError) {
@@ -193,18 +210,39 @@ export async function POST(req: Request) {
     );
   }
 
-  // 5) Load the bank so the pure scorer can compare against the truth.
+  // 5) Load the exam bank so the pure scorer can compare against the truth.
+  //
+  // Phase 4.4-G. The lookup is keyed on bank_question_id — the canonical id
+  // the RPC already wrote — so the scorer and the RPC read the same rows from
+  // the same place. Reading diagnostic_question_bank here would have left the
+  // two disagreeing: the RPC scoring from the exam bank while this returned
+  // an empty result, which the scorer would have read as "every answer wrong".
+  //
+  // ⚠️ topic:diagnostic_topics(name) is NOT optional. Without it the scorer
+  //    receives topic_id (a UUID) and uses it AS the topic name, so weak_topics
+  //    come back as GUIDs and the replan matches against them instead of the
+  //    real names. The live smoke test caught this. unit_id is reached through
+  //    the same relation because past_exam_questions has no such column.
+  //
+  // ⚠️ The subject is enforced here as well as in the RPC. Redundant on
+  //    purpose: this is the query that decides what the student is told they
+  //    scored, and a filter that exists only in another function is a filter
+  //    one refactor away from being optional.
   const { data: bankRows, error: bankError } = await supabase
-    .from("diagnostic_question_bank")
-    // ⚠️ topic:diagnostic_topics(name) is NOT optional. Without it the
-    //    scorer receives topic_id (a UUID) and uses it AS the topic name,
-    //    so weak_topics come back as GUIDs and the replan matches against
-    //    them instead of the real names. The live smoke test caught this.
+    .from("past_exam_questions")
     .select(
-      "id, subject_id, unit_id, topic_id, topic_name:diagnostic_topics(name), question_type, correct_option_index"
+      "id, correct_option_index, question_type, topic_id, topic_name:diagnostic_topics(name), unit_id:diagnostic_topics(unit_id)"
     )
-    .in("id", stored.map((a) => a.question_id))
-    .eq("subject_id", session.subject_id);
+    .in("id", stored.map((a) => a.bank_question_id))
+    .in(
+      "exam_id",
+      (
+        await supabase
+          .from("past_exams")
+          .select("id")
+          .eq("subject_id", session.subject_id)
+      ).data?.map((e: { id: string }) => e.id) ?? []
+    );
 
   if (bankError) {
     return NextResponse.json(
@@ -220,7 +258,10 @@ export async function POST(req: Request) {
   //    any column being consistent, even a server-written one.
   const result = scoreDiagnosticSession(
     stored.map((a) => ({
-      question_id: a.question_id,
+      // BankQuestion.id is the exam bank's id, so the answer rows have to be
+      // keyed the same way. Using question_id here would match nothing and
+      // the scorer would mark every answer wrong without throwing.
+      question_id: a.bank_question_id,
       selected_option_index: a.selected_option_index,
     })),
     questions

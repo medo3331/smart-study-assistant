@@ -44,6 +44,30 @@ const recsSql = readFileSync(
   "utf8"
 );
 
+// Phase 4.4-D moved the scoring and mastery functions into their own file,
+// because phase2-diagnostic-security.sql had already been applied to
+// production. The same guarantees are asserted against the file that is
+// actually live rather than the one the tests were written next to.
+const examBankSql = readFileSync(
+  join(root, "db", "phase4-diagnostic-rpc-exam-bank.sql"),
+  "utf8"
+);
+const examBankCode = examBankSql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+// Phase 4.4-F: the public exam bank is a separate read from the diagnostic,
+// served by its own route.
+const examBankApiSrc = readFileSync(
+  join(root, "app", "api", "exam-bank", "questions", "route.ts"),
+  "utf8"
+);
+const viewerSrc = readFileSync(join(root, "components", "ExamBankViewer.tsx"), "utf8");
+const examBankApiCode = codeOnly(examBankApiSrc);
+const viewerCode = codeOnly(viewerSrc);
+
+// Phase 4.4-G: the two remaining live readers of the old bank.
+const diagnosticPageSrc = readFileSync(join(root, "app", "diagnostic", "page.tsx"), "utf8");
+const diagnosticPageCode = codeOnly(diagnosticPageSrc);
+
 const startCode = codeOnly(startSrc);
 const replannerCode = codeOnly(readFileSync(join(root, "lib", "exam-plan-replanner.ts"), "utf8"));
 const submitCode = codeOnly(submitSrc);
@@ -74,9 +98,91 @@ describe("SECURITY: the answer key never leaves the server", () => {
     // A select("*") would ship the answer key by accident the moment a
     // column is added. The field list must stay explicit.
     expect(startCode).not.toMatch(/select\(\s*"\*"\s*\)/);
+    // Phase 4.4-E: the exam bank has no unit_id or source_reference, and the
+    // answer key is no longer read here at all — scoring is entirely in the
+    // database now, so there is nothing to fetch it for.
     expect(startSrc).toContain(
-      '"id, unit_id, topic_id, question_text, question_type, options_json, difficulty, source_reference, correct_option_index"'
+      '"id, topic_id, question_text, question_type, options_json, difficulty"'
     );
+  });
+
+  it("the start route never reads the answer key into a row", () => {
+    // Stricter than the old assertion, in the direction that matters. The key
+    // is used by submit_diagnostic_answers in SQL, so this route has no
+    // reason to select it into a row object at all.
+    //
+    // It does name the column in a .not("is", null) filter — that is an
+    // eligibility test on whether a key exists, not a read of its value. So
+    // the assertion targets the projected column list specifically, by
+    // matching the .select("...") literal rather than the whole query chain,
+    // which would include the filters and give a false positive.
+    const projected = startCode.match(/\.select\("([^"]*)"\)/g) ?? [];
+    const examBankSelect = projected.find((s) => s.includes("question_text"));
+    expect(examBankSelect).toBeDefined();
+    expect(examBankSelect).not.toContain("correct_option_index");
+    expect(examBankSelect).not.toContain("source_note");
+    expect(examBankSelect).not.toContain("verification_status");
+    expect(examBankSelect).not.toContain("exam_id");
+  });
+
+  it("the start route reads the exam bank, not diagnostic_question_bank", () => {
+    expect(startCode).toContain("past_exam_questions");
+    // The name may appear in prose, but never as a table the route queries.
+    expect(startCode).not.toMatch(/from\(\s*"diagnostic_question_bank"\s*\)/);
+    expect(startCode).not.toMatch(/from\(\s*'diagnostic_question_bank'\s*\)/);
+  });
+
+  it("the start route states the eligibility rule explicitly", () => {
+    // "Verified" means verified for the diagnostic, decided here rather than
+    // inherited from a read policy written for /exams.
+    expect(startCode).toContain("verification_status");
+    expect(startCode).toContain("verified");
+    expect(startCode).toContain('"mcq"');
+    expect(startCode).toContain("topic_id");
+  });
+
+  it("the start route resolves the subject through the exam", () => {
+    // past_exam_questions has no subject_id by design. Subject is reachable
+    // only by walking question -> exam -> subject, and the RPC validates the
+    // same path on submit.
+    expect(startCode).toContain("past_exams");
+    expect(startCode).toContain("exam_id");
+  });
+
+  it("the start route still authenticates before using the admin client", () => {
+    // Bypassing RLS on the read is deliberate. Bypassing the session check
+    // would not be, so the order is asserted rather than assumed.
+    const auth = startCode.indexOf("requireUser");
+    const admin = startCode.indexOf("createServiceClient");
+    expect(auth).toBeGreaterThan(-1);
+    expect(admin).toBeGreaterThan(-1);
+    expect(auth).toBeLessThan(admin);
+  });
+
+  it("the session row is written through the user-scoped client, not the admin one", () => {
+    // The admin client reads questions. The session write must go through the
+    // caller's own client so RLS applies and the session is owned by the
+    // authenticated user. This is the check that stops "we already have an
+    // admin client here" from quietly becoming a service-role write on the
+    // one row that decides who owns a diagnostic.
+    const at = startCode.indexOf('.from("diagnostic_sessions")');
+    expect(at).toBeGreaterThan(-1);
+    const stmt = startCode.slice(
+      startCode.lastIndexOf("const { data: session", at),
+      startCode.indexOf(".single()", at)
+    );
+    expect(stmt.length).toBeGreaterThan(0);
+    expect(stmt).toContain("supabase");
+    expect(stmt).toContain(".insert(");
+    expect(stmt).not.toContain("admin");
+  });
+
+  it("a subject with no verified questions gets a 404, not a 500", () => {
+    // A known state, not a fault. Every subject except mathematics is in
+    // this state today, and the student should be told that plainly rather
+    // than shown a generic error.
+    expect(startCode).toContain("404");
+    expect(startCode).toContain("مفيش أسئلة");
   });
 
   it("the submit response excludes per_question (which carries the key)", () => {
@@ -727,5 +833,227 @@ describe("REGRESSION: a reorder cannot collide with itself", () => {
     expect(recsSql).toContain(
       "grant execute on function public.apply_exam_plan_replan(uuid, jsonb) to authenticated"
     );
+  });
+});
+
+describe("PHASE 4.4-D/E: the exam bank is the diagnostic source of truth", () => {
+  it("the submit RPC reads the answer key from past_exam_questions", () => {
+    const fn = between(examBankCode, "create or replace function public.submit_diagnostic_answers", "create or replace function public.refresh_topic_mastery");
+    expect(fn).toContain("from public.past_exam_questions q");
+    expect(fn).toContain("public.past_exams e");
+  });
+
+  it("no function body still reads diagnostic_question_bank", () => {
+    // Checked against the whole file, not a function, because a single
+    // surviving reference anywhere is what Phase 4.5 would trip on.
+    expect(examBankCode).not.toMatch(/from\s+public\.diagnostic_question_bank/);
+    expect(examBankCode).not.toMatch(/join\s+public\.diagnostic_question_bank/);
+  });
+
+  it("the mastery function derives topics from the exam bank", () => {
+    const fn = between(examBankCode, "create or replace function public.refresh_topic_mastery", "commit;");
+    expect(fn).toContain("join public.past_exam_questions q on q.id = a.bank_question_id");
+  });
+
+  it("the submit RPC takes bank_question_id, with no fallback to question_id", () => {
+    const fn = between(examBankCode, "create or replace function public.submit_diagnostic_answers", "create or replace function public.refresh_topic_mastery");
+    expect(fn).toContain("bank_question_id");
+    // A dual-key contract would leave the legacy path reachable forever.
+    expect(fn).not.toMatch(/v_item\s*->>\s*'question_id'/);
+  });
+
+  it("the submit RPC validates the question against the session subject", () => {
+    // A question id from one subject submitted inside another subject's
+    // session is the hole this closes.
+    const fn = between(examBankCode, "create or replace function public.submit_diagnostic_answers", "create or replace function public.refresh_topic_mastery");
+    expect(fn).toContain("e.subject_id = v_subject");
+    expect(fn).toContain("q.verification_status = 'verified'");
+    expect(fn).toContain("q.topic_id is not null");
+  });
+
+  it("the submit RPC is still the only thing that decides is_correct", () => {
+    const fn = between(examBankCode, "create or replace function public.submit_diagnostic_answers", "create or replace function public.refresh_topic_mastery");
+    expect(fn).toContain("q.correct_option_index = v_sel");
+    // ...and it never returns the key.
+    const ret = fn.slice(fn.indexOf("return jsonb_build_object"));
+    expect(ret).not.toContain("correct_option_index");
+    expect(ret).toContain("correct_count");
+  });
+
+  it("both functions stay SECURITY DEFINER with a pinned search_path", () => {
+    // They are the only writers now that the client INSERT grant is gone, so
+    // a revoked-privilege regression would break every submit.
+    expect(examBankCode).toContain("security definer");
+    expect(examBankCode).toContain("set search_path to 'public', 'pg_temp'");
+  });
+
+  it("bank_question_id is NOT NULL and question_id is nullable", () => {
+    // The asymmetry is the point: no future answer can be written without a
+    // canonical exam-bank question, while a question authored directly in the
+    // exam bank has no legacy id to store.
+    expect(examBankCode).toContain("alter column bank_question_id set not null");
+    expect(examBankCode).toContain("alter column question_id drop not null");
+  });
+
+  it("the legacy uniqueness guard is retained during the transition", () => {
+    // Both indexes defend the same invariant from two sides while the 295
+    // historical rows carry both ids. Removing the legacy one here would
+    // close a door 4.4-G still needs open.
+    expect(examBankSql).toContain("retained until 4.4-G");
+    expect(examBankCode).toContain("on conflict (session_id, bank_question_id)");
+  });
+
+  it("the migration aborts rather than enforcing NOT NULL on incomplete data", () => {
+    expect(examBankCode).toContain("PHASE44D_ABORT");
+    expect(examBankCode).toContain("still lack a bank_question_id");
+  });
+});
+
+describe("PHASE 4.4-F: the public exam bank serves no answer key", () => {
+  it("the API never projects the answer key", () => {
+    // Stronger than asserting the key is absent from the response: it is
+    // never fetched. Selecting it and filtering it out would still put it in
+    // the network response, which is the leak this phase closes.
+    const projected = examBankApiCode.match(/\.select\("([^"]*)"\)/g) ?? [];
+    expect(projected.length).toBeGreaterThan(0);
+    for (const sel of projected) {
+      expect(sel).not.toContain("correct_option_index");
+      expect(sel).not.toContain("source_question_id");
+      expect(sel).not.toContain("source_note");
+    }
+  });
+
+  it("the payload is built field by field, not by spreading a row", () => {
+    // The old viewer did {...q} on a row that included the key, so every
+    // future column would land in component state automatically.
+    expect(examBankApiCode).not.toMatch(/\.\.\.q\b/);
+    expect(viewerCode).not.toMatch(/\.\.\.q\b/);
+  });
+
+  it("the viewer does not mention the answer key at all", () => {
+    // Network, state and DOM in one assertion. The name may appear in the
+    // header comment explaining what was fixed, so the executable code is
+    // checked rather than the file: if the field is not named in code it
+    // cannot be rendered, and the API does not return it, so it cannot be in
+    // state either.
+    expect(viewerCode).not.toContain("correct_option_index");
+  });
+
+  it("the API requires a published exam", () => {
+    // The public exam bank must respect is_published. The diagnostic is a
+    // different read with different permissions; giving the viewer
+    // service-role access would have removed the very check that matters
+    // here.
+    expect(examBankApiCode).toContain("is_published");
+    expect(examBankApiCode).toContain("404");
+  });
+
+  it("the API reads through the caller's client, not the service role", () => {
+    // If this ever imports createServiceClient, an unpublished exam becomes
+    // reachable and the test should fail loudly rather than the leak shipping.
+    expect(examBankApiSrc).not.toContain("supabase/admin");
+    expect(examBankApiSrc).not.toContain("createServiceClient");
+  });
+
+  it("the viewer no longer hard-codes a subject", () => {
+    // It defaulted to a Mathematics uuid, so every exam page showed Math
+    // questions regardless of which exam was open.
+    expect(viewerSrc).not.toContain("6d91c3bb");
+    expect(viewerSrc).not.toContain("diagnostic_question_bank");
+  });
+
+  it("the viewer takes an examId and reads it from the API", () => {
+    expect(viewerSrc).toContain("examId");
+    expect(viewerSrc).toContain("/api/exam-bank/questions");
+    // No direct table access from the browser any more.
+    expect(viewerCode).not.toMatch(/\.from\(\s*"past_exam_questions"/);
+  });
+
+  it("the viewer renders the exam's own title, not a literal", () => {
+    expect(viewerSrc).toContain("exam.title");
+    expect(viewerSrc).not.toContain("2023");
+  });
+
+  it("the API validates examId before it reaches the database", () => {
+    // A junk value should be a 400, not a 22P02 from Postgres.
+    expect(examBankApiCode).toContain("examId");
+    expect(examBankApiCode).toContain("400");
+    expect(examBankApiCode).toMatch(/\[0-9a-f\]\{8\}/);
+  });
+
+  it("neither the API nor the viewer reads diagnostic_question_bank", () => {
+    expect(examBankApiCode).not.toContain("diagnostic_question_bank");
+    expect(viewerCode).not.toContain("diagnostic_question_bank");
+  });
+});
+
+describe("PHASE 4.4-G: nothing live reads diagnostic_question_bank", () => {
+  const readers = [
+    ["app/api/diagnostic/start/route.ts", startCode],
+    ["app/api/diagnostic/submit/route.ts", submitCode],
+    ["app/diagnostic/page.tsx", diagnosticPageCode],
+    ["app/api/exam-bank/questions/route.ts", examBankApiCode],
+    ["components/ExamBankViewer.tsx", viewerCode],
+  ] as const;
+
+  it("no executable code in any live reader touches the old table", () => {
+    // Comments are stripped first: the files explain what the switch replaced,
+    // and naming the old table in that explanation is documentation, not a
+    // dependency. A from() or a join on it would be a dependency.
+    for (const [file, code] of readers) {
+      expect(code, file).not.toMatch(/from\(\s*["']diagnostic_question_bank["']/);
+      expect(code, file).not.toMatch(/join\(\s*["']diagnostic_question_bank["']/);
+    }
+  });
+
+  it("the submit route reads the exam bank by bank_question_id", () => {
+    // Keying on the legacy id would match nothing in the exam bank, and the
+    // scorer treats an unmatched answer as wrong rather than throwing — so
+    // every student would score zero with no error anywhere.
+    expect(submitCode).toContain("past_exam_questions");
+    expect(submitCode).toContain("a.bank_question_id");
+  });
+
+  it("the submit route accepts bank_question_id and refuses the legacy key", () => {
+    // A dual-key contract would keep the retired bank's ids usable.
+    expect(submitCode).toContain("bank_question_id");
+    expect(submitCode).not.toMatch(/rec\.question_id/);
+    expect(submitCode).not.toMatch(/rec\["question_id"\]/);
+  });
+
+  it("the submit route still joins the topic relation", () => {
+    // Without topic_name the scorer falls back to topic_id and weak_topics
+    // come back as GUIDs, which the replan then matches against. A live smoke
+    // test caught this once; the assertion keeps it caught.
+    expect(submitCode).toContain("topic_name:diagnostic_topics(name)");
+  });
+
+  it("the diagnostic page applies the same eligibility rule as the start route", () => {
+    // A subject must appear only when the diagnostic could actually run, so
+    // the count is not a proxy for something the route would then reject.
+    expect(diagnosticPageCode).toContain("verification_status");
+    expect(diagnosticPageCode).toContain("verified");
+    expect(diagnosticPageCode).toContain('"mcq"');
+    expect(diagnosticPageCode).toContain("past_exam_questions");
+  });
+
+  it("the diagnostic page drops the retired source-type allowlist", () => {
+    // source_type only existed on the old table. Carrying the list forward
+    // would be a rule about a column that no longer exists.
+    expect(diagnosticPageCode).not.toContain("source_type");
+    expect(diagnosticPageCode).not.toContain("official");
+  });
+
+  it("the legacy uniqueness guard is still in place", () => {
+    // Phase 4.5 removes it, and only after an audit proves nothing needs it.
+    // 4.4-G must not quietly do that work. The explanatory comment says so
+    // in prose; this asserts the actual index survives, which is what
+    // matters.
+    expect(examBankCode).toContain("on conflict (session_id, bank_question_id)");
+    // The legacy one is a live DB object, not something the migration creates,
+    // so it is asserted against the catalog in the live verification rather
+    // than here. What this file can prove is that the phase does not try to
+    // drop it.
+    expect(examBankSql).not.toMatch(/drop\s+(constraint|index).*session_id_question_id/);
   });
 });
