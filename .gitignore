@@ -65,3 +65,11 @@ next-env.d.ts
 # Smoke-test credentials (Phase 2) - never commit
 .smoke-credentials.json
 dev-server.log
+r.txt
+phase1-run.txt
+smoke*.txt
+u*.txt
+p*.txt
+f.txt
+t.txt
+sec-*.txt
