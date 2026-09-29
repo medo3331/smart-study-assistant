@@ -258,9 +258,7 @@ export async function POST(req: Request) {
 
   const { data: bankRows, error: bankError } = await admin
     .from("past_exam_questions")
-    .select(
-      "id, correct_option_index, question_type, topic_id, topic_name:diagnostic_topics(name), unit_id:diagnostic_topics(unit_id)"
-    )
+    .select("id, correct_option_index, question_type, topic_id")
     .in("id", stored.map((a) => a.bank_question_id))
     .in(
       "exam_id",
@@ -279,7 +277,47 @@ export async function POST(req: Request) {
     );
   }
 
-  const questions = (bankRows ?? []) as BankQuestion[];
+  const rows = (bankRows ?? []) as Array<{
+    id: string;
+    correct_option_index: number;
+    question_type: string;
+    topic_id: string | null;
+  }>;
+
+  // Topics come from a second flat query rather than a PostgREST embed.
+  //
+  // The embed was tried first: `unit_id:diagnostic_topics(unit_id)` does not
+  // produce a scalar. PostgREST returns the whole related row wrapped for a
+  // to-one relation, and the type came back as { unit_id: any }[] — an
+  // array — which the old `(bankRows as BankQuestion[])` cast silently
+  // accepted. TypeScript caught it only after the service client was added;
+  // a cast is exactly the thing that hides a wrong shape.
+  //
+  // Two flat queries with an explicit join in JS cannot be wrong in the same
+  // way, and the topic name is the field that actually matters: the scorer
+  // falls back to topic_id when the name is missing, and weak_topics would
+  // come back as GUIDs for the replan to match against. The live smoke test
+  // caught that once already; it should not be reachable again.
+  const topicIds = [...new Set(rows.map((r) => r.topic_id).filter(Boolean))] as string[];
+  const topics = new Map<string, { name: string; unit_id: string | null }>();
+  if (topicIds.length > 0) {
+    const { data: topicRows } = await admin
+      .from("diagnostic_topics")
+      .select("id, name, unit_id")
+      .in("id", topicIds);
+    for (const t of topicRows ?? []) {
+      topics.set(t.id, { name: t.name, unit_id: t.unit_id ?? null });
+    }
+  }
+
+  const questions: BankQuestion[] = rows.map((r) => ({
+    id: r.id,
+    unit_id: r.topic_id ? topics.get(r.topic_id)?.unit_id ?? null : null,
+    topic_id: r.topic_id,
+    topic_name: r.topic_id ? topics.get(r.topic_id)?.name ?? null : null,
+    question_type: r.question_type as BankQuestion["question_type"],
+    correct_option_index: r.correct_option_index,
+  }));
 
   // 6) Pure scoring. `is_correct` on `stored` is ignored on purpose — we
   //    re-derive it from correct_option_index so the score cannot depend on

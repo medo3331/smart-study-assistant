@@ -524,7 +524,14 @@ describe("REGRESSION: weak topics must be names, not UUIDs", () => {
   // replan string-matched against them — silently doing nothing.
 
   it("the submit route joins the topic name explicitly", () => {
-    expect(submitCode).toContain("topic_name:diagnostic_topics(name)");
+    // Asserted on the shape, not the syntax. The original embed
+    // `topic_name:diagnostic_topics(name)` looked right and worked for the
+    // name, but the same embed also produced `unit_id` as a wrapped row
+    // rather than a scalar, and a type cast hid that until the service
+    // client was added and TypeScript checked the shape. Two flat queries
+    // with an explicit join give the same guarantee without the ambiguity.
+    expect(submitCode).toContain("from(\"diagnostic_topics\")");
+    expect(submitCode).toContain("topic_name");
   });
 
   it("the scorer prefers the name over the id", () => {
@@ -1021,11 +1028,23 @@ describe("PHASE 4.4-G: nothing live reads diagnostic_question_bank", () => {
     expect(submitCode).not.toMatch(/rec\["question_id"\]/);
   });
 
-  it("the submit route still joins the topic relation", () => {
-    // Without topic_name the scorer falls back to topic_id and weak_topics
-    // come back as GUIDs, which the replan then matches against. A live smoke
-    // test caught this once; the assertion keeps it caught.
-    expect(submitCode).toContain("topic_name:diagnostic_topics(name)");
+  it("the submit route still resolves the topic NAME, not just the id", () => {
+    // Without a name the scorer falls back to topic_id, so weak_topics come
+    // back as GUIDs and the replan matches against them. A live smoke test
+    // caught this once already, and it should not be reachable again.
+    //
+    // The assertion is on the shape rather than on the syntax. The original
+    // embed (`topic_name:diagnostic_topics(name)`) also produced
+    // `unit_id:diagnostic_topics(unit_id)` as a wrapped row, not a scalar,
+    // and the type cast hid it. Two flat queries with an explicit join cannot
+    // be wrong in the same way.
+    const topicBlock = between(submitCode, "const topicIds", "const questions");
+    expect(topicBlock.length).toBeGreaterThan(0);
+    expect(topicBlock).toContain("diagnostic_topics");
+    expect(topicBlock).toContain("name");
+    // and the built BankQuestion carries the name
+    expect(submitCode).toContain("topic_name");
+    expect(submitCode).toContain("topics.get(");
   });
 
   it("the diagnostic page applies the same eligibility rule as the start route", () => {
