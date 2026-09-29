@@ -85,7 +85,6 @@ function parseAnswers(raw: unknown): ClientAnswer[] | null {
 }
 
 interface AnswerRow {
-  question_id: string;
   bank_question_id: string;
   selected_option_index: number;
   is_correct: boolean;
@@ -189,11 +188,12 @@ export async function POST(req: Request) {
   //    client's payload. Scoring works from here on.
   const { data: answerRows, error: answerError } = await supabase
     .from("diagnostic_answers")
-    // bank_question_id is what the scorer keys on and what the exam bank is
-    // looked up by. question_id is still read so AnswerRow stays honest about
-    // the row's shape, but nothing below uses it — the legacy id is not a
-    // fallback path, and reading it here would invite someone to.
-    .select("question_id, bank_question_id, selected_option_index, is_correct")
+    // bank_question_id is the only question identity the table has now that
+    // the legacy column is gone, and it is what the scorer keys on and what
+    // the exam bank is looked up by. Selecting question_id here would fail the
+    // whole read with a 500 rather than degrade, because the column name does
+    // not exist at all.
+    .select("bank_question_id, selected_option_index, is_correct")
     .eq("session_id", sessionId);
 
   if (answerError) {
