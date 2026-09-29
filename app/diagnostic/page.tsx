@@ -141,6 +141,11 @@ export default async function DiagnosticPage() {
         subjectId={subject.id}
         subjectName={subject.name}
         planId={planId ?? undefined}
+        // The exam plan is rendered by ExamPlanCard on the dashboard, so
+        // that is where "see your plan" should land. Without this prop the
+        // notice renders its heading and reasons but no link at all, since
+        // PlanChangeNotice treats planHref as optional.
+        planHref={planId ? "/dashboard" : undefined}
       />
     </main>
   );
