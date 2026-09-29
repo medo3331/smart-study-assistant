@@ -61,3 +61,7 @@ next-env.d.ts
 !.env.example
 .hermes-tmp.*
 .env.local
+
+# Smoke-test credentials (Phase 2) - never commit
+.smoke-credentials.json
+dev-server.log

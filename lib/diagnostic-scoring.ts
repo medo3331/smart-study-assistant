@@ -1,61 +1,53 @@
 
-// 1.2D — Diagnostic Scoring (deterministic, server-side only)
-// No AI. No client-trusted correct answers. Source of truth = diagnostic_question_bank.
+// ============================================================================
+// Phase 1 — DEPRECATED SHIM
+// ----------------------------------------------------------------------------
+// كل المنطق انتقل لـ lib/diagnostic-mastery.ts (مصدر الحقيقة الوحيد).
+//
+// ❗ سبب النقل: كان في **نسختين** من `detectWeakTopics` في المشروع،
+// والتانية (في diagnostic-recommendations.ts) كانت بتتقاكم من `is_correct`
+// اللي **العميل بيبعته**. سياسة الـRLS `diag_answers: user insert` بتسمح
+// للمستخدم يكتب العمود ده بنفسه — فلو اتحسب عليه، حد يقدر يبعت score
+// كامل لنفسه. دلوقتي `scoreDiagnosticSession` بتقارن
+// `selected_option_index` بـ `correct_option_index` من بنك الأسئلة بس.
+// ============================================================================
 
-export interface DiagnosticAnswerInput {
-  session_id: string;
-  question_id: string;
-  selected_option_index: number;  // client sends only this — never correct
-}
+export {
+  scoreDiagnosticSession,
+  detectWeakTopics,
+  classifyTopics,
+  updateMastery,
+  updateTopicMastery,
+  isCorrectQuestion,
+  WEAK_THRESHOLD,
+  MIN_QUESTIONS_FOR_JUDGEMENT,
+  MIN_ATTEMPTS_FOR_EVIDENCE,
+  UNTAGGED_TOPIC,
+} from "./diagnostic-mastery";
 
-export interface DiagnosticResult {
-  session_id: string;
-  score: number;
-  total: number;
-  percentage: number;
-  correct_count: number;
-  wrong_count: number;
-  topic_performance: Record<string, { total: number; correct: number; accuracy: number }>;
-  weak_topics: string[];  // accuracy < 60% or insufficient data
-  strong_topics: string[];
-  insufficient_data_topics: string[];
-}
+export type {
+  BankQuestion,
+  DiagnosticAnswerInput,
+  QuestionResult,
+  TopicStat,
+  WeakTopic,
+  DiagnosticResult,
+  MasteryState,
+  MasteryMap,
+  MasteryDelta,
+} from "./diagnostic-mastery";
 
-// Thresholds (design decision — configurable)
-const WEAK_THRESHOLD = 0.60;
+// ⚠️ `DiagnosticAnswerInput` و `DiagnosticResult` اتشالوا من هنا وبقوا
+// exported من الملف الجديد بنفس الاسم ونفس الشكل — أي import قديم بيفضل
+// شغال. الفرق الوحيد: `DiagnosticAnswerInput` بقى فيه `selected_option_index`
+// بس (من غير `session_id`، لأن الـsession id بييجي من الـroute مش من العميل)،
+// و `DiagnosticResult` بقى فيه `per_question` و `topic_performance` كـarrays
+// مش Record.
+// ---------------------------------------------------------------------------
+// ملاحظة: كان في نسخة تالتة من detectWeakTopics هنا (بتاخد Record وبتستخدم
+// شرط `stats.total === 1 && stats.correct <= 1` اللي كان بيصنّف حتى
+// الإجابة الصح كـ insufficient). اتشالت — النسخة في diagnostic-mastery.ts
+// هي الوحيدة، وده اللي بتعمله الاختبارات في
+// lib/__tests__/diagnostic-loop.test.ts (اختبار "threshold uniqueness").
+// ---------------------------------------------------------------------------
 
-export async function scoreDiagnosticSession(
-  sessionId: string,
-  supabaseAdmin: any  // server-role client
-): Promise<DiagnosticResult> {
-  // 1. Load session (verify ownership via RLS — supabaseAdmin reads with service_role for calculation)
-  // 2. Load answers for session (from diagnostic_answers)
-  // 3. Load questions (from diagnostic_question_bank — verified only)
-  // 4. For each answer: compare selected_option_index with correct_option_index (DB truth)
-  // 5. Aggregate score / topic accuracy / weak topics
-  // 6. Return result (never expose correct answers to client)
-  // Implementation detail: server computes; never trusts client score or is_correct
-  throw new Error('Implement with actual supabase admin query pattern — scaffold only');
-}
-
-// Weak topic detection (deterministic — not AI)
-export function detectWeakTopics(
-  topicStats: Record<string, { total: number; correct: number }>
-): { weak: string[]; strong: string[]; insufficient: string[] } {
-  const weak: string[] = [];
-  const strong: string[] = [];
-  const insufficient: string[] = [];
-  for (const [topic, stats] of Object.entries(topicStats)) {
-    if (stats.total === 0 || (stats.total === 1 && stats.correct <= 1)) {
-      insufficient.push(topic);
-    } else if (stats.total >= 2) {
-      const accuracy = stats.correct / stats.total;
-      if (accuracy < WEAK_THRESHOLD) weak.push(topic);
-      else strong.push(topic);
-    }
-  }
-  return { weak, strong, insufficient };
-}
-
-// Note: No AI Router / Agent Router / external provider called.
-// Scoring is pure arithmetic on verified DB data.

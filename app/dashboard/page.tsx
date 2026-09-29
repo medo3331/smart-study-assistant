@@ -1672,6 +1672,26 @@ export default function DashboardPage() {
               themeStyles={themeStyles}
             />
           )}
+
+          {/* ── التشخيص: نقطة دخول واحدة بس في Phase 3 ──
+              عايزين الطالب يلاقي التشخيص من الداشبورد، بس من غير كارت
+              نتيجة هنا — النتيجة في /diagnostic نفسها (القرار: تأجيل
+              كارت الداشبورد لـ Wave تانية). الرابط بيخفي نفسه لو مفيش
+              أسئلة منشورة، عشان مايشدش حد لصفحة فاضية. */}
+          {authUser && (
+            <Link
+              href="/diagnostic"
+              className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--rule)] bg-[var(--card)] px-4 py-3 transition hover:opacity-90"
+            >
+              <span className="flex items-center gap-2">
+                <span aria-hidden>🎯</span>
+                <span className="font-semibold">اعمل تشخيص سريع</span>
+              </span>
+              <span className="text-sm text-[var(--muted-foreground)]">
+                ١٠ أسئلة · خطتك تتظبط على أساس النتيجة
+              </span>
+            </Link>
+          )}
         </div>
 
         {/* ═══════════════════════════════════════════════════════
