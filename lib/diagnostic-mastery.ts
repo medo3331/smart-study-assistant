@@ -50,16 +50,30 @@ export const UNTAGGED_TOPIC = "general";
    ------------------------------------------------------------------------- */
 
 /**
- * row من public.diagnostic_question_bank (اللي نحتاجه بس).
+ * row من public.past_exam_questions — اللي نحتاجه بس.
  *
  * `correct_option_index` هو **مصدر الحقيقة الوحيد** للإجابة الصحيحة.
  * عمود `is_correct` في diagnostic_answers **مش** مصدر — العميل بيكتبه.
+ *
+ * Phase 4.4-G: this used to describe a row of diagnostic_question_bank, which
+ * carried subject_id and unit_id directly. The exam bank has neither, and
+ * adding them would duplicate a fact the schema already holds:
+ *
+ *   subject  past_exam_questions -> past_exams.subject_id
+ *   unit     past_exam_questions -> diagnostic_topics.unit_id
+ *
+ * subject_id is therefore optional and unused below. The scorer never read it
+ * — the route filters by subject before calling — so requiring the field only
+ * forced a query to invent a value the exam bank does not have. unit_id is
+ * derived from the topic, which is the same value the old direct column held
+ * for the ten imported questions, and it is copied into QuestionResult for
+ * parity even though nothing downstream consumes it yet.
  */
 export interface BankQuestion {
   id: string;
-  /** FK → subjects.id — NOT NULL في الـSQL. */
-  subject_id: string;
-  /** FK → diagnostic_units.id — **nullable** (on delete set null). */
+  /** FK → past_exams.subject_id. Optional: not read by the scorer. */
+  subject_id?: string;
+  /** FK → diagnostic_topics.unit_id, reached through topic_id. */
   unit_id: string | null;
   /** FK → diagnostic_topics.id — **nullable**. السطر ده مهم جدًا. */
   topic_id: string | null;

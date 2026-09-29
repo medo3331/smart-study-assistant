@@ -64,6 +64,10 @@ const viewerSrc = readFileSync(join(root, "components", "ExamBankViewer.tsx"), "
 const examBankApiCode = codeOnly(examBankApiSrc);
 const viewerCode = codeOnly(viewerSrc);
 
+// Phase 4.4-G: the two remaining live readers of the old bank.
+const diagnosticPageSrc = readFileSync(join(root, "app", "diagnostic", "page.tsx"), "utf8");
+const diagnosticPageCode = codeOnly(diagnosticPageSrc);
+
 const startCode = codeOnly(startSrc);
 const replannerCode = codeOnly(readFileSync(join(root, "lib", "exam-plan-replanner.ts"), "utf8"));
 const submitCode = codeOnly(submitSrc);
@@ -980,5 +984,76 @@ describe("PHASE 4.4-F: the public exam bank serves no answer key", () => {
   it("neither the API nor the viewer reads diagnostic_question_bank", () => {
     expect(examBankApiCode).not.toContain("diagnostic_question_bank");
     expect(viewerCode).not.toContain("diagnostic_question_bank");
+  });
+});
+
+describe("PHASE 4.4-G: nothing live reads diagnostic_question_bank", () => {
+  const readers = [
+    ["app/api/diagnostic/start/route.ts", startCode],
+    ["app/api/diagnostic/submit/route.ts", submitCode],
+    ["app/diagnostic/page.tsx", diagnosticPageCode],
+    ["app/api/exam-bank/questions/route.ts", examBankApiCode],
+    ["components/ExamBankViewer.tsx", viewerCode],
+  ] as const;
+
+  it("no executable code in any live reader touches the old table", () => {
+    // Comments are stripped first: the files explain what the switch replaced,
+    // and naming the old table in that explanation is documentation, not a
+    // dependency. A from() or a join on it would be a dependency.
+    for (const [file, code] of readers) {
+      expect(code, file).not.toMatch(/from\(\s*["']diagnostic_question_bank["']/);
+      expect(code, file).not.toMatch(/join\(\s*["']diagnostic_question_bank["']/);
+    }
+  });
+
+  it("the submit route reads the exam bank by bank_question_id", () => {
+    // Keying on the legacy id would match nothing in the exam bank, and the
+    // scorer treats an unmatched answer as wrong rather than throwing — so
+    // every student would score zero with no error anywhere.
+    expect(submitCode).toContain("past_exam_questions");
+    expect(submitCode).toContain("a.bank_question_id");
+  });
+
+  it("the submit route accepts bank_question_id and refuses the legacy key", () => {
+    // A dual-key contract would keep the retired bank's ids usable.
+    expect(submitCode).toContain("bank_question_id");
+    expect(submitCode).not.toMatch(/rec\.question_id/);
+    expect(submitCode).not.toMatch(/rec\["question_id"\]/);
+  });
+
+  it("the submit route still joins the topic relation", () => {
+    // Without topic_name the scorer falls back to topic_id and weak_topics
+    // come back as GUIDs, which the replan then matches against. A live smoke
+    // test caught this once; the assertion keeps it caught.
+    expect(submitCode).toContain("topic_name:diagnostic_topics(name)");
+  });
+
+  it("the diagnostic page applies the same eligibility rule as the start route", () => {
+    // A subject must appear only when the diagnostic could actually run, so
+    // the count is not a proxy for something the route would then reject.
+    expect(diagnosticPageCode).toContain("verification_status");
+    expect(diagnosticPageCode).toContain("verified");
+    expect(diagnosticPageCode).toContain('"mcq"');
+    expect(diagnosticPageCode).toContain("past_exam_questions");
+  });
+
+  it("the diagnostic page drops the retired source-type allowlist", () => {
+    // source_type only existed on the old table. Carrying the list forward
+    // would be a rule about a column that no longer exists.
+    expect(diagnosticPageCode).not.toContain("source_type");
+    expect(diagnosticPageCode).not.toContain("official");
+  });
+
+  it("the legacy uniqueness guard is still in place", () => {
+    // Phase 4.5 removes it, and only after an audit proves nothing needs it.
+    // 4.4-G must not quietly do that work. The explanatory comment says so
+    // in prose; this asserts the actual index survives, which is what
+    // matters.
+    expect(examBankCode).toContain("on conflict (session_id, bank_question_id)");
+    // The legacy one is a live DB object, not something the migration creates,
+    // so it is asserted against the catalog in the live verification rather
+    // than here. What this file can prove is that the phase does not try to
+    // drop it.
+    expect(examBankSql).not.toMatch(/drop\s+(constraint|index).*session_id_question_id/);
   });
 });

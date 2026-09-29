@@ -785,8 +785,27 @@ describe("schema alignment with the migrations", () => {
     expect(q("null-unit", 0, "Arrays", null).unit_id).toBeNull();
   });
 
-  it("subject_id is always present (NOT NULL in the DB)", () => {
-    expect(DATASET.every((q) => q.subject_id.length > 0)).toBe(true);
+  it("subject_id is not required on a bank question", () => {
+    // Phase 4.4-G: this used to assert subject_id was always present, because
+    // diagnostic_question_bank had `subject_id uuid NOT NULL`. The exam bank
+    // has no such column — a question belongs to an exam, and the exam
+    // carries the subject. The field survives on the interface as optional
+    // because the scorer never read it, and requiring it would only force a
+    // query to invent a value the schema does not have.
+    const present = DATASET.filter((q) => q.subject_id !== undefined);
+    expect(present.every((q) => (q.subject_id ?? "").length > 0)).toBe(true);
+    // The absence case is the one that matters now: a question reached
+    // through past_exams.subject_id may carry no subject at all, and the
+    // scorer must still produce a result for it.
+    const { subject_id: _omitted, ...withoutSubject } = q("no-subject", 0, "Arrays");
+    const absent: BankQuestion = withoutSubject;
+    expect(absent.subject_id).toBeUndefined();
+    const r = scoreDiagnosticSession(
+      [{ question_id: absent.id, selected_option_index: absent.correct_option_index }],
+      [absent]
+    );
+    expect(r.total).toBe(1);
+    expect(r.correct_count).toBe(1);
   });
 
   it("only emits kinds inside the CHECK constraint", () => {

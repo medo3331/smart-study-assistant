@@ -1,6 +1,7 @@
 import { type Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { DiagnosticFlow } from "@/components/diagnostic/DiagnosticFlow";
 import { fetchActiveExamPlan } from "@/lib/exam-plans";
 
@@ -16,12 +17,13 @@ export const metadata: Metadata = {
    against, then hands off to the client flow.
 
    ⚠️ WHY IT RESOLVES THE SUBJECT HERE AND NOT IN THE CLIENT
-   The bank currently holds verified questions for exactly one subject
-   (Mathematics, from the MOE 2023 paper). The route requires a
-   subject_id, and picking one arbitrarily in the browser would be a guess
-   that 404s the moment the bank grows. Instead we ask the database which
-   subject actually has published questions, and say so plainly when none
-   does — an honest empty state beats a button that fails.
+   The exam bank holds verified, eligible questions for exactly one subject
+   (Mathematics, from the MOE paper). The route requires a subject_id, and
+   picking one arbitrarily in the browser would be a guess that 404s the
+   moment the bank grows. Instead we ask the database which subject actually
+   has eligible questions, using the same eligibility rule the start route
+   and the RPC apply, and say so plainly when none does — an honest empty
+   state beats a button that fails.
 
    ⚠️ NO NEW API ROUTE. This reuses /api/diagnostic/start and
       /api/diagnostic/submit as they are. The count query is a read the
@@ -49,27 +51,68 @@ async function resolveSubject(
   const { data: plan } = await fetchActiveExamPlan(sb, userId);
   const planId = plan?.id ?? null;
 
-  const { data, error } = await sb
-    .from("diagnostic_question_bank")
-    .select("subject_id, subjects(id, name)")
-    .eq("status", "published")
-    .in("source_type", ["official", "verified", "curated", "validated"])
-    .limit(200);
+  // Counted with the service-role client, deliberately.
+  //
+  // This is the same reasoning as /api/diagnostic/start, applied one level up:
+  // whether an exam is published on /exams and whether its questions are
+  // eligible for the diagnostic are different facts. That exam is deliberately
+  // unpublished while its year and sitting are still contradicted, and the
+  // diagnostic does not need the publication claim to serve a verified
+  // question.
+  //
+  // Using RLS here instead would report zero subjects and every student would
+  // see the empty state — accurate about /exams, wrong about the diagnostic.
+  //
+  // The eligibility filter is the same one the start route and the RPC apply,
+  // restated here rather than inherited, so a subject only appears when the
+  // diagnostic could actually run for it.
+  const admin = createServiceClient();
 
-  if (error) {
-    return { subject: null, planId, error: error.message };
+  const { data: exams, error: examError } = await admin
+    .from("past_exams")
+    .select("id, subject_id, subjects(id, name)");
+
+  if (examError) {
+    return { subject: null, planId, error: examError.message };
   }
 
-  // Group in JS rather than trusting a join shape we have not verified:
-  // the relation comes back nested, and a count in SQL would hide that.
-  const byId = new Map<string, { name: string; count: number }>();
-  for (const row of (data ?? []) as Array<{
+  const examIds = (exams ?? []).map((e) => e.id);
+
+  const { data: eligible, error: qError } = await admin
+    .from("past_exam_questions")
+    .select("id, exam_id")
+    .eq("question_type", "mcq")
+    .eq("verification_status", "verified")
+    .not("topic_id", "is", null)
+    .not("correct_option_index", "is", null)
+    .in("exam_id", examIds)
+    .limit(1000);
+
+  if (qError) {
+    return { subject: null, planId, error: qError.message };
+  }
+
+  // Grouped in JS from two flat queries rather than through a Supabase embed.
+  // The relation shape for a nested select is exactly the thing a live smoke
+  // test once got wrong here, and counting in JS over ids cannot be wrong in
+  // the same way: a question has an exam_id, the exam has a subject_id, and
+  // the join is a Map lookup.
+  const subjectByExam = new Map<string, { id: string; name: string }>();
+  for (const row of (exams ?? []) as Array<{
+    id: string;
     subject_id: string | null;
     subjects: { id: string; name: string } | { id: string; name: string }[] | null;
   }>) {
     const rel = row.subjects;
     const s = Array.isArray(rel) ? rel[0] : rel;
     if (!row.subject_id || !s?.id) continue;
+    subjectByExam.set(row.id, { id: s.id, name: s.name });
+  }
+
+  const byId = new Map<string, { name: string; count: number }>();
+  for (const row of (eligible ?? []) as Array<{ id: string; exam_id: string }>) {
+    const s = subjectByExam.get(row.exam_id);
+    if (!s) continue;
     const entry = byId.get(s.id) ?? { name: s.name, count: 0 };
     entry.count += 1;
     byId.set(s.id, entry);
