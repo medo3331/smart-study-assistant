@@ -14,6 +14,7 @@ import {
   assertLectureFile,
   formatFileSize,
   LECTURE_FILE_ACCEPT,
+  MAX_DIRECT_UPLOAD_BYTES,
   MAX_LECTURE_FILE_BYTES,
   TranscriptionError,
   lectureFileExtension,
@@ -51,6 +52,15 @@ describe("formatFileSize", () => {
     expect(formatFileSize(512)).toContain("بايت");
     expect(formatFileSize(64 * 1024)).toContain("كيلوبايت");
     expect(formatFileSize(5 * 1024 * 1024)).toContain("ميجابايت");
+  });
+
+  it("يعرض الجيجابايت بدل «1024 ميجابايت» — الحد بقى 1 جيجا", () => {
+    // 1024 ميجا كانت هتبان سيئة جداً في نص الصفحة، والحد بقى جيجا
+    expect(formatFileSize(1024 * 1024 * 1024)).toBe("1.0 جيجابايت");
+    // تحت الجيجا بيفضل ميجا
+    expect(formatFileSize(200 * 1024 * 1024)).toBe("200 ميجابايت");
+    // جيجا فوق 10 بتتقرب (مش «12.5»)
+    expect(formatFileSize(20 * 1024 * 1024 * 1024)).toBe("20 جيجابايت");
   });
 
   it("بيقرّب الكيلوبايت لرقم صحيح", () => {
@@ -137,6 +147,47 @@ describe("assertLectureFile", () => {
 
   it("يقبل ملف أصغر من السقف", () => {
     expect(() => assertLectureFile(fakeFile("محاضرة.mp3", 1024))).not.toThrow();
+  });
+});
+
+describe("MAX_LECTURE_FILE_BYTES", () => {
+  it("يسمح بمحاضرات طويلة — مش حد Vercel", () => {
+    /* ده الحارس اللي بيمنع رجوعنا لحد الـ 4.5 ميجا بالخطأ: أي حد
+       متغير في المرحلة الجاية لازم يعدّي من هنا. */
+    expect(MAX_LECTURE_FILE_BYTES).toBeGreaterThan(500 * 1024 * 1024);
+  });
+
+  it("أكبر من 25 ميجا (الحد القديم) بفرق كبير", () => {
+    expect(MAX_LECTURE_FILE_BYTES).toBeGreaterThan(25 * 1024 * 1024 * 2);
+  });
+
+  it("يسمح بملف محاضرة 3 ساعات (~200 ميجا)", () => {
+    /* ⚠️ بنستخدم كائن وهمي مش File حقيقي: 200 ميجا في ذاكرة Vitest
+       هتبوظ شغل和环境. الفحص بيقرأ `size` و`name` و`type` بس. */
+    const threeHours = {
+      size: 200 * 1024 * 1024,
+      name: "محاضرة-3h.mp3",
+      type: "audio/mpeg",
+    } as File;
+    expect(threeHours.size).toBeLessThan(MAX_LECTURE_FILE_BYTES);
+    expect(() => assertLectureFile(threeHours)).not.toThrow();
+  });
+
+  it("أقل من حد ElevenLabs (5 جيجا) عشان نبلّغ الطالب قبل المزوّد", () => {
+    // لو بقينا أكبر من المزوّد، الطالب هيعدّي الفحص عندنا ويفشل عند
+    // ElevenLabs برسالة غامضة. الأحسن نرفضها عندنا برسالة واضحة.
+    expect(MAX_LECTURE_FILE_BYTES).toBeLessThan(5 * 1024 * 1024 * 1024);
+  });
+});
+
+describe("MAX_DIRECT_UPLOAD_BYTES", () => {
+  it("حد المنصّة القديم — أقل بكتير من حد التطبيق الجديد", () => {
+    // الـ fallback بس هو اللي محكوم بالحد ده. الرفع الجديد ماشي فوقاه.
+    expect(MAX_DIRECT_UPLOAD_BYTES).toBeLessThan(MAX_LECTURE_FILE_BYTES);
+  });
+
+  it("أقل من 4.5 ميجا (سقف جسم طلب Vercel)", () => {
+    expect(MAX_DIRECT_UPLOAD_BYTES).toBeLessThanOrEqual(4.5 * 1024 * 1024);
   });
 });
 
