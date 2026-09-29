@@ -54,6 +54,16 @@ const examBankSql = readFileSync(
 );
 const examBankCode = examBankSql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
+// Phase 4.4-F: the public exam bank is a separate read from the diagnostic,
+// served by its own route.
+const examBankApiSrc = readFileSync(
+  join(root, "app", "api", "exam-bank", "questions", "route.ts"),
+  "utf8"
+);
+const viewerSrc = readFileSync(join(root, "components", "ExamBankViewer.tsx"), "utf8");
+const examBankApiCode = codeOnly(examBankApiSrc);
+const viewerCode = codeOnly(viewerSrc);
+
 const startCode = codeOnly(startSrc);
 const replannerCode = codeOnly(readFileSync(join(root, "lib", "exam-plan-replanner.ts"), "utf8"));
 const submitCode = codeOnly(submitSrc);
@@ -892,5 +902,83 @@ describe("PHASE 4.4-D/E: the exam bank is the diagnostic source of truth", () =>
   it("the migration aborts rather than enforcing NOT NULL on incomplete data", () => {
     expect(examBankCode).toContain("PHASE44D_ABORT");
     expect(examBankCode).toContain("still lack a bank_question_id");
+  });
+});
+
+describe("PHASE 4.4-F: the public exam bank serves no answer key", () => {
+  it("the API never projects the answer key", () => {
+    // Stronger than asserting the key is absent from the response: it is
+    // never fetched. Selecting it and filtering it out would still put it in
+    // the network response, which is the leak this phase closes.
+    const projected = examBankApiCode.match(/\.select\("([^"]*)"\)/g) ?? [];
+    expect(projected.length).toBeGreaterThan(0);
+    for (const sel of projected) {
+      expect(sel).not.toContain("correct_option_index");
+      expect(sel).not.toContain("source_question_id");
+      expect(sel).not.toContain("source_note");
+    }
+  });
+
+  it("the payload is built field by field, not by spreading a row", () => {
+    // The old viewer did {...q} on a row that included the key, so every
+    // future column would land in component state automatically.
+    expect(examBankApiCode).not.toMatch(/\.\.\.q\b/);
+    expect(viewerCode).not.toMatch(/\.\.\.q\b/);
+  });
+
+  it("the viewer does not mention the answer key at all", () => {
+    // Network, state and DOM in one assertion. The name may appear in the
+    // header comment explaining what was fixed, so the executable code is
+    // checked rather than the file: if the field is not named in code it
+    // cannot be rendered, and the API does not return it, so it cannot be in
+    // state either.
+    expect(viewerCode).not.toContain("correct_option_index");
+  });
+
+  it("the API requires a published exam", () => {
+    // The public exam bank must respect is_published. The diagnostic is a
+    // different read with different permissions; giving the viewer
+    // service-role access would have removed the very check that matters
+    // here.
+    expect(examBankApiCode).toContain("is_published");
+    expect(examBankApiCode).toContain("404");
+  });
+
+  it("the API reads through the caller's client, not the service role", () => {
+    // If this ever imports createServiceClient, an unpublished exam becomes
+    // reachable and the test should fail loudly rather than the leak shipping.
+    expect(examBankApiSrc).not.toContain("supabase/admin");
+    expect(examBankApiSrc).not.toContain("createServiceClient");
+  });
+
+  it("the viewer no longer hard-codes a subject", () => {
+    // It defaulted to a Mathematics uuid, so every exam page showed Math
+    // questions regardless of which exam was open.
+    expect(viewerSrc).not.toContain("6d91c3bb");
+    expect(viewerSrc).not.toContain("diagnostic_question_bank");
+  });
+
+  it("the viewer takes an examId and reads it from the API", () => {
+    expect(viewerSrc).toContain("examId");
+    expect(viewerSrc).toContain("/api/exam-bank/questions");
+    // No direct table access from the browser any more.
+    expect(viewerCode).not.toMatch(/\.from\(\s*"past_exam_questions"/);
+  });
+
+  it("the viewer renders the exam's own title, not a literal", () => {
+    expect(viewerSrc).toContain("exam.title");
+    expect(viewerSrc).not.toContain("2023");
+  });
+
+  it("the API validates examId before it reaches the database", () => {
+    // A junk value should be a 400, not a 22P02 from Postgres.
+    expect(examBankApiCode).toContain("examId");
+    expect(examBankApiCode).toContain("400");
+    expect(examBankApiCode).toMatch(/\[0-9a-f\]\{8\}/);
+  });
+
+  it("neither the API nor the viewer reads diagnostic_question_bank", () => {
+    expect(examBankApiCode).not.toContain("diagnostic_question_bank");
+    expect(viewerCode).not.toContain("diagnostic_question_bank");
   });
 });
