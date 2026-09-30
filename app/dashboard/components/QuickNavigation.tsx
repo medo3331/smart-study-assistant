@@ -9,6 +9,7 @@ import {
   BarChart3,
   Trophy,
   ShoppingBag,
+  GraduationCap,
   Landmark,
   Settings,
 } from "lucide-react";
@@ -126,6 +127,15 @@ export function buildQuickNavItems(opts: {
       icon: <Bot size={20} strokeWidth={2} aria-hidden />,
       onClick: opts.onOpenAi,
       ariaLabel: "فتح المساعد الذكي",
+    },
+    {
+      // 🎓 مدخل discovery للمحاضرات - الـ route نفسه موجود في الـ Navbar,
+      // لكن الـ Dashboard هو أول حاجة الطالب بيشوفها الصبح.
+      id: "lectures",
+      label: "محاضرتي",
+      icon: <GraduationCap size={20} strokeWidth={2} aria-hidden />,
+      href: "/lectures",
+      ariaLabel: "محاضرتي - حوّل محاضرة لنص وملخص وشرح وأسئلة",
     },
     {
       id: "workspace",

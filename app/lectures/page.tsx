@@ -21,7 +21,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
 import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
-import { LectureNote, TranscriptHeading } from "@/components/lectures/LectureNote";
+import { LectureNote } from "@/components/lectures/LectureNote";
+import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
 import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
 import { McqQuiz } from "@/components/lectures/McqQuiz";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
@@ -104,7 +105,7 @@ export default async function MyLecturesPage() {
     <PageShell
       eyebrow="محاضراتي"
       title="محاضراتي 🎙️"
-      lede="كل محاضرة حفظتها في حسابك — مع تفريغها النصي. تقدر تاخد منها ملخص وشرح بالذكاء الاصطناعي."
+      lede="كل محاضرة حفظتها في حسابك. افتح أي قسم للقراءة، وصدّر الشرح PDF أو Word."
     >
       {/* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح، ومش بنعرض
           قائمة فاضية تخلّي الطالب يفتكر إن مفيش محاضرات. */}
@@ -148,50 +149,81 @@ export default async function MyLecturesPage() {
                   </p>
                 </summary>
 
-                <div className="mt-3">
-                  {/* ✨ معالجة بالذكاء الاصطناعي (Phase 4-A).
-                      ملخص/شرح بس — flashcards وMCQ مرحلة تانية. الكومبوننت
-                      بيخفي الزرار لما المحتوى موجود أصلاً. */}
-                  <LectureProcessActions
-                    lectureId={lecture.id}
-                    hasSummary={Boolean(lecture.summary?.trim())}
-                    hasExplanation={Boolean(lecture.explanation?.trim())}
-                  />
-                </div>
+                {/* 🎓 مساحة المذاكرة: كل قسم في بلوك قابل للطي.
+                    الافتراضي: الملخص مفتوح لو موجود، والباقي مقفول. */}
+                <LectureWorkspace defaultOpen={lecture.summary ? ["summary"] : []}>
+                  <div className="mt-3">
+                    {/* ✨ أدوات التوليد بره الأقسام عشان الطالب يلاقيها الأول. */}
+                    <LectureProcessActions
+                      lectureId={lecture.id}
+                      hasSummary={Boolean(lecture.summary?.trim())}
+                      hasExplanation={Boolean(lecture.explanation?.trim())}
+                    />
+                  </div>
 
-                {/* النتيجة المحفوظة من قبل — بتظهر بعد أول تحميل للصفحة.
-                    (اللي اتولّد في نفس الجلسة بيعرضه الكومبوننت فوق فوراً.) */}
-                {lecture.summary && (
-                  <LectureNote kind="summary" content={lecture.summary} />
-                )}
+                  <div className="mt-3 space-y-3">
+                    {lecture.summary && (
+                      <LectureSection
+                        id="summary"
+                        icon="📝"
+                        title="ملخص المحاضرة"
+                        lede="مراجعة سريعة لأهم ما ورد في المحاضرة."
+                      >
+                        <LectureNote kind="summary" content={lecture.summary} />
+                      </LectureSection>
+                    )}
 
-                {lecture.explanation && (
-                  <LectureNote kind="explanation" content={lecture.explanation} />
-                )}
+                    {lecture.explanation && (
+                      <LectureSection
+                        id="explanation"
+                        icon="🧠"
+                        title="شرح المحاضرة"
+                        lede="شرح مبسّط ومنظّم يساعدك تفهم محتوى المحاضرة."
+                        toolbar={<LectureToolbar lectureId={lecture.id} />}
+                      >
+                        <LectureNote kind="explanation" content={lecture.explanation} />
+                      </LectureSection>
+                    )}
 
-                {/* 🃏❓ محتوى المذاكرة المحفوظ (Phase 4-B) — بيفتح من أول
-                    تحميل للصفحة، وبيفضل الطالب يتحكم فيه بدون أي نداء. */}
-                {lecture.flashcards && <FlashcardsPanel cards={lecture.flashcards} />}
+                    {lecture.flashcards && (
+                      <LectureSection
+                        id="flashcards"
+                        icon="🃏"
+                        title="بطاقات المذاكرة"
+                        lede="اقلب البطاقة عشان تشوف الإجابة."
+                      >
+                        <FlashcardsPanel cards={lecture.flashcards} />
+                      </LectureSection>
+                    )}
 
-                {lecture.mcqs && <McqQuiz mcqs={lecture.mcqs} />}
+                    {lecture.mcqs && (
+                      <LectureSection
+                        id="mcq"
+                        icon="❓"
+                        title="اختبار المحاضرة"
+                        lede="جاوب على الأسئلة وشوف شرح كل إجابة."
+                      >
+                        <McqQuiz mcqs={lecture.mcqs} />
+                      </LectureSection>
+                    )}
 
-                <div className="mt-3">
-                  {/* ⚠️ التفريغ **يفضل نص خام** ومقصود: ده نص كلام الدكتور
-                      حرفياً. تلميحه بـ Markdown بيبوّبه. الترويسة الصغيرة
-                      بتفرّقه بصرياً عن المذكرة اللي فوق. */}
-                  {lecture.transcript_text ? (
-                    <>
-                      <TranscriptHeading />
-                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                        {lecture.transcript_text}
-                      </pre>
-                    </>
-                  ) : (
-                    <p className="text-sm text-ink-soft">
-                      مفيش نص محفوظ لهذه المحاضرة.
-                    </p>
-                  )}
-                </div>
+                    <LectureSection
+                      id="transcript"
+                      icon="📜"
+                      title="التفريغ النصي"
+                      lede="نص كلام الدكتور كامل — لمّا تحتاج تراجع الأصل."
+                    >
+                      {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
+                      {lecture.transcript_text ? (
+                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                          {lecture.transcript_text}
+                        </pre>
+                      ) : (
+                        <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
+                      )}
+                    </LectureSection>
+                  </div>
+                </LectureWorkspace>
               </details>
             </article>
           ))}
