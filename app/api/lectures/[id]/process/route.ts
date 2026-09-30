@@ -7,13 +7,21 @@ import {
   toSafeAnalysisError,
 } from "@/lib/ai/lecture-analysis";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
-import type { LectureAnalysisKind } from "@/lib/ai/lecture-prompts";
+import { runAiTask } from "@/lib/ai/tasks/runner";
+import { chunkTranscript, DEFAULT_CHUNK_CHARS, type LectureAnalysisKind } from "@/lib/ai/lecture-prompts";
+import {
+  generateStudyContent,
+  resolveStudyCount,
+  saveStudyContent,
+  StudyContentError,
+  type StudyContentKind,
+} from "@/lib/ai/lecture-study";
 
 /* ==========================================================================
    🧠 /api/lectures/[id]/process — تلخيص وشرح محاضرة (Phase 4-A)
    ═══════════════════════════════════════════════════════════════════════
 
-   POST { "type": "summary" | "explanation" | "all" }
+   POST { "type": "summary" | "explanation" | "all" | "flashcards" | "mcq", "count"?: 1..50 }
 
    ═══ ترتيب الحمايات (مقصود، مش اعتباطي) ═══
      1. جلسة؟ لو لأ → 401.
@@ -69,6 +77,29 @@ const KIND_MAP: Record<string, LectureAnalysisKind[]> = {
   all: ["summary", "explanation"],
 };
 
+/**
+ * 🃏❓ أنواع المحتوى المولّد — Phase 4-B.
+ *
+ * ⚠️ **مافيش `all` هنا عمداً** (وهي نفس الملاحظة في الـ prompt):
+ * `guardAiAccessAndReserve` بيحجز credit واحد لكل طلب. لو عملنا
+ * `all` يولّد بطاقات وأسئلة، الطالب هياخد credit واحد مقابل **عمليتين
+ * توليد مستقلتين** — محاسبة مضلّلة. فالنوعين منفصلين: كل واحد بياخد
+ * credit واحد وبيمثّل عملية واحدة واضحة.
+ */
+const STUDY_TYPES: Record<string, StudyContentKind> = {
+  flashcards: "flashcards",
+  mcq: "mcq",
+};
+
+/** كل الأنواع المقبولة — للرسالة وال تحقق. */
+const ALL_TYPES = [
+  "summary",
+  "explanation",
+  "all",
+  "flashcards",
+  "mcq",
+] as const;
+
 export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -87,16 +118,21 @@ export async function POST(
     }
 
     // ── ٢) الـ body ──
-    const body = (await request.json().catch(() => null)) as { type?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as
+      | { type?: unknown; count?: unknown }
+      | null;
     const type = typeof body?.type === "string" ? body.type : "";
-    const kinds = KIND_MAP[type];
-    if (!kinds) {
+    const studyKind = STUDY_TYPES[type];
+
+    // ⚠️ التحقق من النوع **قبل** أي حاجة غالية. `ALL_TYPES` واحدة
+    // مصدر الحقيقة، والرسالة بتتولّد منها مش مكتوبة يدوي.
+    if (!KIND_MAP[type] && !studyKind) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: "BAD_TYPE",
-            message: "نوع الطلب لازم يكون summary أو explanation أو all.",
+            message: `نوع الطلب لازم يكون واحد من: ${ALL_TYPES.join("، ")}.`,
           },
         },
         { status: 400 },
@@ -186,11 +222,41 @@ export async function POST(
      */
     let result;
     try {
+      // ⬇️ التفريع: محتوى المذاكرة (Phase 4-B) له مساره الخاص لأنه
+      // بيبعت **JSON منظّم** مش نص Markdown. الملخص والشرح بيفضلوا على
+      // `analyzeLecture` زي ما هما — مافيش تغيير في سلوكهم.
+      if (studyKind) {
+        const study = await generateStudyContent({
+          kind: studyKind,
+          transcript,
+          count: resolveStudyCount(body?.count),
+          deps: {
+            runTask: runAiTask,
+            chunk: chunkTranscript,
+            chunkChars: DEFAULT_CHUNK_CHARS,
+          },
+        });
+        await saveStudyContent({
+          supabase,
+          lectureId: lecture.id,
+          userId: user.id,
+          kind: studyKind,
+          items: study.items,
+        });
+        // ⚠️ الرد بيرجّع النتيجة **فقط** — مافيش `saved` هنا: النجاح
+        // واثق لأن `saveStudyContent` رما لو فشل.
+        return NextResponse.json({
+          success: true,
+          lectureId: lecture.id,
+          ...(studyKind === "flashcards" ? { flashcards: study.items } : { mcqs: study.items }),
+        });
+      }
+
       result = await analyzeLecture({
         supabase,
         lectureId: lecture.id,
         transcript,
-        kinds,
+        kinds: KIND_MAP[type],
         user: { userId: user.id },
       });
     } catch (error) {
@@ -213,6 +279,18 @@ export async function POST(
       ...(result.explanation !== null ? { explanation: result.explanation } : {}),
     });
   } catch (error) {
+    // ⚠️ لازم نفحص `StudyContentError` **قبل** `toSafeAnalysisError`، وإلا
+    // الخطأ بيروح لمسار المزوّد ويرجع 502 generically بدل الـ 422/500
+    // الصح — والطالب هيشوف رسالة غلط (مثلاً تفريغ فاضي يطلع «الخدمة
+    // مش متاحة»).
+    if (error instanceof StudyContentError) {
+      console.error(`lectures/process: [${error.code}] ${error.message}`);
+      return NextResponse.json(
+        { success: false, error: { code: error.code, message: error.message } },
+        { status: error.status },
+      );
+    }
+
     const safe = toSafeAnalysisError(error);
     if (!(error instanceof LectureAnalysisError)) {
       // لوج تشخيصي للخطأ الأصلي؛ الرد بياخد الرسالة الآمنة بس.

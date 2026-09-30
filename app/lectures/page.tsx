@@ -21,6 +21,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
 import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
+import { LectureNote, TranscriptHeading } from "@/components/lectures/LectureNote";
+import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
+import { McqQuiz } from "@/components/lectures/McqQuiz";
+import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
 
 export const metadata: Metadata = {
   title: "محاضراتي — Magicly",
@@ -69,6 +73,8 @@ type LectureListItem = {
   transcript_text: string | null;
   summary: string | null;
   explanation: string | null;
+  flashcards: Flashcard[] | null;
+  mcqs: Mcq[] | null;
 };
 
 export default async function MyLecturesPage() {
@@ -87,7 +93,7 @@ export default async function MyLecturesPage() {
   const { data, error } = await supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation, flashcards, mcqs",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -156,28 +162,30 @@ export default async function MyLecturesPage() {
                 {/* النتيجة المحفوظة من قبل — بتظهر بعد أول تحميل للصفحة.
                     (اللي اتولّد في نفس الجلسة بيعرضه الكومبوننت فوق فوراً.) */}
                 {lecture.summary && (
-                  <section className="mt-3">
-                    <h3 className="text-sm font-bold text-ink">الملخص</h3>
-                    <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                      {lecture.summary}
-                    </pre>
-                  </section>
+                  <LectureNote kind="summary" content={lecture.summary} />
                 )}
 
                 {lecture.explanation && (
-                  <section className="mt-3">
-                    <h3 className="text-sm font-bold text-ink">الشرح</h3>
-                    <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                      {lecture.explanation}
-                    </pre>
-                  </section>
+                  <LectureNote kind="explanation" content={lecture.explanation} />
                 )}
 
+                {/* 🃏❓ محتوى المذاكرة المحفوظ (Phase 4-B) — بيفتح من أول
+                    تحميل للصفحة، وبيفضل الطالب يتحكم فيه بدون أي نداء. */}
+                {lecture.flashcards && <FlashcardsPanel cards={lecture.flashcards} />}
+
+                {lecture.mcqs && <McqQuiz mcqs={lecture.mcqs} />}
+
                 <div className="mt-3">
+                  {/* ⚠️ التفريغ **يفضل نص خام** ومقصود: ده نص كلام الدكتور
+                      حرفياً. تلميحه بـ Markdown بيبوّبه. الترويسة الصغيرة
+                      بتفرّقه بصرياً عن المذكرة اللي فوق. */}
                   {lecture.transcript_text ? (
-                    <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                      {lecture.transcript_text}
-                    </pre>
+                    <>
+                      <TranscriptHeading />
+                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                        {lecture.transcript_text}
+                      </pre>
+                    </>
                   ) : (
                     <p className="text-sm text-ink-soft">
                       مفيش نص محفوظ لهذه المحاضرة.

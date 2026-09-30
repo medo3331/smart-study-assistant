@@ -3,6 +3,11 @@
 import { useCallback, useRef, useState } from "react";
 import { Sparkles, Loader2, AlertTriangle } from "lucide-react";
 
+import { LectureNote } from "./LectureNote";
+import { FlashcardsPanel } from "./FlashcardsPanel";
+import { McqQuiz } from "./McqQuiz";
+import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
+
 /* ==========================================================================
    ✨ أزرار معالجة المحاضرة بالذكاء الاصطناعي — Phase 4-A
    ═══════════════════════════════════════════════════════════════════════
@@ -28,6 +33,8 @@ type ProcessResponse = {
   success?: boolean;
   summary?: string;
   explanation?: string;
+  flashcards?: Flashcard[];
+  mcqs?: Mcq[];
   error?: { code?: string; message?: string };
 };
 
@@ -53,6 +60,8 @@ export function LectureProcessActions({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [flashcards, setFlashcards] = useState<Flashcard[] | null>(null);
+  const [mcqs, setMcqs] = useState<Mcq[] | null>(null);
 
   /**
    * ⚠️ القفل بـ `useRef` مش بـ state: الـ state setter بيلفّ async، فدوسين
@@ -62,7 +71,7 @@ export function LectureProcessActions({
   const inFlight = useRef(false);
 
   const run = useCallback(
-    async (type: "summary" | "explanation" | "all") => {
+    async (type: "summary" | "explanation" | "all" | "flashcards" | "mcq") => {
       if (inFlight.current) return;
       inFlight.current = true;
       setLoading(type);
@@ -88,6 +97,8 @@ export function LectureProcessActions({
         // النتيجة بتيجي في نفس الرد — من غير إعادة تحميل للصفحة.
         if (payload.summary) setSummary(payload.summary);
         if (payload.explanation) setExplanation(payload.explanation);
+        if (payload.flashcards) setFlashcards(payload.flashcards);
+        if (payload.mcqs) setMcqs(payload.mcqs);
       } catch {
         setError(GENERIC_ERROR);
       } finally {
@@ -168,26 +179,67 @@ export function LectureProcessActions({
         </div>
       )}
 
-      {/* ⚠️ العرض كنص عادي — مافيش dangerouslySetInnerHTML في المشروع.
-          نص الموديل بيتخزّن كنص، فلو استعملنا HTML هنا كنا فتحنا باب
-          تنفيذ كود من محتوى مولّد (XSS). */}
-      {summary && (
-        <section>
-          <h3 className="text-sm font-bold text-ink">الملخص</h3>
-          <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-            {summary}
-          </pre>
-        </section>
-      )}
+      {/* ───────── 📚 أدوات المذاكرة (Phase 4-B) ─────────
+       *
+       * ⚠️ **منطقة منفصلة عن أفعال الملخص/الشرح** لأن التكلفة مختلفة:
+       * كل ضغطة هنا = credit مستقل. الفصل البصري بيخلّي الطالب يفهم
+       * إن دي عمليات مستقلة، مش جزء من «تلخيص المحاضرة».
+       */}
+      <div className="border-t border-[var(--rule)] pt-3">
+        <p className="mb-2 text-xs font-semibold text-ink-soft">📚 أدوات المذاكرة</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void run("flashcards")}
+            disabled={busy}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading === "flashcards" ? (
+              <Loader2 size={16} className="animate-spin" aria-hidden />
+            ) : (
+              <Sparkles size={16} aria-hidden />
+            )}
+            <span>
+              {loading === "flashcards"
+                ? "جاري التجهيز…"
+                : flashcards
+                  ? "إعادة إنشاء البطاقات"
+                  : "بطاقات المذاكرة"}
+            </span>
+          </button>
 
-      {explanation && (
-        <section>
-          <h3 className="text-sm font-bold text-ink">الشرح</h3>
-          <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-            {explanation}
-          </pre>
-        </section>
-      )}
+          <button
+            type="button"
+            onClick={() => void run("mcq")}
+            disabled={busy}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading === "mcq" ? (
+              <Loader2 size={16} className="animate-spin" aria-hidden />
+            ) : (
+              <Sparkles size={16} aria-hidden />
+            )}
+            <span>
+              {loading === "mcq"
+                ? "جاري التجهيز…"
+                : mcqs
+                  ? "إعادة إنشاء الأسئلة"
+                  : "أسئلة اختبار"}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* ⚠️ العرض عبر `LectureContent` (react-markdown) — **مافيش**
+          dangerouslySetInnerHTML. النص المولّد بيتحوّل لعناصر React حقيقية،
+          فمافيش أي HTML بيترجم أو بينفّذ. */}
+      {summary && <LectureNote kind="summary" content={summary} />}
+
+      {explanation && <LectureNote kind="explanation" content={explanation} />}
+
+      {flashcards && <FlashcardsPanel cards={flashcards} />}
+
+      {mcqs && <McqQuiz mcqs={mcqs} />}
     </div>
   );
 }
