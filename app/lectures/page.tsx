@@ -20,6 +20,7 @@ import { type Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
+import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
 
 export const metadata: Metadata = {
   title: "محاضراتي — Magicly",
@@ -66,6 +67,8 @@ type LectureListItem = {
   created_at: string;
   duration_seconds: number | null;
   transcript_text: string | null;
+  summary: string | null;
+  explanation: string | null;
 };
 
 export default async function MyLecturesPage() {
@@ -78,10 +81,13 @@ export default async function MyLecturesPage() {
   if (!user) redirect("/login?next=/lectures");
 
   // ٢) محاضرات المستخدم بس + النص (عشان نفتحها من نفس الاستعلام).
+  //    ⚠️ `summary` و`explanation` اتضافوا للاختيار عشان نعرف نعرض زرار
+  //    المعالجة بس لو المحاضرة **لسه** مالهاش. الاختيار ده مش بيكسر
+  //    حاجة: الأعمدة موجودة فعلاً في الجدول من migration #14.
   const { data, error } = await supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -92,7 +98,7 @@ export default async function MyLecturesPage() {
     <PageShell
       eyebrow="محاضراتي"
       title="محاضراتي 🎙️"
-      lede="كل محاضرة حفظتها في حسابك — مع تفريغها النصي. تفريغ وملخص وشرح وأسئلة هيتضافوا هنا بعدين."
+      lede="كل محاضرة حفظتها في حسابك — مع تفريغها النصي. تقدر تاخد منها ملخص وشرح بالذكاء الاصطناعي."
     >
       {/* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح، ومش بنعرض
           قائمة فاضية تخلّي الطالب يفتكر إن مفيش محاضرات. */}
@@ -135,6 +141,37 @@ export default async function MyLecturesPage() {
                     )}
                   </p>
                 </summary>
+
+                <div className="mt-3">
+                  {/* ✨ معالجة بالذكاء الاصطناعي (Phase 4-A).
+                      ملخص/شرح بس — flashcards وMCQ مرحلة تانية. الكومبوننت
+                      بيخفي الزرار لما المحتوى موجود أصلاً. */}
+                  <LectureProcessActions
+                    lectureId={lecture.id}
+                    hasSummary={Boolean(lecture.summary?.trim())}
+                    hasExplanation={Boolean(lecture.explanation?.trim())}
+                  />
+                </div>
+
+                {/* النتيجة المحفوظة من قبل — بتظهر بعد أول تحميل للصفحة.
+                    (اللي اتولّد في نفس الجلسة بيعرضه الكومبوننت فوق فوراً.) */}
+                {lecture.summary && (
+                  <section className="mt-3">
+                    <h3 className="text-sm font-bold text-ink">الملخص</h3>
+                    <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                      {lecture.summary}
+                    </pre>
+                  </section>
+                )}
+
+                {lecture.explanation && (
+                  <section className="mt-3">
+                    <h3 className="text-sm font-bold text-ink">الشرح</h3>
+                    <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                      {lecture.explanation}
+                    </pre>
+                  </section>
+                )}
 
                 <div className="mt-3">
                   {lecture.transcript_text ? (
