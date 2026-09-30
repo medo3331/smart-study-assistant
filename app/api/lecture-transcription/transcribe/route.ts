@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { checkDailyBudget, checkRateLimit, clampText } from "@/lib/api-guard";
+import { saveLectureForCurrentUser } from "@/lib/ai/lecture-store";
 import { transcribeLectureFromUrl } from "@/lib/ai/transcription";
 import {
   TranscriptionError,
@@ -25,8 +26,16 @@ import {
      2. `createSignedReadUrl` — رابط قراءة موقّع مؤقت.
      3. ElevenLabs مع `cloud_storage_url` — هو بيسحب الملف من Supabase
         مباشرة. الملف **مش** بينزل في الذاكرة بتاعتنا خالص.
-     4. `deleteObject` — **بعد النجاح بس**. لو فشل التحويل، الملف بيفضل
-        موجود والطالب يقدر يعيد المحاولة من غير ما يرفع تاني.
+     4. `saveLectureForCurrentUser` — حفظ التفريغ في `public.lectures`
+        لصاحب الجلسة (المرحلة ٣). **بيفشل بهدوء** لو مفيش جلسة أو لو
+        قاعدة البيانات واقفة — والتفريغ برجع عادي في الحالتين.
+     5. `deleteObject` — **بعد نجاح الحفظ بس** (شوف التعليق جوه الكود).
+
+   ⚠️ ليش الحفظ قبل الحذف: لو حذفنا الأول، أي فشل في الحفظ = الطالب
+   يخسر تسجيله *و* مايحفظش تفريغه. الترتيب ده معناه إن الملف بيفضل
+   موجود عند أي فشل في الحفظ، فيقدر يدوس «حاول تاني» على نفس المسار
+   من غير ما يرفع ٣٧ ميجا تاني. والـ lifecycle job (٢٤ ساعة) بيبقى
+   الشبكة الأمان لو الطالب راح ومش راجع.
 
    ⚠️Cleanup بالترتيب ده مقصود: الخطأ الشائع إننا نحذف الملف قبل
    200 ميجا من جديد (المسار القديم مكنش عنده المشكلة دي لأن الملف كان
@@ -37,7 +46,12 @@ import {
    POST JSON { path, filename, size }
 
    ═══ output ═══
-   200 → { transcript: LectureTranscript } — **نفس** شكل المرحلة 1 حرفياً.
+   200 → { transcript: LectureTranscript, saved: boolean, ... }
+         `saved: true`  → { lectureId, lecture } — الحفظ تم فعلاً.
+         `saved: false` → { persistCode, persistMessage } — إمّا الزائر
+                          مش مسجّل (AUTH_REQUIRED) أو الحفظ فشل
+                          (DB_FAILED). **التفريغ نجح في الحالتين** —
+                          `saved` بيصف الحفظ بس، مش نجاح التفريغ.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** ٣ تحويلات في الساعة لكل IP — كل واحد بياكل فلوس فعلية. */
@@ -87,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     // ١) الحقيقة من Supabase: الحجم الحقيقي + وجود الملف.
     const path = clampText(body.path, 300).trim();
-    await verifyUploadedObject(path, Number(body.size) || 0);
+    const realSize = await verifyUploadedObject(path, Number(body.size) || 0);
 
     // ٢) رابط موقّع مؤقت — ElevenLabs هو بيسحب الملف، مش إحنا.
     const signedUrl = await createSignedReadUrl(path);
@@ -95,10 +109,67 @@ export async function POST(request: NextRequest) {
     // ٣) التفريغ. مفتاح ElevenLabs بيفضل جوه السيرفر — مش في أي رد.
     const transcript = await transcribeLectureFromUrl(signedUrl);
 
-    // ٤) نضّف — بعد النجاح بس (شوف التعليق فوق).
-    await deleteObject(path);
+    /* ٤) حفظ المحاضرة للمستخدم (المرحلة ٣).
+     *
+     * ⚠️ **الترتيب ده مقصود ومش قابل للتبادل**: بنحاول الحفظ **قبل**
+     * حذف الملف. لو حفظنا وحذفنا الأول، أي فشل في قاعدة البيانات =
+     * الطالب يخسر التسجيل *و* مايحفظش النص = يبقى ضايع خالص.
+     * كلمة "محاضرة" بتتأكد إن الحفظ تم فعلاً.
+     *
+     * ملاحظة على التصميم: الحفظ **بيفشل بهدوء** (مش بيرمي exception)
+     * في الحالتين دول:
+     *   - زائر مش مسجّل → الحفظ مستحيل بالتصميم، مش خطأ.
+     *   - خطأ في قاعدة البيانات → نرجّع الرسالة مع النص.
+     * التفريغ أصلاً نجح ومحدش هيرميه عشان الحفظ فشل.
+     *
+     * ⚠️ الـ try/catch حوالين الحفظ مقصود: `saveLectureForCurrentUser`
+     * بترجّع نتيجة بدل ما ترمي، بس لو العميل نفسه فشل في البناء
+     * (بيئة ناقصة مثلاً) فالاستثناء كان هيوصل لكتلة الـ catch
+     * الكبيرة ويضيّع **التفريغ الناجح**. التفريغ أغلى من الحفظ — مش
+     * من حقّ خطأ في الحفظ يبلعه.
+     */
+    const saveResult = await saveLectureForCurrentUser({
+      transcript,
+      originalFilename: clampText(body.filename, 200).trim() || "محاضرة",
+      storagePath: path,
+      fileSize: realSize,
+    }).catch((error: unknown) => {
+      console.error("lecture-transcription: استثناء أثناء حفظ المحاضرة", error);
+      return {
+        ok: false as const,
+        code: "DB_FAILED" as const,
+        message: "حصلت مشكلة أثناء حفظ المحاضرة. جرّب تاني كمان شوية.",
+      };
+    });
 
-    return NextResponse.json({ transcript });
+    /* ٥) التنظيف — **بعد نجاح الحفظ بس**، وده تغيير مقصود عن السلوك
+     * القديم اللي كان بيحذف قبل أي حفظ.
+     *
+     *   - حفظ نجح  → الملف بقى مش محتاج، نحذفه (نفس سلوك اليوم).
+     *   - زائر      → مافيش محاضرة محفوظة، فالمسؤولية على الـ lifecycle
+     *                  job اللي بيحذف الأقدم من ٢٤ ساعة (db/13-*.sql).
+     *   - فشل حفظ   → **بنسيب الملف** عمداً. الطالب يقدر يدوس
+     *                  «حاول تاني» على نفس المسار من غير ما يرفع
+     *                  ٣٧ ميجا تاني. وده أأمن من إننا نضيّع تسجيله.
+     */
+    if (saveResult.ok) {
+      await deleteObject(path);
+    }
+
+    /* ٦) الرد. `saved` بيوصف **الحفظ** بس — لا بيخلطه بنجاح
+     * التفريغ. الحالتين ٢٠٠ لأن التفريغ نجح في الحالتين:
+     *   الحفظ زائر  → { saved: false, persistCode: "AUTH_REQUIRED" }
+     *   الحفظ فشل   → { saved: false, persistCode: "DB_FAILED" }
+     * الواجهة بتعرض النص في الحالتين وتقول للطالب صراحةً إن المحاضرة
+     * متحفظتش (شوف components/lecture-transcription/LectureTranscriber.tsx).
+     */
+    return NextResponse.json({
+      transcript,
+      saved: saveResult.ok,
+      ...(saveResult.ok
+        ? { lectureId: saveResult.lecture.id, lecture: saveResult.lecture }
+        : { persistCode: saveResult.code, persistMessage: saveResult.message }),
+    });
   } catch (error) {
     if (error instanceof TranscriptionError) {
       if (error.detail) {

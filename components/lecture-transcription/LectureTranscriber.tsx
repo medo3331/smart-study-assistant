@@ -41,6 +41,7 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Check,
@@ -170,6 +171,39 @@ function formatDuration(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+/**
+ * 📚 حالة حفظ المحاضرة كما رجعت من السيرفر.
+ *
+ * `saved` بيوصف **الحفظ** بس — مش نجاح التفريغ. التفريغ نجح في كل
+ * الأحوال، والفرق هو إن المحاضرة اتربطت بحساب المستخدم ولا لأ.
+ */
+type SaveInfo =
+  | { saved: true; lectureId: string }
+  | { saved: false; persistCode?: string; persistMessage?: string };
+
+/**
+ * 📚 يقرا حالة الحفظ من رد الراوت.
+ *
+ * ⚠️ **متحذّر عمداً**: `saved` بيتحسب من `lectureId` **مش** من
+ * `payload.saved` لوحده. السبب إنا لازم نتعامل مع رد ناقص/قديم بأمان —
+ * لو السيرفر رجع `saved: true` من غير `lectureId` (يعني مافيش سطر
+ * اتكتب فعلاً) فالمكوّن هتصدّقه ويقول للطالب «اتحفظت» وهي مااتحفظتش.
+ * المعرّف هو الدليل الوحيد اللي مش بيكذب.
+ */
+function readSaveInfo(payload: unknown): SaveInfo {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const lectureId = p.lectureId;
+  if (typeof lectureId === "string" && lectureId !== "") {
+    return { saved: true, lectureId };
+  }
+  return {
+    saved: false,
+    persistCode: typeof p.persistCode === "string" ? p.persistCode : undefined,
+    persistMessage:
+      typeof p.persistMessage === "string" ? p.persistMessage : undefined,
+  };
+}
+
 /** المكوّن الرئيسي — كل حالة الشاشة في متغيرات واحدة واضحة. */
 export function LectureTranscriber() {
   const [file, setFile] = useState<File | null>(null);
@@ -188,6 +222,14 @@ export function LectureTranscriber() {
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
    *  فالطالب يقدر يدوس «حاول تاني» ويكمّل من نفس الملف. */
   const [uploadedPath, setUploadedPath] = useState<string | null>(null);
+  /** 📚 نتيجة حفظ المحاضرة (المرحلة ٣).
+   *
+   *  ⚠️ دي **مش** نفس `phase`: دي بتقول «التفريغ نجح، بس المحاضرة
+   *  اتحفظت ولا لأ». الفصل ده مقصود — التفريغ ممكن ينجح ١٠٠٪ والحفظ
+   *  يفشل، والنص يفضل معروض في الحالتين. `null` = لسه مالوش خبر
+   *  (المسار القديم اللي مش بيحفظ أصلاً).
+   */
+  const [saveInfo, setSaveInfo] = useState<SaveInfo | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -325,8 +367,30 @@ export function LectureTranscriber() {
         return false;
       }
 
-      // نجح — الملف اتمسح في السيرفر، فبننسى المسار عندنا كمان.
-      setUploadedPath(null);
+      /* 📚 حالة الحفظ — بتتقري من نفس الرد (المرحلة ٣).
+       *
+       * ⚠️ **الفرق الحاسم عن السلوك القديم في `uploadedPath`**: الكود
+       * القديم كان بيمسح المسار دايماً عند النجاح لأن الخادم كان
+       * بيحذف الملف دايماً. دلوقتي الخادم بيحذف **بس لو الحفظ نجح**:
+       *
+       *   - حفظ نجح  → الملف اتمسح في السيرفر فعلاً، فنمسح المسار عندنا
+       *                 عادي. (إلا لو الحفظ زائر — الملف بيفضل متروك
+       *                 للـ lifecycle، فبنمسح المسار برضه عشان متقعدش
+       *                 في حالة "محاولة تاني" ميتة.)
+       *   - حفظ فشل  → السيرفر **سيب** الملف عمداً. هنا البند ده هو
+       *                 اللي بيخلّي «حاول تاني» تشتغل: بنحسب المسار
+       *                 تاني ونترك `phase` على "done" مع عرض النص.
+       *
+       * ملاحظة: `transcribeUploaded` بترجّع `true` و`phase = "done"`
+       * في الحالتين — لأن **التفريغ نجح** في الحالتين. الفرق بيترجمه
+       * الشريط اللي تحت، مش حالة الشاشة كلها.
+       */
+      const info = readSaveInfo(payload);
+      setSaveInfo(info);
+      if (info.saved) {
+        // الملف اتمسح في السيرفر — مش فايدة نحتفظ بالمسار.
+        setUploadedPath(null);
+      }
       setTranscript(result);
       setPhase("done");
       return true;
@@ -616,6 +680,59 @@ export function LectureTranscriber() {
               </p>
             )}
           </div>
+
+          {/* ───────── 📚 حالة حفظ المحاضرة (المرحلة ٣) ─────────
+           *
+           * ⚠️ الشريط ده **مش** جزء من حالة نجاح/فشل التفريغ. التفريغ
+           * نجح ١٠٠٪ في كل الحالات المعروضة هنا — ده كلام عن **الحفظ
+           * في الحساب** بس. سبب الفصل: «نجح التفريغ» و«اتحفظت» حقيقتين
+           * منفصلتين، وإخفاء الفرق يخلّي الطالب يفكّر إن ضاع منّه نص وهو
+           * لسه قدامه على الشاشة.
+           */}
+          {saveInfo && (
+            <div
+              role="status"
+              className={`mt-4 flex items-start gap-3 rounded-xl border p-4 ${
+                saveInfo.saved
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : "border-amber-500/30 bg-amber-500/10"
+              }`}
+            >
+              {saveInfo.saved ? (
+                <Check size={18} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              ) : (
+                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              )}
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[var(--text)]">
+                  {saveInfo.saved
+                    ? "محفوظة في حسابك ✓"
+                    : "النص جاهز — بس المحاضرة متحفظتش"}
+                </p>
+
+                <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
+                  {saveInfo.saved
+                    ? "تقدر ترجعلها في أي وقت من «محاضراتي»."
+                    : saveInfo.persistCode === "AUTH_REQUIRED"
+                      ? "سجّل دخول الأول، وبعدين ارفع المحاضرة تاني وهتتحفظ في حسابك. النص اللي فوق موجود — انسخه أو حمّله دلوقتي."
+                      : (saveInfo.persistMessage ??
+                        "حصلت مشكلة في الحفظ. النص اللي فوق موجود — انسخه أو حمّله، وجرّب ترفع المحاضرة تاني.")}
+                </p>
+
+                {/* رابط لصفحة المحاضرات — بيظهر بس لما يكون في محاضرة
+                    محفوظة فعلاً (يعني في حاجة يلوّي عليها). */}
+                {saveInfo.saved && (
+                  <Link
+                    href="/lectures"
+                    className="mt-2 inline-block text-sm font-semibold text-[var(--accent)] underline underline-offset-4"
+                  >
+                    افتح محاضراتي
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* أزرار النسخ والتحميل */}
           <div className="mt-4 flex flex-wrap gap-2">
