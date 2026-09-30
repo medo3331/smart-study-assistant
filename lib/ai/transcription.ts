@@ -220,29 +220,18 @@ function normalizeUpstream(payload: UpstreamResponse): LectureTranscript {
 }
 
 /**
- * يحوّل ملف محاضرة إلى نص عبر ElevenLabs Scribe v2.
+ * الطلب المشترك لـ ElevenLabs — بياخد مصدر الملف من الدالة اللي فوقاه.
  *
- * ⚠️ دالة سيرفر فقط: بتقرأ `ELEVENLABS_API_KEY` من البيئة وبترسل الملف
- * كـ multipart لـ `POST /v1/speech-to-text`. بترمي `TranscriptionError` في
- * كل الأحوال — مفيش خطأ بينزل عادي.
+ * ⚠️ المفتاح هنا بس (`readApiKey`)، وكل حاجة تانية (التطبيع، ترجمة الأخطاء)
+ * مشتركة بين المسارين — عشان الضمانة الحقيقية إن المرحلة 1 والمرحلة 2
+ * بيرجّعوا **نفس** `LectureTranscript` بالظبط. أي اختلاف هنا معناه اختلاف
+ * في اللي الواجهة بتعرضه.
  */
-export async function transcribeLecture(file: File): Promise<LectureTranscript> {
+async function callElevenLabs(buildForm: (apiKey: string) => FormData): Promise<LectureTranscript> {
   const apiKey = readApiKey();
-  assertLectureFile(file);
-
   // FormData بتولّد الـ boundary بنفسها — متحطّش Content-Type يدوي،
   // الـ boundary لازم يفضل زي ما Node كتبه بالظبط.
-  const form = new FormData();
-  form.append("model_id", SCRIBE_MODEL_ID);
-  form.append("file", file, file.name);
-  // تسمية الأحداث الصوتية (ضحك، خطوات) بتبوّخ النص اللي الطالب عايز يذاكره
-  // — فبنقفلها عن قصد. والتوقيتات على مستوى الكلمة هي اللي بتحوّل الرد
-  // لمقاطع مقروءة.
-  form.append("tag_audio_events", "false");
-  form.append("timestamps_granularity", "word");
-  // language_code مش مبعوت: ElevenLabs بيكتشف اللغة لوحده وده أفضل من
-  // افتراض إن كل محاضراتنا عربية. لو حبيت فرض العربي، ضيف هنا
-  // form.append("language_code", "ara").
+  const form = buildForm(apiKey);
 
   let response: Response;
   try {
@@ -300,4 +289,68 @@ export async function transcribeLecture(file: File): Promise<LectureTranscript> 
   }
 
   return transcript;
+}
+
+/** الحقول المشتركة في الطلب — نفس القيم في المسارين. */
+function appendCommonFields(form: FormData): void {
+  form.append("model_id", SCRIBE_MODEL_ID);
+  // تسمية الأحداث الصوتية (ضحك، خطوات) بتبوّخ النص اللي الطالب عايز يذاكره
+  // — فبنقفلها عن قصد. والتوقيتات على مستوى الكلمة هي اللي بتحوّل الرد
+  // لمقاطع مقروءة.
+  form.append("tag_audio_events", "false");
+  form.append("timestamps_granularity", "word");
+  // language_code مش مبعوت: ElevenLabs بيكتشف اللغة لوحده وده أفضل من
+  // افتراض إن كل محاضراتنا عربية. لو حبيت فرض العربي، ضيف هنا
+  // form.append("language_code", "ara").
+}
+
+/**
+ * يحوّل ملف محاضرة إلى نص عبر ElevenLabs Scribe v2 — **رفع مباشر من
+ * المتصفح** (المرحلة 1).
+ *
+ * ⚠️ المسار ده بيمرّ بجسم طلب الفانكشن، فمحدود بحوالي 4.5 ميجا على
+ * Vercel. بيشتغل كـ fallback بس للمسارات الصغيرة (وللبيئات اللي
+ * Supabase Storage مش مهيّأة فيها). للمسارات الكبيرة استخدم
+ * `transcribeLectureFromUrl` من `/api/lecture-transcription/transcribe`.
+ */
+export async function transcribeLecture(file: File): Promise<LectureTranscript> {
+  assertLectureFile(file);
+  return callElevenLabs(() => {
+    const form = new FormData();
+    appendCommonFields(form);
+    form.append("file", file, file.name);
+    return form;
+  });
+}
+
+/**
+ * يحوّل ملف محاضرة إلى نص من **رابط موقّع** على تخزين — المرحلة 2.
+ *
+ * ⚠️ ليه ده مهم: ElevenLabs بيقبل `cloud_storage_url` كبديل للـ `file`
+ * ("Exactly one of the file or cloud_storage_url"). لما نديه الرابط هو
+ * **هو** بيسحب الملف من Supabase — يعني الملف مش بيلمس الفانكشن خالص
+ * في الاتجاهين:
+ *   - في الفانكشن: بعت بس form فيه رابط (حوالي 200 بايت).
+ *   - من ElevenLabs: سحب مباشر من Supabase برابط موقّع.
+ *
+ * ده اللي بيشيل حد الـ 4.5 ميجا نهائياً، مش بيخفّيه.
+ *
+ * @param signedUrl رابط قراءة موقّع (مش public) من `createSignedReadUrl`
+ */
+export async function transcribeLectureFromUrl(
+  signedUrl: string,
+): Promise<LectureTranscript> {
+  if (typeof signedUrl !== "string" || !signedUrl.startsWith("https://")) {
+    throw new TranscriptionError(
+      "INVALID_URL",
+      "رابط الملف المرفوع غير صالح. حاول ترفع المحاضرة من جديد.",
+      400,
+    );
+  }
+  return callElevenLabs(() => {
+    const form = new FormData();
+    appendCommonFields(form);
+    form.append("cloud_storage_url", signedUrl);
+    return form;
+  });
 }

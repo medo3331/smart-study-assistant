@@ -11,10 +11,17 @@
    اللي بيتعمل في `app/ai-studio` و`components/ai/*`. لو حبيت الترجمة
    لاحقًا، الكود كله في كومبوننت واحد والنصوص فيه سهلة الإخراج للقاموس.
 
-   ⚠️ العقد مع السيرفر: POST /api/lecture-transcription بـ FormData
-   (الحقل `file`) وبيرجّع `{ transcript: LectureTranscript }` أو
-   `{ error: { code, message } }`. **كل** الكلام عن ElevenLabs والأسعار
-   معزول جوه `lib/ai/transcription.ts` — الكلاينت مش شايف ولا سطر منه.
+   ⚠️ العقد مع السيرفر (3 نقاط):
+     - POST /api/lecture-transcription/upload-url بـ JSON { filename,
+       contentType, size } ← بيرجّع { signedUrl, token, path, expiresIn }.
+       تذكرة مؤقتة على **مسار واحد**؛ مفيش أي صلاحية عامة على الباكيت.
+     - PUT المتصفح على signedUrl مباشرة (مش في الفانكشن) — وده اللي
+       بيشيل حد الـ 4.5 ميجا.
+     - POST /api/lecture-transcription/transcribe بـ JSON { path, filename,
+       size } ← بيرجّع `{ transcript: LectureTranscript }` (نفس المرحلة 1).
+     كلهم بيرجّعوا `{ error: { code, message } }` عند الفشل.
+     **كل** الكلام عن ElevenLabs والأسعار معزول جوه
+     `lib/ai/transcription.ts` — الكلاينت مش شايف ولا سطر منه.
 
    ⚠️ الاستيراد: `lib/ai/transcription-shared` بس (مفيهوش `process.env`
    ولا `fetch`). استيراد `lib/ai/transcription` هنا كان هيعني كود المزوّد
@@ -52,9 +59,11 @@ import {
   assertLectureFile,
   formatFileSize,
   LECTURE_FILE_ACCEPT,
+  MAX_DIRECT_UPLOAD_BYTES,
   MAX_LECTURE_FILE_BYTES,
   TranscriptionError,
   type LectureTranscript,
+  type UploadTicket,
 } from "@/lib/ai/transcription-shared";
 
 /* ───────────────────────── نصوص الواجهة ───────────────────────── */
@@ -63,14 +72,69 @@ import {
 const ERR_GENERIC = "حصلت مشكلة أثناء تحويل المحاضرة. حاول مرة أخرى.";
 const ERR_NETWORK = "فيها مشكلة في الاتصال. اتأكد من الإنترنت وحاول تاني.";
 const ERR_NO_FILE = "اختر ملف المحاضرة الأول.";
+const ERR_UPLOAD = "فشل رفع المحاضرة. حاول مرة أخرى.";
+const ERR_UPLOAD_RETRY = "مقدرناش نجهّز رفع المحاضرة. حاول تاني بعد شوية.";
 
 /** الحدّ بالأرقام العربية-الهندية زي باقي الواجهة. */
-const MAX_MB_LABEL = `${Math.round(MAX_LECTURE_FILE_BYTES / (1024 * 1024))} ميجابايت`;
+const MAX_SIZE_LABEL = formatFileSize(MAX_LECTURE_FILE_BYTES);
 
 /** الصيغ المدعومة في سطر واحد تحت منطقة الرفع. */
 const FORMATS_LABEL = "MP3 · WAV · M4A · MP4 · AAC · FLAC · OGG · WEBM";
 
 type Phase = "idle" | "working" | "done" | "error";
+
+/** مرحلة الشغل الجارية — بتتحول لرسالة مختلفة لكل خطوة.
+ *  ⚠️ مفيش نسبة مئوية عن قصد: ElevenLabs بيرجّع النص مرة واحدة في
+ *  الآخر من غير تقدّم، والرقم الوهمي كذب صريح. الوحيد اللي بيعرض
+ *  نسبة هو **الرفع** — ودي حقيقية 100% (بايتم على المتصفح). */
+type Stage = "uploading" | "transcribing" | "finalizing";
+
+/**
+ * رفع الملف **مباشرة** للتخزين عن طريق الـ signed URL بتاع الراوت.
+ *
+ * ⚠️ ليه `XMLHttpRequest` مش `fetch`: عشان نعرف نسبة الرفع الحقيقية.
+ * `fetch` ماعندهاش progress events في المتصفح، و`XMLHttpRequest.upload.onprogress`
+ * بيبعت البايتات المرفوعة فعلاً. النسبة دي **مش مزيّفة** — دي الحقيقية.
+ * (نسبة التحويل نفسها مش بتتعرض — ElevenLabs مش بيبعت تقدّم.)
+ *
+ * ⚠️ التوكن لازم يتبعت في هيدر `x-upsert-token` حسب API Supabase.
+ * ممنوع أي مفتاح خدمة يوصل المتصفح — اللي بيتبعت ده تذكرة مؤقتة
+ * لمسار واحد بس.
+ */
+function uploadDirect(
+  signedUrl: string,
+  token: string,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open("PUT", signedUrl, true);
+    xhr.setRequestHeader("x-upsert-token", token);
+    // ⚠️ لازم: من غير content-type صحيح Supabase بيرفض الطلب.
+    if (file.type) xhr.setRequestHeader("Content-Type", file.type);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      // Supabase بيرجّع 200 أو 201 على نجاح الرفع.
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`upload_failed_${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error("upload_network_error"));
+    xhr.ontimeout = () => reject(new Error("upload_timeout"));
+    // مهلة 4 ساعات: محاضرة 3 ساعات على نت بطيء ممكن تاخد وقت، واللي
+    // مانعدّيش ساعتين دي مش upload ticket TTL (ساعتين) — ده توصيل.
+    xhr.timeout = 4 * 60 * 60 * 1000;
+
+    xhr.send(file);
+  });
+}
 
 /** استخراج رسالة عربية آمنة من رد الراوت.
  *  الراوت بيرجّع `{ error: { code, message } }` — والرسالة مكتوبة بالعربي
@@ -114,6 +178,16 @@ export function LectureTranscriber() {
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<LectureTranscript | null>(null);
   const [copied, setCopied] = useState(false);
+  /** المرحلة الجارية من الشغل — بتتحكم في نص التحميل. */
+  const [stage, setStage] = useState<Stage>("uploading");
+  /** نسبة رفع **حقيقية** (0..100). مش بتتحرك أثناء التحويل خالص —
+   *  ElevenLabs مش بيبعت تقدّم، وإيهام الطالب بنسبة هنا كذب. */
+  const [uploadPercent, setUploadPercent] = useState(0);
+  /** مسار الملف **بعد** ما اترفع فعلاً.
+   *  ⚠️ ده اللي بيخلّي إعادة المحاولة ممكنة من غير رفع تاني: لو فشل
+   *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
+   *  فالطالب يقدر يدوس «حاول تاني» ويكمّل من نفس الملف. */
+  const [uploadedPath, setUploadedPath] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,6 +227,9 @@ export function LectureTranscriber() {
       setTranscript(null);
       setCopied(false);
       setPhase("idle");
+      // ملف جديد = تذكرة جديدة، وننسى أي مسار قديم.
+      setUploadedPath(null);
+      setUploadPercent(0);
     },
     [],
   );
@@ -164,14 +241,19 @@ export function LectureTranscriber() {
     setError(null);
     setCopied(false);
     setPhase("idle");
+    setUploadedPath(null);
+    setUploadPercent(0);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
-  /** يرفع الملف ويحوّله. */
-  const run = useCallback(async () => {
-    if (!file || working) return;
+  /** مسار المرحلة 1 القديم: الملف في جسم طلب الفانكشن.
+   *  بيشتغل للملفات الصغيرة بس (أو لما Supabase Storage مش مهيّأ).
+   *  محفوظ زي ما هو — المرحلة 1 مش مفقودة. */
+  const runDirect = useCallback(async () => {
+    if (!file) return;
 
     setPhase("working");
+    setStage("transcribing");
     setError(null);
     setTranscript(null);
     setCopied(false);
@@ -193,9 +275,6 @@ export function LectureTranscriber() {
         return;
       }
 
-      /* حارس أخير في الكلاينت: لو الرد مرّ من غير نص (حالة نادرة جداً)،
-         بنعرض رسالة صريحة بدل مربع نص فاضي — المساعد الذكي كمان لما
-         يتبعتله الـ transcript بعدين هيلاقي shape متوقع. */
       const result = (payload as { transcript?: LectureTranscript } | null)?.transcript;
       if (!result || typeof result.text !== "string" || result.text.trim() === "") {
         setError(ERR_GENERIC);
@@ -206,11 +285,147 @@ export function LectureTranscriber() {
       setTranscript(result);
       setPhase("done");
     } catch {
+      setError(ERR_NETWORK);
+      setPhase("error");
+    }
+  }, [file]);
+
+  /**
+   * الخطوة ٣/٤: تفريغ ملف **متروفع بالفعل** + عرض النتيجة.
+   *
+   * منفصلة عن `run` عشان إعادة المحاولة بعد فشل تفريغ ترجع ل هنا
+   * على طول — من غير ما نطلب تذكرة جديدة ولا نرفع 200 ميجا تاني.
+   */
+  const transcribeUploaded = useCallback(
+    async (path: string) => {
+      setStage("transcribing");
+      setUploadPercent(100);
+
+      const response = await fetch("/api/lecture-transcription/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, filename: file?.name ?? "محاضرة", size: file?.size ?? 0 }),
+      });
+      const payload: unknown = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        /* ⚠️ الملف لسه مرفوع (الخادم بيحذفه بعد النجاح بس) — فبنسيب
+           `uploadedPath` متسجّل، والزر بيرجع لـ «حاول تاني» ويكمّل من
+           نفس الملف. ده أهم فرق عن المرحلة 1. */
+        setError(extractErrorMessage(payload, ERR_GENERIC));
+        setPhase("error");
+        return false;
+      }
+
+      setStage("finalizing");
+      const result = (payload as { transcript?: LectureTranscript } | null)?.transcript;
+      if (!result || typeof result.text !== "string" || result.text.trim() === "") {
+        setError(ERR_GENERIC);
+        setPhase("error");
+        return false;
+      }
+
+      // نجح — الملف اتمسح في السيرفر، فبننسى المسار عندنا كمان.
+      setUploadedPath(null);
+      setTranscript(result);
+      setPhase("done");
+      return true;
+    },
+    [file],
+  );
+
+  /**
+   * المسار الجديد (المرحلة 2): تذكرة ← رفع مباشر ← تفريغ.
+   *
+   * ⚠️ الملف **مش** بيمرّ في أي جسم طلب للفانكشن: بينزل من المتصفح
+   * للتخزين على signed URL، وElevenLabs بيسحبه من هناك.
+   */
+  const run = useCallback(async () => {
+    if (!file || working) return;
+
+    setPhase("working");
+    setError(null);
+    setTranscript(null);
+    setCopied(false);
+    setUploadPercent(0);
+
+    try {
+      /* ⚠️ الملف ده مرفوع خلاص من محاولة سابقة (فشل التفريغ مثلاً):
+         نكمّل من عند التفريغ — رفع 200 ميجا تاني معناه دقائق ضايعة
+         على الطالب ونصيب من الفاتورة. */
+      if (uploadedPath) {
+        await transcribeUploaded(uploadedPath);
+        return;
+      }
+
+      // ── الخطوة ١: تذكرة الرفع (JSON صغير) ──
+      const ticketResponse = await fetch("/api/lecture-transcription/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          size: file.size,
+        }),
+      });
+      const ticketPayload: unknown = await ticketResponse.json().catch(() => null);
+
+      /* التخزين مش مهيّأ في البيئة دي (سطر الأوامر الأول بيكشف ده) —
+         نرجع للمسار القديم بدل ما نقفل الطالب برسالة. الملف
+         الملف الصغير لسه هيشتغل. */
+      const code = (ticketPayload as { error?: { code?: string } } | null)?.error?.code;
+      if (ticketResponse.status === 503 && code === "STORAGE_NOT_CONFIGURED") {
+        /* ⚠️ المسار القديم بيمرّ بجسم طلب الفانكشن (حد ~4.5 ميجا على
+           Vercel). فلو الملف كبير والرفع المباشر مش مفعّل، محاولة الرفع
+           هتفشل عند المنصّة برسالة غامضة — بنرفضها هنا برسالة
+           مفهومة. الملف الصغير لسه هيشتغل عادي. */
+        if (file.size > MAX_DIRECT_UPLOAD_BYTES) {
+          setError(
+            `حجم الملف كبير أوي والرفع المباشر مش متاح حالياً. الحد في الوضع ده ${formatFileSize(
+              MAX_DIRECT_UPLOAD_BYTES,
+            )}. جرّب تاني بعد شوية.`,
+          );
+          setPhase("error");
+          return;
+        }
+        await runDirect();
+        return;
+      }
+
+      if (!ticketResponse.ok) {
+        setError(extractErrorMessage(ticketPayload, ERR_UPLOAD_RETRY));
+        setPhase("error");
+        return;
+      }
+
+      const ticket = ticketPayload as UploadTicket | null;
+      if (!ticket?.signedUrl || !ticket.token || !ticket.path) {
+        setError(ERR_UPLOAD_RETRY);
+        setPhase("error");
+        return;
+      }
+
+      // ── الخطوة ٢: الرفع المباشر للتخزين (بنسبة حقيقية) ──
+      setStage("uploading");
+      try {
+        await uploadDirect(ticket.signedUrl, ticket.token, file, setUploadPercent);
+      } catch {
+        setError(ERR_UPLOAD);
+        setPhase("error");
+        return;
+      }
+
+      // الملف بقى في مكانه — لو التفريغ فشل، إعادة المحاولة هتكمل منه.
+      setUploadedPath(ticket.path);
+
+      // ── الخطوات ٣ و ٤: تفريغ + عرض ──
+      await transcribeUploaded(ticket.path);
+    } catch {
       // فشل fetch نفسه = نت فاصل أو الصفحة اتقفلت
       setError(ERR_NETWORK);
       setPhase("error");
     }
-  }, [file, working]);
+  }, [file, working, runDirect, uploadedPath, transcribeUploaded]);
 
   /** نسخ النص للحافظة — مع تنظيف المؤقّت عشان مايتسرّبش بين Copies. */
   const copyText = useCallback(async () => {
@@ -271,7 +486,7 @@ export function LectureTranscriber() {
           اسحب ملف المحاضرة هنا أو اضغط لاختيار ملف
         </p>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          {FORMATS_LABEL} — الحد الأقصى {MAX_MB_LABEL}
+          {FORMATS_LABEL} — الحد الأقصى {MAX_SIZE_LABEL}
         </p>
 
         <button
@@ -328,13 +543,36 @@ export function LectureTranscriber() {
             <div className="mt-4" role="status" aria-live="polite">
               <div className="flex items-center justify-center gap-2 text-sm font-semibold text-[var(--accent)]">
                 <LoaderCircle size={18} className="animate-spin" aria-hidden />
-                <span>جاري تحويل المحاضرة إلى نص...</span>
+                <span>
+                  {stage === "uploading"
+                    ? "جاري رفع المحاضرة..."
+                    : stage === "finalizing"
+                      ? "جاري تجهيز النص..."
+                      : "تم رفع المحاضرة، جاري تحويلها إلى نص..."}
+                </span>
               </div>
+
+              {/* ⚠️ الشريط بيتحرك بنسبتين مختلفة حسب المرحلة:
+                  - أثناء الرفع: عرض حقيقي من البايتات المرفوعة (integers).
+                  - أثناء التحويل: نبضة غير محددة، **من غير أي رقم** — لأن
+                    ElevenLabs مش بيبعت تقدّم وعرض «60%» هنا كذب.
+                  التحويل الطويل بيحصل بس في المرحلة دي لأن الملف غالباً
+                  بيكون أكبر من 4.5 ميجا. */}
               <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
-                <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
+                {stage === "uploading" ? (
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
+                    style={{ width: `${Math.min(100, Math.max(2, uploadPercent))}%` }}
+                  />
+                ) : (
+                  <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
+                )}
               </div>
+
               <p className="mt-2 text-center text-xs text-[var(--muted)]">
-                المحاضرات الطويلة ممكن تاخد دقيقة أو أكتر — سيب الصفحة مفتوحة.
+                {stage === "uploading"
+                  ? `الرفع مباشر للتخزين — ${uploadPercent}%`
+                  : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
               </p>
             </div>
           ) : (
@@ -344,7 +582,9 @@ export function LectureTranscriber() {
               className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] text-sm font-semibold text-white transition-colors hover:opacity-90"
             >
               <Mic size={18} aria-hidden />
-              <span>تحويل إلى نص</span>
+              {/* الملف لسه مرفوع؟ يعني دوسنا الأول رفع من غير ما يوصل،
+                  فالتسميات لازم توضّح إننا مش بنرفع تاني. */}
+              <span>{uploadedPath ? "حاول تحويلها تاني" : "تحويل إلى نص"}</span>
             </button>
           )}
         </div>
