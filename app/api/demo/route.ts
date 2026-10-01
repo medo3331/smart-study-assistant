@@ -1,3 +1,5 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 import { NextRequest, NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import { checkDailyBudget, checkRateLimit } from '@/lib/api-guard';
@@ -259,8 +261,13 @@ export async function POST(request: NextRequest) {
     let raw = '';
     let lastError: unknown = null;
 
+    // Phase 5-C4 (shadow): anonymous demo. userId stays null, units = 0.
+    // ⚠️ no IP / cookie / session is read for accounting — the limiter above is untouched.
+    const usage = resolveUsageRequestContext(request, null, { feature: "demo" });
+    let attemptNo = 0;
     for (const apiKey of apiKeys) {
       try {
+      const doneMs = startProviderAttempt();
         const groq = new Groq({ apiKey, maxRetries: 0, timeout: GROQ_TIMEOUT_MS });
         const completion = await groq.chat.completions.create({
           model: GROQ_MODELS.fast,
@@ -270,6 +277,9 @@ export async function POST(request: NextRequest) {
           response_format: { type: 'json_object' },
         });
         raw = completion.choices[0]?.message?.content || '';
+        // 🧡 C4: سطر shadow للديمو. userId = null, units = 0, no billing, no guard.
+        recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs(), units: 0 });
+        recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs(), units: 0 });
         if (raw) break;
       } catch (err) {
         console.warn('demo: فشل مفتاح، بجرّب اللي بعده', err);

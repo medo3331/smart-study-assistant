@@ -1,3 +1,5 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
@@ -156,7 +158,12 @@ ${roleLines}
     let rawContent = "";
     let lastError: unknown = null;
 
+    // \ud83e\udde1 C4 (shadow): \u0627\u0644\u0647\u0648\u064a\u0629 \u0628\u062a\u062a\u0643\u062a\u0628 \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629 \u0644\u0643\u0644 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0646\u0637\u0642\u064a.
+    const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "exam_plan" });
+    let attemptNo = 0;
+
     for (const apiKey of apiKeys) {
+      const doneMs = startProviderAttempt();
       try {
         const groq = new Groq({ apiKey });
         const completion = await groq.chat.completions.create({
@@ -167,8 +174,22 @@ ${roleLines}
           response_format: { type: "json_object" },
         });
         rawContent = completion.choices[0]?.message?.content || "";
+        // 🧾 C4 (shadow): سطر واحد لكل نداء مزوّد فعلي. اللوب ده بينادي
+        //   Groq فعلاً كل دورة، فكل دورة = محاولة = سطر مستقل.
+        recordDirectProviderAttempt({
+          usage, feature: "exam_plan", attemptNo: attemptNo++, provider: "groq",
+          model: GROQ_MODELS.fast,
+          status: rawContent ? "completed" : "failed_after_response",
+          promptTokens: completion.usage?.prompt_tokens,
+          completionTokens: completion.usage?.completion_tokens,
+          latencyMs: doneMs(),
+        });
         if (rawContent) break;
       } catch (err) {
+        recordDirectProviderAttempt({
+          usage, feature: "exam_plan", attemptNo: attemptNo++, provider: "groq",
+          model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs(),
+        });
         console.warn("exam-plan: فشل مفتاح، بنجرّب اللي بعده");
         lastError = err;
       }

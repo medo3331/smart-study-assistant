@@ -1,3 +1,4 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runAiTask } from "@/lib/ai/tasks/runner";
@@ -87,7 +88,9 @@ export async function POST(req: Request) {
     ].join("\n");
     let aiResult: BaccGoalRecommendation|null=null; let usedHeuristic=false;
     try{
-      const res=await runAiTask("chat",{messages:[{role:"system", content: systemPrompt},{role:"user", content: goal}], user:{role: ctx.persona??"student", language:"ar", educationLevel: stageCode?`baccalaureate:${stageCode}:${trackCode||""}`:"baccalaureate", preferences:{stage: stageCode||"unknown", track: trackCode||"unknown"}}, options:{temperature:0.5}});
+      const res=await runAiTask("chat",{messages:[{role:"system", content: systemPrompt},{role:"user", content: goal}], user:{role: ctx.persona??"student", language:"ar", educationLevel: stageCode?`baccalaureate:${stageCode}:${trackCode||""}`:"baccalaureate", preferences:{stage: stageCode||"unknown", track: trackCode||"unknown"}}, options:{temperature:0.5},
+        usage: resolveUsageRequestContext(req, user?.id ?? null, { feature: "goal", diagnostics: { goalLevel: "baccalaureate" } }),
+      });
       const raw=(res.content||"").trim(); const s=raw.indexOf("{"); const e=raw.lastIndexOf("}");
       if(s!==-1 && e!==-1 && e>s){
         const parsed=JSON.parse(raw.slice(s,e+1));

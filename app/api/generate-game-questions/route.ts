@@ -1,3 +1,5 @@
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
@@ -44,16 +46,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
     }
     const groq = new Groq({ apiKey });
-    const completion = await groq.chat.completions.create({
+    const doneMs = startProviderAttempt();
+      // 🧾 C4: identity created ONCE for this logical request.
+      const usage = resolveUsageRequestContext(request, userId ?? null, { feature: "quiz" });
+      const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: "You are a helpful educational assistant that outputs strictly in JSON format." },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,
-    });
+    })
+      .catch((err) => {
+        // C4.1: the provider request itself failed -> no response at all.
+        // Rethrow so the route keeps its EXACT existing error behaviour.
+        recordDirectProviderAttempt({
+          usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "llama-3.3-70b-versatile",
+          status: "failed_no_response", latencyMs: doneMs(),
+        });
+        throw err;
+      });
 
     const textResult = completion.choices[0]?.message?.content || "";
+    recordDirectProviderAttempt({ usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "llama-3.3-70b-versatile", status: textResult ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     const jsonStartIndex = textResult.indexOf("[");
     const jsonEndIndex = textResult.lastIndexOf("]") + 1;
     const jsonString = textResult.substring(jsonStartIndex, jsonEndIndex);

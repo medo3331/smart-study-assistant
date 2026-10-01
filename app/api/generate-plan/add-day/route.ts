@@ -1,3 +1,5 @@
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
@@ -34,6 +36,9 @@ export async function POST(req: Request) {
     if (!apiKey) { await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? ""); return NextResponse.json({ success: false, error: "الخدمة غير متاحة حالياً." }, { status: 503 }); }
 
     const groq = new Groq({ apiKey });
+    const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "study_plan" });
+    // C4 (shadow): one event per ACTUAL provider request (this route has no loop -> attemptNo 0).
+    const doneMs = startProviderAttempt();
     const completion = await groq.chat.completions.create({
       model: GROQ_MODELS.fast,
       temperature: 0.35,
@@ -43,8 +48,18 @@ export async function POST(req: Request) {
         { role: "system", content: "أنت معلم. اقترح خطوة الدراسة التالية فقط بدون تكرار ما سبق. أعد JSON فقط بالشكل: {\"title\":\"عنوان قصير\",\"topic\":\"عنوان الدرس\",\"description\":\"وصف قصير عملي\"}." },
         { role: "user", content: `المادة: ${subject}\nأسلوب التعلم: ${learningStyle || "عملي"}\nالموضوعات المنجزة أو المضافة سابقاً: ${previousTopics || "لا يوجد"}` },
       ],
-    });
+    })
+      .catch((err) => {
+        // C4.1: the provider request itself failed -> no response at all.
+        // Rethrow so the route keeps its EXACT existing error behaviour.
+        recordDirectProviderAttempt({
+          usage, feature: "study_plan", attemptNo: 0, provider: "groq", model: GROQ_MODELS.fast,
+          status: "failed_no_response", latencyMs: doneMs(),
+        });
+        throw err;
+      });
     const raw = completion.choices[0]?.message?.content || "";
+    recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: 0, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") throw new Error("invalid response");
     const day = parsed as { title?: unknown; topic?: unknown; description?: unknown };

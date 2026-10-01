@@ -22,6 +22,34 @@ import {
 } from "./models";
 import { withConcurrencyLimit } from "./queue";
 import { getRuntimePriority, isModelRuntimeEnabled } from "./model-state";
+import type { AiUsageContext } from "./usage-context";
+import { recordAiUsage, type UsageStatus } from "./usage-accounting";
+import { scheduleUsageRecording } from "./usage-scheduler";
+
+/**
+ * 🗺️ يحوّل نتيجة محاولة المزوّد لحالة `ai_usage_events`.
+ *
+ * ⚠️ **مش قرار تسعير** — دي تصنيف للأدلة بس. Phase 5-C5 هيقرر بعدين
+ *   هل `429` أو `timeout` يُحتسب ولا لأ. إحنا بنسجّل اللي حصل بالظبط.
+ *
+ * | الحالة في الكود                | معناها                        | `status`               |
+ * |--------------------------------|-------------------------------|------------------------|
+ * | رجّع استجابة                   | نجح                           | `completed`            |
+ * | `EMPTY_RESPONSE`               | ردّ، بس الناتج غير صالح       | `failed_after_response` |
+ * | `AiProviderError` تاني         | فشل قبل ما يردّ أصلاً      | `failed_no_response`   |
+ * | أي استثناء تاني (مش مزوّد)      | خطأ تنفيذ                 | `error`                |
+ *
+ * ⚠️ `skipped` **مش بنستخدمه هنا** عن قصد: التخطّي قبل أي نداء مزوّد
+ *   (cooldown / مزوّد مش مُهيّأ) **مش بيولّد سطر أصلاً** — لأنه مش
+ *   محاولة. لو استعملناه كنا بنكسر عقد "صف لكل محاولة فعلية" وبنقيس
+ *   providers ما اتنادتش، يخلّط تحليل C5.
+ */
+function mapAttemptStatus(error: unknown): UsageStatus {
+  if (!(error instanceof AiProviderError)) return "error";
+  // ⚠️ رجّع ردّ بس الناتج مش مستخدم → الفرق بين "مفيش رد" و"رد فاشل".
+  if (error.reasonCode === "EMPTY_RESPONSE") return "failed_after_response";
+  return "failed_no_response";
+}
 
 /**
  * AI Boundary (Phase A) — لا coupling مع Economy بعد.
@@ -279,11 +307,38 @@ export class AiRouter {
     return AI_PROVIDER_BY_TASK[task];
   }
 
-  async completeChat(task: AiTaskType, input: AiChatRequest): Promise<AiRoutedResponse> {
-    return withConcurrencyLimit(() => this.completeChatInner(task, input));
+  /**
+   * @param usage **اختياري**: سياق الطلب المنطقي. لو اتمرّر، بنسجّل **محاولة
+   *   لكل نداء مزوّد فعلي**. لو اتخطّى، المسجّل بيشتغل عادي و**مافيش
+   *   تسجيل** — وده اللي بيخلّي C3 صفر سلوك على المسارات اللي لسه
+   *   ما اتربطتش (دي C4).
+   */
+  async completeChat(
+    task: AiTaskType,
+    input: AiChatRequest,
+    usage?: AiUsageContext,
+  ): Promise<AiRoutedResponse> {
+    return withConcurrencyLimit(() => this.completeChatInner(task, input, usage));
   }
 
-  private async completeChatInner(task: AiTaskType, input: AiChatRequest): Promise<AiRoutedResponse> {
+  private async completeChatInner(
+    task: AiTaskType,
+    input: AiChatRequest,
+    usage?: AiUsageContext,
+  ): Promise<AiRoutedResponse> {
+    /**
+     * 🧭 السياق الواحد للطلب المنطقي — بيتحدّد **مرة واحدة** هنا.
+     *
+     * ⚠️ ليه `input.usage` الأول؟ لأن الـ route بيمرّره جوه
+     *   `AiChatRequest` (أضيق تغيير ممكن). والمعامل الصريح موجود لو حد
+     *   مرّره يدويًا من غير ما يعدّل الـ input.
+     *
+     * 🚫 **مافيش جيل هنا:** لو `usage` غايب، النتيجة `undefined` ←
+     *   المسجّل بيشتغل ومافيش تسجيل. الهوية بتتولّد عند حدّ الطلب
+     *   (`resolveUsageRequestContext`) مش هنا — وده اللي بيمنع تكرار
+     *   أو ضياع الـ identity.
+     */
+    const ctx = usage ?? input.usage;
     const required = TASK_CAPABILITIES[task];
     const mediaOnly = required.some((capability) => capability === "vision" || capability === "file_analysis");
 
@@ -292,13 +347,51 @@ export class AiRouter {
       const providerName = this.getProviderName(task);
       const provider = this.providers[providerName];
       if (!provider) throw new Error(`AI provider \"${providerName}\" is not available for task \"${task}\".`);
+      // 🧾 الطلب ده محاولة واحدة دايمًا (مافيش fallback قبل الوسائط)،
+      //   فـ attemptNo = 0 ومكانش فيه أي حدث قبله.
+      const startedAt = Date.now();
       try {
         const response = await provider.completeChat(input);
         recordProviderResult(providerName, { ok: true });
+        // 🧾 نقطة قياس #1 — نفس حدّ المزوّد الحقيقي، مش حوالين النداء.
+        if (ctx) {
+          scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: providerName,
+            model: response.model,
+            status: "completed",
+            units: 1,
+            promptTokens: response.usage?.promptTokens,
+            completionTokens: response.usage?.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "media", source: ctx.source, ...ctx.diagnostics },
+          }));
+        }
         return response;
       } catch (error) {
         if (error instanceof AiProviderError) {
           recordProviderResult(providerName, { ok: false, status: error.status, reason: `HTTP ${error.status}` });
+        }
+        // 🧾 نقطة قياس #1 (فشل) — بنسجّل قبل إعادة الرمي، مش بعدها، عشان
+        //   النتيجة بتتغيّر أصلاً لو الـ recording نجح.
+        if (ctx) {
+          scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: providerName,
+            model: input.model,
+            status: mapAttemptStatus(error),
+            units: 1,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "media", source: ctx.source, ...ctx.diagnostics },
+          }));
         }
         throw error;
       }
@@ -342,11 +435,49 @@ export class AiRouter {
 
       const request: AiChatRequest = candidate.model ? { ...input, model: candidate.model } : input;
       const startedAt = Date.now();
+      // 🧾 ترقيم المحاولات: بنلتقط القيمة **قبل** الزيادة، فالأول = 0.
+      //
+      // ⚠️ **ليه العدّاد موجود هنا بالظبط:** السطر ده بيجي بعد كل الـ
+      //   pre-flight skips (مزوّد مش مُهيّأ / cooldown) — فبنية العدّاد
+      //   نفسها **ضامنة** إن attemptNo بيتحسب للمحاولات الفعلية بس،
+      //   ومزوّد ما اتنادىش ما بياخدش رقم. ده اللي بيحقق شرط
+      //   "pre-flight skip ما بيولّدش حدث" من غير أي منطق إضافي.
+      const attemptNo = attemptsMade;
       attemptsMade++;
       try {
         const response = await provider.completeChat(request);
         recordProviderResult(candidate.provider, { ok: true, latencyMs: Date.now() - startedAt });
         attempts.push({ provider: candidate.provider, model: candidate.model ?? response.model, ok: true });
+        // 🧾 ★ نقطة القياس الحقيقية — جوّه الـ fallback loop، عند
+        //   `provider.completeChat` بالظبط. سطر واحد لكل محاولة.
+        //
+        //   ⚠️ `operationId` و `idempotencyKey` **ثابتين** من الـ context
+        //   الواحد بتاع الطلب المنطقي — الفرق الوحيد بين السطرين هو
+        //   `attemptNo` (0=Groq، 1=NVIDIA). دي كل الفكرة: طلب واحد
+        //   ب-advances جوه، مش سطر واحد لكل request.
+        //
+        //   🛡️ `void` مقصود: بنسجّل **بشكل مقطوع** (fire-and-forget) عشان
+        //   بطء/تعطّل الـ DB مايضيفش latency لرد المستخدم. و`recordAiUsage`
+        //   متصمّم إنه مايرميش أبدًا، فمافيش خطر unhandled rejection.
+        if (ctx) {
+          scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo,
+            provider: candidate.provider,
+            model: candidate.model ?? response.model,
+            status: "completed",
+            units: 1,
+            // ⚠️ بنحفظ اللي المزوّد رجّعه بس — مافيش أي تقدير. المزوّد
+            //   اللي مش بيرجّع usage بيسجّل null وده صحيح.
+            promptTokens: response.usage?.promptTokens,
+            completionTokens: response.usage?.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "chat", source: ctx.source, attemptCount: attemptNo + 1, ...ctx.diagnostics },
+          }));
+        }
         return attempts.length > 1
           ? { ...response, fallback: { attempts: [...attempts] } }
           : response;
@@ -368,6 +499,35 @@ export class AiRouter {
           }
         );
         attempts.push({ provider: candidate.provider, model: candidate.model, ok: false, reason });
+
+        // 🧾 ★ نقطة القياس (فشل) — **قبل** كل قرارات الـ fallback اللي
+        //   تحت (break / exclude). لازم نسجّل المحاولة الفاشلة دي حتى لو
+        //   الـ fallback وقف بعدها، وإلا هنشوف "المحاولة الأولى اللي نجحت"
+        //   من غير أي دليل إن دي كانت المحاولة التانية.
+        if (ctx) {
+          scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo,
+            provider: candidate.provider,
+            model: candidate.model,
+            status: mapAttemptStatus(error),
+            // ⚠️ units = 1 **للأدلة** — مش بيقف عند الفشل. Phase 5-C5
+            //   هيقرر بعدين هل الفشل ده يُحتسب في billing ولا لأ. إحنا
+//   بنسجّل إن المزوّد اتنادى فعلاً، وده هو القرار الفيصل.
+            units: 1,
+            latencyMs: Date.now() - startedAt,
+            metadata: {
+              path: "chat",
+              source: ctx.source,
+              attemptCount: attemptNo + 1,
+              httpStatus: error instanceof AiProviderError ? error.status : null,
+              reason,
+            },
+          }));
+        }
 
         if (!(error instanceof AiProviderError)) throw error;
         if (!shouldTryNextCandidate(error.status)) break;

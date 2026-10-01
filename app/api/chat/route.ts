@@ -11,6 +11,7 @@ import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
 import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 
 /** أقصى عدد رسايل بنمررها للموديل (الأحدث بس). */
 const MAX_MESSAGES = 30;
@@ -124,9 +125,20 @@ export async function POST(req: Request) {
 
     let completion;
     try {
+      // 🧾 Phase 5-C3 (pilot) — توليد هوية الطلب المنطقي **مرة واحدة**
+      // هنا، عند حدّ الطلب. وبعدين بتتنقّل زي ما هي لكل محاولة مزوّد
+      // جوه `completeChatInner` — من غير ما تتغيّر (مافيش أي حد بيكتب
+      // فيها). `attemptNo` هو الوحيد اللي بيتغيّر بين المحاولات.
+      //
+      // ⚠️ **سلوك محفوظ 100%:** السطر ده بيقرا header وبيولّد UUID فقط.
+      //   مافيش تغيير في الـ guard ولا الـ limits ولا الـ credit ولا
+      //   ترتيب المزوّدين ولا الـ fallback ولا شكل الرد.
+      const usage = resolveUsageRequestContext(req, user.id);
+
       completion = await aiRouter.completeChat("chat", {
         messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
         temperature: 0.7,
+        usage,
       });
     } catch (error) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
