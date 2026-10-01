@@ -7,9 +7,9 @@
  *
  * ⚠️ **مشكلة العربية في PDF (حقيقية و معروفة):** خطوط PDF القياسية
  * (Helvetica) **ما فيها** تشكيل عربي ولا ربط حروف ولا RTL. الحل هو
- * تسجيل خط عربي حقيقي — المشروع بيعمل كده في `file-generator.tsx`
- * بجلب خط Amiri وقت التشغيل. بنتبع نفس الأسلوب بالظبط عشان النتيجة
- * متسقة مع باقي ملفات Magicly.
+ * تسجيل خط عربي حقيقي — **محلي** في `public/fonts/` (مش CDN)، عشان
+ * التصدير ما يعتمدش على الإنترنت وقت الطلب. الخط المستخدم هو
+ * Cairo بعد ما Amiri ثبت أنه بيكسر `fontkit` (شوف كتلة الخط تحت).
  *
  * ═══ لماذا AST واحد للاثنين ═══
  * `markdown-doc.ts` بيحوّل Markdown لـ AST مرة واحدة، و renderer
@@ -18,6 +18,93 @@
  */
 
 import React from "react";
+
+/* ═══════════════════════ الخط العربي ═══════════════════════ */
+
+/**
+ * ⚠️⚠️ **سبب تغيير الخط من Amiri إلى Cairo (مهم جدًا):**
+ *
+ * Amiri كان بيكسر توليد الـ PDF تمامًا مع العربي الحقيقي:
+ *
+ *   TypeError: Cannot read properties of null (reading 'xCoordinate')
+ *     at fontkit/.../GPOSProcessor.js  ->  applyAnchor -> getAnchor
+ *
+ * والسبب مش RTL ولا RTL logic: جدول `GPOS` (advanced glyph positioning) في
+ * ملف Amiri فيه مرساة (anchor) ناقصة، و`fontkit` بيرجع `null` بدل ما
+ * يتعامل معاها. أي نص عربي طويل كفاية بيقع في المسار ده وبيوقّف
+ * `renderToBuffer` بالكامل — يعني **مافيش PDF بيتولّد أصلاً**.
+ *
+ * اتأكدنا من ده بالتجربة: نفس النص بالظبط
+ * "بتحوّل المشكلة الحقيقي لصيغة رياضية تحل." →
+ *   - Amiri      : FAIL (xCoordinate)
+ *   - Cairo      : OK
+ *   - Noto Naskh : OK
+ *   - Tajawal    : OK
+ *
+ * وبالمناسبة: بنستخدم **Cairo** — خط sans-serif حديث، واضح جدًا للقراءة
+ * الجاهزة للطلبة، وبيغطي العربي واللاتيني.
+ *
+ * ⚠️ **محلي مش CDN:** الملفات في `public/fonts/` جواه المستوديو.
+ * التحميل وقت الطلب بيعتمد على الإنترنت كان هيخلي التصدير يفشل كمان
+ * لما الشبكة بطيئة أو مفيش — وده بالظبط العطل اللي بنصلّحه.
+ */
+
+const FONT_DIR = join(process.cwd(), "public", "fonts");
+
+/** ملفات Cairo: عربي + لاتيني، عادي + غامق. */
+const FONT_FILES = {
+  regular: ["cairo-arabic-400-normal.woff", "cairo-latin-400-normal.woff"],
+  bold: ["cairo-arabic-700-normal.woff", "cairo-latin-700-normal.woff"],
+} as const;
+
+/** ⬇️ بديل عند فشل قراءة الملف: Helvetica مضمون في PDF نفسه.
+ *  عربي هيفضل وحش — بس أحسن من إنه مافيش PDF خالص. */
+const FALLBACK_FAMILY = "Helvetica";
+
+let fontPromise: Promise<string> | null = null;
+
+/**
+ * يسجّل خط Cairo من القرص ويج اسمه.
+ * النتيجة بتتخزّن **وقت العملية الواحدة** — الملف بيتقرا مرة واحدة مهما
+ * عدد الطلبات في نفس الـ instance.
+ */
+export function ensureArabicFont(): Promise<string> {
+  if (fontPromise) return fontPromise;
+  const family = "MagiclyCairo";
+  fontPromise = (async () => {
+    try {
+      const regular = FONT_FILES.regular.map((f) => join(FONT_DIR, f));
+      const bold = FONT_FILES.bold.map((f) => join(FONT_DIR, f));
+      for (const file of [...regular, ...bold]) {
+        if (!existsSync(file)) {
+          throw new Error(`Arabic font file missing: ${file}`);
+        }
+      }
+      // ⬇️ كل `src` مسار واحد — الحقل يقبل string مش array، فبنعمل
+      //    أربع مدخلات (عربي/لاتيني × عادي/غامق).
+      Font.register({
+        family,
+        fonts: [
+          { src: regular[0], fontWeight: 400 },
+          { src: bold[0], fontWeight: 700 },
+          { src: regular[1], fontWeight: 400 },
+          { src: bold[1], fontWeight: 700 },
+        ],
+      });
+      return family;
+    } catch (error) {
+      console.warn(
+        "[lecture-doc] Cairo font unavailable, falling back to",
+        FALLBACK_FAMILY,
+        "- Arabic will render poorly:",
+        (error as Error).message,
+      );
+      return FALLBACK_FAMILY;
+    }
+  })();
+  return fontPromise;
+}
+
 import { Document, Page, Text, View, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import {
   Document as DocxDocument,
@@ -28,6 +115,9 @@ import {
   AlignmentType,
   BorderStyle,
 } from "docx";
+
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 import { parseMarkdown, type DocBlock, type Inline } from "./markdown-doc";
 
@@ -64,41 +154,6 @@ export function safeExportFilename(title: string, format: ExportFormat): string 
   const base = cleaned === "" ? "lecture" : cleaned;
   return `Magicly-${base}-explanation.${format}`;
 }
-/* ═══════════════════════ الخط العربي ═══════════════════════ */
-
-/**
- * ⚠️ مصادر الخط من CDN زي `file-generator.tsx` بالظبط — عشان النتيجة
- * متسقة مع باقي ملفات Magicly ومن غير ملف خط كبير في المستوديو.
- * لو التحميل فشل بنرجع لـ Helvetica (عربي هيبان وحش، بس المستند بيطلع).
- */
-const ARABIC_FONT_SOURCES = [
-  "https://cdn.jsdelivr.net/npm/@fontsource/amiri@5.1.1/files/amiri-arabic-400-normal.woff",
-  "https://unpkg.com/@fontsource/amiri@5.1.1/files/amiri-arabic-400-normal.woff",
-];
-
-let fontPromise: Promise<string> | null = null;
-
-/** يسجّل خط عربي ويج اسمه. النتيجة بتتخزّن وقت العملية الواحدة. */
-export function ensureArabicFont(): Promise<string> {
-  if (fontPromise) return fontPromise;
-  fontPromise = (async () => {
-    for (const src of ARABIC_FONT_SOURCES) {
-      try {
-        const res = await fetch(src, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) continue;
-        const bytes = Buffer.from(await res.arrayBuffer()).toString("base64");
-        Font.register({ family: "MagiclyArabic", fonts: [{ src: `data:font/woff;base64,${bytes}` }] });
-        return "MagiclyArabic";
-      } catch (error) {
-        console.warn("[lecture-doc] Arabic font source failed:", src, (error as Error).message);
-      }
-    }
-    console.warn("[lecture-doc] falling back to Helvetica; Arabic glyphs may render poorly");
-    return "Helvetica";
-  })();
-  return fontPromise;
-}
-
 /* ═══════════════════════ PDF ═══════════════════════ */
 
 function pdfStyles(font: string) {
@@ -123,6 +178,21 @@ function pdfStyles(font: string) {
   });
 }
 /** ⬇️ `<Text>` جوه `<Text>` بيورّث التنسيق — وده اللي بيخلّي **غامق** يبان غامق فعلاً. */
+/**
+ * 🧹 بيشيل الإيموجي من نص الـ PDF.
+ *
+ * ⚠️ ليه: خط Cairo (وكل خط عربي) **مالوش** إيموجي. الإيموجي مش
+ * بيترسم، وبيطلع **صندوق فاضي أو مربع أسود** في المستند — وهو أسوأ من
+ * إنه يتشال.Verifier: لما استخرجنا النص من PDF طلع محل الإيموجي
+ * رمز null.
+ *
+ * بنشيل النطاق دي بس (U+1F300 وما بعده)، واللي قبله زي ™ و— و«»
+ * موجودين في الخط وبيتروا عادي. الـ Word **مش** بيأثر منه لأنه بيستخدم
+ * خطوط النظام اللي عندها إيموجي.
+ */
+const EMOJI_PATTERN =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu;
+
 function pdfInlines(inlines: Inline[], s: ReturnType<typeof pdfStyles>, base?: { fontSize?: number; color?: string }) {
   return inlines.map((piece, index) => {
     const isCode = piece.marks.includes("code");
@@ -140,7 +210,7 @@ function pdfInlines(inlines: Inline[], s: ReturnType<typeof pdfStyles>, base?: {
               }
         }
       >
-        {piece.text}
+        {piece.text.replace(EMOJI_PATTERN, "")}
       </Text>
     );
   });
