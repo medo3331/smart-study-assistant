@@ -49,63 +49,22 @@ import React from "react";
  * لما الشبكة بطيئة أو مفيش — وده بالظبط العطل اللي بنصلّحه.
  */
 
-const FONT_DIR = join(process.cwd(), "public", "fonts");
-
-/** ملفات Cairo: عربي + لاتيني، عادي + غامق. */
-const FONT_FILES = {
-  regular: ["cairo-arabic-400-normal.woff", "cairo-latin-400-normal.woff"],
-  bold: ["cairo-arabic-700-normal.woff", "cairo-latin-700-normal.woff"],
-} as const;
-
-/** ⬇️ بديل عند فشل قراءة الملف: Helvetica مضمون في PDF نفسه.
- *  عربي هيفضل وحش — بس أحسن من إنه مافيش PDF خالص. */
-const FALLBACK_FAMILY = "Helvetica";
-
-let fontPromise: Promise<string> | null = null;
-
 /**
- * يسجّل خط Cairo من القرص ويج اسمه.
- * النتيجة بتتخزّن **وقت العملية الواحدة** — الملف بيتقرا مرة واحدة مهما
- * عدد الطلبات في نفس الـ instance.
+ * ⬇️ تحميل الخط كله في `lib/lectures/pdf-font.ts` — **مصدر واحد للمشروع**.
+ *
+ * كان في نسختين من نفس الكود: هنا وفي `lib/ai/file-generator.tsx`، والاتنين
+ * بخط Amiri من CDN — وده **سبب عطل تصدير الـ PDF** (جدول GPOS ناقص
+ * في الخط، و`fontkit` بيرجع null فالرسم بيموت). الخطوط دلوقتي **محلية**
+ * في `public/fonts/` والاتنين بيشاركوا نفس العائلة.
+ *
+ * Re-export بالاسم القديم عشان الاختبارات والمواضع اللي بتستدعيه ماتكسرش.
  */
-export function ensureArabicFont(): Promise<string> {
-  if (fontPromise) return fontPromise;
-  const family = "MagiclyCairo";
-  fontPromise = (async () => {
-    try {
-      const regular = FONT_FILES.regular.map((f) => join(FONT_DIR, f));
-      const bold = FONT_FILES.bold.map((f) => join(FONT_DIR, f));
-      for (const file of [...regular, ...bold]) {
-        if (!existsSync(file)) {
-          throw new Error(`Arabic font file missing: ${file}`);
-        }
-      }
-      // ⬇️ كل `src` مسار واحد — الحقل يقبل string مش array، فبنعمل
-      //    أربع مدخلات (عربي/لاتيني × عادي/غامق).
-      Font.register({
-        family,
-        fonts: [
-          { src: regular[0], fontWeight: 400 },
-          { src: bold[0], fontWeight: 700 },
-          { src: regular[1], fontWeight: 400 },
-          { src: bold[1], fontWeight: 700 },
-        ],
-      });
-      return family;
-    } catch (error) {
-      console.warn(
-        "[lecture-doc] Cairo font unavailable, falling back to",
-        FALLBACK_FAMILY,
-        "- Arabic will render poorly:",
-        (error as Error).message,
-      );
-      return FALLBACK_FAMILY;
-    }
-  })();
-  return fontPromise;
-}
+import { ensurePdfFont as ensureArabicFont } from "./pdf-font";
 
-import { Document, Page, Text, View, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+/** Re-export عام بالاسم القديم — التوافق مع الاختبارات. */
+export { ensurePdfFont as ensureArabicFont } from "./pdf-font";
+
+import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import {
   Document as DocxDocument,
   Paragraph,
@@ -115,9 +74,6 @@ import {
   AlignmentType,
   BorderStyle,
 } from "docx";
-
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 import { parseMarkdown, type DocBlock, type Inline } from "./markdown-doc";
 
