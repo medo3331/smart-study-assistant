@@ -1,3 +1,5 @@
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
@@ -147,6 +149,9 @@ export async function POST(req: Request) {
       ? `اعمل عرض من ${slideCount} شرايح عن "${topic}"، مبني على المحتوى ده:\n\n${source}`
       : `اعمل عرض من ${slideCount} شرايح عن "${topic}".`;
 
+    const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "slides" });
+    // C4 (shadow): one event per ACTUAL provider request (this route has no loop -> attemptNo 0).
+    const doneMs = startProviderAttempt();
     const completion = await groq.chat.completions.create({
       model: GROQ_MODELS.advanced,
       messages: [
@@ -156,9 +161,19 @@ export async function POST(req: Request) {
       temperature: 0.5,
       max_tokens: 4000,
       response_format: { type: "json_object" },
-    });
+    })
+      .catch((err) => {
+        // C4.1: the provider request itself failed -> no response at all.
+        // Rethrow so the route keeps its EXACT existing error behaviour.
+        recordDirectProviderAttempt({
+          usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced,
+          status: "failed_no_response", latencyMs: doneMs(),
+        });
+        throw err;
+      });
 
     const rawContent = completion.choices[0]?.message?.content ?? "";
+    recordDirectProviderAttempt({ usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       return NextResponse.json(

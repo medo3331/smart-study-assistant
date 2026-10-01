@@ -1,3 +1,5 @@
+import type { AiUsageContext } from "./usage-context";
+
 /**
  * The stable contract between product features (and future agents) and AI
  * providers.  Provider SDKs and their response formats must not leak past
@@ -40,6 +42,20 @@ export type AiChatRequest = {
   messages: AiChatMessage[];
   model?: string;
   temperature?: number;
+  /**
+   * 🧾 سياق الطلب المنطقي (Phase 5-C3) — **اختياري بالكامل**.
+   *
+   * ⚠️ **مش للمزوّد**: الـ adapters بيشوفوا `messages`/`model` بس،
+   *   فالحقل ده بتجاهله من غير قصد ومالهوش أي تأثير على الطلب الخارج.
+   *
+   * 🧭 ليه هنا بالظبط: ده **أضيق تغيير ممكن** ينقل السياق من الـ route
+   *   لحدّ `completeChatInner` — بيعدّي مع `AiChatRequest` الموجودة من
+   *   غير ما نلمس signature واحد في `service.ts` ولا في أي feature.
+   *
+   * ⚠️ مافيش حدّ-request context بيتولّد هنا — لو غاب، المسجّل بيشتغل
+   *   ومافيش تسجيل. بتولّده الـ routes عند حدّ الطلب الحقيقي بس.
+   */
+  usage?: AiUsageContext;
 };
 
 /** The part of an OpenAI-compatible response used by the current chat UI. */

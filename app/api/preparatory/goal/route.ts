@@ -1,3 +1,4 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runAiTask } from "@/lib/ai/tasks/runner";
@@ -176,6 +177,7 @@ export async function POST(req: Request) {
           },
         },
         options: { temperature: 0.5 },
+        usage: resolveUsageRequestContext(req, user?.id ?? null, { feature: "goal", diagnostics: { goalLevel: "preparatory" } }),
       });
 
       const raw = (res.content || "").trim();

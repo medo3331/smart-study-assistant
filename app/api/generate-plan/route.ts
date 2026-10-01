@@ -1,3 +1,5 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
@@ -122,8 +124,12 @@ export async function POST(req: Request) {
     let lastError: unknown = null;
 
     // التنقل بين المفاتيح وتجاهل أي مفتاح به خطأ أو منتهي
+    // Phase 5-C4 (shadow): one event per ACTUAL provider request in this loop.
+    const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "study_plan" });
+    let attemptNo = 0;
     for (const apiKey of apiKeys) {
       try {
+      const doneMs = startProviderAttempt();
         const groq = new Groq({ apiKey });
         const completion = await groq.chat.completions.create({
           model: GROQ_MODELS.fast,
@@ -134,7 +140,9 @@ export async function POST(req: Request) {
         });
 
         rawContent = completion.choices[0]?.message?.content || "";
+        recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
         if (rawContent) break; // عند نجاح أي مفتاح نخرج فوراً
+        recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs() });
       } catch (err) {
         console.warn(`فشل المفتاح الحالي (${errorDetails(err).message})، جاري تجربة المفتاح التالي...`);
         lastError = err;
