@@ -17,9 +17,17 @@
    ====================================================================== */
 
 import { type Metadata } from "next";
+import Link from "next/link";
+import { Mic } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
+import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
+import { LectureNote } from "@/components/lectures/LectureNote";
+import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
+import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
+import { McqQuiz } from "@/components/lectures/McqQuiz";
+import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
 
 export const metadata: Metadata = {
   title: "محاضراتي — Magicly",
@@ -66,6 +74,10 @@ type LectureListItem = {
   created_at: string;
   duration_seconds: number | null;
   transcript_text: string | null;
+  summary: string | null;
+  explanation: string | null;
+  flashcards: Flashcard[] | null;
+  mcqs: Mcq[] | null;
 };
 
 export default async function MyLecturesPage() {
@@ -78,10 +90,13 @@ export default async function MyLecturesPage() {
   if (!user) redirect("/login?next=/lectures");
 
   // ٢) محاضرات المستخدم بس + النص (عشان نفتحها من نفس الاستعلام).
+  //    ⚠️ `summary` و`explanation` اتضافوا للاختيار عشان نعرف نعرض زرار
+  //    المعالجة بس لو المحاضرة **لسه** مالهاش. الاختيار ده مش بيكسر
+  //    حاجة: الأعمدة موجودة فعلاً في الجدول من migration #14.
   const { data, error } = await supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation, flashcards, mcqs",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -91,9 +106,26 @@ export default async function MyLecturesPage() {
   return (
     <PageShell
       eyebrow="محاضراتي"
-      title="محاضراتي 🎙️"
-      lede="كل محاضرة حفظتها في حسابك — مع تفريغها النصي. تفريغ وملخص وشرح وأسئلة هيتضافوا هنا بعدين."
+      title="محاضراتي 📚"
+      lede="كل محاضرة حفظتها في حسابك. افتح أي قسم للقراءة، وصدّر الشرح PDF أو Word."
     >
+      {/* 🎙️ زر «ابدأ محاضرة جديدة» — نظير الـ CTA اللي في الداشبورد.
+       *
+       * ⚠️ ليه موجود أصلاً: الصفحة دي للقائمة، الطالب يوصلها من الرابط
+       * أو من الـ Navbar من غير ما يمر على الداشبورد. من غير الزر ده هو
+       * محبوس هنا — مافيش طريق يبدأ تفريغ جديد غير الرجوع للداشبورد.
+       * يبدأ تفريغ جديد غير الرجوع للداشبورد.
+       */}
+      <div className="mb-4 flex justify-end">
+        <Link
+          href="/lecture-transcription"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          <Mic size={16} aria-hidden />
+          <span>ابدأ محاضرة جديدة</span>
+        </Link>
+      </div>
+
       {/* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح، ومش بنعرض
           قائمة فاضية تخلّي الطالب يفتكر إن مفيش محاضرات. */}
       {error ? (
@@ -136,17 +168,81 @@ export default async function MyLecturesPage() {
                   </p>
                 </summary>
 
-                <div className="mt-3">
-                  {lecture.transcript_text ? (
-                    <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                      {lecture.transcript_text}
-                    </pre>
-                  ) : (
-                    <p className="text-sm text-ink-soft">
-                      مفيش نص محفوظ لهذه المحاضرة.
-                    </p>
-                  )}
-                </div>
+                {/* 🎓 مساحة المذاكرة: كل قسم في بلوك قابل للطي.
+                    الافتراضي: الملخص مفتوح لو موجود، والباقي مقفول. */}
+                <LectureWorkspace defaultOpen={lecture.summary ? ["summary"] : []}>
+                  <div className="mt-3">
+                    {/* ✨ أدوات التوليد بره الأقسام عشان الطالب يلاقيها الأول. */}
+                    <LectureProcessActions
+                      lectureId={lecture.id}
+                      hasSummary={Boolean(lecture.summary?.trim())}
+                      hasExplanation={Boolean(lecture.explanation?.trim())}
+                    />
+                  </div>
+
+                  <div className="mt-3 space-y-3">
+                    {lecture.summary && (
+                      <LectureSection
+                        id="summary"
+                        icon="📝"
+                        title="ملخص المحاضرة"
+                        lede="مراجعة سريعة لأهم ما ورد في المحاضرة."
+                      >
+                        <LectureNote kind="summary" content={lecture.summary} />
+                      </LectureSection>
+                    )}
+
+                    {lecture.explanation && (
+                      <LectureSection
+                        id="explanation"
+                        icon="🧠"
+                        title="شرح المحاضرة"
+                        lede="شرح مبسّط ومنظّم يساعدك تفهم محتوى المحاضرة."
+                        toolbar={<LectureToolbar lectureId={lecture.id} />}
+                      >
+                        <LectureNote kind="explanation" content={lecture.explanation} />
+                      </LectureSection>
+                    )}
+
+                    {lecture.flashcards && (
+                      <LectureSection
+                        id="flashcards"
+                        icon="🃏"
+                        title="بطاقات المذاكرة"
+                        lede="اقلب البطاقة عشان تشوف الإجابة."
+                      >
+                        <FlashcardsPanel cards={lecture.flashcards} />
+                      </LectureSection>
+                    )}
+
+                    {lecture.mcqs && (
+                      <LectureSection
+                        id="mcq"
+                        icon="❓"
+                        title="اختبار المحاضرة"
+                        lede="جاوب على الأسئلة وشوف شرح كل إجابة."
+                      >
+                        <McqQuiz mcqs={lecture.mcqs} />
+                      </LectureSection>
+                    )}
+
+                    <LectureSection
+                      id="transcript"
+                      icon="📜"
+                      title="التفريغ النصي"
+                      lede="نص كلام الدكتور كامل — لمّا تحتاج تراجع الأصل."
+                    >
+                      {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
+                      {lecture.transcript_text ? (
+                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                          {lecture.transcript_text}
+                        </pre>
+                      ) : (
+                        <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
+                      )}
+                    </LectureSection>
+                  </div>
+                </LectureWorkspace>
               </details>
             </article>
           ))}

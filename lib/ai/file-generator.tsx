@@ -16,7 +16,6 @@ import {
   Page,
   Text,
   View,
-  Font,
   StyleSheet,
   renderToBuffer,
   type DocumentProps,
@@ -30,6 +29,7 @@ import {
   AlignmentType,
 } from "docx";
 import * as XLSX from "xlsx";
+import { ensurePdfFont as registerPdfFont } from "@/lib/lectures/pdf-font";
 
 export type FileType = "pdf" | "docx" | "xlsx" | "pptx";
 export type FileContent =
@@ -97,41 +97,23 @@ function asRecordArray(value: unknown): Array<Record<string, unknown>> {
 // ============================================
 
 /**
- * خط عربي للـ PDF: بنجيب Amiri مرة واحدة وقت التشغيل وبنسجّله كـ data URL
- * عشان الرسم نفسه مايحتاجش نت. لو التحميل فشل نرجع لـ Helvetica.
+ * ⚠️ **الخط اتغيّر من Amiri إلى Cairo (سبب حقيقي مش تحسين ذوق):**
+ *
+ * الكود القديم كان بيجيب **Amiri** من CDN وقت التشغيل. وبالـ Arabic
+ * الحقيقي كان **بيقع**:
+ *
+ *   TypeError: Cannot read properties of null (reading 'xCoordinate')
+ *     at fontkit/opentype/GPOSProcessor.js -> getAnchor
+ *
+ * جدول GPOS في Amiri فيه مرساة ناقصة، و`fontkit` بيرجع null فالرسم
+ * كله بيموت — **مافيش PDF بيتولّد**. اتأكدنا بالتجربة على نفس الجملة:
+ * Amiri FAIL | Cairo OK | Noto Naskh OK | Tajawal OK.
+ *
+ * منطق التحميل موحّد في `lib/lectures/pdf-font.ts`:
+ * الخط **محلي** في `public/fonts/` (مش CDN) — التصدير مايعتمدش على
+ * شبكة وقت الطلب، والنسختين بيستخدموا نفس العائلة.
  */
-const ARABIC_FONT_SOURCES = [
-  "https://cdn.jsdelivr.net/npm/@fontsource/amiri@5.1.1/files/amiri-arabic-400-normal.woff",
-  "https://unpkg.com/@fontsource/amiri@5.1.1/files/amiri-arabic-400-normal.woff",
-];
-
-let pdfFontPromise: Promise<string> | null = null;
-
-function ensurePdfFont(): Promise<string> {
-  if (pdfFontPromise) return pdfFontPromise;
-  pdfFontPromise = (async () => {
-    for (const src of ARABIC_FONT_SOURCES) {
-      try {
-        const res = await fetch(src, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) continue;
-        const bytes = Buffer.from(await res.arrayBuffer()).toString("base64");
-        const dataUrl = `data:font/woff;base64,${bytes}`;
-        Font.register({
-          family: "Magicly Arabic",
-          fonts: [{ src: dataUrl }],
-        });
-        console.log("[File Gen] Arabic PDF font registered:", src);
-        return "Magicly Arabic";
-      } catch (err) {
-        console.warn("[File Gen] Font source failed:", src, (err as Error).message);
-      }
-    }
-    console.warn("[File Gen] Falling back to Helvetica — Arabic glyphs may render poorly");
-    return "Helvetica";
-  })();
-  return pdfFontPromise;
-}
-
+const ensurePdfFont = registerPdfFont;
 function buildPdfStyles(fontFamily: string) {
   return StyleSheet.create({
     page: { padding: 40, fontFamily, direction: "rtl" },

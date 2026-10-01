@@ -9,6 +9,7 @@ import {
   BarChart3,
   Trophy,
   ShoppingBag,
+  GraduationCap,
   Landmark,
   Settings,
 } from "lucide-react";
@@ -126,6 +127,15 @@ export function buildQuickNavItems(opts: {
       icon: <Bot size={20} strokeWidth={2} aria-hidden />,
       onClick: opts.onOpenAi,
       ariaLabel: "فتح المساعد الذكي",
+    },
+    {
+      // CTA لفريغ محاضرة جديدة - مش لقايمة المحفوظات (دي /lectures).
+      // الـ Navbar فيه "محاضرتي" للقايمة، فده نقطة البداية.
+      id: "lectures",
+      label: "تفريغ محاضرة",
+      icon: <GraduationCap size={20} strokeWidth={2} aria-hidden />,
+      href: "/lecture-transcription",
+      ariaLabel: "تفريغ محاضرة - ارفع محاضرة وحوّلها لنص وملخص وأسئلة وبطاقات",
     },
     {
       id: "workspace",
