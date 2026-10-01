@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { BookOpen } from "lucide-react";
 import { SubPageShell } from "@/components/SubPageShell";
 import { LectureTranscriber } from "@/components/lecture-transcription/LectureTranscriber";
 import { breadcrumbLd, pageMeta } from "@/lib/seo";
@@ -43,6 +45,21 @@ export default function LectureTranscriptionPage() {
         <p className="mt-3 max-w-2xl leading-relaxed text-[var(--muted)]">
           ارفع تسجيل المحاضرة وسيتم تحويل الكلام إلى نص يمكنك مراجعته ونسخه.
         </p>
+
+        {/* 📚 رابط للقائمة المحفوظة.
+         *
+         * ⚠️ ليه مهم: الصفحة دي نقطة **البداية**. بعد ما الطالب يخلّص تفريغ
+         * هنا، محاضرته بتتحفظ — فلازم يكون عنده طريق يوصلها من غير ما
+         * يعرف الرابط بالغلط. من غير السطر ده، الرحلة بتخلص وما فيش
+         * خطوة تالية واضحة.
+         */}
+        <Link
+          href="/lectures"
+          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)] underline underline-offset-4"
+        >
+          <BookOpen size={15} aria-hidden />
+          <span>محاضراتي المحفوظة</span>
+        </Link>
       </header>
 
       <section className="band">

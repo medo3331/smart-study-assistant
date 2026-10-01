@@ -129,13 +129,13 @@ export function buildQuickNavItems(opts: {
       ariaLabel: "فتح المساعد الذكي",
     },
     {
-      // 🎓 مدخل discovery للمحاضرات - الـ route نفسه موجود في الـ Navbar,
-      // لكن الـ Dashboard هو أول حاجة الطالب بيشوفها الصبح.
+      // CTA لفريغ محاضرة جديدة - مش لقايمة المحفوظات (دي /lectures).
+      // الـ Navbar فيه "محاضرتي" للقايمة، فده نقطة البداية.
       id: "lectures",
-      label: "محاضرتي",
+      label: "تفريغ محاضرة",
       icon: <GraduationCap size={20} strokeWidth={2} aria-hidden />,
-      href: "/lectures",
-      ariaLabel: "محاضرتي - حوّل محاضرة لنص وملخص وشرح وأسئلة",
+      href: "/lecture-transcription",
+      ariaLabel: "تفريغ محاضرة - ارفع محاضرة وحوّلها لنص وملخص وأسئلة وبطاقات",
     },
     {
       id: "workspace",

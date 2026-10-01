@@ -17,6 +17,8 @@
    ====================================================================== */
 
 import { type Metadata } from "next";
+import Link from "next/link";
+import { Mic } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
@@ -104,9 +106,26 @@ export default async function MyLecturesPage() {
   return (
     <PageShell
       eyebrow="محاضراتي"
-      title="محاضراتي 🎙️"
+      title="محاضراتي 📚"
       lede="كل محاضرة حفظتها في حسابك. افتح أي قسم للقراءة، وصدّر الشرح PDF أو Word."
     >
+      {/* 🎙️ زر «ابدأ محاضرة جديدة» — نظير الـ CTA اللي في الداشبورد.
+       *
+       * ⚠️ ليه موجود أصلاً: الصفحة دي للقائمة، الطالب يوصلها من الرابط
+       * أو من الـ Navbar من غير ما يمر على الداشبورد. من غير الزر ده هو
+       * محبوس هنا — مافيش طريق يبدأ تفريغ جديد غير الرجوع للداشبورد.
+       * يبدأ تفريغ جديد غير الرجوع للداشبورد.
+       */}
+      <div className="mb-4 flex justify-end">
+        <Link
+          href="/lecture-transcription"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          <Mic size={16} aria-hidden />
+          <span>ابدأ محاضرة جديدة</span>
+        </Link>
+      </div>
+
       {/* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح، ومش بنعرض
           قائمة فاضية تخلّي الطالب يفتكر إن مفيش محاضرات. */}
       {error ? (
