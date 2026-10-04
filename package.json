@@ -20,6 +20,9 @@
     "test:all": "vitest run"
   },
   "dependencies": {
+    "@ffmpeg/core": "0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@google/genai": "^2.12.0",
     "@google/generative-ai": "^0.24.1",
     "@react-pdf/renderer": "^4.9.0",

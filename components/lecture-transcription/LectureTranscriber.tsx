@@ -41,6 +41,10 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useRef, useState } from "react";
+import {
+  compressLectureMedia,
+  needsCompression,
+} from "@/lib/media/lecture-compression";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -88,7 +92,7 @@ type Phase = "idle" | "working" | "done" | "error";
  *  ⚠️ مفيش نسبة مئوية عن قصد: ElevenLabs بيرجّع النص مرة واحدة في
  *  الآخر من غير تقدّم، والرقم الوهمي كذب صريح. الوحيد اللي بيعرض
  *  نسبة هو **الرفع** — ودي حقيقية 100% (بايتم على المتصفح). */
-type Stage = "uploading" | "transcribing" | "finalizing";
+type Stage = "preparing" | "uploading" | "transcribing" | "finalizing";
 
 /**
  * رفع الملف **مباشرة** للتخزين عن طريق الـ signed URL بتاع الراوت.
@@ -207,6 +211,11 @@ function readSaveInfo(payload: unknown): SaveInfo {
 /** المكوّن الرئيسي — كل حالة الشاشة في متغيرات واحدة واضحة. */
 export function LectureTranscriber() {
   const [file, setFile] = useState<File | null>(null);
+  // \ud83e\udde1 \u0627\u0633\u0645 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0623\u0635\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u0636\u063a\u0637 (\u0644\u0644\u0639\u0631\u0636 \u0648\u0627\u062d\u062f)
+  const [originalName, setOriginalName] = useState<string | null>(null);
+  const [originalSize, setOriginalSize] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const [preparePercent, setPreparePercent] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,7 +254,7 @@ export function LectureTranscriber() {
    *  الفحص هنا مش بديل عن فحص الراوت — ده بس عشان الطالب يشوف الرسالة
    *  قبل ما نرفع أي حاجة. */
   const selectFile = useCallback(
-    (next: File | null | undefined) => {
+    async (next: File | null | undefined) => {
       if (!next) {
         setError(ERR_NO_FILE);
         setPhase("error");
@@ -264,14 +273,58 @@ export function LectureTranscriber() {
         return;
       }
 
-      setFile(next);
+      // 🧾 Phase: ضغط قبل الرفع — Supabase على الباقة المجانية بيقف عند 50MB.
+      //   الملف الأكبر من 45MB بيتحول لصوت MP3 قبل أي رفع. اللي بيتحفظ
+      //   هنا هو **الملف المعالج**، لأن ده اللي بيرفع.
+      const sourceName = next.name;
+      const sourceSize = next.size;
+
+      if (!needsCompression(next)) {
+        // ⏭️ ملف صغير: نفس المسار القديم بالظبط، ومن غير تحميل FFmpeg.
+        setFile(next);
+        setOriginalName(sourceName);
+        setOriginalSize(0);
+        setError(null);
+        setTranscript(null);
+        setCopied(false);
+        setPhase("idle");
+        setUploadedPath(null);
+        setUploadPercent(0);
+        return;
+      }
+
+      setPreparing(true);
+      setPreparePercent(0);
+      setPhase("working");
+      setStage("preparing");
       setError(null);
-      setTranscript(null);
-      setCopied(false);
-      setPhase("idle");
-      // ملف جديد = تذكرة جديدة، وننسى أي مسار قديم.
-      setUploadedPath(null);
-      setUploadPercent(0);
+
+      try {
+        const result = await compressLectureMedia(next, (progress) => {
+          setPreparePercent(Math.round(progress.ratio * 100));
+        });
+        setFile(result.file);
+        setOriginalName(sourceName);
+        setOriginalSize(sourceSize);
+        setTranscript(null);
+        setCopied(false);
+        setPhase("idle");
+        setUploadedPath(null);
+        setUploadPercent(0);
+      } catch (preparationError) {
+        // ❌ مبنرفعش الملف الأصلي: حجمه هيعدّي حد Supabase.
+        setFile(null);
+        setOriginalName(null);
+        setOriginalSize(0);
+        setError(
+          preparationError instanceof Error && preparationError.message === "still_too_large"
+            ? "المحاضرة طويلة أوي وحجمها كبير بعد الضغط. جرب تقسّمها على ملفين."
+            : "مقدرناش نجهّز الملف ده. جرّب ملف تاني أو أعد المحاولة.",
+        );
+        setPhase("error");
+      } finally {
+        setPreparing(false);
+      }
     },
     [],
   );
@@ -581,12 +634,17 @@ export function LectureTranscriber() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-[var(--text)]" title={file.name}>
-                {file.name}
+              <p className="truncate text-sm font-semibold text-[var(--text)]" title={originalName ?? file.name}>
+                {originalName ?? file.name}
               </p>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
                 {formatFileSize(file.size)}
                 {file.type ? ` · ${file.type}` : ""}
+                {originalSize > 0 ? (
+                  <span className="text-[var(--accent)]">
+                    {` \u00b7 \u062a\u0645 \u0636\u063a\u0637\u0647 \u0645\u0646 ${formatFileSize(originalSize)}`}
+                  </span>
+                ) : null}
               </p>
             </div>
 
@@ -623,7 +681,12 @@ export function LectureTranscriber() {
                   التحويل الطويل بيحصل بس في المرحلة دي لأن الملف غالباً
                   بيكون أكبر من 4.5 ميجا. */}
               <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
-                {stage === "uploading" ? (
+                {stage === "preparing" ? (
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
+                    style={{ width: `${Math.min(100, Math.max(2, preparePercent))}%` }}
+                  />
+                ) : stage === "uploading" ? (
                   <div
                     className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
                     style={{ width: `${Math.min(100, Math.max(2, uploadPercent))}%` }}
@@ -634,7 +697,9 @@ export function LectureTranscriber() {
               </div>
 
               <p className="mt-2 text-center text-xs text-[var(--muted)]">
-                {stage === "uploading"
+                {stage === "preparing"
+                  ? `\u062c\u0627\u0631\u064a \u062c\u0647\u064a\u0632 \u0627\u0644\u0645\u0644\u0641 \u2014 ${preparePercent}%`
+                  : stage === "uploading"
                   ? `الرفع مباشر للتخزين — ${uploadPercent}%`
                   : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
               </p>
