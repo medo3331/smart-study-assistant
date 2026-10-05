@@ -45,6 +45,7 @@ import {
 import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import type { AiTaskType } from "@/lib/ai/types";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import {
@@ -490,6 +491,21 @@ export async function POST(req: Request) {
     };
     if (imageInput) input.imageInput = imageInput;
     if (fileInput) input.fileInput = fileInput;
+
+    // 🧾 Phase 5-C5: هوية الطلب بتتولّد هنا **مرة واحدة** وبتنزل جوه
+    // `unifiedAI` لكل محاولة مزوّد. المسار ده كان بيلفّ على
+    // `callGroqWithModel` مباشرةً فمابيشوف `routing.ts` خالص — وده سبب
+    // إن Chat كان بيرد عادي وEvent = 0.
+    //
+    // ⚠️ `feature = "chat"`: المسار ده **هو** المحادثة الأساسية (نفس
+    //    الوظيفة بتاعة `/api/chat`)، فالتصنيف الدلالي واحد مقصود.
+    //    التمييز بين المسارين بيحصل في `metadata.path` ("unified_ai"
+    //    مقابل "media"/"chat") — وده اللي بيخلّي C5 يفرّق من غير ما
+    //    نكبّر الـ taxonomy.
+    input.usage = resolveUsageRequestContext(req, userId, {
+      feature: "chat",
+      diagnostics: { route: "unified_ai" },
+    });
 
     // ---- Unified brain (من /api/chat): شخصية الطالب + سياقه الدراسي — best-effort ----
     // للمسجلين فقط؛ الزوار والمجهولون يكملون بدونها ولا يتعطلون.

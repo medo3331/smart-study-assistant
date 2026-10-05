@@ -140,9 +140,9 @@ export async function POST(req: Request) {
         });
 
         rawContent = completion.choices[0]?.message?.content || "";
-        recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
+        await recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
         if (rawContent) break; // عند نجاح أي مفتاح نخرج فوراً
-        recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs() });
+        await recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs() });
       } catch (err) {
         console.warn(`فشل المفتاح الحالي (${errorDetails(err).message})، جاري تجربة المفتاح التالي...`);
         lastError = err;

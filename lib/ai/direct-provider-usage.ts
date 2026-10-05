@@ -49,12 +49,18 @@ export type DirectProviderUsage = {
 /**
  * 📍 يسجّل محاولة provider واحدة بالجدولة الدائمة (مابعد الرد).
  *
- * ⚠️ **بترجع `void`:** الكتابة بتعد بعد الرد، فمايش زيادة على الطلب.
- * ⚠️ الفاضل بيسترجع صممة — إصلاح        في أي حال يفشل عنده ما يحصل سيريراً.
+ * ⚠️ **بترجع `Promise<void>` — لازم المستدعي يعملها `await`:**
+ *   المسجّل بقى `await`-based في C4.1 عشان الضمانة تكون **حقيقية**
+ *   (الـ insert يخلص قبل ما الدالة ترجع). لو رجعنا void هنا، الـ promise
+ *   بيبقى floating وبتضيع الكتابة على السيرفر المجمّد — نفس bug الـ
+ *   `after()` بالظبط.
+ *
+ * ⚠️ الخطأ **مابترميش أبدًا**: `scheduleUsageRecording` بتمسكه جواها،
+ *   فالطلب الأصلي مش بيتأثر (قاعدة "مفيش path يفشل").
  */
-export function recordDirectProviderAttempt(input: DirectProviderUsage): void {
+export async function recordDirectProviderAttempt(input: DirectProviderUsage): Promise<void> {
   const { usage, feature } = input;
-  scheduleUsageRecording(() =>
+  await scheduleUsageRecording(() =>
     recordAiUsage({
       userId: usage.userId ?? null,
       feature,

@@ -49,17 +49,18 @@ export async function POST(req: Request) {
         { role: "user", content: `المادة: ${subject}\nأسلوب التعلم: ${learningStyle || "عملي"}\nالموضوعات المنجزة أو المضافة سابقاً: ${previousTopics || "لا يوجد"}` },
       ],
     })
-      .catch((err) => {
+      .catch(async (err) => {
         // C4.1: the provider request itself failed -> no response at all.
         // Rethrow so the route keeps its EXACT existing error behaviour.
-        recordDirectProviderAttempt({
+        // ⚠️ `async` + `await`: land the write BEFORE the rethrow.
+        await recordDirectProviderAttempt({
           usage, feature: "study_plan", attemptNo: 0, provider: "groq", model: GROQ_MODELS.fast,
           status: "failed_no_response", latencyMs: doneMs(),
         });
         throw err;
       });
     const raw = completion.choices[0]?.message?.content || "";
-    recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: 0, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
+    await recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: 0, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") throw new Error("invalid response");
     const day = parsed as { title?: unknown; topic?: unknown; description?: unknown };

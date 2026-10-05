@@ -176,7 +176,7 @@ ${roleLines}
         rawContent = completion.choices[0]?.message?.content || "";
         // 🧾 C4 (shadow): سطر واحد لكل نداء مزوّد فعلي. اللوب ده بينادي
         //   Groq فعلاً كل دورة، فكل دورة = محاولة = سطر مستقل.
-        recordDirectProviderAttempt({
+        await recordDirectProviderAttempt({
           usage, feature: "exam_plan", attemptNo: attemptNo++, provider: "groq",
           model: GROQ_MODELS.fast,
           status: rawContent ? "completed" : "failed_after_response",
@@ -186,7 +186,7 @@ ${roleLines}
         });
         if (rawContent) break;
       } catch (err) {
-        recordDirectProviderAttempt({
+        await recordDirectProviderAttempt({
           usage, feature: "exam_plan", attemptNo: attemptNo++, provider: "groq",
           model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs(),
         });

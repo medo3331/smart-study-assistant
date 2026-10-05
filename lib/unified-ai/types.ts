@@ -10,6 +10,8 @@
  * Nothing deleted (AIHub / AgentLauncher stay until verification complete).
  */
 
+import type { AiUsageContext } from "@/lib/ai/usage-context";
+
 export interface UnifiedAIInput {
   prompt: string;
   imageInput?: File | unknown;     // from Magic upload button (existing)
@@ -22,6 +24,18 @@ export interface UnifiedAIInput {
   // Unified brain: server-built system prompt (persona + student context + study facts).
   // Built server-side only — client must never send it.
   system?: string;
+  /**
+   * 🧾 Phase 5-C5 — shadow usage context.
+   *
+   * ⚠️ **السبب:** `/api/unified-ai` كان بيتنادى `callGroqWithModel` مباشرة،
+   *   من غير ما يمرّ على `routing.ts` — فمافيش أي سطر usage بيتسجّل. ده
+   *   كان hole حقيقي في الـ coverage matrix، مش مجرد مسار ناقص.
+   *
+   * 🔑 الهوية (operationId / idempotencyKey) بتتولّد **مرة واحدة** في
+   *   الـ route عبر `resolveUsageRequestContext` وبتتنقّل لجوه، فالمحاولات
+   *   بتتبع بعض. `unifiedAI` **مابيولّدش** هوية جديدة من عنده.
+   */
+  usage?: AiUsageContext;
 }
 
 export interface UnifiedAIResult {
