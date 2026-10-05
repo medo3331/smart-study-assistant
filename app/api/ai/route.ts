@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import {
   isImplementedAiTask,
@@ -248,7 +249,9 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       }
-      const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+      // \ud83e\udde1 C4-FINAL: \u0647\u0648\u064a\u0629 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0646\u0637\u0642\u064a \u2014 \u062a\u062a\u0643\u0631\u0631 \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629 \u0648\u0628\u062a\u0646\u0642\u0644 \u0644\u0643\u0644 \u0627\u0644\u0641\u0631\u0639\u064a\u0646.
+    const usageContext = resolveUsageRequestContext(req, user.id, { feature: task });
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
       if (!guard.ok) return guard.response;
       const encoder = new TextEncoder();
       const sseStream = new ReadableStream<Uint8Array>({
@@ -259,7 +262,7 @@ export async function POST(req: Request) {
             const streamTask = (["chat", "explain", "tutor"].includes(task as string)
               ? (task as "chat" | "explain" | "tutor")
               : "chat");
-            for await (const chunk of streamWithFallback(streamTask, input)) {
+            for await (const chunk of streamWithFallback(streamTask, input, usageContext)) {
               send(chunk);
             }
           } catch (error) {
@@ -298,12 +301,14 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
+    // \ud83e\udde1 C4-FINAL: \u0647\u0648\u064a\u0629 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0646\u0637\u0642\u064a \u2014 \u062a\u062a\u0643\u0631\u0631 \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629 \u0648\u0628\u062a\u0646\u0642\u0644 \u0644\u0643\u0644 \u0627\u0644\u0641\u0631\u0639\u064a\u0646.
+    const usageContext = resolveUsageRequestContext(req, user.id, { feature: task });
     const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;
 
     const startedAt = Date.now();
     try {
-      const result: AiTaskResult = await runAiTask(task, input);
+      const result: AiTaskResult = await runAiTask(task, { ...input, usage: usageContext });
       void recordAiOperation(supabase, {
         userId: user.id,
         provider: result.provider,

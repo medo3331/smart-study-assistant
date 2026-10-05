@@ -1,3 +1,4 @@
+import type { AiUsageContext } from "./usage-context";
 /* ==========================================================================
    🧠 معالجة المحاضرات بالذكاء الاصطناعي — Phase 4-A
    ═══════════════════════════════════════════════════════════════════════
@@ -103,6 +104,7 @@ async function runSingle(
   kind: LectureAnalysisKind,
   transcript: string,
   user: { userId: string; educationLevel?: string },
+  usage?: AiUsageContext,
 ): Promise<{ content: string; calls: number }> {
   const chunks = chunkTranscript(transcript, DEFAULT_CHUNK_CHARS);
   if (chunks.length === 0) {
@@ -117,6 +119,7 @@ async function runSingle(
   const notes: string[] = [];
   for (const [index, chunk] of chunks.entries()) {
     const result = await runAiTask("chat", {
+      usage,
       messages: buildMessages({
         kind,
         content: chunk,
@@ -138,6 +141,7 @@ async function runSingle(
   let calls = chunks.length;
   if (chunks.length > 1) {
     const merged = await runAiTask("chat", {
+      usage,
       messages: buildMessages({
         kind: "synthesis",
         content: notes.join("\n\n"),
@@ -174,14 +178,30 @@ export async function analyzeLecture(input: {
   transcript: string;
   kinds: LectureAnalysisKind[];
   user: { userId: string; educationLevel?: string };
+  /** \ud83e\udde1 C4-FINAL: \u0633\u064a\u0627\u0642 \u0627\u0644\u0637\u0644\u0628 \u2014 \u0645\u0646 \u0627\u0644\u0631\u0648\u0627\u062a. */
+  usage?: AiUsageContext;
 }): Promise<LectureAnalysis> {
-  const { supabase, lectureId, transcript, kinds, user } = input;
+  const { supabase, lectureId, transcript, kinds, user, usage } = input;
+  /**
+   * \ud83d\udd11 \u0633\u064a\u0627\u0642 \u0645\u062e\u062a\u0644\u0641 \u0644\u0643\u0644 \u0646\u0648\u0639 \u0645\u062e\u062a\u0644\u0641.
+   *
+   * \u26a0\ufe0f \u0644\u0648\u0644\u0647 \u0627\u0644\u0643\u0644\u0645 \u0648\u0627\u062d\u062f: \u0639\u0646\u0627\u0635\u0631 \u0645\u062d\u0627\u0638\u0631\u0629 \u0645\u0639\u0627\u0645\u0644\u0629\u060c \u0648\u0645\u0627\u0637\u0644\u0628\u0627\u062a\u062a\u0647\u0627\u0643\u060c
+   * \u0628\u064a\u0628\u062f\u0628\u0644\u0648 \u0646\u0641\u0633 \u0627\u0644 operation_id \u0648\u0627\u0644 feature \u0644\u0643\u0644 \u0645\u0639\u0627\u0645\u0644\u0629 \u0648\u0627\u062d\u062f\u0629\u060c \u0644\u0643\u0646 \u0646\u0635\u064a\u0631 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629 \u0645\u062d\u062f\u064a\u062f.
+   * \u0627\u0644\u0645\u0641\u062a\u0627\u062d \u064a\u0628\u0642\u0649 operation_id \u0648\u0627\u0642\u0647 \u0645\u0634\u0627\u0628\u0631\u0629\u0614 \u0644\u0623\u0646 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u062a\u0641\u0631\u0651\u062f
+   * (user_id, idempotency_key, attempt_no) \u062a\u0637\u0628\u064a\u0639 \u0627\u0644\u062b\u0627\u0646\u064a\u0629 \u0645\u0639 \u0627\u0644\u0623\u0648\u0644\u0649.
+   *
+   * \u0644\u0630\u0644\u0643 \u0628\u0636\u064a\u0641 \u0627\u0644\u0643\u0644\u0645\u0629 \u0628\u0639\u062f \u0627\u0644\u0646\u0648\u0639: \u064a\u064f\u0642\u062a\u0637\u0639 \u062a\u0639\u062f\u064a\u062f \u0627\u0644\u0645\u062d\u062a\u0641\u0631\u062f \u0642\u0628\u0644 \u0627\u0644\u0631\u0641\u0639.
+   */
+  const forKind = (kind: LectureAnalysisKind): AiUsageContext | undefined =>
+    usage
+      ? { ...usage, feature: `lecture_${kind}`, idempotencyKey: `${usage.idempotencyKey}:${kind}` }
+      : undefined;
 
   const summaryResult = kinds.includes("summary")
-    ? await runSingle("summary", transcript, user)
+    ? await runSingle("summary", transcript, user, forKind("summary"))
     : null;
   const explanationResult = kinds.includes("explanation")
-    ? await runSingle("explanation", transcript, user)
+    ? await runSingle("explanation", transcript, user, forKind("explanation"))
     : null;
 
   const summary = summaryResult?.content ?? null;
