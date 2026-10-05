@@ -10,7 +10,7 @@
  *   ممكن ما يكملش. النتيجة: المستخدم أخد ردّه، بس الـ shadow event ضاع.
  *   وC5 هيبني قرارات على البيانات دي — فالنقصان ده مش cosmetic.
  *
- *   الحل الرسمي: `after()` من `next/server` \u2014 **مخصوص** \u0644\u0644\u0623\u0639\u0645\u0627\u0644 \u0627\u0644\u062a\u064a \u0627\u0644\u0645\u0641\u0635\u0648\u0643 \u062a\u062d\u0635\u0644
+ *   الحل الرسمي: `after()` من `next/server` — **مخصوص** للأعمال التي المفصوك تحصل
  *   تحصل بعد الـ response (logging / analytics) بالظبط.
  *
  * ═══ ليه `after()` بيشتغل من هنا جوّه الـ راوتر ═══
@@ -19,7 +19,7 @@
  *   `withConcurrencyLimit` (اللي ملفوف حوالين `completeChatInner`) مجرد
  *   promises — مافيش worker ولا timer بيقطع السياق.
  *
- *   \u2705 \u0645\u062a\u062d\u0642\u0651\u0642 \u0628\u0641\u0639\u0644 \u0627\u062e\u062a\u0628\u0627\u0631 \u062d\u0642\u064a\u0642\u064a\u060c \u0645\u0634 \u0627\u0641\u062a\u0631\u0627\u0636: \u0646\u0641\u0633 \u0627\u0644\u0628\u0646\u064a\u0629 (\u0631\u0648\u062a \u2192 limiter \u2192 \u0623\u0639\u0645\u0642 \u0646\u0642\u0637\u0629)
+ *   ✅ متحقّق بفعل اختبار حقيقي، مش افتراض: نفس البنية (روت → limiter → أعمق نقطة)
  *      رجّعت نفس الـ store في كل المستويات.
  *
  * ═══ ليه في fallback ═══
@@ -32,23 +32,48 @@
  *   الـ callback. يعني صفر زيادة في وقت الرد.
  */
 
-import { after } from "next/server";
-
 /**
  * 📬 يجدول الكتابة في shadow بحيث تكمل **بعد** ما الرد يتبعت.
  *
  * ⚠️ الـ callback لازم يرجّع Promise — `after` بينتظره فعلاً، وده اللي
- *   \u0628\u064a\u0636\u0645\u0646 \u0625\u0646 \u0627\u0644\u0643\u062a\u0627\u0628\u0629 \u062e\u0644\u0635 \u0642\u0628\u0644 \u0645\u0627 \u064a\u062a\u0642\u0641\u0644 \u0627\u0644\u0639\u062a\u0648\u062f.
+ *   بيضمن إن الكتابة خلص قبل ما يتقفل العتود.
  *
  * @param run عملية الحفظ (best-effort، ماينفعش ترمي).
  */
-export function scheduleUsageRecording(run: () => Promise<void>): void {
+/**
+ * 💾 يحفظ الـ usage event ويح guarantees إنه **خلص فعلاً** قبل ما الدالة ترجع.
+ *
+ * ═══ ليه بقينا نـ await بدل `after()` ═══
+ *
+ * كان المسجّل بيستعمل `after()` من `next/server` عشان ميضيفش latency
+ * للرد. في التطوير ده اشتغل. **في الإنتاج وقف التسجيل بعد 5 دقايق من أول
+ * deploy** والـ `max(created_at)` اتجمّد — يعني الـ callbacks كانت بتتسجّل
+ * ومش بتتنفّذ.
+ *
+ * فيه سببين مرجّحين، والاتنين بيتحلوا بـ await:
+ *   1) الـ instance يتجمّد بعد ما الـ response يتبعت، والـ callback لسه
+ *      مجدول.
+ *   2) `after()` بيتنادى من جوه callback **بعد** ما الـ stream يخلص
+ *      (زي `onFinish`) — يعني بعد ما الـ request scope انتهى. ساعتها
+ *      `after()` بيرمي، والكود كان بيروح للـ `void run()` اللي جوا
+ *      الـ `catch`، والـ function بتتقفل قبل ما الـ insert يخلص.
+ *
+ * ⚠️ الـ `try/catch` القديم كان بيغطي **التسجيل بس**، مش التنفيذ. فلو
+ *   `after()` قَبِل الـ callback ومينفّذش بعد كده، مافيش حد ياخد يعرف.
+ *
+ * ═══ الثمن ═══
+ * سطر INSERT واحد بياخد أقل من 100ms، والـ AI call أصلاً بياخد ثواني.
+ * ده أحسن بكتير من صفر latency مقابل صفر بيانات.
+ *
+ * ⚠️ الخطأ **بيتسجّل** بـ console.error عشان يبان في Vercel logs — قبل
+ *   الكود ده كان `.catch(() => {})` فصامت تمامًا، فلو الـ insert كان
+ *   بيفشل بسبب RLS/constraint/env مت(verbose) كنا مش هعرف خالص.
+ */
+export async function scheduleUsageRecording(run: () => Promise<void>): Promise<void> {
   try {
-    // ⭐ المسار السعيد: جدولة حقيقية بعد الرد، مضمونة الإتمام.
-    after(run);
-  } catch {
-    // 🧪 بره request scope (unit tests / background job) — نشغّل مباشرة.
-    //   `catch` فاضية مقصودة: دي مافيشش surface للمستخدم أصلاً.
-    void run().catch(() => {});
+    await run();
+  } catch (error) {
+    // 🟥 لازم يبان في logs: تسجيل فاشل = hole في shadow data.
+    console.error("[ai-usage] record failed:", error);
   }
 }

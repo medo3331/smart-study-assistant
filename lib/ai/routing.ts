@@ -355,7 +355,7 @@ export class AiRouter {
         recordProviderResult(providerName, { ok: true });
         // 🧾 نقطة قياس #1 — نفس حدّ المزوّد الحقيقي، مش حوالين النداء.
         if (ctx) {
-          scheduleUsageRecording(() => recordAiUsage({
+          await scheduleUsageRecording(() => recordAiUsage({
             userId: ctx.userId ?? null,
             feature: ctx?.feature ?? task,
             operationId: ctx.operationId,
@@ -379,7 +379,7 @@ export class AiRouter {
         // 🧾 نقطة قياس #1 (فشل) — بنسجّل قبل إعادة الرمي، مش بعدها، عشان
         //   النتيجة بتتغيّر أصلاً لو الـ recording نجح.
         if (ctx) {
-          scheduleUsageRecording(() => recordAiUsage({
+          await scheduleUsageRecording(() => recordAiUsage({
             userId: ctx.userId ?? null,
             feature: ctx?.feature ?? task,
             operationId: ctx.operationId,
@@ -460,7 +460,7 @@ export class AiRouter {
         //   بطء/تعطّل الـ DB مايضيفش latency لرد المستخدم. و`recordAiUsage`
         //   متصمّم إنه مايرميش أبدًا، فمافيش خطر unhandled rejection.
         if (ctx) {
-          scheduleUsageRecording(() => recordAiUsage({
+          await scheduleUsageRecording(() => recordAiUsage({
             userId: ctx.userId ?? null,
             feature: ctx?.feature ?? task,
             operationId: ctx.operationId,
@@ -505,7 +505,7 @@ export class AiRouter {
         //   الـ fallback وقف بعدها، وإلا هنشوف "المحاولة الأولى اللي نجحت"
         //   من غير أي دليل إن دي كانت المحاولة التانية.
         if (ctx) {
-          scheduleUsageRecording(() => recordAiUsage({
+          await scheduleUsageRecording(() => recordAiUsage({
             userId: ctx.userId ?? null,
             feature: ctx?.feature ?? task,
             operationId: ctx.operationId,
