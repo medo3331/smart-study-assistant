@@ -278,8 +278,8 @@ export async function POST(request: NextRequest) {
         });
         raw = completion.choices[0]?.message?.content || '';
         // 🧡 C4: سطر shadow للديمو. userId = null, units = 0, no billing, no guard.
-        recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs(), units: 0 });
-        recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs(), units: 0 });
+        await recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs(), units: 0 });
+        await recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs(), units: 0 });
         if (raw) break;
       } catch (err) {
         console.warn('demo: فشل مفتاح، بجرّب اللي بعده', err);

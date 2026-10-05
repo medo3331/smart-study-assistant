@@ -55,9 +55,13 @@ export async function* streamWithFallback(
     const attemptNo = attemptsMade++;
 
     const startedAt = Date.now();
-    const recordAttempt = (status: UsageStatus) => {
+    // ⚠️ **لازم `async` + `await`:** المسجّل بقى `await`-based (C4.1)، يعني
+    //    `scheduleUsageRecording` بترجع Promise. لو ناديناها من غير `await`
+    //    هنا، الـ insert بيبقى floating promise وبيتحطم على أي error غير
+    //    متوقع — وده بالظبط الـ bug اللي C4.1 اتعمل عشانه.
+    const recordAttempt = async (status: UsageStatus) => {
       if (!usage) return;
-      scheduleUsageRecording(() =>
+      await scheduleUsageRecording(() =>
         recordAiUsage({
           userId: usage.userId ?? null,
           feature: usage.feature ?? task,
@@ -78,10 +82,10 @@ export async function* streamWithFallback(
         ...input,
         model: candidates.find((c) => c.provider === provider)?.model ?? input.model,
       });
-      recordAttempt("completed");
+      await recordAttempt("completed");
       return;
     } catch (err) {
-      recordAttempt(
+      await recordAttempt(
         err instanceof AiProviderError && err.reasonCode === "EMPTY_RESPONSE"
           ? "failed_after_response"
           : err instanceof AiProviderError

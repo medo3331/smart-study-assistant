@@ -19,6 +19,9 @@ import { routerSelectAgent } from "./router";
 import { extractTextFromFile } from "../extract-text";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
+import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
+import { scheduleUsageRecording } from "@/lib/ai/usage-scheduler";
+import type { AiUsageContext } from "@/lib/ai/usage-context";
 
 // Groq adapter — verified working (key from env, HTTP 200)
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -28,11 +31,52 @@ async function callGroqWithModel(
   prompt: string,
   model: string,
   _language: string = "ar",
-  system?: string
+  system?: string,
+  usage?: AiUsageContext
 ): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
   void _language;
   const key = process.env.GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
+
+  // 🧾 Phase 5-C5: نقطة القياس عند حدّ المزوّد الحقيقي.
+  //
+  // ⚠️ **ليه هنا بالذات؟** دي أول (وآخر) نقطة فيها نداء شبكة للمزوّد.
+  //    أي try/catch بيرجع من فوق الـ fetch = صفر قياس.
+  //
+  // ⚠️ **مفيش streaming في المسار ده** — `fetch` بيرجّع الرد كامل و
+  //    `await res.json()` بيستهلكه قبل ما التسجيل ينفّذ. فمافيش خطر
+  //    الـ "بعد ما الـ stream يتقفل" اللي حذّر منه C4.1: احنا **جوه**
+  //    الكود المتزامن، مش على `onFinish`.
+  const startedAt = Date.now();
+
+  /**
+   * 🧾 سطر shadow واحد لكل محاولة مزوّد فعلية.
+   *
+   * ⚠️ **`await` إجباري:** مافيش `after()` ولا fire-and-forget. لو الكتابة
+   *   اتفلتت كـ floating promise، السيرفر المجمّد بيقتلها — وده بالظبط
+   *   اللي خلّى `max(created_at)` يتجمّد في C4.1.
+   */
+  const recordAttempt = async (status: UsageStatus, tokens?: { prompt?: number; completion?: number }) => {
+    if (!usage) return;
+    await scheduleUsageRecording(() =>
+      recordAiUsage({
+        userId: usage.userId ?? null,
+        feature: usage.feature ?? "chat",
+        operationId: usage.operationId,
+        idempotencyKey: usage.idempotencyKey,
+        attemptNo: 0,
+        provider: "groq",
+        model,
+        status,
+        units: 1,
+        promptTokens: tokens?.prompt ?? null,
+        completionTokens: tokens?.completion ?? null,
+        latencyMs: Date.now() - startedAt,
+        metadata: { path: "unified_ai", source: usage.source, ...usage.diagnostics },
+      }),
+    );
+  };
+
   try {
     const messages = [
       ...(system ? [{ role: "system", content: system }] : []),
@@ -53,16 +97,23 @@ async function callGroqWithModel(
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       console.error("Groq error", res.status, detail.slice(0, 200));
+      await recordAttempt("failed_no_response");
       return { ok: false, error: "AI provider temporarily unavailable. Please try again." };
     }
     const data = await res.json().catch(() => null);
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
+      await recordAttempt("failed_after_response");
       return { ok: false, error: "AI returned an empty response. Please try again." };
     }
+    await recordAttempt("completed", {
+      prompt: data?.usage?.prompt_tokens,
+      completion: data?.usage?.completion_tokens,
+    });
     return { ok: true, content, model };
   } catch (e: unknown) {
     console.error("Groq exception:", e instanceof Error ? e.message : String(e));
+    await recordAttempt("failed_no_response");
     return { ok: false, error: "AI request failed. Please try again." };
   }
 }
@@ -134,7 +185,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // Unified brain: system من السيرفر (شخصية + سياق الطالب) + إرشادات المخططات.
     const serverSystem = typeof input.system === "string" ? input.system.trim() : "";
     const systemPrompt = serverSystem ? `${serverSystem}\n\n${DIAGRAM_GUIDELINES}` : DIAGRAM_GUIDELINES;
-    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemPrompt);
+    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemPrompt, input.usage);
     if (!providerResult.ok) {
       return {
         ok: false,
