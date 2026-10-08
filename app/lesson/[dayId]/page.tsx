@@ -24,6 +24,7 @@ import { LessonProgressPanel } from "./components/LessonProgressPanel";
 import LessonVideoPlayer from "@/components/lesson/LessonVideoPlayer";
 import { VideoCandidate } from "@/lib/lesson/video-server";
 import { SpecializationTools } from "@/components/lesson/SpecializationTools";
+import { LessonNotes } from "@/components/lesson/LessonNotes";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -1058,6 +1059,9 @@ export default function LessonDetailPage() {
             </AnimatePresence>
           </div>
         </Reveal>
+
+        {/* ملاحظات الطالب على الدرس — Phase 1 (تحفظ لوحدها بعد الكتابة) */}
+        <LessonNotes dayId={dayId} />
 
         {/* الاختبار: ورقة أسئلة — الاختيار بيتعلّم بالحبر، والتصحيح بأخضر/أحمر بعد التسليم */}
         <Reveal delay={0.16}>
