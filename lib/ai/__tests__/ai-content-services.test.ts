@@ -112,7 +112,7 @@ describe("generateEducationalImage fallback chain", () => {
     // keys are present. With the keys emptied the chain should have hit
     // Pollinations at least once before giving up.
     expect(fetchMock).toHaveBeenCalled();
-    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
     expect(urls.some((u) => u.includes("pollinations"))).toBe(true);
   }, 30000);
 
