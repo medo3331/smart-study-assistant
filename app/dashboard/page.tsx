@@ -33,7 +33,7 @@ import { HeroSection } from "./components/HeroSection";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
 import { useAudio } from "@/components/audio/AudioProvider";
-import { Sidebar, type SettingsSectionId } from "./components/Sidebar";
+import { SettingsDrawer, type SettingsSectionId } from "./components/SettingsDrawer";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
 import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components/nav-config";
@@ -1955,7 +1955,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <Sidebar
+      <SettingsDrawer
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
         showSubjectModal={showSubjectModal}

@@ -91,7 +91,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "achievements", icon: "🏆", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
       { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
       { id: "rewards", icon: "🪙", label: "سجل المكافآت", latin: "Rewards", href: "/rewards" },
-      { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
+      { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", href: "/dashboard/progress" },
       { id: "leaderboard", icon: "🥇", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
       // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب
       // بالمذاكرة، فالمكان الطبيعي ليهم جنب الإنجازات والتحليلات.
