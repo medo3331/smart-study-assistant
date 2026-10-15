@@ -51,8 +51,18 @@ export type CompressResult = {
   retries: number;
 };
 
-/** الملف كبير من الحد — مافيش ملمس بالضغط مطلًًاً. */
-export function needsCompression(file: Pick<File, "size">): boolean {
+/** الملف كبير من الحد — مفيش مساس بالضغط مطلقًا. */
+export function needsCompression(file: Pick<File, "size" | "type">): boolean {
+  const LOSSY_TYPES = new Set([
+    "audio/mpeg",      // MP3 (standard)
+    "audio/mp3",       // MP3 (non-standard but common)
+    "audio/mp4",       // M4A/AAC (standard)
+    "audio/x-m4a",     // M4A (Safari/iOS)
+    "audio/aac",       // AAC (standard)
+    "audio/x-aac",     // AAC (non-standard)
+    "audio/ogg",       // OGG/Opus (standard)
+  ]);
+  if (LOSSY_TYPES.has(file.type)) return false;
   return file.size > MAX_UPLOAD_BYTES;
 }
 
