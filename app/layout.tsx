@@ -184,7 +184,7 @@ const noFlashTheme = `
   if(p){document.documentElement.setAttribute('data-pack',p);}
   var l=localStorage.getItem('locale');
   if(l==='en'){document.documentElement.lang='en';document.documentElement.dir='ltr';}
-}catch(e){try{document.documentElement.setAttribute('data-theme','warm-dark');}catch(_){}})();
+}catch(e){try{document.documentElement.setAttribute('data-theme','warm-dark');}catch(_){}}})();
 `;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

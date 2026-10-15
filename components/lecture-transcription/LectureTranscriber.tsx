@@ -45,7 +45,82 @@ import {
   compressLectureMedia,
   needsCompression,
 } from "@/lib/media/lecture-compression";
+import {
+  needsRecoveryCard,
+  recoveryBlurb,
+  recoveryOptions,
+  recoveryTitle,
+  stageFromCode,
+  type RecoveryAction,
+  type RecoveryOption,
+  type FailureStage,
+} from "@/lib/media/lecture-recovery";
 import Link from "next/link";
+
+/** خصائص بطاقة الاسترداد — كلها قيم للعرض فقط، بلا أي بيانات مستخدم. */
+type RecoveryCardProps = {
+  stage: FailureStage;
+  attempts: number;
+  message: string;
+  working: boolean;
+  onAction: (action: RecoveryAction) => void;
+};
+
+/**
+ * بطاقة الاسترداد بعد الفشل — نفس ثيم Magicly (توكنات CSS فقط، بلا CSS جديد).
+ *
+ * ⚠️ تُرسَم فقط عندما: في رسالة خطأ + كود فشل معروف + المرحلة تستحق
+ * بطاقة (تجهيز/رفع — مش تفريغ، لأن التفريغ له زرّه «حاول تحويلها تاني»).
+ * كل زر فيها بينفّذ إجراءً حقيقيًا: إعادة يدوية (محاولة واحدة) /
+ * فتح منتقي الملفات / تعليمات التقسيم ظاهرة كنص / رابط `/ai-studio`.
+ * لا تُعرض أي أسماء ملفات أو أحجام أو روابط أو أسرار — العناوين
+ * والتفاصيل نصوص عربية ثابتة من `lecture-recovery`.
+ */
+function RecoveryCard({ stage, attempts, message, working, onAction }: RecoveryCardProps) {
+  const title = recoveryTitle(stage);
+  const blurb = recoveryBlurb(stage);
+  const options = recoveryOptions(stage, attempts);
+  const primaryClass =
+    "inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  const secondaryClass =
+    "inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-4 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <div role="alert" className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-4">
+      <p className="text-base font-bold text-[var(--text)]">{title}</p>
+      <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{blurb}</p>
+      <p className="mt-2 text-xs text-[var(--muted)]">{message}</p>
+      <div className="mt-3 flex flex-col gap-2">
+        {options.map((option: RecoveryOption) =>
+          option.action === "paste-text" ? (
+            <Link key={option.action} href="/ai-studio" className={secondaryClass}>
+              <span>{option.label}</span>
+            </Link>
+          ) : (
+            <button
+              key={option.action}
+              type="button"
+              onClick={() => onAction(option.action)}
+              disabled={working}
+              className={option.primary ? primaryClass : secondaryClass}
+            >
+              <span>{option.label}</span>
+            </button>
+          ),
+        )}
+      </div>
+      {/* تفاصيل كل خيار — التعليمات الكاملة للتقسيم ظاهرة هنا
+          كنص بلا زر وهمي، حسب القاعدة المتفق عليها. */}
+      <ul className="mt-3 space-y-1.5">
+        {options.map((option: RecoveryOption) => (
+          <li key={`detail-${option.action}`} className="text-xs leading-relaxed text-[var(--muted)]">
+            <span className="font-semibold text-[var(--text)]">{option.label}: </span>
+            {option.detail}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 import {
   AlertTriangle,
   Check,
@@ -79,6 +154,21 @@ const ERR_NETWORK = "فيها مشكلة في الاتصال. اتأكد من ا
 const ERR_NO_FILE = "اختر ملف المحاضرة الأول.";
 const ERR_UPLOAD = "فشل رفع المحاضرة. حاول مرة أخرى.";
 const ERR_UPLOAD_RETRY = "مقدرناش نجهّز رفع المحاضرة. حاول تاني بعد شوية.";
+
+/**
+ * كود فشل ثابت للتشخيص الآمن — بيُسجَّل في الكونسول وبيُلصق نسخة صغيرة
+ * منه مع رسالة الفشل في الواجهة، عشان نعرف **أي فرع بالتحديد** وقف
+ * من غير ما نحتاج من المستخدم يعيد إنتاج المشكلة ونحن عمالين نخمّن.
+ *
+ * ⚠️ **ممنوع أي بيانات مستخدم داخل الكود**: لا اسم الملف، لا الحجم،
+ * لا الرابط، لا التوكن، ولا محتوى رد الخادم — كود قصير ثابت بس.
+ * مثال: `upload.xhr` = فشل الـ PUT مباشرة، `prep.duration` = فشل
+ * قراءة مدة الملف قبل الضغط.
+ */
+function failCode(code: string, message: string): string {
+  console.warn(`[lecture-transcription] failure code=${code}`);
+  return `${message} (كود الخطأ: ${code})`;
+}
 
 /** الحدّ بالأرقام العربية-الهندية زي باقي الواجهة. */
 const MAX_SIZE_LABEL = formatFileSize(MAX_LECTURE_FILE_BYTES);
@@ -226,6 +316,17 @@ export function LectureTranscriber() {
   /** نسبة رفع **حقيقية** (0..100). مش بتتحرك أثناء التحويل خالص —
    *  ElevenLabs مش بيبعت تقدّم، وإيهام الطالب بنسبة هنا كذب. */
   const [uploadPercent, setUploadPercent] = useState(0);
+  /** الملف الأصلي المختار — محتفظ بيه لإعادة التجهيز اليدوية من بطاقة
+   *  الاسترداد. ⚠️ مش بيترفع أبدًا إلا بعد ما الضغط ينجح: فرع الفشل
+   *  بيمسح `file` لكن بيسيب ده للضغطة الجاية فقط. */
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  /** عدد محاولات التجهيز اليدوية للملف الحالي — بتتصفّر مع كل اختيار جديد.
+   *  ⚠️ السقف في `MAX_MANUAL_RETRIES` عشان مافيش حلقات مكلفة:
+   *  بعدها بطاقة الاسترداد بتخفي زر إعادة المحاولة. */
+  const [prepareAttempts, setPrepareAttempts] = useState(0);
+  /** كود الفشل الأخير (`failCode`) — بيحدّد بطاقة الاسترداد المعروضة.
+   *  ⚠️ كود ثابت بلا أي بيانات مستخدم: لا اسم ملف ولا حجم ولا روابط. */
+  const [failureCode, setFailureCode] = useState<string | null>(null);
   /** مسار الملف **بعد** ما اترفع فعلاً.
    *  ⚠️ ده اللي بيخلّي إعادة المحاولة ممكنة من غير رفع تاني: لو فشل
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
@@ -264,10 +365,14 @@ export function LectureTranscriber() {
       try {
         assertLectureFile(next);
       } catch (validationError) {
+        setFailureCode("file.invalid");
         setError(
-          validationError instanceof TranscriptionError
-            ? validationError.message
-            : ERR_GENERIC,
+          failCode(
+            "file.invalid",
+            validationError instanceof TranscriptionError
+              ? validationError.message
+              : ERR_GENERIC,
+          ),
         );
         setPhase("error");
         return;
@@ -282,6 +387,9 @@ export function LectureTranscriber() {
       if (!needsCompression(next)) {
         // ⏭️ ملف صغير: نفس المسار القديم بالظبط، ومن غير تحميل FFmpeg.
         setFile(next);
+        setPendingFile(null);
+        setPrepareAttempts(0);
+        setFailureCode(null);
         setOriginalName(sourceName);
         setOriginalSize(0);
         setError(null);
@@ -293,6 +401,12 @@ export function LectureTranscriber() {
         return;
       }
 
+      /* 🧾 تتبّع إعادة التجهيز اليدوية: اختيار جديد = عدّاد جديد.
+         ⚠️ الضغطة الواحدة تشغّل محاولة واحدة بس؛ السقف في `MAX_MANUAL_RETRIES`
+         وبتتحكم فيه بطاقة الاسترداد (زر إعادة المحاولة بيختفي بعده). */
+      setPendingFile(next);
+      setPrepareAttempts((attempts) => attempts + 1);
+      setFailureCode(null);
       setPreparing(true);
       setPreparePercent(0);
       setPhase("working");
@@ -316,17 +430,57 @@ export function LectureTranscriber() {
         setFile(null);
         setOriginalName(null);
         setOriginalSize(0);
+        /* 🔎 كود الفرع بيحدّد أين وقف الضغط: قراءة المدة (`prep.duration`)
+            ولا تنفيذ ffmpeg (`prep.exec`) ولا الحجم النهائي (`prep.too_long`)
+            ولا تحميل المحرّك/كتابة الملف (`prep.other`). الأسماء دي بس —
+            بلا أي بيانات مستخدم. */
+        const reason =
+          preparationError instanceof Error ? preparationError.message : "";
+        const code =
+          reason === "still_too_large"
+            ? "prep.too_long"
+            : reason === "bad_duration"
+              ? "prep.duration"
+              : reason === "bad_media"
+                ? "prep.media"
+                : reason === "no_dom"
+                  ? "prep.no_dom"
+                  : reason.startsWith("ffmpeg_exit_")
+                    ? "prep.exec"
+                    : "prep.other";
         setError(
-          preparationError instanceof Error && preparationError.message === "still_too_large"
-            ? "المحاضرة طويلة أوي وحجمها كبير بعد الضغط. جرب تقسّمها على ملفين."
-            : "مقدرناش نجهّز الملف ده. جرّب ملف تاني أو أعد المحاولة.",
+          failCode(
+            code,
+            reason === "still_too_large"
+              ? "المحاضرة طويلة أوي وحجمها كبير بعد الضغط. جرب تقسّمها على ملفين."
+              : "مقدرناش نجهّز الملف ده. جرّب ملف تاني أو أعد المحاولة.",
+          ),
         );
+        setFailureCode(code);
         setPhase("error");
       } finally {
         setPreparing(false);
       }
     },
     [],
+  );
+
+  /** ينفّذ إجراء بطاقة الاسترداد المختار — كل إجراء حقيقي بلا استثناء:
+   *  - `retry-prepare`: يعيد التجهيز كاملًا على الملف المحفوظ (محاولة يدوية واحدة).
+   *  - `pick-smaller`: يفتح منتقي الملفات لاختيار نسخة أخف.
+   *  - `split-guide`: لا إجراء — التعليمات الكاملة معروضة أصلًا في تفاصيل الخيار.
+   *  - `paste-text`: رابط حقيقي لصفحة `/ai-studio` (يُرسَم في البطاقة نفسها). */
+  const handleRecovery = useCallback(
+    (action: RecoveryAction) => {
+      if (action === "retry-prepare") {
+        const target = pendingFile;
+        if (!target || working) return;
+        void selectFile(target);
+      } else if (action === "pick-smaller") {
+        openPicker();
+      }
+    },
+    [pendingFile, working, selectFile, openPicker],
   );
 
   /** يمسح الاختيار ويرجّع الشاشة لحالتها الأولى. */
@@ -338,6 +492,9 @@ export function LectureTranscriber() {
     setPhase("idle");
     setUploadedPath(null);
     setUploadPercent(0);
+    setPendingFile(null);
+    setPrepareAttempts(0);
+    setFailureCode(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -365,14 +522,16 @@ export function LectureTranscriber() {
       const payload: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(extractErrorMessage(payload, ERR_GENERIC));
+        setFailureCode("direct.http");
+        setError(failCode("direct.http", extractErrorMessage(payload, ERR_GENERIC)));
         setPhase("error");
         return;
       }
 
       const result = (payload as { transcript?: LectureTranscript } | null)?.transcript;
       if (!result || typeof result.text !== "string" || result.text.trim() === "") {
-        setError(ERR_GENERIC);
+        setFailureCode("direct.bad_response");
+        setError(failCode("direct.bad_response", ERR_GENERIC));
         setPhase("error");
         return;
       }
@@ -380,7 +539,8 @@ export function LectureTranscriber() {
       setTranscript(result);
       setPhase("done");
     } catch {
-      setError(ERR_NETWORK);
+      setFailureCode("net.direct");
+      setError(failCode("net.direct", ERR_NETWORK));
       setPhase("error");
     }
   }, [file]);
@@ -407,7 +567,8 @@ export function LectureTranscriber() {
         /* ⚠️ الملف لسه مرفوع (الخادم بيحذفه بعد النجاح بس) — فبنسيب
            `uploadedPath` متسجّل، والزر بيرجع لـ «حاول تاني» ويكمّل من
            نفس الملف. ده أهم فرق عن المرحلة 1. */
-        setError(extractErrorMessage(payload, ERR_GENERIC));
+        setFailureCode("transcribe.http");
+        setError(failCode("transcribe.http", extractErrorMessage(payload, ERR_GENERIC)));
         setPhase("error");
         return false;
       }
@@ -415,7 +576,8 @@ export function LectureTranscriber() {
       setStage("finalizing");
       const result = (payload as { transcript?: LectureTranscript } | null)?.transcript;
       if (!result || typeof result.text !== "string" || result.text.trim() === "") {
-        setError(ERR_GENERIC);
+        setFailureCode("transcribe.bad_response");
+        setError(failCode("transcribe.bad_response", ERR_GENERIC));
         setPhase("error");
         return false;
       }
@@ -497,10 +659,14 @@ export function LectureTranscriber() {
            هتفشل عند المنصّة برسالة غامضة — بنرفضها هنا برسالة
            مفهومة. الملف الصغير لسه هيشتغل عادي. */
         if (file.size > MAX_DIRECT_UPLOAD_BYTES) {
+          setFailureCode("storage.disabled");
           setError(
-            `حجم الملف كبير أوي والرفع المباشر مش متاح حالياً. الحد في الوضع ده ${formatFileSize(
-              MAX_DIRECT_UPLOAD_BYTES,
-            )}. جرّب تاني بعد شوية.`,
+            failCode(
+              "storage.disabled",
+              `حجم الملف كبير أوي والرفع المباشر مش متاح حالياً. الحد في الوضع ده ${formatFileSize(
+                MAX_DIRECT_UPLOAD_BYTES,
+              )}. جرّب تاني بعد شوية.`,
+            ),
           );
           setPhase("error");
           return;
@@ -510,14 +676,16 @@ export function LectureTranscriber() {
       }
 
       if (!ticketResponse.ok) {
-        setError(extractErrorMessage(ticketPayload, ERR_UPLOAD_RETRY));
+        setFailureCode("ticket.http");
+        setError(failCode("ticket.http", extractErrorMessage(ticketPayload, ERR_UPLOAD_RETRY)));
         setPhase("error");
         return;
       }
 
       const ticket = ticketPayload as UploadTicket | null;
       if (!ticket?.signedUrl || !ticket.token || !ticket.path) {
-        setError(ERR_UPLOAD_RETRY);
+        setFailureCode("ticket.invalid");
+        setError(failCode("ticket.invalid", ERR_UPLOAD_RETRY));
         setPhase("error");
         return;
       }
@@ -527,7 +695,8 @@ export function LectureTranscriber() {
       try {
         await uploadDirect(ticket.signedUrl, ticket.token, file, setUploadPercent);
       } catch {
-        setError(ERR_UPLOAD);
+        setFailureCode("upload.xhr");
+        setError(failCode("upload.xhr", ERR_UPLOAD));
         setPhase("error");
         return;
       }
@@ -539,7 +708,8 @@ export function LectureTranscriber() {
       await transcribeUploaded(ticket.path);
     } catch {
       // فشل fetch نفسه = نت فاصل أو الصفحة اتقفلت
-      setError(ERR_NETWORK);
+      setFailureCode("net.run");
+      setError(failCode("net.run", ERR_NETWORK));
       setPhase("error");
     }
   }, [file, working, runDirect, uploadedPath, transcribeUploaded]);
@@ -717,6 +887,22 @@ export function LectureTranscriber() {
             </button>
           )}
         </div>
+      )}
+
+      {/* ───────── بطاقة الاسترداد بعد الفشل ─────────
+          ⚠️ بتظهر بس لما: في رسالة خطأ + كود فشل معروف + المرحلة تستحق
+          بطاقة (تجهيز/رفع — مش تفريغ، لأن التفريغ له زرّه «حاول تحويلها
+          تاني»). الخيارات جاية من `recoveryOptions` حسب المرحلة وعدد
+          المحاولات — وكل زر فيها بينفّذ إجراءً حقيقيًا:
+          إعادة يدوية / فتح المنتقي / تعليمات / رابط `/ai-studio`. */}
+      {error && failureCode && needsRecoveryCard(stageFromCode(failureCode)) && (
+        <RecoveryCard
+          stage={stageFromCode(failureCode)}
+          attempts={prepareAttempts}
+          message={error}
+          working={working}
+          onAction={handleRecovery}
+        />
       )}
 
       {/* ───────── الخطأ ───────── */}
