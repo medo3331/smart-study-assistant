@@ -44,6 +44,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   compressLectureMedia,
   needsCompression,
+  getDeviceLimit,
 } from "@/lib/media/lecture-compression";
 import {
   needsRecoveryCard,
@@ -395,6 +396,18 @@ export function LectureTranscriber() {
         );
       } else {
         setLargeFileWarning(null);
+      }
+
+      // ⚠️ فحص حد الجهاز قبل الضغط — إذا كان الملف أكبر من حد الجهاز، اعرض خطأ وتوقف.
+      const deviceLimit = getDeviceLimit();
+      if (next.size > deviceLimit) {
+        setError(
+          `الملف ${Math.round(next.size / 1024 / 1024)} ميجا — أكبر من الحد الأقصى لجهازك (${Math.round(
+            deviceLimit / 1024 / 1024
+          )} ميجا). ممكن تضغطه بنفسك من هاتفك، أو قسمه لمحاضرتين.`
+        );
+        setPhase("error");
+        return;
       }
 
       if (!needsCompression(next)) {

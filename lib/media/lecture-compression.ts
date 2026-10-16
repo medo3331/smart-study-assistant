@@ -24,6 +24,38 @@
 /** هد الأمان: Supabase سابطاعًاًّضعًاًيًن 50 MB — محافظناً منهاً. */
 export const MAX_UPLOAD_BYTES = 45 * 1024 * 1024;
 
+/**
+ * حدود حجم الملف حسب سعة ذاكرة الجهاز — لحماية من OOM في ffmpeg.wasm.
+ *
+ * deviceMemory متوفر في Chrome/Edge/Brave، مش متوفر في Safari.
+ * fallback لـ user-agent للسفاري وأجهزة قديمة.
+ *
+ * الحدود:
+ * - RAM ≤ 2GB  → 40MB  (أجهزة قديمة / موبايل'entrée级)
+ * - RAM ≤ 4GB  → 60MB  (موبايل متوسط)
+ * - RAM ≤ 8GB  → 100MB (كمبيوتر متوسط)
+ * - RAM > 8GB  → 120MB (كمبيوتر قوي)
+ *
+ * fallback UA:
+ * - iOS → 60MB
+ * - Android → 80MB
+ * - desktop → 120MB
+ */
+export function getDeviceLimit(): number {
+  const ram = (navigator as any).deviceMemory;
+  if (typeof ram === "number" && ram > 0) {
+    if (ram <= 2) return 40 * 1024 * 1024;
+    if (ram <= 4) return 60 * 1024 * 1024;
+    if (ram <= 8) return 100 * 1024 * 1024;
+    return 120 * 1024 * 1024;
+  }
+  // Fallback UA لـ Safari وأجهزة لا تدعم deviceMemory
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return 60 * 1024 * 1024;
+  if (/Android/i.test(ua)) return 80 * 1024 * 1024;
+  return 120 * 1024 * 1024;
+}
+
 /** سلّم الضغط من العوادة للموديلات في الملذارات. */
 export const BITRATE_LADDER_KBPS = [64, 48, 32] as const;
 
@@ -58,6 +90,10 @@ export function needsCompression(file: Pick<File, "size" | "type">): boolean {
     "audio/mp3",
   ]);
   if (LOSSY_TYPES.has(file.type)) return false;
+
+  const deviceLimit = getDeviceLimit();
+  if (file.size > deviceLimit) return false;
+
   return file.size > MAX_UPLOAD_BYTES;
 }
 
