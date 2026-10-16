@@ -327,6 +327,8 @@ export function LectureTranscriber() {
   /** كود الفشل الأخير (`failCode`) — بيحدّد بطاقة الاسترداد المعروضة.
    *  ⚠️ كود ثابت بلا أي بيانات مستخدم: لا اسم ملف ولا حجم ولا روابط. */
   const [failureCode, setFailureCode] = useState<string | null>(null);
+  /** تحذير للملفات الكبيرة غير MP3 — قبل ما يدخلوا الضغط (ffmpeg). */
+  const [largeFileWarning, setLargeFileWarning] = useState<string | null>(null);
   /** مسار الملف **بعد** ما اترفع فعلاً.
    *  ⚠️ ده اللي بيخلّي إعادة المحاولة ممكنة من غير رفع تاني: لو فشل
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
@@ -383,6 +385,17 @@ export function LectureTranscriber() {
       //   هنا هو **الملف المعالج**، لأن ده اللي بيرفع.
       const sourceName = next.name;
       const sourceSize = next.size;
+
+      // ⚠️ تحذير للملفات الكبيرة غير MP3 — لو الرفع فشل، المستخدم لازم يضغط الملف من تليفونه.
+      const MAX_WARN_BYTES = 45 * 1024 * 1024;
+      const isLossyAudio = /^audio\/(mpeg|mp3)$/i.test(next.type);
+      if (next.size > MAX_WARN_BYTES && !isLossyAudio) {
+        setLargeFileWarning(
+          "الملف أكبر من 45 ميجا. لو الرفع فشل، فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
+        );
+      } else {
+        setLargeFileWarning(null);
+      }
 
       if (!needsCompression(next)) {
         // ⏭️ ملف صغير: نفس المسار القديم بالظبط، ومن غير تحميل FFmpeg.
@@ -696,7 +709,12 @@ export function LectureTranscriber() {
         await uploadDirect(ticket.signedUrl, ticket.token, file, setUploadPercent);
       } catch {
         setFailureCode("upload.xhr");
-        setError(failCode("upload.xhr", ERR_UPLOAD));
+        setError(
+          failCode(
+            "upload.xhr",
+            "الملف أكبر من الحد المسموح للرفع. فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
+          )
+        );
         setPhase("error");
         return;
       }
@@ -903,6 +921,17 @@ export function LectureTranscriber() {
           working={working}
           onAction={handleRecovery}
         />
+      )}
+
+      {/* ───────── تحذير الملف الكبير ───────── */}
+      {largeFileWarning && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"
+        >
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" aria-hidden />
+          <p className="text-sm leading-relaxed text-[var(--text)]">{largeFileWarning}</p>
+        </div>
       )}
 
       {/* ───────── الخطأ ───────── */}
