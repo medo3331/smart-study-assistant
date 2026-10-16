@@ -54,13 +54,8 @@ export type CompressResult = {
 /** الملف كبير من الحد — مفيش مساس بالضغط مطلقًا. */
 export function needsCompression(file: Pick<File, "size" | "type">): boolean {
   const LOSSY_TYPES = new Set([
-    "audio/mpeg",      // MP3 (standard)
-    "audio/mp3",       // MP3 (non-standard but common)
-    "audio/mp4",       // M4A/AAC (standard)
-    "audio/x-m4a",     // M4A (Safari/iOS)
-    "audio/aac",       // AAC (standard)
-    "audio/x-aac",     // AAC (non-standard)
-    "audio/ogg",       // OGG/Opus (standard)
+    "audio/mpeg",
+    "audio/mp3",
   ]);
   if (LOSSY_TYPES.has(file.type)) return false;
   return file.size > MAX_UPLOAD_BYTES;
@@ -149,10 +144,19 @@ async function loadFfmpeg(onProgress?: (ratio: number) => void) {
 
   onProgress?.(0.05);
   // ⚠️ single-thread core: مايحتاجش هدرز COOP/COEP إصلاً.
-  await ffmpeg.load({
-    coreURL: "/ffmpeg/ffmpeg-core.js",
-    wasmURL: "/ffmpeg/ffmpeg-core.wasm",
-  });
+  const FFMPEG_CDN = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
+  try {
+    await ffmpeg.load({
+      coreURL: `${FFMPEG_CDN}/ffmpeg-core.js`,
+      wasmURL: `${FFMPEG_CDN}/ffmpeg-core.wasm`,
+    });
+  } catch (cdnError) {
+    console.warn("[ffmpeg] CDN load failed, falling back to local", cdnError);
+    await ffmpeg.load({
+      coreURL: "/ffmpeg/ffmpeg-core.js",
+      wasmURL: "/ffmpeg/ffmpeg-core.wasm",
+    });
+  }
 
   ffmpegSingleton = ffmpeg;
   return ffmpeg;
