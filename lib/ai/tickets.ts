@@ -21,8 +21,16 @@
                      والـ lease عدّى — إعادة المحاولة بتدفع تفريغة تانية
                      (مرة واحدة على الأكثر؛ بعدها consumed).
 
-   الأخطاء: كل فشل تذكرة بيرمي TICKET_ERROR واحد موحد. **ممنوع** السر
-   أو ticket_id أو path في أي رسالة أو لوج — الـ kind فقط هو اللي
+   الـ claim بمحاولتين UPDATE ذريتين متتاليتين (مش or() واحدة):
+     PostgREST or-string مع timestamp ISO فيه نقطة عشرية (".000Z")
+     بتكسر فصل field.op.value — فبدل المغامرة بصيغة مركّبة، كل محاولة
+     UPDATE مستقلة وذرية بمعناها الواضح:
+       محاولة ١: status = 'active'
+       محاولة ٢: status = 'processing' AND processing_started_at < lease cutoff
+     لو الاتنين رجعوا صفر صفوف → مالك مشغول (423) أو invalid (404).
+
+   الأخطاء: كل فشل تذكرة بيرمي TicketError موحد. **ممنوع** السر أو
+   ticket_id أو path في أي رسالة أو لوج — الـ kind فقط هو اللي
    بيتسجل ('invalid' | 'concurrent').
    ========================================================================== */
 
@@ -55,16 +63,32 @@ export type TicketClaimant =
   | { userId: string; secret: null }
   | { userId: null; secret: string };
 
-/** خطأ تذكرة موحد — الراوت بترجمه لـ 404 (أو 423 لو concurrent). */
+/** خطأ تذكرة موحد — الراوت بترجمه لـ 404 (أو 423 لو concurrent).
+ *  الرسالة عامة عن قصد: مش بتفرق بين "مش موجودة" و"مش بتاعتك"
+ *  و"منتهية" و"مستهلكة" — عشان مفيش كشف وجود تذكرة لمستخدم تاني. */
 export class TicketError extends Error {
   readonly kind: "invalid" | "concurrent";
 
   constructor(kind: "invalid" | "concurrent") {
-    super(kind === "invalid" ? "الطلب ده مالوش صلاحية." : "فيه عملية تحويل جارية.");
+    super(kind === "invalid" ? "الطلب ده مالوش صلاحية. ارفع المحاضرة من جديد وحاول تاني." : "فيه عملية تحويل جارية على الملف ده. استنى تخلص.");
     this.name = "TicketError";
     this.kind = kind;
   }
 }
+
+/**
+ * عقد سلسلة فلاتر الـ UPDATE — بينا隔离نا عن generics بتاعة supabase-js
+ * بتعريف محلي بسيط. أي تغيير في الأعمدة بيظهر هنا أولًا في الـ typecheck.
+ */
+type TicketUpdateChain = {
+  eq(column: string, value: unknown): TicketUpdateChain;
+  is(column: string, value: string | null): TicketUpdateChain;
+  gt(column: string, value: string): TicketUpdateChain;
+  lt(column: string, value: string): TicketUpdateChain;
+  select(columns: string): {
+    maybeSingle(): Promise<{ data: { claim_id: string } | null; error: unknown }>;
+  };
+};
 
 /** توليد سر 32 بايت base64url — للزائر بلا جلسة. */
 export function generateTicketSecret(): string {
@@ -138,16 +162,20 @@ async function cleanupExpiredTickets(service: SupabaseClient): Promise<void> {
 /* ─────────────────────────── claim ─────────────────────────── */
 
 /**
- * استحواذ ذري على التذكرة قبل أي قراءة للملف أو نداء ElevenLabs.
+ * استحواذ على التذكرة قبل أي قراءة للملف أو نداء ElevenLabs.
  *
- * الشروط كلها في UPDATE واحد (لا check-then-act):
+ * محاولتين UPDATE ذريتين متتاليتين (كل واحدة لوحدها ذرية على مستوى
+ * الصف — مفيش check-then-act):
+ *   محاولة ١: status = 'active' — الحالة الطبيعية.
+ *   محاولة ٢: status = 'processing' AND processing_started_at < lease
+ *              cutoff — إعادة استحواذ بعد فانكشن ماتت والـ lease عدّى.
+ *
+ * الشروط المشتركة في كل محاولة (كلها في الـ UPDATE نفسه):
  *   - ticket_id + storage_path متطابقين (ربط المسار بالتذكرة).
  *   - expires_at > now() (الصلاحية).
  *   - الهوية صريحة — ممنوع الخلط بين الأنواع:
  *       * تذكرة مملوكة (مسجل/anonymous) → نفس الجلسة فقط.
  *       * تذكرة سر (زائر بلا جلسة) → مطابقة SHA-256 للسر المُرسَل.
- *   - status = 'active'، أو 'processing' انتهى lease بتاعه (12 دقيقة)
- *     — إعادة الاستحواذ بعد lease منتهي مسموحة عشان "حاول تاني" يشتغل.
  *
  * يرمي:
  *   TicketError('concurrent') → مالك صح بس فيه تفريغ جاري (423).
@@ -163,13 +191,12 @@ export async function claimTicket(
   },
 ): Promise<TicketClaim> {
   const claimId = randomUUID();
-  const leaseCutoff = new Date(Date.now() - LEASE_MS).toISOString();
   const now = new Date().toISOString();
+  const leaseCutoff = new Date(Date.now() - LEASE_MS).toISOString();
 
-  // فرعان صريحان — مفيش IS NULL OR =? اللي بيسمح بالخلط بين الأنواع.
-  let branch: ReturnType<SupabaseClient["from"]> extends never ? never : any;
-  if (input.claimant.userId !== null && input.claimant.secret === null) {
-    branch = service
+  /** السلسلة المفلترة بالهوية — كل محاولة بتبني سلسلة جديدة. */
+  const identityFiltered = (): TicketUpdateChain => {
+    const base = service
       .from("upload_tickets")
       .update({
         status: "processing",
@@ -178,41 +205,44 @@ export async function claimTicket(
       })
       .eq("ticket_id", input.ticketId)
       .eq("storage_path", input.storagePath)
-      .eq("owner_user_id", input.claimant.userId)
-      .is("secret_hash", null)
-      .gt("expires_at", now);
-  } else if (input.claimant.userId === null && input.claimant.secret !== null) {
-    branch = service
-      .from("upload_tickets")
-      .update({
-        status: "processing",
-        claim_id: claimId,
-        processing_started_at: now,
-      })
-      .eq("ticket_id", input.ticketId)
-      .eq("storage_path", input.storagePath)
-      .is("owner_user_id", null)
-      .eq("secret_hash", hashTicketSecret(input.claimant.secret))
-      .gt("expires_at", now);
-  } else {
+      .gt("expires_at", now) as unknown as TicketUpdateChain;
+
+    // فرعان صريحان — مفيش IS NULL OR =? اللي بيسمح بالخلط بين الأنواع.
+    if (input.claimant.userId !== null && input.claimant.secret === null) {
+      return base.eq("owner_user_id", input.claimant.userId).is("secret_hash", null);
+    }
+    if (input.claimant.userId === null && input.claimant.secret !== null) {
+      return base
+        .is("owner_user_id", null)
+        .eq("secret_hash", hashTicketSecret(input.claimant.secret));
+    }
     // خلط أنواع (جلسة + سر مع بعض، ولا الاتنين) → invalid.
     throw new TicketError("invalid");
-  }
+  };
 
-  // فرع الحالة: active، أو processing انتهى lease بتاعه.
-  const { data: claimed, error } = await branch
-    .or(`status.eq.active,status.eq.processing.and.processing_started_at.lt.${leaseCutoff}`)
+  // محاولة ١: الحالة الطبيعية.
+  const attemptActive = await identityFiltered()
+    .eq("status", "active")
     .select("claim_id")
-    .single();
-
-  if (error || !claimed) {
-    // هل ده "تزامن من مالك صح" ولا "مش مالكك/مش موجودة"؟ الـ 423
-    // بيرجع **بس** بعد تأكيد الملكية — مفيش كشف وجود لحد تاني.
-    if (await isOwnedAndBusy(service, input)) throw new TicketError("concurrent");
-    throw new TicketError("invalid");
+    .maybeSingle();
+  if (attemptActive.data?.claim_id) {
+    return { claimId: attemptActive.data.claim_id };
   }
 
-  return { claimId: claimed.claim_id as string };
+  // محاولة ٢: استحواذ جديد بعد انتهاء الـ lease (فانكشن ماتت ونص).
+  const attemptLease = await identityFiltered()
+    .eq("status", "processing")
+    .lt("processing_started_at", leaseCutoff)
+    .select("claim_id")
+    .maybeSingle();
+  if (attemptLease.data?.claim_id) {
+    return { claimId: attemptLease.data.claim_id };
+  }
+
+  // هل ده "تزامن من مالك صح" ولا "مش مالكك/مش موجودة"؟ الـ 423
+  // بيرجع **بس** بعد تأكيد الملكية — مفيش كشف وجود لحد تاني.
+  if (await isOwnedAndBusy(service, input)) throw new TicketError("concurrent");
+  throw new TicketError("invalid");
 }
 
 /** فحص "المالك الصح بس فيه تفريغ جاري" — بعد فشل الـ claim فقط. */
