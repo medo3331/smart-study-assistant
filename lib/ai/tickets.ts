@@ -8,7 +8,7 @@
 
    التصميم (v3 — المعتمد):
      - ticket_id   = معرّف فقط. مش سر.
-     - secret      = 32 بايت عشوائي (base64) للزائر بلا جلسة فقط.
+     - secret      = 32 بايت عشوائي (base64url) للزائر بلا جلسة فقط.
                     بيتخزن **SHA-256 hash** في secret_hash، والسر نفسه
                     بيرجع مرة واحدة في رد /upload-url ومش بيتسجل في
                     أي لوج ولا أي رد خطأ.
@@ -22,12 +22,21 @@
                      (مرة واحدة على الأكثر؛ بعدها consumed).
 
    الأخطاء: كل فشل تذكرة بيرمي TICKET_ERROR واحد موحد. **ممنوع** السر
-   أو ticket_id أو path في أي رسالة أو لوج — الكود اللي بيبنص في اللوج
-   هو الـ kind فقط ('invalid' | 'concurrent').
+   أو ticket_id أو path في أي رسالة أو لوج — الـ kind فقط هو اللي
+   بيتسجل ('invalid' | 'concurrent').
    ========================================================================== */
 
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** عمر التذكرة: 2 ساعة — نفس عمر الـ signed upload URL في
+ *  transcription-storage.ts (UPLOAD_URL_TTL_SECONDS). محسوبة بالـ JS
+ *  (مش SQL string) عشان تمرر قيمة ISO حقيقية لـ supabase-js. */
+const TICKET_TTL_MS = 2 * 60 * 60 * 1000;
+
+/** lease الاستحواذ: 12 دقيقة — أكبر من أي حد تنفيذ فعلي في المسار
+ *  (مهلة ElevenLabs 5 د + maxDuration الفانكشن 5 د + هامش). */
+export const LEASE_MS = 12 * 60 * 1000;
 
 /** التذكرة اللي بترجع لـ /upload-url (السر بيتصرف مرة واحدة هنا بس). */
 export type IssuedTicket = {
@@ -41,6 +50,11 @@ export type TicketClaim = {
   claimId: string;
 };
 
+/** هوية المطالب بالتذكرة — فرعان صريحان، الخلط بينهم = invalid. */
+export type TicketClaimant =
+  | { userId: string; secret: null }
+  | { userId: null; secret: string };
+
 /** خطأ تذكرة موحد — الراوت بترجمه لـ 404 (أو 423 لو concurrent). */
 export class TicketError extends Error {
   readonly kind: "invalid" | "concurrent";
@@ -51,12 +65,6 @@ export class TicketError extends Error {
     this.kind = kind;
   }
 }
-
-/** lease الاستحواذ: 12 دقيقة — أكبر من أي حد تنفيذ فعلي في المسار. */
-const LEASE_MS = 12 * 60 * 1000;
-
-/** عمر رابط الرفع الموقّع = 2 ساعة (نفس UPLOAD_URL_TTL_SECONDS) — التذكرة بتعيش معاه. */
-const TICKET_TTL_SQL = "now() + interval '2 hours'";
 
 /** توليد سر 32 بايت base64url — للزائر بلا جلسة. */
 export function generateTicketSecret(): string {
@@ -87,22 +95,27 @@ export async function issueTicket(
   const owned = input.ownerUserId !== null;
   const secret = owned ? null : generateTicketSecret();
 
-  const { error } = await service.from("upload_tickets").insert({
-    storage_path: input.storagePath,
-    owner_user_id: input.ownerUserId,
-    secret_hash: owned ? null : hashTicketSecret(secret as string),
-    status: "active",
-    expires_at: TICKET_TTL_SQL,
-  });
+  const { data, error } = await service
+    .from("upload_tickets")
+    .insert({
+      storage_path: input.storagePath,
+      owner_user_id: input.ownerUserId,
+      secret_hash: owned ? null : hashTicketSecret(secret as string),
+      status: "active",
+      expires_at: new Date(Date.now() + TICKET_TTL_MS).toISOString(),
+    })
+    // الـ ticket_id بيتولّد في الداتابيز (default) — لازم نقراه بنفس النداء.
+    .select("ticket_id")
+    .single();
 
-  if (error) throw new TicketError("invalid");
+  if (error || !data?.ticket_id) throw new TicketError("invalid");
 
-  // تنظيف احتمالي محدود الدفعات — بهدوء.
+  // تنظيف احتمالي محدود الدفعات — بهدوء، مش شرط لنجاح الإصدار.
   if (Math.random() < 0.05) {
     void cleanupExpiredTickets(service).catch(() => {});
   }
 
-  return { ticketId: "", secret };
+  return { ticketId: data.ticket_id as string, secret };
 }
 
 /** تنظيف التذاكر المنتهية من أكتر من 7 أيام — دفعة 200 كحد أقصى. */
@@ -131,7 +144,7 @@ async function cleanupExpiredTickets(service: SupabaseClient): Promise<void> {
  *   - ticket_id + storage_path متطابقين (ربط المسار بالتذكرة).
  *   - expires_at > now() (الصلاحية).
  *   - الهوية صريحة — ممنوع الخلط بين الأنواع:
- *       * تذكرة مملوكة → نفس الجلسة فقط.
+ *       * تذكرة مملوكة (مسجل/anonymous) → نفس الجلسة فقط.
  *       * تذكرة سر (زائر بلا جلسة) → مطابقة SHA-256 للسر المُرسَل.
  *   - status = 'active'، أو 'processing' انتهى lease بتاعه (12 دقيقة)
  *     — إعادة الاستحواذ بعد lease منتهي مسموحة عشان "حاول تاني" يشتغل.
@@ -146,72 +159,55 @@ export async function claimTicket(
   input: {
     ticketId: string;
     storagePath: string;
-    claimant: { userId: string | null; secret: string | null };
+    claimant: TicketClaimant;
   },
 ): Promise<TicketClaim> {
   const claimId = randomUUID();
   const leaseCutoff = new Date(Date.now() - LEASE_MS).toISOString();
+  const now = new Date().toISOString();
 
-  // الهوية: فرعان صريحان — مفيش IS NULL OR =? اللي بيسمح بالخلط.
-  const isOwnedTicket = input.claimant.userId !== null && input.claimant.secret === null;
-  const isSecretTicket = input.claimant.userId === null && input.claimant.secret !== null;
-
-  // الشرط المشترك (باقي الهوية بيتحقق بالفرعين تحت — supabase-js مش
-  // بيدعم OR المركّب في single update بسهولة، فبنعملها بشرطين منفصلين).
-  const base = {
-    ticket_id: input.ticketId,
-    storage_path: input.storagePath,
-    expires_at: null, // placeholder — بينضاف كشرط lt('now') تحت
-  };
-  void base; // الشكل النهائي مبني بالـ builder تحت
-
-  const ownedMatch = isOwnedTicket
-    ? service
-        .from("upload_tickets")
-        .update({
-          status: "processing",
-          claim_id: claimId,
-          processing_started_at: new Date().toISOString(),
-        })
-        .eq("ticket_id", input.ticketId)
-        .eq("storage_path", input.storagePath)
-        .eq("owner_user_id", input.claimant.userId as string)
-        .is("secret_hash", null)
-        .gt("expires_at", new Date().toISOString())
-    : null;
-
-  const secretMatch = isSecretTicket
-    ? service
-        .from("upload_tickets")
-        .update({
-          status: "processing",
-          claim_id: claimId,
-          processing_started_at: new Date().toISOString(),
-        })
-        .eq("ticket_id", input.ticketId)
-        .eq("storage_path", input.storagePath)
-        .is("owner_user_id", null)
-        .eq("secret_hash", hashTicketSecret(input.claimant.secret as string))
-        .gt("expires_at", new Date().toISOString())
-    : null;
-
-  const branch = ownedMatch ?? secretMatch;
-  if (!branch) throw new TicketError("invalid");
+  // فرعان صريحان — مفيش IS NULL OR =? اللي بيسمح بالخلط بين الأنواع.
+  let branch: ReturnType<SupabaseClient["from"]> extends never ? never : any;
+  if (input.claimant.userId !== null && input.claimant.secret === null) {
+    branch = service
+      .from("upload_tickets")
+      .update({
+        status: "processing",
+        claim_id: claimId,
+        processing_started_at: now,
+      })
+      .eq("ticket_id", input.ticketId)
+      .eq("storage_path", input.storagePath)
+      .eq("owner_user_id", input.claimant.userId)
+      .is("secret_hash", null)
+      .gt("expires_at", now);
+  } else if (input.claimant.userId === null && input.claimant.secret !== null) {
+    branch = service
+      .from("upload_tickets")
+      .update({
+        status: "processing",
+        claim_id: claimId,
+        processing_started_at: now,
+      })
+      .eq("ticket_id", input.ticketId)
+      .eq("storage_path", input.storagePath)
+      .is("owner_user_id", null)
+      .eq("secret_hash", hashTicketSecret(input.claimant.secret))
+      .gt("expires_at", now);
+  } else {
+    // خلط أنواع (جلسة + سر مع بعض، ولا الاتنين) → invalid.
+    throw new TicketError("invalid");
+  }
 
   // فرع الحالة: active، أو processing انتهى lease بتاعه.
   const { data: claimed, error } = await branch
-    .or(
-      [
-        `status.eq.active`,
-        `status.eq.processing,processing_started_at.lt.${leaseCutoff}`,
-      ].join(","),
-    )
+    .or(`status.eq.active,status.eq.processing.and.processing_started_at.lt.${leaseCutoff}`)
     .select("claim_id")
     .single();
 
   if (error || !claimed) {
-    // هل ده "مش مالكك" ولا "تزامن من مالكك"؟ الـ 423 بيرجع **بس** بعد
-    // تأكيد الملكية — لازم قراءة تانية مشروطه بالهوية نفسها.
+    // هل ده "تزامن من مالك صح" ولا "مش مالكك/مش موجودة"؟ الـ 423
+    // بيرجع **بس** بعد تأكيد الملكية — مفيش كشف وجود لحد تاني.
     if (await isOwnedAndBusy(service, input)) throw new TicketError("concurrent");
     throw new TicketError("invalid");
   }
@@ -225,7 +221,7 @@ async function isOwnedAndBusy(
   input: {
     ticketId: string;
     storagePath: string;
-    claimant: { userId: string | null; secret: string | null };
+    claimant: TicketClaimant;
   },
 ): Promise<boolean> {
   const leaseCutoff = new Date(Date.now() - LEASE_MS).toISOString();
@@ -241,7 +237,9 @@ async function isOwnedAndBusy(
   if (input.claimant.userId !== null && input.claimant.secret === null) {
     query = query.eq("owner_user_id", input.claimant.userId);
   } else if (input.claimant.userId === null && input.claimant.secret !== null) {
-    query = query.is("owner_user_id", null).eq("secret_hash", hashTicketSecret(input.claimant.secret as string));
+    query = query
+      .is("owner_user_id", null)
+      .eq("secret_hash", hashTicketSecret(input.claimant.secret));
   } else {
     return false; // خلط أنواع → invalid مش concurrent (مفيش كشف)
   }
