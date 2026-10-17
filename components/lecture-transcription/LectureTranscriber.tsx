@@ -13,15 +13,22 @@
 
    ⚠️ العقد مع السيرفر (3 نقاط):
      - POST /api/lecture-transcription/upload-url بـ JSON { filename,
-       contentType, size } ← بيرجّع { signedUrl, token, path, expiresIn }.
-       تذكرة مؤقتة على **مسار واحد**؛ مفيش أي صلاحية عامة على الباكيت.
+       contentType, size } ← بيرجّع { signedUrl, token, path, expiresIn,
+       ticketId, secret }. تذكرة مؤقتة على **مسار واحد**؛ مفيش أي صلاحية
+       عامة على الباكيت.
      - PUT المتصفح على signedUrl مباشرة (مش في الفانكشن) — وده اللي
        بيشيل حد الـ 4.5 ميجا.
      - POST /api/lecture-transcription/transcribe بـ JSON { path, filename,
-       size } ← بيرجّع `{ transcript: LectureTranscript }` (نفس المرحلة 1).
-     كلهم بيرجّعوا `{ error: { code, message } }` عند الفشل.
+       size, ticketId, secret? } ← بيرجّع `{ transcript: LectureTranscript }`
+       (نفس المرحلة 1).
+     كلهم بيرجعوا `{ error: { code, message } }` عند الفشل.
      **كل** الكلام عن ElevenLabs والأسعار معزول جوه
      `lib/ai/transcription.ts` — الكلاينت مش شايف ولا سطر منه.
+
+   🎫 تذاكر الملكية: `ticketId` (+ `secret` للزائر بلا جلسة) بيتصرفوا
+   من /upload-url وبيتبعتوا مع كل نداء لـ /transcribe. التذكرة بتستهلك
+   مع أول نجاح تفريغ (حتى لو الحفظ فشل) — فأي 404 من /transcribe معناها
+   «ارفع من جديد»، والعميل بيمسح المسار والتذكرة فورًا.
 
    ⚠️ الاستيراد: `lib/ai/transcription-shared` بس (مفيهوش `process.env`
    ولا `fetch`). استيراد `lib/ai/transcription` هنا كان هيعني كود المزوّد
@@ -155,13 +162,15 @@ const ERR_NETWORK = "فيها مشكلة في الاتصال. اتأكد من ا
 const ERR_NO_FILE = "اختر ملف المحاضرة الأول.";
 const ERR_UPLOAD = "فشل رفع المحاضرة. حاول مرة أخرى.";
 const ERR_UPLOAD_RETRY = "مقدرناش نجهّز رفع المحاضرة. حاول تاني بعد شوية.";
+/** 🎫 التذكرة استُهلكت/انتهت — الخادم رجّع الرد الموحد «ارفع من جديد». */
+const ERR_TICKET_INVALID = "التذكرة انتهت. ارفع المحاضرة من جديد.";
 
 /**
  * كود فشل ثابت للتشخيص الآمن — بيُسجَّل في الكونسول وبيُلصق نسخة صغيرة
  * منه مع رسالة الفشل في الواجهة، عشان نعرف **أي فرع بالتحديد** وقف
  * من غير ما نحتاج من المستخدم يعيد إنتاج المشكلة ونحن عمالين نخمّن.
  *
- * ⚠️ **ممنوع أي بيانات مستخدم داخل الكود**: لا اسم الملف، لا الحجم،
+ * ⚠️ **ممنوع أي بيانات مستخدم داخل الكود**: لا اسم الملف، لا الحجم,
  * لا الرابط، لا التوكن، ولا محتوى رد الخادم — كود قصير ثابت بس.
  * مثال: `upload.xhr` = فشل الـ PUT مباشرة، `prep.duration` = فشل
  * قراءة مدة الملف قبل الضغط.
@@ -184,6 +193,14 @@ type Phase = "idle" | "working" | "done" | "error";
  *  الآخر من غير تقدّم، والرقم الوهمي كذب صريح. الوحيد اللي بيعرض
  *  نسبة هو **الرفع** — ودي حقيقية 100% (بايتم على المتصفح). */
 type Stage = "preparing" | "uploading" | "transcribing" | "finalizing";
+
+/** 🎫 تذكرة الملكية من ناحية العميل — اللي بيتخزن في الحالة.
+ *  `secret` موجود بس للزائر بلا جلسة (بيتبعت مع كل نداء تفريغ بدل
+ *  الكوكيز). ممنوع يظهر في أي رسالة/لوج/عنوان. */
+type OwnershipTicket = {
+  ticketId: string;
+  secret: string | null;
+};
 
 /**
  * رفع الملف **مباشرة** للتخزين عن طريق الـ signed URL بتاع الراوت.
@@ -302,7 +319,8 @@ function readSaveInfo(payload: unknown): SaveInfo {
 /** المكوّن الرئيسي — كل حالة الشاشة في متغيرات واحدة واضحة. */
 export function LectureTranscriber() {
   const [file, setFile] = useState<File | null>(null);
-  // \ud83e\udde1 \u0627\u0633\u0645 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0623\u0635\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u0636\u063a\u0637 (\u0644\u0644\u0639\u0631\u0636 \u0648\u0627\u062d\u062f)
+
+// 🧡 اسم الملف الأصلي قبل الضغط (للعرض واحد)
   const [originalName, setOriginalName] = useState<string | null>(null);
   const [originalSize, setOriginalSize] = useState(0);
   const [preparing, setPreparing] = useState(false);
@@ -335,6 +353,10 @@ export function LectureTranscriber() {
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
    *  فالطالب يقدر يدوس «حاول تاني» ويكمّل من نفس الملف. */
   const [uploadedPath, setUploadedPath] = useState<string | null>(null);
+  /** 🎫 تذكرة الملكية المرتبطة بالمسار المرفوع — إلزامية في أي نداء
+   *  لـ /transcribe (الخادم مش بيقبل مسار من غيرها). بتتمسح مع المسار
+   *  في نفس الأماكن بالظبط عشان الاتنين يفضلوا متزامنين دايمًا. */
+  const [uploadTicket, setUploadTicket] = useState<OwnershipTicket | null>(null);
   /** 📚 نتيجة حفظ المحاضرة (المرحلة ٣).
    *
    *  ⚠️ دي **مش** نفس `phase`: دي بتقول «التفريغ نجح، بس المحاضرة
@@ -403,7 +425,7 @@ export function LectureTranscriber() {
       if (next.size > deviceLimit) {
         setError(
           `الملف ${Math.round(next.size / 1024 / 1024)} ميجا — أكبر من الحد الأقصى لجهازك (${Math.round(
-            deviceLimit / 1024 / 1024
+            deviceLimit / 1024 / 1024,
           )} ميجا). ممكن تضغطه بنفسك من هاتفك، أو قسمه لمحاضرتين.`
         );
         setPhase("error");
@@ -423,6 +445,7 @@ export function LectureTranscriber() {
         setCopied(false);
         setPhase("idle");
         setUploadedPath(null);
+        setUploadTicket(null);
         setUploadPercent(0);
         return;
       }
@@ -450,6 +473,7 @@ export function LectureTranscriber() {
         setCopied(false);
         setPhase("idle");
         setUploadedPath(null);
+        setUploadTicket(null);
         setUploadPercent(0);
       } catch (preparationError) {
         // ❌ مبنرفعش الملف الأصلي: حجمه هيعدّي حد Supabase.
@@ -517,6 +541,7 @@ export function LectureTranscriber() {
     setCopied(false);
     setPhase("idle");
     setUploadedPath(null);
+    setUploadTicket(null);
     setUploadPercent(0);
     setPendingFile(null);
     setPrepareAttempts(0);
@@ -576,23 +601,50 @@ export function LectureTranscriber() {
    *
    * منفصلة عن `run` عشان إعادة المحاولة بعد فشل تفريغ ترجع ل هنا
    * على طول — من غير ما نطلب تذكرة جديدة ولا نرفع 200 ميجا تاني.
+   *
+   * 🎫 بتاخد تذكرة الملكية بتاعة المسار — الخادم مش بيقبل المسار
+   * من غيرها (ده هو إغلاق IDOR نفسه).
    */
   const transcribeUploaded = useCallback(
-    async (path: string) => {
+    async (path: string, ticket: OwnershipTicket | null) => {
       setStage("transcribing");
       setUploadPercent(100);
 
       const response = await fetch("/api/lecture-transcription/transcribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, filename: file?.name ?? "محاضرة", size: file?.size ?? 0 }),
+        body: JSON.stringify({
+          path,
+          filename: file?.name ?? "محاضرة",
+          size: file?.size ?? 0,
+          ticketId: ticket?.ticketId ?? "",
+          ...(ticket?.secret ? { secret: ticket.secret } : {}),
+        }),
       });
       const payload: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
-        /* ⚠️ الملف لسه مرفوع (الخادم بيحذفه بعد النجاح بس) — فبنسيب
-           `uploadedPath` متسجّل، والزر بيرجع لـ «حاول تاني» ويكمّل من
-           نفس الملف. ده أهم فرق عن المرحلة 1. */
+        /* 🎫 404 = الرد الموحد: التذكرة غلط/مش بتاعتك/منتهية/مستهلكة.
+           إعادة المحاولة بنفس التذكرة مستحيلة — بنمسح المسار والتذكرة
+           عشان الزر يرجع «تحويل إلى نص» والرفع يبدأ من جديد. */
+        if (response.status === 404) {
+          setUploadedPath(null);
+          setUploadTicket(null);
+          setFailureCode("transcribe.ticket_invalid");
+          setError(
+            failCode(
+              "transcribe.ticket_invalid",
+              extractErrorMessage(payload, ERR_TICKET_INVALID),
+            ),
+          );
+          setPhase("error");
+          return false;
+        }
+        /* 423 = فيه تفريغ جاري على نفس الملف (المالك صح). التذكرة لسه
+           سليمة — بنسيب المسار والتذكرة عشان «حاول تاني» يشتغل بعد شوية.
+           أي فشل تاني: نفس السلوك القديم — الملف لسه مرفوع (الخادم
+           بيحذفه بعد النجاح بس)، فبنسيب `uploadedPath` متسجّل، والزر
+           بيرجع لـ «حاول تاني» ويكمّل من نفس الملف. */
         setFailureCode("transcribe.http");
         setError(failCode("transcribe.http", extractErrorMessage(payload, ERR_GENERIC)));
         setPhase("error");
@@ -610,17 +662,11 @@ export function LectureTranscriber() {
 
       /* 📚 حالة الحفظ — بتتقري من نفس الرد (المرحلة ٣).
        *
-       * ⚠️ **الفرق الحاسم عن السلوك القديم في `uploadedPath`**: الكود
-       * القديم كان بيمسح المسار دايماً عند النجاح لأن الخادم كان
-       * بيحذف الملف دايماً. دلوقتي الخادم بيحذف **بس لو الحفظ نجح**:
-       *
-       *   - حفظ نجح  → الملف اتمسح في السيرفر فعلاً، فنمسح المسار عندنا
-       *                 عادي. (إلا لو الحفظ زائر — الملف بيفضل متروك
-       *                 للـ lifecycle، فبنمسح المسار برضه عشان متقعدش
-       *                 في حالة "محاولة تاني" ميتة.)
-       *   - حفظ فشل  → السيرفر **سيب** الملف عمداً. هنا البند ده هو
-       *                 اللي بيخلّي «حاول تاني» تشتغل: بنحسب المسار
-       *                 تاني ونترك `phase` على "done" مع عرض النص.
+       * 🎫 التذكرة استُهلكت مع نجاح التفريغ نفسه (حتى لو الحفظ فشل
+       * بعدها — سيناريو 14): الخادم رجّع النص، فأي «حاول تاني» على نفس
+       * التذكرة هيرجع 404. بنمسح المسار والتذكرة في الحالتين عشان
+       * الزر مايقعدش في حالة «حاول تاني» ميتة — «محاضرة جديدة» هي
+       * الطريق الوحيد بعد النجاح.
        *
        * ملاحظة: `transcribeUploaded` بترجّع `true` و`phase = "done"`
        * في الحالتين — لأن **التفريغ نجح** في الحالتين. الفرق بيترجمه
@@ -628,10 +674,8 @@ export function LectureTranscriber() {
        */
       const info = readSaveInfo(payload);
       setSaveInfo(info);
-      if (info.saved) {
-        // الملف اتمسح في السيرفر — مش فايدة نحتفظ بالمسار.
-        setUploadedPath(null);
-      }
+      setUploadedPath(null);
+      setUploadTicket(null);
       setTranscript(result);
       setPhase("done");
       return true;
@@ -657,9 +701,10 @@ export function LectureTranscriber() {
     try {
       /* ⚠️ الملف ده مرفوع خلاص من محاولة سابقة (فشل التفريغ مثلاً):
          نكمّل من عند التفريغ — رفع 200 ميجا تاني معناه دقائق ضايعة
-         على الطالب ونصيب من الفاتورة. */
-      if (uploadedPath) {
-        await transcribeUploaded(uploadedPath);
+         على الطالب ونصيب من الفاتورة. التذكرة لازم تكون موجودة مع
+         المسار (الاتنين بيتمسحوا وبيترجعوا مع بعض دايمًا). */
+      if (uploadedPath && uploadTicket) {
+        await transcribeUploaded(uploadedPath, uploadTicket);
         return;
       }
 
@@ -709,7 +754,8 @@ export function LectureTranscriber() {
       }
 
       const ticket = ticketPayload as UploadTicket | null;
-      if (!ticket?.signedUrl || !ticket.token || !ticket.path) {
+      // 🎫 ticketId إلزامي — من غيره الخادم بيرفض التفريغ أصلًا.
+      if (!ticket?.signedUrl || !ticket.token || !ticket.path || typeof ticket.ticketId !== "string") {
         setFailureCode("ticket.invalid");
         setError(failCode("ticket.invalid", ERR_UPLOAD_RETRY));
         setPhase("error");
@@ -732,18 +778,22 @@ export function LectureTranscriber() {
         return;
       }
 
-      // الملف بقى في مكانه — لو التفريغ فشل، إعادة المحاولة هتكمل منه.
+      // الملف بقى في مكانه — المسار + التذكرة مع بعض دايمًا.
       setUploadedPath(ticket.path);
+      setUploadTicket({ ticketId: ticket.ticketId, secret: ticket.secret ?? null });
 
       // ── الخطوات ٣ و ٤: تفريغ + عرض ──
-      await transcribeUploaded(ticket.path);
+      await transcribeUploaded(ticket.path, {
+        ticketId: ticket.ticketId,
+        secret: ticket.secret ?? null,
+      });
     } catch {
       // فشل fetch نفسه = نت فاصل أو الصفحة اتقفلت
       setFailureCode("net.run");
       setError(failCode("net.run", ERR_NETWORK));
       setPhase("error");
     }
-  }, [file, working, runDirect, uploadedPath, transcribeUploaded]);
+  }, [file, working, runDirect, uploadedPath, uploadTicket, transcribeUploaded]);
 
   /** نسخ النص للحافظة — مع تنظيف المؤقّت عشان مايتسرّبش بين Copies. */
   const copyText = useCallback(async () => {
@@ -843,7 +893,7 @@ export function LectureTranscriber() {
                 {file.type ? ` · ${file.type}` : ""}
                 {originalSize > 0 ? (
                   <span className="text-[var(--accent)]">
-                    {` \u00b7 \u062a\u0645 \u0636\u063a\u0637\u0647 \u0645\u0646 ${formatFileSize(originalSize)}`}
+                    {` · تم ضغطه من ${formatFileSize(originalSize)}`}
                   </span>
                 ) : null}
               </p>
@@ -899,7 +949,7 @@ export function LectureTranscriber() {
 
               <p className="mt-2 text-center text-xs text-[var(--muted)]">
                 {stage === "preparing"
-                  ? `\u062c\u0627\u0631\u064a \u062c\u0647\u064a\u0632 \u0627\u0644\u0645\u0644\u0641 \u2014 ${preparePercent}%`
+                  ? `جاري تجهيز الملف — ${preparePercent}%`
                   : stage === "uploading"
                   ? `الرفع مباشر للتخزين — ${uploadPercent}%`
                   : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
@@ -920,7 +970,7 @@ export function LectureTranscriber() {
         </div>
       )}
 
-      {/* ───────── بطاقة الاسترداد بعد الفشل ─────────
+{/* ───────── بطاقة الاسترداد بعد الفشل ─────────
           ⚠️ بتظهر بس لما: في رسالة خطأ + كود فشل معروف + المرحلة تستحق
           بطاقة (تجهيز/رفع — مش تفريغ، لأن التفريغ له زرّه «حاول تحويلها
           تاني»). الخيارات جاية من `recoveryOptions` حسب المرحلة وعدد
