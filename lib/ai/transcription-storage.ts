@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════════════════════════
 
    **سيرفر بس.** كل دالة هنا بتمسك مفتاح الخدمة — ممنوع أي استيراد من
-   كومبوننت كلاينت. اللي بيحتاجه الكلاينت (الأنواع والحدود) في
+   كومپوننت كلاينت. اللي بيحتاجه الكلاينت (الأنواع والحدود) في
    `transcription-shared.ts`.
 
    ═══ ليه Supabase Storage ═══
@@ -31,7 +31,7 @@
      - المسار فيه `crypto.randomUUID()`، فمينفعش حد يخمّن مسار
        ملف تاني ويتعدّل عليه.
      - بنتحقق من الحجم **بعد** الرفع من بيانات Supabase نفسها
- *       (list)، مش من اللي المتصفح أعلنه.
+       (list)، مش من اللي المتصفح أعلنه.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { randomUUID } from "node:crypto";
@@ -61,6 +61,14 @@ const UPLOAD_URL_TTL_SECONDS = 2 * 60 * 60;
  *  وبعدين بنحذف الملف. مش رابط عام. */
 const READ_URL_TTL_SECONDS = 60 * 60;
 
+/**
+ * 🎫 تذكرة الرفع من ناحية التخزين **بس**: رابط موقّع + مسار.
+ * حقول الملكية (`ticketId` / `secret`) بتتصدر من الراوت
+ * (`/upload-url`) عبر `lib/ai/tickets.ts` — مش من هنا — عشان مصدر
+ * واحد للحقيقة لكل جزء، والـ typecheck بيمسك أي خلط.
+ */
+export type StorageUploadTicket = Omit<UploadTicket, "ticketId" | "secret">;
+
 /** هل التخزين مهيّأ؟ (URL + مفتاح سيرفر موجودين في البيئة)
  *  الواجهة بتستخدم ده عشان ترجع للمسار القديم بدل ما تفشل صامتة.
  *
@@ -89,17 +97,17 @@ function storage() {
 
 /** يبني مسار كائن فريد.
  *
- *  ⚠️ الـ UUID في النص **مهم أمنياً**: المسار ده هو كل حاجة بتفصل
- *  بين ملف مستخدم وآخر. لو رجعنا لاسم الملف الأصلي بس، حد يقدر يخمّن
- *  مسار ملف حد تاني ويبعت عليه طلب تفريغ. الاسم الأصلي بيتخزّن
- *  **متسجّل** كـ metadata مش كجزء من المسار.
+ * ⚠️ الـ UUID في النص **مهم أمنياً**: المسار ده هو كل حاجة بتفصل
+ * بين ملف مستخدم وآخر. لو رجعنا لاسم الملف الأصلي بس، حد يقدر يخمّن
+ * مسار ملف حد تاني ويبعت عليه طلب تفريغ. الاسم الأصلي بيتخزّن
+ * **متسجّل** كـ metadata مش كجزء من المسار.
  *
- *  امتداد الملف جزء من المسار عشان ElevenLabs يميّز النوع من الرابط
- *  (هو بيستنتج النوع من المسار/الـ content-type). */
+ * امتداد الملف جزء من المسار عشان ElevenLabs يميّز النوع من الرابط
+ * (هو بيستنتج النوع من المسار/الـ content-type). */
 function buildObjectPath(originalName: string): string {
   const match = /\.([A-Za-z0-9]{1,5})$/.exec(originalName);
   const ext = (match?.[1] ?? "bin").toLowerCase();
-  // yyyy/mm/dd بيسهّل تنظيف الملفات القديمة بـ lifecycle policy.
+  // yyyy/mm/dd بيسهّل تنظيم الملفات القديمة بـ lifecycle policy.
   const now = new Date();
   const yyyy = now.getUTCFullYear();
   const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
@@ -113,12 +121,14 @@ function buildObjectPath(originalName: string): string {
  * ⚠️ بنتحقق من الاسم والحجم **قبل** ما نولّد التذكرة، لكن ده فحص مبكّر
  * مش نهائي: الفحص الحقيقي بيحصل في `verifyUploadedObject` بعد ما الملف
  * يوصل فعلاً (المتصفح يقدر يكذب في `size`).
+ *
+ * 🎫 بتخصّ **جزء التخزين بس** — الراوت بيضيف تذكرة الملكية فوقه.
  */
 export async function createUploadTicket(input: {
   filename: string;
   contentType: string;
   size: number;
-}): Promise<UploadTicket> {
+}): Promise<StorageUploadTicket> {
   assertLectureUploadMeta(input.filename, input.size, input.contentType);
 
   const path = buildObjectPath(input.filename);
