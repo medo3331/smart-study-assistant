@@ -4,6 +4,7 @@ import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/dire
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
@@ -36,6 +37,17 @@ export async function POST(req: Request) {
     // ٢) حدّ استخدام: توليد الخطة أغلى طلب عندنا
     const limited = checkRateLimit(`plan:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
+
+    // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
+    const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد الخدمة.", retryable: false },
+        { status: 429 }
+      );
+    }
+
     // Phase H: 1 credit gate (free model, but still costs 1 credit)
     guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;

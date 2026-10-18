@@ -9,7 +9,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { getAdminRole, isOwnerEmail } from "@/lib/auth-roles";
+import { resolveActor, actorHasPermission } from "@/lib/policy";
 
 export type RewardType = "limit_boost" | "trial_week" | "pro_week" | "upload_credits";
 
@@ -38,9 +38,8 @@ export async function issueReward(
   try {
     // ── EPIC-2 Authorization Guard: ONLY Owner (rewards.manage = owner only)
     const supabaseClient = createServiceClient();
-    const role = await getAdminRole(supabaseClient, adminUserId, adminEmail);
-    const isActualOwner = role === "owner" || isOwnerEmail(adminEmail ?? null);
-    if (!isActualOwner) {
+    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    if (!actorHasPermission(actor, "rewards.manage")) {
       await recordAuditLog({
         actor: adminUserId,
         actor_email: adminEmail,

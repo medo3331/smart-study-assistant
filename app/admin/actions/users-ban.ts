@@ -2,7 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { getAdminRole, hasPermission, isOwnerEmail } from "@/lib/auth-roles";
+import { resolveActor, actorHasPermission } from "@/lib/policy";
 
 export interface BanResult {
   ok: boolean;
@@ -19,10 +19,8 @@ export interface BanResult {
 export async function banUser(userId: string, userCode: string | null, reason: string, adminUserId: string, adminEmail: string | null): Promise<BanResult> {
   try {
     const supabaseClient = createServiceClient();
-    const allowed = await hasPermission(supabaseClient, adminUserId, adminEmail, "users.ban");
-    const role = await getAdminRole(supabaseClient, adminUserId, adminEmail);
-    const isActualOwner = role === "owner" || isOwnerEmail(adminEmail ?? null);
-    if (!allowed && !isActualOwner) {
+    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    if (!actorHasPermission(actor, "users.ban")) {
       await recordAuditLog({
         actor: adminUserId,
         actor_email: adminEmail,
@@ -70,10 +68,8 @@ export async function banUser(userId: string, userCode: string | null, reason: s
 export async function unbanUser(userId: string, userCode: string | null, adminUserId: string, adminEmail: string | null): Promise<BanResult> {
   try {
     const supabaseClient = createServiceClient();
-    const allowed = await hasPermission(supabaseClient, adminUserId, adminEmail, "users.unban");
-    const role = await getAdminRole(supabaseClient, adminUserId, adminEmail);
-    const isActualOwner = role === "owner" || isOwnerEmail(adminEmail ?? null);
-    if (!allowed && !isActualOwner) {
+    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    if (!actorHasPermission(actor, "users.unban")) {
       await recordAuditLog({
         actor: adminUserId,
         actor_email: adminEmail,
