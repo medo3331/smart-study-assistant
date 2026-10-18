@@ -25,7 +25,6 @@
     "@ffmpeg/util": "^0.12.2",
     "@google/genai": "^2.12.0",
     "@google/generative-ai": "^0.24.1",
-    "@next/swc-win32-x64-msvc": "^16.2.10",
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.117.2",
