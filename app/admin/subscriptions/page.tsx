@@ -36,8 +36,11 @@ export default async function AdminSubscriptionsPage({
 }) {
   const sp = await searchParams;
   const { user, isOwner } = await requireAdminPermission("subscriptions.manage");
+  if (!isOwner) {
+    redirect("/dashboard?admin=owner-only");
+  }
 
-  const canActivate = isOwner;
+  const canActivate = true;
   const lookupRaw = (sp.sub_lookup ?? "").trim();
   const status = lookupRaw ? await getSubscriptionStatus(lookupRaw) : null;
   const lookupFailed = Boolean(lookupRaw) && !status;
@@ -219,8 +222,12 @@ export default async function AdminSubscriptionsPage({
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <label className="flex flex-col gap-1">
-              <span className="text-xs text-slate-400">User Code</span>
-              <input name="user_code" type="text" placeholder="MAG-XXX-XXXX" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono" required />
+              <span className="text-xs text-slate-400">بريد المستلم</span>
+              <input name="email" type="email" placeholder="user@example.com" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm" required />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-slate-400">كود المستخدم (اختياري)</span>
+              <input name="user_code" type="text" placeholder="MAG-XXX-XXXX" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono" />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs text-slate-400">الخطة</span>
