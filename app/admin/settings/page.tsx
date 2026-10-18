@@ -2,6 +2,7 @@ import { Server, UserCog, UserPlus } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { providerConfigStatus } from "@/lib/ai/health";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminSkeleton, AdminStatCard, AdminTableWrap } from "@/components/admin/ui";
+import { readSystemSettings, updateSystemSettings } from "@/app/plans/actions";
 
 /**
  * ⚙️ الإعدادات — الصفحة الجديدة (المرحلة 1).
@@ -15,6 +16,10 @@ import { AdminCard, AdminNotice, AdminPageHeader, AdminSkeleton, AdminStatCard, 
  */
 export default async function AdminSettingsPage() {
   const { supabase, user, isOwner } = await requireAdminPermission("admins.manage");
+
+  const settings = await readSystemSettings();
+  const isSubsEnabled = settings.isSubscriptionsEnabled;
+  const isPaymentsEnabled = settings.isPaymentsEnabled;
 
   const { data: adminsList } = await supabase.from("site_admins").select("user_id, role, added_at").order("added_at", { ascending: true });
   const admins = (adminsList ?? []) as Array<{ user_id: string; role: string | null; added_at: string | null }>;
@@ -113,11 +118,82 @@ export default async function AdminSettingsPage() {
         )}
       </AdminCard>
 
+      <AdminCard
+        title="إعدادات النظام (Master Switch)"
+        description="تمكين/تعطيل الاشتراكات والدفع على مستوى المنصة بالكامل. Owner فقط."
+        tone="rose"
+      >
+        {(() => {
+          const toggleLabel = (on: boolean) => (on ? "مفعل" : "معطل");
+          const toggleTone = (on: boolean) => (on ? "emerald" : "rose");
+
+          async function saveSettings(formData: FormData) {
+            const isSubs = formData.get("isSubscriptionsEnabled") === "true";
+            const isPayments = formData.get("isPaymentsEnabled") === "true";
+            await updateSystemSettings({ isSubscriptionsEnabled: isSubs, isPaymentsEnabled: isPayments });
+          }
+
+          return (
+            <form action={saveSettings} method="POST" className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border border-slate-700 rounded-2xl bg-slate-900/50">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-slate-200">تفعيل الاشتراكات</span>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${toggleTone(isSubsEnabled)}`}>
+                      {toggleLabel(isSubsEnabled)}
+                    </span>
+                  </div>
+                  <input type="hidden" name="isSubscriptionsEnabled" value="false" />
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none p-2 rounded-lg hover:bg-slate-800 transition">
+                    <input
+                      type="checkbox"
+                      name="isSubscriptionsEnabled"
+                      value="true"
+                      defaultChecked={isSubsEnabled}
+                      className="sr-only peer"
+                    />
+                    <div className="w-12 h-6 rounded-full bg-slate-700 peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:translate-x-6"></div>
+                  </label>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-slate-200">تفعيل الدفع</span>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${toggleTone(isPaymentsEnabled)}`}>
+                      {toggleLabel(isPaymentsEnabled)}
+                    </span>
+                  </div>
+                  <input type="hidden" name="isPaymentsEnabled" value="false" />
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none p-2 rounded-lg hover:bg-slate-800 transition">
+                    <input
+                      type="checkbox"
+                      name="isPaymentsEnabled"
+                      value="true"
+                      defaultChecked={isPaymentsEnabled}
+                      className="sr-only peer"
+                    />
+                    <div className="w-12 h-6 rounded-full bg-slate-700 peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:translate-x-6"></div>
+                  </label>
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <UserCog size={16} /> حفظ الإعدادات
+              </button>
+              <AdminNotice tone="default">
+                عند الإيقاف: أي محاولة لتفعيل اشتراك أو إجراء دفع ستُرفض تلقائياً
+                برسالة "نظام الاشتراكات/الدفع معطل حالياً من قبل الإدارة" وتُسجل في سجل التدقيق (Audit Log).
+              </AdminNotice>
+            </form>
+          );
+        })()}
+      </AdminCard>
+
       <AdminSkeleton
-        title="إعدادات المنصة"
+        title="إعدادات الإشعارات وحدود المنصة"
         deferredTo="المرحلة 4"
         items={[
-          { label: "تفعيل/تعطيل الفترة المجانية والدفع", detail: "app_settings (billing_free_period_enabled / billing_payments_enabled) — القراءة متاحة في /admin/plans. الحفظ من اللوحة محتاج أولًا إصلاح صلاحية updateBillingSettings (حاليًا بتقبل أي مستخدم عنده entitlement premium بدل فحص الدور)." },
           { label: "إعدادات الإشعارات", detail: "محتاج جدول/مفاتيح إعدادات جديدة — مش موجودة حاليًا، فمفيش حاجة تتعرض كأنها شغالة." },
           { label: "حدود عامة للمنصة", detail: "حدود الرفع/الرسائل بتيجي من lib/ai/rate-limit.ts + خريطة داخلية في app/api/upload/route.ts — التوحيد مع subscription_plans مؤجل للمرحلة 4." },
           { label: "سجل الإعدادات", detail: "أي تغيير إعدادات لازم يسجّل في audit_log بنوع العملية والمُنفِّذ (زي باقي العمليات الحساسة)." },

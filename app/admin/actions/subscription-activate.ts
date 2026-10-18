@@ -60,7 +60,35 @@ export async function activateSubscription(
 
     const privileged = createServiceClient();
 
-    // ── حل المستلم: الإيميل يُحلّ لـ UUID سيرفر-side؛ الكود كخيار احتياطي
+    // ── Master Switch: فحص هل الاشتراكات مفعلة عالمياً قبل أي عملية
+    const { data: settingsRows } = await privileged
+      .from("system_settings")
+      .select("key, value")
+      .in("key", ["is_subscriptions_enabled"]);
+    const settingsMap = new Map((settingsRows ?? []).map((r: any) => [r.key, r.value]));
+    const subsEnabled = settingsMap.get("is_subscriptions_enabled") === "true";
+    if (!subsEnabled) {
+      await recordAuditLog({
+        actor: adminUserId,
+        actor_email: adminEmail,
+        action: "subscriptions.manage",
+        resource_type: "subscription",
+        resource_id: input.userCode?.trim() ?? null,
+        details: { user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, reason: "subscriptions_disabled_master_switch" },
+        result: "BLOCKED",
+      });
+      return {
+        ok: false,
+        message: "نظام الاشتراكات معطل حالياً من قبل الإدارة",
+        error: "subscriptions_disabled",
+        activationId: null,
+        auditId: null,
+        userId: null,
+      };
+    }
+
+    // ── حل المستلم: الإيميل يُحلّ لـ UUID سيرفر-side (المسار الأساسي والأكثر أماناً)
+    // user_code يُحتفظ به كاختياري للتوافق مع الاستدعاءات القديمة فقط.
     const recipientEmail = (input.email ?? "").trim().toLowerCase();
     let recipientUserId: string | null = null;
     let usedEmail = false;
