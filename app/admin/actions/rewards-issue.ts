@@ -147,7 +147,7 @@ export async function issueReward(
       const { data: activationData, error: activationError } = await privileged
         .from("subscription_activations")
         .insert({
-          user_code: `REWARD-${recipientUserId.slice(0, 8)}-${Date.now().toString(36)}`,
+          user_code: null,
           user_id: recipientUserId,
           plan_key: planKey,
           duration_days: input.durationDays || 7,

@@ -44,8 +44,8 @@ export async function activateSubscription(
         actor_email: adminEmail,
         action: "subscriptions.manage",
         resource_type: "subscription",
-        resource_id: input.userCode?.trim() ?? null,
-        details: { user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, rejected_by: adminUserId, reason: "non_owner_attempt_rejected" },
+        resource_id: input.userCode?.trim() || null,
+        details: { user_code: input.userCode?.trim() || null, plan_key: input.planKey, rejected_by: adminUserId, reason: "non_owner_attempt_rejected" },
         result: "BLOCKED",
       });
       return {
@@ -73,8 +73,8 @@ export async function activateSubscription(
         actor_email: adminEmail,
         action: "subscriptions.manage",
         resource_type: "subscription",
-        resource_id: input.userCode?.trim() ?? null,
-        details: { user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, reason: "subscriptions_disabled_master_switch" },
+        resource_id: input.userCode?.trim() || null,
+        details: { user_code: input.userCode?.trim() || null, plan_key: input.planKey, reason: "subscriptions_disabled_master_switch" },
         result: "BLOCKED",
       });
       return {
@@ -196,7 +196,7 @@ export async function activateSubscription(
     const { data: activationData, error: activationError } = await privileged
       .from("subscription_activations")
       .insert({
-        user_code: input.userCode?.trim() ?? null,
+        user_code: input.userCode?.trim() || null,
         user_id: userId,
         plan_key: input.planKey,
         duration_days: input.durationDays,
@@ -212,8 +212,8 @@ export async function activateSubscription(
         actor_email: adminEmail,
         action: "subscriptions.manage",
         resource_type: "subscription",
-        resource_id: input.userCode?.trim() ?? null,
-        details: { user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, duration_days: input.durationDays, reason: "db_insert_failed" },
+        resource_id: input.userCode?.trim() || null,
+        details: { user_code: input.userCode?.trim() || null, plan_key: input.planKey, duration_days: input.durationDays, reason: "db_insert_failed" },
         result: "FAIL",
       });
       return { ok: false, message: "فشل تسجيل التفعيل: " + activationError.message, error: activationError.message, activationId: null };
@@ -229,7 +229,7 @@ export async function activateSubscription(
       resource_type: "subscription",
       resource_id: (recipientEmail || input.userCode?.trim()) ?? null,
       details: {
-        user_code: input.userCode?.trim() ?? null,
+        user_code: input.userCode?.trim() || null,
         user_id: userId,
         plan_key: input.planKey,
         duration_days: input.durationDays,
