@@ -80,7 +80,32 @@ export async function searchUsers(
       return [];
     }
 
-    return mapRows(data as any[], planFilter);
+    const mapped = mapRows(data as any[], planFilter);
+
+    // fallback: profiles.email غالباً NULL (الإيميل في auth.users فقط).
+    // لو البحث أعطى صفر نتائج، ابحث في auth.users عبر service_role ثم اجلب profiles بالـ IDs.
+    if (q && mapped.length === 0) {
+      try {
+        const { data: listData } = await privileged.auth.admin.listUsers();
+        const needle = q.toLowerCase();
+        const matchedIds = (listData?.users ?? [])
+          .filter((u) => (u.email ?? "").toLowerCase().includes(needle))
+          .slice(0, 50)
+          .map((u) => u.id);
+        if (matchedIds.length > 0) {
+          const { data: fallbackRows } = await privileged
+            .from("profiles")
+            .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at, user_codes(code, is_active), entitlements(kind, value, metadata)")
+            .in("id", matchedIds)
+            .limit(50);
+          if (fallbackRows) return mapRows(fallbackRows as any[], planFilter);
+        }
+      } catch {
+        // fallback الأفضل جهد — لو فشل، أرجع النتائج الأصلية (فارغة)
+      }
+    }
+
+    return mapped;
   } catch {
     return [];
   }
