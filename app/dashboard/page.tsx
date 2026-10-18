@@ -54,6 +54,7 @@ import { LightSocialComparison } from "@/components/LightSocialComparison";
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // Preview branch: conservative control center extension (stats + navigation + focus)
 import { DashboardStats } from "./components/DashboardStats";
+import UserQrCard from "./components/UserQrCard";
 import { QuickNavigation, buildQuickNavItems } from "./components/QuickNavigation";
 import { TodayFocus } from "./components/TodayFocus";
 // 🎯 First Session — "ماذا تريد أن تفعل اليوم؟" (Control Center entry point)
@@ -1801,6 +1802,9 @@ export default function DashboardPage() {
             completedSteps={completedCount}
             weeklyFocusMinutes={weeklyFocusMinutesTotal}
           />
+
+          {/* Phase 3 — كود المستخدم + QR (المرحلة 3) */}
+          <UserQrCard />
 
           {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

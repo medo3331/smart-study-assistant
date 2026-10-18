@@ -177,7 +177,18 @@ export default async function AdminUsersPage({
                       className="text-amber-400 underline decoration-dotted underline-offset-4 hover:text-amber-300"
                       title="تفاصيل المستخدم + QR Code (المرحلة 3)"
                     >
-                      {u.public_user_code || u.user_code || "—"}
+                      {u.public_user_code || u.user_code ? (
+                          <>
+                            {u.public_user_code}
+                            {u.user_code && u.user_code !== u.public_user_code && (
+                              <span className="text-[9px] text-slate-500 ml-1" title="كود تفعيل يدوي (user_codes)">
+                                · {u.user_code}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                     </Link>
                   </td>
                   <td className="px-3 py-2">
