@@ -3,6 +3,8 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { resolveActor } from "@/lib/policy";
+import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
 
 export async function uploadFile(formData: FormData) {
   try {
@@ -15,6 +17,12 @@ export async function uploadFile(formData: FormData) {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || user.is_anonymous) return { ok: false, message: "غير مسجل", error: "unauthenticated" };
+
+    const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    const quota = await checkSubscriptionQuota(user.id, "upload", actor.isOwner);
+    if (!quota.allowed) {
+      return { ok: false, message: quota.reasonAr ?? "تم تجاوز حد الخدمة", error: "QUOTA_EXCEEDED" };
+    }
 
     const privileged = createServiceClient();
 

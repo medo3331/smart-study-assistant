@@ -8,7 +8,7 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
 import type { AdminPermissionKey } from "@/lib/auth-roles";
-import { getAdminRole, isOwnerEmail } from "@/lib/auth-roles";
+import { resolveActor } from "@/lib/policy";
 
 export interface SubscriptionActivationInput {
   userCode: string;          // MAG-XXXX
@@ -35,9 +35,8 @@ export async function activateSubscription(
   try {
     // ── EPIC-2 Authorization Guard: ONLY Owner can activate subscriptions (not Admin, not Support)
     const supabaseClient = createServiceClient();
-    const role = await getAdminRole(supabaseClient, adminUserId, adminEmail);
-    const isActualOwner = role === "owner" || isOwnerEmail(adminEmail ?? null);
-    if (!isActualOwner) {
+    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    if (!actor.isOwner) {
       // Explicit clear rejection — NOT silent fail, NOT bypass
       await recordAuditLog({
         actor: adminUserId,

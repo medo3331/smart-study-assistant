@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getAdminRole } from "@/lib/auth-roles";
+import { resolveActor, actorHasPermission } from "@/lib/policy";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
 
 export async function POST(req: Request) {
   const cookieStore = cookies();
@@ -13,10 +14,10 @@ export async function POST(req: Request) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const role = await getAdminRole(supabase, user?.id || null, user?.email);
+  const actor = await resolveActor(supabase, user?.id || null, user?.email ?? null);
 
-  if (role !== "owner" && role !== "admin") {
-    return NextResponse.json({ error: "غير مصرح — للأدمن والمالك فقط" }, { status: 403 });
+  if (!actorHasPermission(actor, "credits.manage")) {
+    return NextResponse.json({ error: "غير مصرح — للمالك فقط (credits.manage)" }, { status: 403 });
   }
 
   const formData = await req.formData();
@@ -40,12 +41,48 @@ export async function POST(req: Request) {
       p_delta: amount,
       p_reason: "admin_grant",
       p_ref_id: refId,
-      p_metadata: { granted_by: user?.id, role },
+      p_metadata: { granted_by: user?.id, role: actor.role },
     } as unknown as { p_user_id: string; p_delta: number; p_reason: string; p_ref_id: string });
 
     if (error) throw error;
+
+    // EPIC-2: Audit log for credit grants (sensitive operation)
+    await recordAuditLog({
+      actor: user?.id ?? null,
+      actor_email: user?.email ?? null,
+      action: "subscriptions.manage",
+      resource_type: "ai_credits",
+      resource_id: targetUserId,
+      details: {
+        operation: "grant",
+        amount,
+        ref_id: refId,
+        granted_by: user?.id,
+        actor_role: actor.role,
+      },
+      result: "PASS",
+    });
   } catch (e) {
     const msg = (e as { message?: string })?.message || "فشل شحن الرصيد";
+
+    // EPIC-2: Audit log for failed credit grants
+    await recordAuditLog({
+      actor: user?.id ?? null,
+      actor_email: user?.email ?? null,
+      action: "subscriptions.manage",
+      resource_type: "ai_credits",
+      resource_id: targetUserId,
+      details: {
+        operation: "grant",
+        amount,
+        reason: "grant_failed",
+        error: msg,
+        granted_by: user?.id,
+        actor_role: actor.role,
+      },
+      result: "FAIL",
+    });
+
     return NextResponse.redirect(new URL(`/admin?error=${encodeURIComponent(msg)}`, req.url));
   }
 
