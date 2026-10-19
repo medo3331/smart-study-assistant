@@ -193,6 +193,15 @@ export type Dictionary = {
   login_forgot_submit: string;
   login_reset_title: string;
   login_reset_submit: string;
+  login_otp_title: string;
+  login_otp_label: string;
+  login_otp_placeholder: string;
+  login_otp_submit: string;
+  login_otp_resend: string;
+  login_otp_hint: string;
+  login_otp_err: string;
+  login_otp_sent: string;
+  login_otp_back: string;
   login_back_signin: string;
   login_ok_reset_sent: string;
   login_ok_reset: string;
@@ -606,6 +615,15 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     login_forgot_submit: 'إرسال رابط الاسترجاع',
     login_reset_title: 'تعيين كلمة سر جديدة',
     login_reset_submit: 'حفظ كلمة السر الجديدة',
+    login_otp_title: 'تأكيد الكود',
+    login_otp_label: 'كود التأكيد',
+    login_otp_placeholder: '000000',
+    login_otp_submit: 'تأكيد الكود',
+    login_otp_resend: 'إعادة إرسال الكود',
+    login_otp_hint: 'ابعتنا كود من 6 أرقام على إيميلك — اكتبه هنا، أو افتح الرابط اللي في الإيميل لو فضّلت.',
+    login_otp_err: 'الكود غير صحيح أو منتهي الصلاحية. جرّب تاني.',
+    login_otp_sent: 'الكود وصلك على إيميلك — اكتبه هنا.',
+    login_otp_back: 'رجوع',
     login_back_signin: 'الرجوع لتسجيل الدخول',
     login_ok_reset_sent: 'لو الإيميل مسجّل، هتوصلك رسالة فيها رابط لتعيين كلمة سر جديدة.',
     login_ok_reset: 'تم تغيير كلمة السر. تقدر تسجّل دخولك دلوقتي.',
@@ -997,6 +1015,15 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     login_forgot_submit: 'Send reset link',
     login_reset_title: 'Choose a new password',
     login_reset_submit: 'Save new password',
+    login_otp_title: 'Verify code',
+    login_otp_label: 'Confirmation code',
+    login_otp_placeholder: '000000',
+    login_otp_submit: 'Verify code',
+    login_otp_resend: 'Resend code',
+    login_otp_hint: 'We sent a 6-digit code to your email — enter it here, or open the link in the email if you prefer.',
+    login_otp_err: 'Wrong or expired code. Try again.',
+    login_otp_sent: 'The code is in your email — enter it here.',
+    login_otp_back: 'Back',
     login_back_signin: 'Back to sign in',
     login_ok_reset_sent: 'If that email is registered, we sent a link to reset your password.',
     login_ok_reset: 'Your password has been changed. You can sign in now.',
