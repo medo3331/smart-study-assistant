@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
 import { ProviderRow } from "@/components/AuthProviders";
+import { openSupport } from "@/components/SupportWidget";
 
 type PasswordFlow = "signin" | "signup" | "forgot" | "reset";
 
@@ -68,6 +69,8 @@ function LoginForm() {
   /** كود الـ OTP المعلّق: recovery (نسيت الباسورد) أو signup (تأكيد التسجيل). */
   const [pendingVerify, setPendingVerify] = useState<"recovery" | "signup" | null>(null);
   const [otpCode, setOtpCode] = useState("");
+  /** مودال الإرشادات — خطوات التسجيل والدخول بالكود. */
+  const [showHelp, setShowHelp] = useState(false);
   const arrivedFromResetLink = useSyncExternalStore(
     () => () => {},
     () => new URLSearchParams(window.location.search).get("reset") === "1",
@@ -244,7 +247,17 @@ function LoginForm() {
           <p className="eyebrow" style={{ margin: 0 }}>
             {pendingVerify ? t.login_otp_title : isForgot ? t.login_forgot_title : isReset ? t.login_reset_title : isSignup ? t.login_submit_signup : t.login_submit_signin}
           </p>
-          <TopControls />
+          <div className="row" style={{ gap: "10px" }}>
+            <button
+              type="button"
+              onClick={() => setShowHelp(true)}
+              className="small muted"
+              style={{ background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
+            >
+              {t.login_help_btn}
+            </button>
+            <TopControls />
+          </div>
         </div>
 
         {message && (
@@ -253,6 +266,26 @@ function LoginForm() {
             role={message.type === "error" ? "alert" : "status"}
           >
             {message.text}
+            {message.type === "error" && (
+              <button
+                type="button"
+                onClick={() => openSupport(message.text)}
+                style={{
+                  display: "block",
+                  marginTop: "8px",
+                  background: "none",
+                  border: 0,
+                  padding: 0,
+                  font: "inherit",
+                  fontSize: "0.72rem",
+                  color: "var(--ink-soft)",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                }}
+              >
+                🛟 {t.login_need_help}
+              </button>
+            )}
             {canContinue && (
               <button
                 type="button"
@@ -451,6 +484,53 @@ function LoginForm() {
             {t.login_guest_hint}
           </p>
         </div>}
+
+        {/* ---- مودال الإرشادات ---- */}
+        {showHelp && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(15, 23, 42, 0.55)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="login-help-title"
+            onClick={() => setShowHelp(false)}
+          >
+            <div
+              className="sheet-card card-lift w-[min(26rem,calc(100vw-2rem))] p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <h2 id="login-help-title" className="text-sm font-bold text-ink">
+                  {t.login_help_title}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowHelp(false)}
+                  className="mono px-1 text-ink-soft hover:text-ink"
+                  aria-label="إغلاق الإرشادات"
+                >
+                  ✕
+                </button>
+              </div>
+              <ol
+                className="space-y-3 text-xs leading-relaxed text-ink-soft"
+                style={{ paddingInlineStart: "1.2rem", margin: 0 }}
+              >
+                <li>{t.login_help_step1}</li>
+                <li>{t.login_help_step2}</li>
+                <li>{t.login_help_step3}</li>
+                <li>{t.login_help_step4}</li>
+              </ol>
+              <button
+                type="button"
+                onClick={() => setShowHelp(false)}
+                className="btn btn-marker mt-4 block w-full py-2 text-center text-sm"
+              >
+                {t.login_otp_back}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

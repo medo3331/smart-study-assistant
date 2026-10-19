@@ -6,7 +6,8 @@ import { useAudio } from "@/components/audio/AudioProvider";
 /* ==========================================================================
    ودجت الرأي — «الميزة دي عجبتك؟»
 
-   بتظهر في كل صفحة. 👍 بتتبعت فوراً، و 👎 بتفتح حقل «إيه المشكلة؟».
+   بتظهر في كل صفحة. ٣-٥ نجوم بتتبعت فوراً، و١-٢ نجمة بيفتحوا حقل
+   «إيه المشكلة؟» **إجباري** — التقييم الضعيف لوحده معلومات ناقصة.
 
    ⚠️ ثلاث قواعد بنت التصميم ده، وكلها عن «ماتزنّش على المستخدم»:
 
@@ -106,7 +107,7 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
    * ممكن تشوف القيمة القديمة لو المستخدم غيّر رأيه بسرعة — ووقتها
    * الإيميل بيوصل بالتقييم الغلط من غير أي خطأ يظهر.
    */
-  const ratingRef = useRef<"up" | "down" | null>(null);
+  const ratingRef = useRef<number | null>(null);
   /** بيمنع إرسالين على نفس التقييم لو ضغط مرتين بسرعة. */
   const sendingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -177,8 +178,8 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
 
   if (phase === "hidden") return null;
 
-  /** بيبعت التقييم. التعليق اختياري. */
-  async function submit(rating: "up" | "down", commentText: string) {
+  /** بيبعت التقييم (1-5 نجوم). التعليق إجباري مع التقييمات الضعيفة. */
+  async function submit(rating: number, commentText: string) {
     if (sendingRef.current) return;
     sendingRef.current = true;
     setSending(true);
@@ -210,27 +211,21 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
     }
   }
 
-  function handleUp() {
-    ratingRef.current = "up";
-    // 👍 مالوش سؤال تاني — بيتبعت فوراً. أي خطوة زيادة هنا بتضيّع
-    // الرأي الإيجابي، واللي عجبته الميزة مش هيقعد يكتب.
-    void submit("up", "");
-  }
-
-  function handleDown() {
-    ratingRef.current = "down";
-    setPhase("comment");
+  /** ضغط نجمة: ٣-٥ بتتبعت فوراً، و١-٢ بتفتح حقل الاقتراح (إجباري). */
+  function handleStar(value: number) {
+    ratingRef.current = value;
+    if (value <= 2) {
+      setPhase("comment");
+      return;
+    }
+    void submit(value, "");
   }
 
   function handleSendComment() {
-    const rating = ratingRef.current ?? "down";
+    const rating = ratingRef.current ?? 3;
+    // إجباري: مافيش إرسال من غير اقتراح مكتوب
+    if (!comment.trim()) return;
     void submit(rating, comment.trim());
-  }
-
-  /** تخطّي كتابة المشكلة — التقييم السلبي لوحده معلومة مفيدة. */
-  function handleSkipComment() {
-    const rating = ratingRef.current ?? "down";
-    void submit(rating, "");
   }
 
   function handleDismiss() {
@@ -267,17 +262,19 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
               </button>
             </div>
 
-            <div className="flex gap-2">
-              {/* الاسم المتاح نص صريح — الإيموجي لوحده مش اسم مفهوم
-                  لقارئ الشاشة، فهو aria-hidden والنص في .sr-only */}
-              <button type="button" onClick={handleUp} disabled={sending} className="btn btn-quiet flex-1 text-sm py-2">
-                <span aria-hidden>👍</span>
-                <span className="sr-only">عجبتني</span>
-              </button>
-              <button type="button" onClick={handleDown} disabled={sending} className="btn btn-quiet flex-1 text-sm py-2">
-                <span aria-hidden>👎</span>
-                <span className="sr-only">مش عجبتني</span>
-              </button>
+            <div className="flex justify-between gap-1" role="group" aria-label="تقييم من 5 نجوم">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleStar(value)}
+                  disabled={sending}
+                  aria-label={`${value} من 5 نجوم`}
+                  className="flex-1 py-1 text-xl text-ink-soft hover:text-ink transition-colors"
+                >
+                  <span aria-hidden>★</span>
+                </button>
+              ))}
             </div>
 
             {sendError && (
@@ -293,7 +290,7 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
           <>
             <div className="flex items-start justify-between gap-2">
               <label htmlFor="feedback-comment" className="text-xs font-bold text-ink leading-relaxed">
-                إيه المشكلة؟
+                إيه المشكلة؟ اكتب اقتراحك عشان نقدر نظّبطها.
               </label>
               <button
                 type="button"
@@ -328,18 +325,10 @@ export function FeedbackWidget({ page, featureLabel, enabled = true }: FeedbackW
               <button
                 type="button"
                 onClick={handleSendComment}
-                disabled={sending}
+                disabled={sending || !comment.trim()}
                 className="btn btn-marker flex-1 text-sm py-2"
               >
                 {sending ? "بيتبعت…" : "ابعت"}
-              </button>
-              <button
-                type="button"
-                onClick={handleSkipComment}
-                disabled={sending}
-                className="btn btn-quiet text-sm py-2"
-              >
-                تخطّي
               </button>
             </div>
 
