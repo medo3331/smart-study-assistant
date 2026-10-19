@@ -65,6 +65,9 @@ function LoginForm() {
   // بيظهر بعد ترقية حساب الزائر: جلسته لسه شغّالة فينفع يكمّل من غير دخول تاني
   const [canContinue, setCanContinue] = useState(false);
   const [ignoreResetLink, setIgnoreResetLink] = useState(false);
+  /** كود الـ OTP المعلّق: recovery (نسيت الباسورد) أو signup (تأكيد التسجيل). */
+  const [pendingVerify, setPendingVerify] = useState<"recovery" | "signup" | null>(null);
+  const [otpCode, setOtpCode] = useState("");
   const arrivedFromResetLink = useSyncExternalStore(
     () => () => {},
     () => new URLSearchParams(window.location.search).get("reset") === "1",
@@ -83,6 +86,12 @@ function LoginForm() {
       });
       if (error) console.error("Password reset email error:", error.message);
       setMessage({ type: error ? "error" : "success", text: error ? t.login_err_reset : t.login_ok_reset_sent });
+      // الكود بيوصل في نفس الإيميل ({{ .Token }}) — نعرض شاشة إدخاله على طول،
+      // والرابط يفضل شغال كخيار تاني لو المستخدم فضّله.
+      if (!error) {
+        setPendingVerify("recovery");
+        setOtpCode("");
+      }
     } else if (activeFlow === "reset") {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
@@ -145,8 +154,11 @@ function LoginForm() {
           router.push(resolveNext());
           router.refresh();
         } else {
-          // محتاج يأكّد الإيميل الأول — مفيش جلسة، فمفيش وجهة نوديه لها
-          setMessage({ type: "success", text: t.login_ok_created });
+          // محتاج يأكّد الإيميل — مفيش جلسة. لو قالب الإيميل فيه {{ .Token }}
+          // يقدر يأكد بكود 6 أرقام هنا مباشرة بدل ما يفتح الرابط (أقل احتكاك).
+          setMessage({ type: "success", text: t.login_otp_sent });
+          setPendingVerify("signup");
+          setOtpCode("");
         }
       }
     }
@@ -170,6 +182,56 @@ function LoginForm() {
     setGuestLoading(false);
   };
 
+  /** تأكيد كود الـ OTP: recovery يوديك لشاشة الباسورد الجديد، signup يدخل على طول. */
+  const handleCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingVerify) return;
+    setLoading(true);
+    setMessage(null);
+
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpCode.trim(),
+      type: pendingVerify,
+    });
+
+    if (error) {
+      setMessage({ type: "error", text: t.login_otp_err });
+    } else if (pendingVerify === "recovery") {
+      setPendingVerify(null);
+      setOtpCode("");
+      setFlow("reset");
+    } else {
+      router.push(resolveNext());
+      router.refresh();
+    }
+    setLoading(false);
+  };
+
+  /** إعادة إرسال الكود لنوع التدفق المعلّق نفسه. */
+  const handleResendCode = async () => {
+    if (!pendingVerify || loading) return;
+    setLoading(true);
+    setMessage(null);
+
+    const { error } =
+      pendingVerify === "recovery"
+        ? await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: authCallbackUrl("/login?reset=1"),
+          })
+        : await supabase.auth.resend({
+            type: "signup",
+            email,
+            options: { emailRedirectTo: authCallbackUrl(resolveNext()) },
+          });
+
+    setLoading(false);
+    setMessage({
+      type: error ? "error" : "success",
+      text: error ? t.login_err_reset : t.login_otp_sent,
+    });
+  };
+
   const isSignup = activeFlow === "signup";
   const isForgot = activeFlow === "forgot";
   const isReset = activeFlow === "reset";
@@ -180,7 +242,7 @@ function LoginForm() {
       <div className="auth-form stack" style={{ gap: "22px" }}>
         <div className="row" style={{ justifyContent: "space-between" }}>
           <p className="eyebrow" style={{ margin: 0 }}>
-            {isForgot ? t.login_forgot_title : isReset ? t.login_reset_title : isSignup ? t.login_submit_signup : t.login_submit_signin}
+            {pendingVerify ? t.login_otp_title : isForgot ? t.login_forgot_title : isReset ? t.login_reset_title : isSignup ? t.login_submit_signup : t.login_submit_signin}
           </p>
           <TopControls />
         </div>
@@ -213,6 +275,54 @@ function LoginForm() {
           </div>
         )}
 
+        {pendingVerify ? (
+          <form onSubmit={handleCodeSubmit} className="stack" style={{ gap: "16px" }}>
+            <div>
+              <label className="field-label" htmlFor="otpCode">
+                {t.login_otp_label}
+              </label>
+              <input
+                id="otpCode"
+                className="field"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                dir="ltr"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                placeholder={t.login_otp_placeholder}
+                style={{ textAlign: "center", fontSize: "1.35rem", letterSpacing: "0.45em", fontWeight: 700 }}
+              />
+            </div>
+            <p className="muted small" style={{ margin: 0 }}>
+              {t.login_otp_hint}
+            </p>
+            <button type="submit" className="btn btn-marker btn-block" disabled={loading || otpCode.length !== 6}>
+              {loading ? t.login_loading : t.login_otp_submit}
+            </button>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <button
+                type="button"
+                onClick={handleResendCode}
+                disabled={loading}
+                className="small muted"
+                style={{ background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
+              >
+                {t.login_otp_resend}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPendingVerify(null); setOtpCode(""); setMessage(null); }}
+                className="small muted"
+                style={{ background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
+              >
+                ← {t.login_otp_back}
+              </button>
+            </div>
+          </form>
+        ) : (
         <form onSubmit={handlePasswordSubmit} className="stack" style={{ gap: "16px" }}>
           {isSignup && (
             <div>
@@ -287,8 +397,9 @@ function LoginForm() {
             {loading ? t.login_loading : isForgot ? t.login_forgot_submit : isReset ? t.login_reset_submit : isSignup ? t.login_submit_signup : t.login_submit_signin}
           </button>
         </form>
+        )}
 
-        {!isForgot && !isReset && <p className="small muted" style={{ margin: 0 }}>
+        {!isForgot && !isReset && !pendingVerify && <p className="small muted" style={{ margin: 0 }}>
           {isSignup ? t.login_has_account : t.login_no_account}{" "}
           <button
             type="button"
@@ -314,7 +425,7 @@ function LoginForm() {
           </button>
         </p>}
 
-        {(isForgot || isReset) && (
+        {(isForgot || isReset) && !pendingVerify && (
           <button
             type="button"
             onClick={() => { setIgnoreResetLink(true); setFlow("signin"); setMessage(null); }}
@@ -325,9 +436,9 @@ function LoginForm() {
           </button>
         )}
 
-        {!isForgot && !isReset && <ProviderRow />}
+        {!isForgot && !isReset && !pendingVerify && <ProviderRow />}
 
-        {!isForgot && !isReset && <div className="stack" style={{ gap: "8px" }}>
+        {!isForgot && !isReset && !pendingVerify && <div className="stack" style={{ gap: "8px" }}>
           <button
             type="button"
             onClick={handleGuestLogin}
