@@ -326,7 +326,7 @@ export default function AssessmentPage() {
       // سطور بتتحقن من طبقة المحورين (شخصية + مستوى + مجال) — مش مسار كود منفصل
       const systemInstruction = `أنت مصمم خطط دراسية خبير. ${buildPersonaContext(persona, studentLevel, field)} هتصمم خطة من ${profile.days} خطوات بالظبط لموضوع "${subject}" في مجال "${category}"، لشخص مستواه "${LEVEL_LABEL[profile.level]}" وأسلوب تعلمه المفضل "${STYLE_LABEL[profile.style]}". رتب الخطوات من الأساسيات للأصعب تدريجيًا. رد بصيغة JSON فقط بدون أي نص إضافي أو Markdown، على شكل array بالظبط كده: [{"title":"...", "topic":"...", "description":"..."}]. الحقل title يكون قصير زي "الدرس 1"، topic عنوان الموضوع نفسه، description جملة أو اتنين شرح مختصر للمحتوى.`;
 
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

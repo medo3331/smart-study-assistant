@@ -39,7 +39,14 @@ export async function POST(req: Request) {
     const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", code: "MESSAGE_QUOTA_EXCEEDED" } },
+        {
+          error: {
+            message:
+              quota.reasonAr ??
+              "لقد وصلت للحد الأقصى للمحادثة مع المساعد الذكي (30 رسالة). الميزات الأساسية (الشرح والأسئلة والاختبارات) ما زالت متاحة لك بدون حدود.",
+            code: "MESSAGE_QUOTA_EXCEEDED",
+          },
+        },
         { status: 429 }
       );
     }
