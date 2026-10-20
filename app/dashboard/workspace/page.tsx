@@ -237,7 +237,14 @@ export default function WorkspacePage() {
 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setNotice(data?.error?.message || "ما قدرناش نلخّص المادة دي دلوقتي. حاول تاني.");
+        const msg =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
+          (data?.error?.message as string | undefined) ||
+          (res.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "ما قدرناش نلخّص المادة دي دلوقتي. حاول تاني.");
+        setNotice(msg);
         return;
       }
 

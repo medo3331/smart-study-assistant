@@ -335,8 +335,17 @@ export default function AssessmentPage() {
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || "فشل الاتصال بالـ AI");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
+          (data?.error?.message as string | undefined) ||
+          (response.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "فشل الاتصال بالـ AI");
+        throw new Error(msg);
+      }
 
       const raw = data?.choices?.[0]?.message?.content || "";
       const cleaned = raw.replace(/```json|```/g, "").trim();
