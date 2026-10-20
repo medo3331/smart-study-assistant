@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
 
@@ -11,6 +11,8 @@ export interface MagiclyContextInput {
   subject?: unknown;
   lesson?: unknown;
   learningStyle?: unknown;
+  studyField?: unknown;
+  learningGoal?: unknown;
 }
 
 export interface StudentContext {
@@ -19,6 +21,10 @@ export interface StudentContext {
   learningStyle: "practical" | "visual" | "academic";
   progress: { completed: number; total: number };
   memories: Array<{ kind: string; value: string }>;
+  /** التخصص الدراسي للطالب (من profiles.study_field) */
+  studyField: string;
+  /** الهدف التعليمي للطالب (من profiles.learning_goal) */
+  learningGoal: string;
 }
 
 type LearningStyle = StudentContext["learningStyle"];
@@ -58,20 +64,36 @@ export async function getStudentContext(
 ): Promise<StudentContext> {
   const configId = shortText(input.configId);
   const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
-  const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle"> = {
+  const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle" | "studyField" | "learningGoal"> = {
     subject: shortText(input.subject) || "المادة الحالية",
     lesson: shortText(input.lesson) || "الدرس الحالي",
     learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
+    studyField: shortText(input.studyField) || "",
+    learningGoal: shortText(input.learningGoal) || "",
   };
 
   if (!configId) {
-    return { ...fallback, progress: { completed: 0, total: 0 }, memories: [] };
+    // حتى لو ما在第ся configur، نجلب التخصص والهدف من profiles إن وُجد
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("study_field, learning_goal")
+      .eq("id", userId)
+      .maybeSingle();
+
+    return {
+      ...fallback,
+      progress: { completed: 0, total: 0 },
+      memories: [],
+      studyField: profile?.study_field ?? fallback.studyField,
+      learningGoal: profile?.learning_goal ?? fallback.learningGoal,
+    };
   }
 
-  const [configResult, daysResult, memoryResult] = await Promise.all([
+  const [configResult, daysResult, memoryResult, profileResult] = await Promise.all([
     supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
     supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
     supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
+    supabase.from("profiles").select("study_field, learning_goal").eq("id", userId).maybeSingle(),
   ]);
 
   const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
@@ -87,6 +109,8 @@ export async function getStudentContext(
     progress: { completed, total: days.length },
     // failure here is expected before running db/ai-learning.sql; chat continues normally.
     memories: memoryResult.error ? [] : ((memoryResult.data ?? []) as Array<{ kind: string; value: string }>),
+    studyField: profileResult.data?.study_field ?? fallback.studyField,
+    learningGoal: profileResult.data?.learning_goal ?? fallback.learningGoal,
   };
 }
 
@@ -176,6 +200,9 @@ export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyM
   return withDiagramGuidelines(`أنت «ماجيكلي»، مساعد مذاكرة مصري خفيف وطبيعي. هدفك فهم الطالب وتدريبه، وليس مجرد إعطاء إجابة.
 
 السياق الموثوق:
+- الطالب: ${context.studyField ? `طالب في تخصص ${context.studyField}` : "طالب"}
+- الهدف التعليمي: ${context.learningGoal || "تطوير المهارات"}
+
 - المادة: ${context.subject}
 - الدرس: ${context.lesson}
 - التقدم: ${context.progress.completed}/${context.progress.total} دروس مكتملة
@@ -194,3 +221,4 @@ ${toolFacts.length ? `- نتائج الأدوات: ${toolFacts.join(" ")}` : ""}
 الوضع الحالي: ${mode}.
 ${MODE_GUIDE[mode]}`);
 }
+
