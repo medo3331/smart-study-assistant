@@ -78,8 +78,8 @@ export async function POST(req: Request) {
     let combinedSystem = systemInstruction || "";
     if (!combinedSystem) {
       try {
-        const studentContext = await getStudentContext(supabase, user.id);
-        const studyFacts = await getStudyToolFacts(supabase, user.id);
+        const studentContext = await getStudentContext(supabase, user.id, context ?? {});
+        const studyFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
         combinedSystem = buildMagiclySystemPrompt({ ...context, ...studentContext, ...studyFacts });
       } catch {
         combinedSystem = "أنت مساعد تعليمي يكتب شرحاً واضحاً للمادة بالعربية الفصحى المبسطة.";
