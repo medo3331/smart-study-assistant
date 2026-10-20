@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     }
 
     const answer = completion.content;
-    void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "ai_generate", status: "completed", usage: completion.usage, contentLength: answer.length });
+    void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: answer.length });
 
     return NextResponse.json({
       choices: [{ message: { role: "assistant", content: answer } }],
