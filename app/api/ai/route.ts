@@ -250,10 +250,21 @@ export async function POST(req: Request) {
       // Phase H: credit/entitlement gate even for streaming (same cost)
       const candidates = routeCandidates(task);
       const hasEnt = async (k: string, v: string) => {
-        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-        return Boolean(data);
+        try {
+          const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+          return Boolean(data);
+        } catch (e) {
+          console.error("[api/ai] has_entitlement failed:", e);
+          return false;
+        }
       };
-      const accessible = await filterAccessibleModels(candidates, hasEnt);
+      let accessible = candidates;
+      try {
+        accessible = await filterAccessibleModels(candidates, hasEnt);
+      } catch (e) {
+        console.error("[api/ai] filterAccessibleModels failed:", e);
+        accessible = candidates;
+      }
       if (accessible.length === 0 && candidates.length > 0) {
         return NextResponse.json(
           { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
@@ -302,10 +313,21 @@ export async function POST(req: Request) {
     // Phase H: entitlement filter + credit reserve before execution
     const candidates = routeCandidates(task);
     const hasEnt = async (k: string, v: string) => {
-      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-      return Boolean(data);
+      try {
+        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+        return Boolean(data);
+      } catch (e) {
+        console.error("[api/ai] has_entitlement failed:", e);
+        return false;
+      }
     };
-    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    let accessible = candidates;
+    try {
+      accessible = await filterAccessibleModels(candidates, hasEnt);
+    } catch (e) {
+      console.error("[api/ai] filterAccessibleModels failed:", e);
+      accessible = candidates;
+    }
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json(
         { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },

@@ -6,7 +6,7 @@ function mockSupabase(profile: Record<string, unknown>, history: Array<{ role: s
     from: (table: string) => ({
       select: () => ({
         eq: (_col: string, val: string) => ({
-          single: async () => ({ data: table === "profiles" ? profile : null }),
+          maybeSingle: async () => ({ data: table === "profiles" ? profile : null }),
           order: () => ({
             limit: async () => ({ data: table === "chat_messages" ? history : [] }),
           }),
@@ -28,7 +28,7 @@ describe("Chaos: User Isolation", () => {
       "اشرح لي نيوتن",
       {},
       mockSupabase({
-        full_name: "أحمد",
+        display_name: "أحمد",
         stage: "ثانوي",
         grade: "الصف الأول",
         subjects: ["رياضيات"],
@@ -60,14 +60,14 @@ describe("Chaos: User Isolation", () => {
       "session-1",
       "س1",
       {},
-      mockSupabase({ full_name: "علي", stage: "إعدادي" }) as never
+      mockSupabase({ display_name: "علي", stage: "إعدادي" }) as never
     );
     const user2 = await buildFullContext(
       "user-B",
       "session-2",
       "س2",
       {},
-      mockSupabase({ full_name: "منى", stage: "جامعي" }) as never
+      mockSupabase({ display_name: "منى", stage: "جامعي" }) as never
     );
     expect(user1.messages[0].content).not.toBe(user2.messages[0].content);
     expect(user1.messages[0].content).toContain("علي");
@@ -80,7 +80,7 @@ describe("Chaos: User Isolation", () => {
       "session-1",
       "سؤال",
       { maxHistoryMessages: 10 },
-      mockSupabase({ full_name: "علي" }, [{ role: "user", content: "من جلستي فقط" }]) as never
+      mockSupabase({ display_name: "علي" }, [{ role: "user", content: "من جلستي فقط" }]) as never
     );
     expect(messages.some((m: any) => m.content.includes("من جلستي فقط"))).toBe(true);
   });
@@ -97,7 +97,7 @@ describe("Chaos: User Isolation", () => {
   });
 
   it("rpc_quota_shape_is_not_injected_into_prompt", async () => {
-    const sb = mockSupabase({ full_name: "أحمد" });
+    const sb = mockSupabase({ display_name: "أحمد" });
     const { messages } = await buildFullContext("u", "s", "س", {}, sb as never);
     const all = messages.map((m) => m.content).join(" ");
     expect(all).not.toMatch(/plan_id|remaining|150/);

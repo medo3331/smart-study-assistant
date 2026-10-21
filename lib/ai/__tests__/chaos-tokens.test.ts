@@ -7,7 +7,7 @@ function mockSupabaseWithHistory(history: Array<{ role: string; content: string 
     from: (table: string) => ({
       select: () => ({
         eq: () => ({
-          single: async () => ({ data: table === "profiles" ? { full_name: "أحمد" } : null }),
+          maybeSingle: async () => ({ data: table === "profiles" ? { display_name: "أحمد" } : null }),
           order: () => ({
             limit: async () => ({ data: table === "chat_messages" ? history : [] }),
           }),

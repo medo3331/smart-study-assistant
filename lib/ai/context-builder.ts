@@ -19,7 +19,7 @@ type SupabaseLike = {
   from: (table: string) => {
     select: (cols: string) => {
       eq: (col: string, val: string) => {
-        single: () => Promise<{ data: ContextProfile | null }>;
+        maybeSingle: () => Promise<{ data: ContextProfile | null }>;
         order?: (col: string, opts?: unknown) => {
           limit: (n: number) => Promise<{ data: Array<{ role: string; content: string }> | null }>;
         };
@@ -75,7 +75,7 @@ export async function buildFullContext(
 
   if (supabase) {
     try {
-      const row = await supabase.from("profiles").select("*").eq("id", _userId).single();
+      const row = await supabase.from("profiles").select("*").eq("id", _userId).maybeSingle();
       profile = row.data ?? {};
     } catch {
       profile = {};
