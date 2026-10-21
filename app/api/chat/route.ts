@@ -21,6 +21,16 @@ const MAX_MESSAGE_CHARS = 8000;
 
 type IncomingMessage = { role?: unknown; content?: unknown };
 
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((p) => (p && typeof p === "object" && "text" in p ? String((p as { text?: unknown }).text ?? "") : ""))
+      .join(" ");
+  }
+  return "";
+}
+
 export async function POST(req: Request) {
   try {
     // ١) لازم يكون مسجّل دخول — الراوت ده كان مفتوح للعالم كله
@@ -81,13 +91,29 @@ export async function POST(req: Request) {
         (m) =>
           m &&
           (m.role === "user" || m.role === "assistant") &&
-          typeof m.content === "string" &&
-          m.content.trim().length > 0
+          ((typeof m.content === "string" && m.content.trim().length > 0) ||
+            (Array.isArray(m.content) &&
+              m.content.length > 0 &&
+              m.content.every(
+                (p) =>
+                  p &&
+                  typeof p === "object" &&
+                  (p.type === "text" || p.type === "image_url")
+              )))
       )
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: clampText(m.content, MAX_MESSAGE_CHARS),
-      }));
+      .map((m) => {
+        if (typeof m.content === "string") {
+          return { role: m.role as "user" | "assistant", content: clampText(m.content, MAX_MESSAGE_CHARS) };
+        }
+        // array content: clamp text parts
+        const parts = (m.content as Array<{ type: string; text?: string; image_url?: { url: string } }>).map((p) => {
+          if (p.type === "text") {
+            return { type: "text" as const, text: clampText(p.text ?? "", MAX_MESSAGE_CHARS) };
+          }
+          return { type: "image_url" as const, image_url: { url: p.image_url?.url ?? "" } };
+        });
+        return { role: m.role as "user" | "assistant", content: parts };
+      });
 
     if (safeMessages.length === 0) {
       return NextResponse.json(
@@ -99,8 +125,8 @@ export async function POST(req: Request) {
     // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
-    const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
-    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
+    const selectedMode = parseMode(mode, messageText(safeMessages.at(-1)?.content ?? ""));
+    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, messageText(safeMessages.at(-1)?.content ?? ""));
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
     // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
@@ -111,7 +137,7 @@ export async function POST(req: Request) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
     const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
-    void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
+    void rememberSessionContext(supabase, user.id, studentContext, messageText(safeMessages.at(-1)?.content ?? ""));
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
     const candidates = routeCandidates("chat");
@@ -182,16 +208,18 @@ export async function POST(req: Request) {
           if (!ownedConversation) savedConversationId = "";
         }
         if (!savedConversationId) {
+          const titleText = messageText(safeMessages.at(-1)?.content ?? "");
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "محادثة جديدة" })
+            .insert({ user_id: user.id, title: titleText.slice(0, 80) || "محادثة جديدة" })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
         }
         if (savedConversationId) {
+          const userContentText = messageText(safeMessages.at(-1)?.content ?? "");
           await supabase.from("chat_messages").insert([
-            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: safeMessages.at(-1)?.content ?? "" },
+            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: userContentText },
             { conversation_id: savedConversationId, user_id: user.id, role: "assistant", content: answer },
           ]);
           await supabase
@@ -208,7 +236,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...data,
       conversationId: savedConversationId || undefined,
-      suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
+      suggestedAgent: suggestAgentFromText(messageText(safeMessages.at(-1)?.content ?? "")) ?? undefined,
     });
   } catch (error) {
     console.error("chat route error:", error);
