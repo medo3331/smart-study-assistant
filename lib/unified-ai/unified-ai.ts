@@ -16,7 +16,7 @@
  */
 import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
-import { extractTextFromFile } from "../extract-text";
+import { extractTextFromFile, detectFileKind } from "../extract-text";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";

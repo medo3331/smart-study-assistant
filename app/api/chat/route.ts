@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PDFParse } from "pdf-parse";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
@@ -85,35 +86,59 @@ export async function POST(req: Request) {
     }
 
     // ٣) تنضيف الرسايل: الأدوار المسموحة بس، ونص مقصوص
-    const safeMessages = (messages as IncomingMessage[])
-      .slice(-MAX_MESSAGES)
-      .filter(
-        (m) =>
-          m &&
-          (m.role === "user" || m.role === "assistant") &&
-          ((typeof m.content === "string" && m.content.trim().length > 0) ||
-            (Array.isArray(m.content) &&
-              m.content.length > 0 &&
-              m.content.every(
-                (p) =>
-                  p &&
-                  typeof p === "object" &&
-                  (p.type === "text" || p.type === "image_url")
-              )))
-      )
-      .map((m) => {
-        if (typeof m.content === "string") {
-          return { role: m.role as "user" | "assistant", content: clampText(m.content, MAX_MESSAGE_CHARS) };
-        }
-        // array content: clamp text parts
-        const parts = (m.content as Array<{ type: string; text?: string; image_url?: { url: string } }>).map((p) => {
-          if (p.type === "text") {
-            return { type: "text" as const, text: clampText(p.text ?? "", MAX_MESSAGE_CHARS) };
+    const safeMessages = await Promise.all(
+      (messages as IncomingMessage[])
+        .slice(-MAX_MESSAGES)
+        .filter(
+          (m) =>
+            m &&
+            (m.role === "user" || m.role === "assistant") &&
+            ((typeof m.content === "string" && m.content.trim().length > 0) ||
+              (Array.isArray(m.content) &&
+                m.content.length > 0 &&
+                m.content.every(
+                  (p) =>
+                    p &&
+                    typeof p === "object" &&
+                    (p.type === "text" || p.type === "image_url")
+                )))
+        )
+        .map(async (m) => {
+          if (typeof m.content === "string") {
+            return { role: m.role as "user" | "assistant", content: clampText(m.content, MAX_MESSAGE_CHARS) };
           }
-          return { type: "image_url" as const, image_url: { url: p.image_url?.url ?? "" } };
-        });
-        return { role: m.role as "user" | "assistant", content: parts };
-      });
+          // array content: clamp text parts; extract PDFs sent as data URLs
+          const parts = await Promise.all(
+            (m.content as Array<{ type: string; text?: string; image_url?: { url: string } }>).map(async (p) => {
+              if (p.type === "text") {
+                return { type: "text" as const, text: clampText(p.text ?? "", MAX_MESSAGE_CHARS) };
+              }
+              const url = p.image_url?.url ?? "";
+              const pdfMatch = /^data:application\/pdf[^;]*;base64,(.*)$/i.exec(url);
+              if (pdfMatch) {
+                try {
+                  const buffer = Buffer.from(pdfMatch[1], "base64");
+                  if (buffer.length > 4 * 1024 * 1024) {
+                    throw new Error("too large");
+                  }
+                  const parser = new PDFParse({ data: buffer });
+                  const result = await parser.getText();
+                  await parser.destroy();
+                  const text = (result.text || "").trim();
+                  if (text) {
+                    return { type: "text" as const, text: clampText(`هذا محتوى الملف: ${text}`, MAX_MESSAGE_CHARS) };
+                  }
+                } catch (e) {
+                  console.warn("chat route PDF parse failed", e);
+                }
+                return { type: "text" as const, text: "تعذر قراءة ملف PDF. تأكد أن الملف نصي وليس صورة، أو جرب رفع ملف أصغر." };
+              }
+              return { type: "image_url" as const, image_url: { url } };
+            })
+          );
+          return { role: m.role as "user" | "assistant", content: parts };
+        })
+    );
 
     if (safeMessages.length === 0) {
       return NextResponse.json(
@@ -226,6 +251,7 @@ export async function POST(req: Request) {
           ]);
           await supabase
             .from("chat_conversations")
+
             .update({ updated_at: new Date().toISOString() })
             .eq("id", savedConversationId)
             .eq("user_id", user.id);
@@ -248,3 +274,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };

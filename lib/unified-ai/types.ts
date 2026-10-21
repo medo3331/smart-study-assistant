@@ -51,6 +51,8 @@ export interface UnifiedAIResult {
   };
   reasoning?: string;             // why router chose this agent (for debug / coach context)
   error?: string;
+  errorCode?: string;
+  /** When PDF extraction fails, frontend shows specific message. */
 }
 
 export interface AgentRouterDecision {

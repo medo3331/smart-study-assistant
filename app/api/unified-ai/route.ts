@@ -133,6 +133,14 @@ export async function POST(req: Request) {
       if (f instanceof File) fileInput = f;
       const i = formData.get("imageInput");
       if (i instanceof File) imageInput = i;
+      // حجم الملف: حد أقصى ~4 ميجا لتجنب 413 من Vercel
+      const attached = fileInput || imageInput;
+      if (attached && attached.size > 4 * 1024 * 1024) {
+        return NextResponse.json(
+          { ok: false, error: "حجم الملف كبير جداً، يرجى رفع ملف أصغر من 4 ميجا", code: "FILE_TOO_LARGE" },
+          { status: 413 }
+        );
+      }
       const lang = formData.get("language");
       if (typeof lang === "string") language = lang;
       const ctx = formData.get("context");
@@ -160,8 +168,11 @@ export async function POST(req: Request) {
       // Legacy: body.model as X handled above
     }
 
-    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+    if (!prompt || typeof prompt !== "string" || (prompt.trim().length === 0 && !fileInput && !imageInput)) {
       return NextResponse.json({ ok: false, error: "المطلوب نص (prompt)", code: "INVALID_REQUEST" }, { status: 400 });
+    }
+    if (!prompt.trim() && (fileInput || imageInput)) {
+      prompt = "لخّصلي المحتوى ده واشرحه بأسلوب واضح ومنظم.";
     }
 
     // ---- Auth ----
@@ -551,7 +562,7 @@ export async function POST(req: Request) {
       }
       // Provider failure: spec §16 → 500 but we keep 200 for client resilience with ok:false
       // To honor §16, return 502 for provider errors; client already handles both.
-      return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: "PROVIDER_ERROR" }, { status: 502 });
+      return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: result.errorCode || "PROVIDER_ERROR" }, { status: result.errorCode === "PDF_READ_FAILED" ? 422 : 502 });
     }
 
     // SUCCESS → consume is implicit (reserve = consume); no extra ledger write
@@ -613,3 +624,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى.", code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
+export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
+

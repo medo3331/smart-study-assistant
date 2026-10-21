@@ -174,6 +174,10 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         const rawError =
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
           (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ.");
+        if (code === "PDF_READ_FAILED" || code === "FILE_TOO_LARGE" || /تعذر قراءة|حجم الملف كبير/.test(rawError)) {
+          setMessages((m) => [...m, { role: "assistant", content: "تعذر قراءة ملف PDF. تأكد أن الملف نصي وليس صورة، أو جرب رفع ملف أصغر." }]);
+          return;
+        }
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
         const supportAction = { label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true };
 
