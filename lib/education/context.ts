@@ -129,7 +129,7 @@ export async function getDetailedAIContext(userId: string) {
       university_departments(name)
     `)
     .eq("id", userId)
-    .single();
+    .maybeSingle();
 
   // 2. جلب أسماء المواد التي اختارها الطالب (user_subjects أو من settings)
   let subjects: string[] = [];
