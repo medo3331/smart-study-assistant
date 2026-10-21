@@ -86,6 +86,8 @@ export async function POST(req: Request) {
     }
 
     // ٣) تنضيف الرسايل: الأدوار المسموحة بس، ونص مقصوص
+    let pdfFailed = false;
+    let pdfTooLarge = false;
     const safeMessages = await Promise.all(
       (messages as IncomingMessage[])
         .slice(-MAX_MESSAGES)
@@ -119,6 +121,7 @@ export async function POST(req: Request) {
                 try {
                   const buffer = Buffer.from(pdfMatch[1], "base64");
                   if (buffer.length > 4 * 1024 * 1024) {
+                    pdfTooLarge = true;
                     throw new Error("too large");
                   }
                   const parser = new PDFParse({ data: buffer });
@@ -128,10 +131,12 @@ export async function POST(req: Request) {
                   if (text) {
                     return { type: "text" as const, text: clampText(`هذا محتوى الملف: ${text}`, MAX_MESSAGE_CHARS) };
                   }
+                  pdfFailed = true;
                 } catch (e) {
                   console.warn("chat route PDF parse failed", e);
+                  if ((e as Error)?.message !== "too large") pdfFailed = true;
                 }
-                return { type: "text" as const, text: "تعذر قراءة ملف PDF. تأكد أن الملف نصي وليس صورة، أو جرب رفع ملف أصغر." };
+                return { type: "text" as const, text: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك." };
               }
               return { type: "image_url" as const, image_url: { url } };
             })
@@ -139,6 +144,19 @@ export async function POST(req: Request) {
           return { role: m.role as "user" | "assistant", content: parts };
         })
     );
+
+    if (pdfTooLarge) {
+      return NextResponse.json(
+        { error: { message: "الملف كبير جداً، الحد الأقصى 4 ميجابايت", code: "FILE_TOO_LARGE" } },
+        { status: 413 }
+      );
+    }
+    if (pdfFailed) {
+      return NextResponse.json(
+        { error: { message: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.", code: "PDF_READ_FAILED" } },
+        { status: 422 }
+      );
+    }
 
     if (safeMessages.length === 0) {
       return NextResponse.json(

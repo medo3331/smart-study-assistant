@@ -145,7 +145,20 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         console.error("OCR error (resilient):", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
         extractedText = "";
         ocrMeta = { engineUsed: 3, confidence: "low" };
-        // Continue — don't throw
+        const isPdf = detectFileKind(file.type, file.name) === "pdf";
+        if (isPdf) {
+          return {
+            ok: false,
+            agentUsed: "unknown",
+            answer: "",
+            error: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.",
+            errorCode: "PDF_READ_FAILED",
+            extractedText: undefined,
+            metadata: undefined,
+            reasoning: undefined,
+          };
+        }
+        // Continue for non-PDF — don't throw
       }
     }
 
