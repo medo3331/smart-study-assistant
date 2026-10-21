@@ -164,7 +164,9 @@ export async function POST(req: Request) {
       //   ترتيب المزوّدين ولا الـ fallback ولا شكل الرد.
       const usage = resolveUsageRequestContext(req, user.id);
 
-      completion = await aiRouter.completeChat("chat", {
+      // ����� ���� ������ �� ���� ��� System Prompt
+    console.log("[api/chat] messages to provider:", JSON.stringify([{ role: "system", content: combinedSystem }, ...safeMessages]));
+    completion = await aiRouter.completeChat("chat", {
         messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
         temperature: 0.7,
         usage,
