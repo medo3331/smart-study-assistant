@@ -264,7 +264,13 @@ export async function POST(req: Request) {
           { status: 404 }
         );
       }
-      const accessible = await filterAccessibleModels(candidates, hasEntitlement);
+      let accessible: typeof candidates = [];
+      try {
+        accessible = await filterAccessibleModels(candidates, hasEntitlement);
+      } catch (e) {
+        console.error("[unified-ai] filterAccessibleModels failed, falling back to candidates:", e);
+        accessible = candidates;
+      }
       if (accessible.length === 0) {
         // ظƒظ„ ط§ظ„ظ…ط±ط´ط­ظٹظ† ظ…ظ‚ظپظ„ظٹظ† â€” ظ„ط§ fallback ظٹظƒط³ط± ط§ظ„ط³ظٹط§ط³ط©
         const required =

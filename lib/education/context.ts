@@ -116,26 +116,33 @@ export async function getDetailedAIContext(userId: string) {
   const supabase = await createClient();
 
   // 1. جلب بيانات البروفايل مع أسماء المرحلة والصف والشعبة والجامعة
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select(`
-      display_name,
-      persona,
-      learning_goal,
-      study_field,
-      education_stage_id,
-      education_stages(name, code),
-      education_grade_id,
-      education_grades(name, order_index),
-      education_track_id,
-      education_tracks(name, code),
-      university_id,
-      universities(name),
-      university_faculties(name),
-      university_departments(name)
-    `)
-    .eq("id", userId)
-    .maybeSingle();
+  let profile: any = null;
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select(`
+        display_name,
+        persona,
+        learning_goal,
+        study_field,
+        education_stage_id,
+        education_stages(name, code),
+        education_grade_id,
+        education_grades(name, order_index),
+        education_track_id,
+        education_tracks(name, code),
+        university_id,
+        universities(name),
+        university_faculties(name),
+        university_departments(name)
+      `)
+      .eq("id", userId)
+      .maybeSingle();
+    profile = data ?? null;
+  } catch (e) {
+    console.error("[education/context] profile fetch failed:", e);
+    profile = null;
+  }
 
   // 2. جلب أسماء المواد التي اختارها الطالب (user_subjects أو من settings)
   let subjects: string[] = [];
@@ -151,13 +158,20 @@ export async function getDetailedAIContext(userId: string) {
   }
 
   // 3. جلب أهم 3 نقاط ضعف ديناميكية (الأعلى أخطاءً والأقل إتقاناً)
-  const { data: weaknessesData } = await supabase
-    .from("user_weaknesses")
-    .select("topic_name, error_count, mastery_level, subject:subject_id(name)")
-    .eq("user_id", userId)
-    .order("error_count", { ascending: false })
-    .order("mastery_level", { ascending: true })
-    .limit(3);
+  let weaknessesData: any = null;
+  try {
+    const { data } = await supabase
+      .from("user_weaknesses")
+      .select("topic_name, error_count, mastery_level, subject:subject_id(name)")
+      .eq("user_id", userId)
+      .order("error_count", { ascending: false })
+      .order("mastery_level", { ascending: true })
+      .limit(3);
+    weaknessesData = data ?? null;
+  } catch (e) {
+    console.error("[education/context] weaknesses fetch failed:", e);
+    weaknessesData = null;
+  }
 
   const weaknesses = (weaknessesData || []).map((w: any) => ({
     topic: w.topic_name,

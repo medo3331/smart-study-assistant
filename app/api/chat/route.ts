@@ -188,7 +188,13 @@ export async function POST(req: Request) {
       const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
       return Boolean(data);
     };
-    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    let accessible = candidates;
+    try {
+      accessible = await filterAccessibleModels(candidates, hasEnt);
+    } catch (e) {
+      console.error("chat: filterAccessibleModels failed, falling back to candidates:", e);
+      accessible = candidates;
+    }
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json({ error: { message: "ظ‡ط°ظ‡ ط§ظ„ظ…ظ‡ظ…ط© طھطھط·ظ„ط¨ طµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
