@@ -44,7 +44,7 @@ export function ContextualNotification() {
         // to read from window/local prayer data or fall back to a safe no-message mode.
         // For minimal safe in-app notification: we rely ONLY on the verified calculation functions.
         // We load the service response pattern via the existing mechanism (same as usePrayerTimes hook).
-        const res = await fetch("/api/prayer-times").catch(() => null); // if endpoint exists; else skip
+        const res = null; // disabled: /api/prayer-times does not exist (404); avoid console error
         // If no endpoint, we do NOT invent data. We skip prayer-based message.
         if (!res || cancelled) return;
         const data = await res.json().catch(() => null);
@@ -85,7 +85,7 @@ export function ContextualNotification() {
         const { data: profile, error } = await supabase
           .from("profiles")
           .select("streak, last_study_day")
-          .single();
+          .maybeSingle();
         if (cancelled) return;
         if (error || !profile) return;
         // Existing convention: daily_missions uses UTC; streak risk only shown if today

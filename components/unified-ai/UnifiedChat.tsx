@@ -418,6 +418,13 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                     </Link>
                   )
                 )}
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
+                >
+                  <Crown size={14} />
+                  ترقية الآن
+                </Link>
               </div>
             </div>
             <button
