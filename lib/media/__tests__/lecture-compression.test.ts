@@ -1,8 +1,8 @@
-﻿/**
- * ط§ط®طھط¨ط§ط± ط§ظ„ط¶ط؛ط· ظ‚ط¨ظ„ ط§ظ„ط±ظپط¹ â€” Phase ط§ظ„ظ…ط­ط§ط¶ط±ط©
- * â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
+/**
+ * اختبار الضغط قبل الرفع — Phase المحاضرة
+ * ══════════════════════════════════════════════════════════════════════════
  *
- * â›” ظ…ط§ط´ط§ط³ط© FFmpeg ط¨ط§ظƒظƒ: ط§ظ„ظ…ط­ط±ظ‘ظƒ ط§ظ„ط­ظ‚ظٹظ‚ظٹ ظ…ط§طھط­ظ…ظ‘ط´â€‹ط§ط·ظ‹ط§ظ‹.
+ * ⛔ ماشاسة FFmpeg باكك: المحرّك الحقيقي ماتحمّش​اطًاً.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -57,7 +57,7 @@ import {
   needsCompression,
 } from "../lecture-compression";
 
-/** ظ…ط­ط§ظƒط§ط© navigator.deviceMemory */
+/** محاكاة navigator.deviceMemory */
 function mockDeviceMemory(memory: number | undefined) {
   Object.defineProperty(navigator, "deviceMemory", {
     configurable: true,
@@ -65,7 +65,7 @@ function mockDeviceMemory(memory: number | undefined) {
   });
 }
 
-/** ظ…ط­ط§ظƒط§ط© navigator.userAgent */
+/** محاكاة navigator.userAgent */
 function mockUserAgent(ua: string) {
   Object.defineProperty(navigator, "userAgent", {
     configurable: true,
@@ -94,19 +94,19 @@ afterEach(async () => {
   await disposeCompressionEngine();
 });
 
-describe("ط§ظ„ظ‚ط±ط§ط±ط© â€” ط§ظ„ط­ط¯ ظˆط§ظ„ط¹ط¯ط§ط¯ط©", () => {
-  it("âœ… 45 MB طھظƒط³ط±ظٹط§ظ† ط£ط³ط·ط± ظ…ظ† ط§ظ„ظ…ط¹ط§ط¬ط©", () => {
-    expect(needsCompression({ size: mb(45) })).toBe(false);
-    expect(needsCompression({ size: mb(44) })).toBe(false);
-    expect(needsCompression({ size: 0 })).toBe(false);
+describe("القرارة — الحد والعدادة", () => {
+  it("✅ 45 MB تكسريان أسطر من المعاجة", () => {
+    expect(needsCompression({ type: "video/mp4", size: mb(45) })).toBe(false);
+    expect(needsCompression({ type: "video/mp4", size: mb(44) })).toBe(false);
+    expect(needsCompression({ type: "video/mp4", size: 0 })).toBe(false);
   });
 
-  it("âœ… ط£ظƒط¨ط± ظ…ظ† 45 MB ظٹط­طھط§ط¬ ط¶ط؛ط·", () => {
-    expect(needsCompression({ size: mb(45) + 1 })).toBe(true);
-    expect(needsCompression({ size: mb(51) })).toBe(true);
+  it("✅ أكبر من 45 MB يحتاج ضغط", () => {
+    expect(needsCompression({ type: "video/mp4", size: mb(45) + 1 })).toBe(true);
+    expect(needsCompression({ type: "video/mp4", size: mb(51) })).toBe(true);
   });
 
-  it("âœ… ط§ظ„ظ…ط¹ط§ط¯ط§طھ: 64â†’48â†’32â†’24 ط­ط³ط¨ ط§ظ„ظ…ط¯ط©", () => {
+  it("✅ المعادات: 64→48→32→24 حسب المدة", () => {
     expect(bitrateForDuration(30 * 60)).toBe(64);
     expect(bitrateForDuration(60 * 60)).toBe(64);
     expect(bitrateForDuration(61 * 60)).toBe(48);
@@ -117,19 +117,19 @@ describe("ط§ظ„ظ‚ط±ط§ط±ط© â€” ط§ظ„ط­ط¯ ظˆط§ظ�
     expect(bitrateForDuration(99999 * 60)).toBe(32); // above 2h -> floor rung
   });
 
-  it("âœ… ط§ط³ظ… ط§ظ„ظ…ظ„ظپ ظٹظڈظ…ظ‘ظ„ ظˆط§ط­ط¯", () => {
+  it("✅ اسم الملف يُمّل واحد", () => {
     expect(mp3Filename("lecture.mp4")).toBe("lecture.mp3");
     expect(mp3Filename("my talk.webm")).toBe("my talk.mp3");
     expect(mp3Filename("noext")).toBe("noext.mp3");
   });
 
-  it("âœ… ط³ظ„ظ‘ظ… ظ…ط¹ط§ط¯ط§طھ ظ…طھظ†ط§ط²ظ„", () => {
+  it("✅ سلّم معادات متنازل", () => {
     expect([...BITRATE_LADDER_KBPS]).toEqual([64, 48, 32]);
   });
 });
 
-describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () => {
-  it("âœ… ظ…ظ„ظپ طµط؛ظٹط± â†’ ظ…ط§ظپظٹط´ طھظ…ط³ظƒ FFmpeg ظˆظ„ط§ ط¶ط؛ط·", async () => {
+describe("الضغط — المحرّك", () => {
+  it("✅ ملف صغير → مافيش تمسك FFmpeg ولا ضغط", async () => {
     const small = fileOf(mb(10), "small.mp3", "audio/mpeg");
     const result = await compressLectureMedia(small, undefined, durationOf(10));
 
@@ -139,7 +139,7 @@ describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () =>
     expect(h.execCalls).toHaveLength(0);
   });
 
-  it("âœ… ظ…ظ„ظپ ط£ظƒط¨ط± â†’ ط¨ظٹط·ظ„ظ…طµ طµظˆطھ MP3 mono ظ…ظ† ط؛ظٹط± ظپظٹط¯ظٹظˆ", async () => {
+  it("✅ ملف أكبر → بيطلمص صوت MP3 mono من غير فيديو", async () => {
     await compressLectureMedia(fileOf(mb(51)), undefined, durationOf(30 * 60));
 
     const args = h.execCalls[0];
@@ -150,7 +150,7 @@ describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () =>
     expect(h.loadCalls).toBe(1);
   });
 
-  it("âœ… ظ†طھط§ط¬ ط¯ط§ط®ظ„ ط§ظ„ط­ط¯ â†’ ظٹط³طھط£ظ† ظ„ظ„ط±ظپط¹", async () => {
+  it("✅ نتاج داخل الحد → يستأن للرفع", async () => {
     h.outputBytes = mb(18);
     const result = await compressLectureMedia(fileOf(mb(51)), undefined, durationOf(30 * 60));
 
@@ -161,8 +161,8 @@ describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () =>
     expect(result.originalBytes).toBe(mb(51));
   });
 
-  it("âœ… ظ†طھط§ط¬ ط£ظƒط¨ط± â†’ ط¬ط±ظ‘ط¨ ط¨ظ…ط¹ط¯ط¯ ط£ط®ظپطµ ط­طھظ‰ ظٹط¯ط®ظ„", async () => {
-    // âڑ ï¸ڈ 50 > 45 ظˆ 46 > 45 ظˆ 30 <= 45 â†’ ط«ظ„ط§ط« ط¬ط±ط¨طھ ط¥ط¹ط§ط¯ط© ط§ظ„ظ…ط¹ط§ط¯ط©.
+  it("✅ نتاج أكبر → جرّب بمعدد أخفص حتى يدخل", async () => {
+    // ⚠️ 50 > 45 و 46 > 45 و 30 <= 45 → ثلاث جربت إعادة المعادة.
     h.outputLadder = [mb(50), mb(46), mb(30)];
     const result = await compressLectureMedia(fileOf(mb(51)), undefined, durationOf(30 * 60));
 
@@ -173,14 +173,14 @@ describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () =>
   });
 
   mockDeviceMemory(16); // 120MB device limit
-  it("â‌Œ ظ„ظ… ظٹط¯ط®ظ„ ط¨ط¹ط¯ ط£ظ‚ظ„ ظ…ط¹ط§ط¯ط© â†’ ط±ظپط¹ ط¨ط±ط³ط§ظ„ط©", async () => {
+  it("❌ لم يدخل بعد أقل معادة → رفع برسالة", async () => {
     h.outputBytes = mb(300);
     await expect(
       compressLectureMedia(fileOf(mb(50)), undefined, durationOf(30 * 60)),
     ).rejects.toThrow("still_too_large");
   });
 
-  it("â‌Œ ظپط´ظ„ طھط­ظ…ظٹظ„ FFmpeg ط¨ظٹط±طھظ‡ظٹ ظ„ظ„ط·ط§ظ„ط¨", async () => {
+  it("❌ فشل تحميل FFmpeg بيرتهي للطالب", async () => {
     h.loadThrows = true;
     await expect(
       compressLectureMedia(fileOf(mb(51)), undefined, durationOf(30 * 60)),
@@ -188,22 +188,22 @@ describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () =>
   });
 
   mockDeviceMemory(16); // 120MB device limit
-  it("â‌Œ ظ„ظ… ظ†ط±ظپط¹ ط§ظ„ظ…ظ„ظپ ط§ظ„ط£طµظ„ظٹ ط£ط¨ط¯ظ‹ط§ظ‹", async () => {
+  it("❌ لم نرفع الملف الأصلي أبدًاً", async () => {
     h.outputBytes = mb(300);
     await expect(
       compressLectureMedia(fileOf(mb(50)), undefined, durationOf(30 * 60)),
     ).rejects.toThrow();
-    // âڑ ï¸ڈ the original is never "returned for upload" on failure.
+    // ⚠️ the original is never "returned for upload" on failure.
     expect(h.execCalls.length).toBeGreaterThan(0);
   });
 
-  it("âœ… ط§ظ„ظ†ط¸ط§ظپ ط§ظ„ط§ظپطھط±ط§ط¶ظٹ ظ…ظ† ط§ظ„ظ†ط¸ط§ظ…", async () => {
+  it("✅ النظاف الافتراضي من النظام", async () => {
     await compressLectureMedia(fileOf(mb(51)), undefined, durationOf(30 * 60));
     expect(h.deleted).toContain("input.media");
     expect(h.deleted).toContain("output.mp3");
   });
 
-  it("âœ… ط¨ظٹظ†ط´ط± ظ†ط³ط¨ط© طھظ‚ط¯ظ…", async () => {
+  it("✅ بينشر نسبة تقدم", async () => {
     const seen: number[] = [];
     await compressLectureMedia(fileOf(mb(51)), (p) => seen.push(p.ratio), durationOf(30 * 60));
     expect(seen.length).toBeGreaterThan(0);
@@ -211,70 +211,70 @@ describe("ط§ظ„ط¶ط؛ط· â€” ط§ظ„ظ…ط­ط±ظ‘ظƒ", () =>
   });
 });
 
-describe("getDeviceLimit â€” ط­ط¯ظˆط¯ ط§ظ„ط¬ظ‡ط§ط²", () => {
+describe("getDeviceLimit — حدود الجهاز", () => {
   afterEach(() => {
     delete (navigator as any).deviceMemory;
     delete (navigator as any).userAgent;
   });
 
-  it("RAM â‰¤ 2GB â†’ 40MB", () => {
+  it("RAM ≤ 2GB → 40MB", () => {
     mockDeviceMemory(2);
     expect(getDeviceLimit()).toBe(40 * 1024 * 1024);
   });
 
-  it("RAM â‰¤ 4GB â†’ 60MB", () => {
+  it("RAM ≤ 4GB → 60MB", () => {
     mockDeviceMemory(4);
     expect(getDeviceLimit()).toBe(60 * 1024 * 1024);
   });
 
-  it("RAM â‰¤ 8GB â†’ 100MB", () => {
+  it("RAM ≤ 8GB → 100MB", () => {
     mockDeviceMemory(8);
     expect(getDeviceLimit()).toBe(100 * 1024 * 1024);
   });
 
-  it("RAM > 8GB â†’ 120MB", () => {
+  it("RAM > 8GB → 120MB", () => {
     mockDeviceMemory(16);
     expect(getDeviceLimit()).toBe(120 * 1024 * 1024);
   });
 
-  it("no deviceMemory + iOS UA â†’ 60MB", () => {
+  it("no deviceMemory + iOS UA → 60MB", () => {
     delete (navigator as any).deviceMemory;
     mockUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)");
     expect(getDeviceLimit()).toBe(60 * 1024 * 1024);
   });
 
-  it("no deviceMemory + Android UA â†’ 80MB", () => {
+  it("no deviceMemory + Android UA → 80MB", () => {
     delete (navigator as any).deviceMemory;
     mockUserAgent("Mozilla/5.0 (Linux; Android 10; SM-G973F)");
     expect(getDeviceLimit()).toBe(80 * 1024 * 1024);
   });
 
-  it("no deviceMemory + desktop UA â†’ 120MB", () => {
+  it("no deviceMemory + desktop UA → 120MB", () => {
     delete (navigator as any).deviceMemory;
     mockUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
     expect(getDeviceLimit()).toBe(120 * 1024 * 1024);
   });
 });
 
-describe("needsCompression ظ…ط¹ ط­ط¯ظˆط¯ ط§ظ„ط¬ظ‡ط§ط²", () => {
+describe("needsCompression مع حدود الجهاز", () => {
   afterEach(() => {
     delete (navigator as any).deviceMemory;
     delete (navigator as any).userAgent;
   });
 
-  it("ظ…ظ„ظپ ط£ظƒط¨ط± ظ…ظ† ط­ط¯ ط§ظ„ط¬ظ‡ط§ط² ظ„ط§ ظٹط­طھط§ط¬ ط¶ط؛ط· (ط³ظٹط¸ظ‡ط± ط®ط·ط£ ظپظٹ ط§ظ„ظˆط§ط¬ظ‡ط©)", () => {
+  it("ملف أكبر من حد الجهاز لا يحتاج ضغط (سيظهر خطأ في الواجهة)", () => {
     mockDeviceMemory(2); // 40MB limit
     const largeFile = { size: 50 * 1024 * 1024, type: "audio/wav" } as File;
     expect(needsCompression(largeFile)).toBe(false);
   });
 
-  it("ظ…ظ„ظپ ط£طµط؛ط± ظ…ظ† ط­ط¯ ط§ظ„ط¬ظ‡ط§ط² ظٹط­طھط§ط¬ ط¶ط؛ط· ط¥ط°ط§ ط£ظƒط¨ط± ظ…ظ† 45MB", () => {
+  it("ملف أصغر من حد الجهاز يحتاج ضغط إذا أكبر من 45MB", () => {
     mockDeviceMemory(16); // 120MB limit
     const file = { size: 50 * 1024 * 1024, type: "audio/wav" } as File;
     expect(needsCompression(file)).toBe(true);
   });
 
-  it("MP3 ظƒط¨ظٹط± ظ…ظ† ط­ط¯ ط§ظ„ط¬ظ‡ط§ط² ظ„ط§ ظٹط­طھط§ط¬ ط¶ط؛ط· (ظ…ط³طھط«ظ†ظ‰)", () => {
+  it("MP3 كبير من حد الجهاز لا يحتاج ضغط (مستثنى)", () => {
     mockDeviceMemory(2); // 40MB limit
     const largeMP3 = { size: 50 * 1024 * 1024, type: "audio/mpeg" } as File;
     expect(needsCompression(largeMP3)).toBe(false);

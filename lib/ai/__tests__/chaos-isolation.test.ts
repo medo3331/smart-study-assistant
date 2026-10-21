@@ -82,7 +82,7 @@ describe("Chaos: User Isolation", () => {
       { maxHistoryMessages: 10 },
       mockSupabase({ full_name: "علي" }, [{ role: "user", content: "من جلستي فقط" }]) as never
     );
-    expect(messages.some((m) => m.content.includes("من جلستي فقط"))).toBe(true);
+    expect(messages.some((m: any) => m.content.includes("من جلستي فقط"))).toBe(true);
   });
 
   it("empty_profile_still_returns_system_message", async () => {

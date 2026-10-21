@@ -83,7 +83,7 @@ describe("Chaos: Token Limits", () => {
       { maxHistoryMessages: 1 },
       mockSupabaseWithHistory([{ role: "user", content: "x".repeat(8000) }]) as never
     );
-    const hist = messages.find((m) => m.content.startsWith("x"));
+    const hist = messages.find((m: any) => m.content.startsWith("x"));
     expect((hist?.content.length ?? 0)).toBeLessThanOrEqual(4001);
   });
 
