@@ -176,28 +176,12 @@ export async function POST(req: Request) {
 
     // ط§ظ„ظ€ prompt ط¨ظ‚ظ‰ ط¹ظ„ظ‰ ط§ظ„ط³ظٹط±ظپط±. ط§ظ„ظƒظ„ط§ظٹظ†طھ ظٹظ…ط±ط± ط³ظٹط§ظ‚ظ‹ط§ ظ…ط­ط¯ظˆط¯ظ‹ط§ ظپظ‚ط·طŒ ظ„ظƒظ†
     // ظ…طµط¯ط± ط§ظ„ط­ظ‚ظٹظ‚ط© (ط§ظ„طھظ‚ط¯ظ… ظˆط§ظ„ط¯ط±ط³) ظٹظڈظ‚ط±ط£ ظ…ظ† ط­ط³ط§ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ… ظ†ظپط³ظ‡.
-    let studentContext: any = {};
-    let selectedMode = parseMode(mode, messageText(safeMessages.at(-1)?.content ?? ""));
-    let toolFacts: any = {};
-    try {
-      studentContext = await getStudentContext(supabase, user.id, context ?? {});
-      toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, messageText(safeMessages.at(-1)?.content ?? ""));
-    } catch (e) {
-      console.warn("Student context fetch failed, continuing without context:", e);
-      studentContext = {};
-      toolFacts = {};
-    }
-    const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+    const displayName = (user as { user_metadata?: { full_name?: string; name?: string }; email?: string | null }).user_metadata?.full_name
+      || (user as { user_metadata?: { name?: string } }).user_metadata?.name
+      || user.email
+      || "الطالب";
+    const combinedSystem = `أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: ${displayName}${user.email ? ` (${user.email})` : ""}. أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.`;
 
-    // ط¯ظ…ط¬ ط´ط®طµظٹط© ط§ظ„ط·ط§ظ„ط¨ (Persona Builder) ظ…ط¹ ط§ظ„ط¨ط±ظˆظ…ط¨طھ ط§ظ„ط£ط³ط§ط³ظٹ
-    let personaPrompt = "";
-    try {
-      personaPrompt = await buildSystemPrompt(user.id);
-    } catch (e) {
-      console.warn("Persona prompt build failed, falling back to base system prompt:", e);
-    }
-    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- ط§ظ„ط³ظٹط§ظ‚ ط§ظ„طھط¹ظ„ظٹظ…ظٹ ط§ظ„ط¥ط¶ط§ظپظٹ ---\n${system}` : system;
-    void rememberSessionContext(supabase, user.id, studentContext, messageText(safeMessages.at(-1)?.content ?? ""));
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
     const candidates = routeCandidates("chat");

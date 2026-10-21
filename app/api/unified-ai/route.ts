@@ -529,22 +529,11 @@ export async function POST(req: Request) {
     }
     if (userId && supabase && !isAnonymous) {
       try {
-        const studentContext = await getStudentContext(supabase, userId, ctxInput);
-        const selectedMode = parseMode(rawMode, prompt);
-        const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt);
-        const magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
-        let personaPrompt = "";
-        try {
-          personaPrompt = await buildSystemPrompt(userId);
-        } catch (e) {
-          console.warn("[unified-ai] persona prompt build failed, using base system prompt:", e);
-        }
-        input.system = personaPrompt
-          ? `${personaPrompt}\n\n--- ط§ظ„ط³ظٹط§ظ‚ ط§ظ„طھط¹ظ„ظٹظ…ظٹ ط§ظ„ط¥ط¶ط§ظپظٹ ---\n${magiclySystem}`
-          : magiclySystem;
-        void rememberSessionContext(supabase, userId, studentContext, prompt);
+        const { data: { user } } = await supabase.auth.getUser();
+        const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "الطالب";
+        input.system = "أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
       } catch (e) {
-        console.warn("[unified-ai] student context build failed, continuing without it:", e);
+        console.warn("[unified-ai] user context build failed, continuing without it:", e);
       }
     }
 
