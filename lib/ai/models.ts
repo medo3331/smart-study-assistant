@@ -67,6 +67,18 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     freeEndpoint: true,
     enabled: true,
   },
+  {
+    id: "llama-3.2-11b-vision-preview",
+    provider: "groq",
+    displayName: "Llama 3.2 11B Vision (Groq)",
+    capabilities: ["text", "vision", "streaming"],
+    contextWindow: 8_192,
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 3,
+    freeEndpoint: true,
+    enabled: true,
+  },
 
   /* ------------------------------------------------------------------ */
   /* NVIDIA Free Endpoint — مُتحقَّق منها حيًا (2026-08-26)               */
@@ -168,6 +180,17 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     priority: 2,
     tier: "free",
     fallbackPriority: 3,
+    freeEndpoint: true,
+    enabled: true,
+  },
+  {
+    id: "qwen/qwen-2.5-vl-7b-instruct:free",
+    provider: "openrouter",
+    displayName: "Qwen 2.5 VL 7B (OpenRouter Free)",
+    capabilities: ["text", "vision", "streaming"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
     freeEndpoint: true,
     enabled: true,
   },

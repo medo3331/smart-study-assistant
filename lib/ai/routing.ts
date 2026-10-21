@@ -1,4 +1,5 @@
 import type {
+  AiChatMessage,
   AiChatRequest,
   AiChatResponse,
   AiImageGenerationRequest,
@@ -222,10 +223,17 @@ function shouldTryNextCandidate(status: number): boolean {
  *
  * البوابة الموحّدة في كل الحالات: enabled + freeEndpoint + تهيئة المزوّد + صحته.
  */
-export function routeCandidates(task: AiTaskType, now: Date = new Date()): RouteCandidate[] {
-  void now; // نقطة توسّع مستقبلية (sticky sessions / budget windows) — مش مستخدمة حاليًا.
-  const required = TASK_CAPABILITIES[task];
-  const primaryProvider = AI_PROVIDER_BY_TASK[task];
+export function routeCandidates(
+  task: AiTaskType,
+  now: Date = new Date(),
+  options?: { hasImage?: boolean }
+): RouteCandidate[] {
+  void now;
+  const hasImage = Boolean(options?.hasImage);
+  const required = hasImage
+    ? [...TASK_CAPABILITIES[task], "vision" as AiCapability]
+    : TASK_CAPABILITIES[task];
+  const primaryProvider = hasImage ? "groq" : AI_PROVIDER_BY_TASK[task];
   const allowPaid = paidModelsAllowed();
   const candidates: RouteCandidate[] = [];
 
@@ -258,6 +266,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
   for (const modelId of TASK_MODEL_PREFERENCE[task] ?? []) {
     const preferred = MODEL_REGISTRY.find((model) => model.id === modelId);
     if (!preferred || !isUsable(preferred.provider)) continue;
+    if (hasImage && preferred.provider === "gemini") continue;
     pushIfEligible(preferred.provider, preferred.id);
   }
 
@@ -281,7 +290,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
 
   // مزوّدات بديلة — بس اللي حالتهم بتسمح بالاستخدام الآن.
   const otherProviders = [...new Set(MODEL_REGISTRY.map((m) => m.provider))].filter(
-    (p) => p !== primaryProvider
+    (p) => p !== primaryProvider && !(hasImage && p === "gemini")
   );
   for (const provider of otherProviders) {
     if (!isUsable(provider)) continue;
@@ -294,6 +303,15 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
   }
 
   return candidates;
+}
+
+function detectImageInMessages(messages: AiChatMessage[]): boolean {
+  for (const m of messages) {
+    if (Array.isArray(m.content)) {
+      if (m.content.some((part) => part && part.type === "image_url")) return true;
+    }
+  }
+  return false;
 }
 
 export class AiRouter {
@@ -339,8 +357,8 @@ export class AiRouter {
      *   أو ضياع الـ identity.
      */
     const ctx = usage ?? input.usage;
-    const required = TASK_CAPABILITIES[task];
-    const mediaOnly = required.some((capability) => capability === "vision" || capability === "file_analysis");
+    const hasImage = detectImageInMessages(input.messages) || Boolean((input as { imageDataUrl?: string }).imageDataUrl);
+    const mediaOnly = TASK_CAPABILITIES[task].some((capability) => capability === "vision" || capability === "file_analysis");
 
     // مهام الوسائط: بدون أي fallback عابر للقدرات.
     if (mediaOnly || task === "image_generation") {
@@ -398,7 +416,7 @@ export class AiRouter {
     }
 
     const attempts: RouterAttempt[] = [];
-    const candidates = routeCandidates(task);
+    const candidates = routeCandidates(task, new Date(), { hasImage });
 
     if (candidates.length === 0) {
       throw new AiRouteError(
