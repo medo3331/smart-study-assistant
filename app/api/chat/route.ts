@@ -176,9 +176,17 @@ export async function POST(req: Request) {
 
     // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
-    const studentContext = await getStudentContext(supabase, user.id, context ?? {});
-    const selectedMode = parseMode(mode, messageText(safeMessages.at(-1)?.content ?? ""));
-    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, messageText(safeMessages.at(-1)?.content ?? ""));
+    let studentContext: any = {};
+    let selectedMode = parseMode(mode, messageText(safeMessages.at(-1)?.content ?? ""));
+    let toolFacts: any = {};
+    try {
+      studentContext = await getStudentContext(supabase, user.id, context ?? {});
+      toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, messageText(safeMessages.at(-1)?.content ?? ""));
+    } catch (e) {
+      console.warn("Student context fetch failed, continuing without context:", e);
+      studentContext = {};
+      toolFacts = {};
+    }
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
     // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
