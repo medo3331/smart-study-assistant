@@ -47,16 +47,6 @@ import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-st
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import type { AiTaskType } from "@/lib/ai/types";
-import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
-import {
-  buildMagiclySystemPrompt,
-  getStudentContext,
-  getStudyToolFacts,
-  parseMode,
-  rememberSessionContext,
-  type MagiclyContextInput,
-} from "@/lib/magicly-ai";
-
 function serverRequestId(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -520,7 +510,6 @@ export async function POST(req: Request) {
 
     // ---- Unified brain (ظ…ظ† /api/chat): ط´ط®طµظٹط© ط§ظ„ط·ط§ظ„ط¨ + ط³ظٹط§ظ‚ظ‡ ط§ظ„ط¯ط±ط§ط³ظٹ â€” best-effort ----
     // ظ„ظ„ظ…ط³ط¬ظ„ظٹظ† ظپظ‚ط·ط› ط§ظ„ط²ظˆط§ط± ظˆط§ظ„ظ…ط¬ظ‡ظˆظ„ظˆظ† ظٹظƒظ…ظ„ظˆظ† ط¨ط¯ظˆظ†ظ‡ط§ ظˆظ„ط§ ظٹطھط¹ط·ظ„ظˆظ†.
-    const ctxInput = context as unknown as MagiclyContextInput;
     const rawMode = (context as Record<string, unknown>)?.mode;
     const rawConversationId = (context as Record<string, unknown>)?.conversationId;
     let incomingConversationId = "";
