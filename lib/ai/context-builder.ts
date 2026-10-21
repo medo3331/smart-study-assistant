@@ -2,11 +2,11 @@ import type { AiChatMessage } from "./types";
 import { appendSystemInstruction, truncateText } from "./prompt-engine";
 
 export type ContextProfile = {
-  full_name?: string;
+  display_name?: string;
   stage?: string;
   grade?: string;
-  subjects?: string[];
-  goal?: string;
+  study_field?: string;
+  learning_goal?: string | string[];
   preferred_style?: string;
   daily_study_hours?: number;
 };
@@ -36,14 +36,17 @@ function scrubIds(text: string): string {
 }
 
 function profileSystemPrompt(profile: ContextProfile): string {
-  const subjects = (profile.subjects ?? []).join("، ");
+  const studyField = profile.study_field ? String(profile.study_field) : "";
+  const goals = Array.isArray(profile.learning_goal)
+    ? profile.learning_goal.join("، ")
+    : (profile.learning_goal ? String(profile.learning_goal) : "");
   const base = [
     "أنت مساعد دراسي شخصي.",
-    profile.full_name ? `اسم الطالب: ${profile.full_name}` : "",
+    profile.display_name ? `اسم الطالب: ${profile.display_name}` : "",
     profile.stage ? `المرحلة: ${profile.stage}` : "",
     profile.grade ? `الصف: ${profile.grade}` : "",
-    subjects ? `المواد: ${subjects}` : "",
-    profile.goal ? `الهدف: ${profile.goal}` : "",
+    studyField ? `المادة: ${studyField}` : "",
+    goals ? `الهدف: ${goals}` : "",
     profile.preferred_style ? `أسلوب الشرح: ${profile.preferred_style}` : "",
     typeof profile.daily_study_hours === "number" ? `ساعات يومية: ${profile.daily_study_hours}` : "",
   ]

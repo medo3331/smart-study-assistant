@@ -70,10 +70,10 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         if (!user || cancelled) return;
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name, subject")
+          .select("display_name, study_field")
           .eq("id", user.id)
           .maybeSingle();
-        let subject = (profile as any)?.subject || "";
+        let subject = (profile as any)?.study_field || "";
         if (!subject) {
           const { data } = await supabase
             .from("user_subjects")
@@ -83,7 +83,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           subject = (data as any)?.[0]?.subjects?.name || "";
         }
         const name =
-          (profile as any)?.full_name ||
+          (profile as any)?.display_name ||
           (user.user_metadata as any)?.full_name ||
           "الطالب";
         if (!cancelled) {

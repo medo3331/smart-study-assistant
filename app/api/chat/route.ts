@@ -88,7 +88,9 @@ export async function POST(req: Request) {
     // ٣) تنضيف الرسايل: الأدوار المسموحة بس، ونص مقصوص
     let pdfFailed = false;
     let pdfTooLarge = false;
-    const safeMessages = await Promise.all(
+    let safeMessages: any;
+    try {
+      safeMessages = await Promise.all(
       (messages as IncomingMessage[])
         .slice(-MAX_MESSAGES)
         .filter(
@@ -144,6 +146,13 @@ export async function POST(req: Request) {
           return { role: m.role as "user" | "assistant", content: parts };
         })
     );
+    } catch (e) {
+      console.warn("chat route message processing failed", e);
+      return NextResponse.json(
+        { error: { message: "تعذر قراءة النص من هذا الـ PDF", code: "PDF_READ_FAILED" } },
+        { status: 400 }
+      );
+    }
 
     if (pdfTooLarge) {
       return NextResponse.json(
