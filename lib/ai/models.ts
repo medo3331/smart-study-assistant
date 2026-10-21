@@ -235,6 +235,19 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     freeEndpoint: true,
     enabled: true,
   },
+  /* ---------------- OpenRouter (مجاني — Nemotron Vision) ---------------- */
+  {
+    id: "nvidia/nemotron-nano-12b-v2-vl:free",
+    provider: "openrouter",
+    displayName: "Nemotron Nano 12B v2 VL (OpenRouter, Free)",
+    capabilities: ["text", "vision", "streaming"],
+    contextWindow: 128_000,
+    priority: 1,
+    tier: "free",
+    fallbackPriority: 1,
+    freeEndpoint: true,
+    enabled: true,
+  },
 ];
 
 const BY_ID = new Map(MODEL_REGISTRY.map((model) => [model.id, model]));

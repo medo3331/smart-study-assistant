@@ -113,10 +113,10 @@ export async function getDetailedAIContext(userId: string) {
   const { data: profile } = await supabase
     .from("profiles")
     .select(`
-      full_name,
+      display_name,
       persona,
-      goals,
-      learning_style,
+      learning_goal,
+      study_field,
       education_stage_id,
       education_stages(name, code),
       education_grade_id,
@@ -141,7 +141,7 @@ export async function getDetailedAIContext(userId: string) {
     subjects = subjectsData?.map((s: any) => s.subjects?.name).filter(Boolean) || [];
   } catch {
     // fallback: إذا لم يكن جدول user_subjects موجوداً بعد، نقرأ من profile.subject مباشرة
-    if (profile?.subject) subjects = [String(profile.subject)];
+    if (profile?.study_field) subjects = [String(profile.study_field)];
   }
 
   // 3. جلب أهم 3 نقاط ضعف ديناميكية (الأعلى أخطاءً والأقل إتقاناً)
@@ -161,7 +161,7 @@ export async function getDetailedAIContext(userId: string) {
   }));
 
   return {
-    name: profile?.full_name || "يا بطل",
+    name: profile?.display_name || "يا بطل",
     persona: profile?.persona ?? null,
     stage: (profile?.education_stages as { name?: string; code?: string } | null)?.name ?? null,
     grade: (profile?.education_grades as { name?: string; order_index?: number } | null)?.name ?? null,
@@ -169,8 +169,12 @@ export async function getDetailedAIContext(userId: string) {
     university: (profile?.universities as { name?: string } | null)?.name ?? null,
     faculty: (profile?.university_faculties as { name?: string } | null)?.name ?? null,
     department: (profile?.university_departments as { name?: string } | null)?.name ?? null,
-    goals: Array.isArray(profile?.goals) ? profile.goals : [],
-    style: profile?.learning_style ?? null,
+    goals: Array.isArray(profile?.learning_goal)
+      ? profile.learning_goal
+      : profile?.learning_goal
+        ? [String(profile.learning_goal)]
+        : [],
+    style: null,
     subjects: subjects,
     weaknesses: weaknesses,
   };

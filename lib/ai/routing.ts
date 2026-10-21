@@ -233,7 +233,7 @@ export function routeCandidates(
   const required = hasImage
     ? [...TASK_CAPABILITIES[task], "vision" as AiCapability]
     : TASK_CAPABILITIES[task];
-  const primaryProvider = hasImage ? "groq" : AI_PROVIDER_BY_TASK[task];
+  const primaryProvider = hasImage ? "openrouter" : AI_PROVIDER_BY_TASK[task];
   const allowPaid = paidModelsAllowed();
   const candidates: RouteCandidate[] = [];
 
