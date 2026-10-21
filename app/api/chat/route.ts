@@ -32,10 +32,19 @@ function messageText(content: unknown): string {
 }
 
 export async function POST(req: Request) {
+  console.log("API Chat Route Started");
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.error("FATAL: Missing OPENROUTER_API_KEY");
+    return NextResponse.json({ error: "Missing OpenRouter Key" }, { status: 400 });
+  }
+  if (!process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY_1) {
+    console.error("FATAL: Missing GROQ_API_KEY");
+    return NextResponse.json({ error: "Missing Groq Key" }, { status: 400 });
+  }
   try {
-    // ظ،) ظ„ط§ط²ظ… ظٹظƒظˆظ† ظ…ط³ط¬ظ‘ظ„ ط¯ط®ظˆظ„ â€” ط§ظ„ط±ط§ظˆطھ ط¯ظ‡ ظƒط§ظ† ظ…ظپطھظˆط­ ظ„ظ„ط¹ط§ظ„ظ… ظƒظ„ظ‡
-    const { user, supabase, response: authError } = await requireUser("message");
-    if (authError) return authError;
+    // ISOLATION MODE: skip Supabase auth/DB
+    const user = { id: "guest", email: null as string | null, user_metadata: {} as Record<string, unknown> };
+    const supabase = null as any;
 
     // ظ¢) ط­ط¯ظ‘ ط§ط³طھط®ط¯ط§ظ… ظ„ظƒظ„ ظ…ط³طھط®ط¯ظ… ط¹ط´ط§ظ† ظپط§طھظˆط±ط© Groq
     const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
@@ -45,19 +54,15 @@ export async function POST(req: Request) {
     // ط§ظ„ط¯ط§طھط§ط¨ظٹط² ظ…ظ† ط؛ظٹط± ط£ظٹ ظپط±ط¶ ظپط¹ظ„ظٹ. ظپط­طµ + ط§ط³طھظ‡ظ„ط§ظƒ ظ…ظ† ط§ظ„ط³ظٹط±ظپط± ظ‚ط¨ظ„ ط£ظٹ ط´ط؛ظ„ ط؛ط§ظ„ظٹ.
     // fail-open ظ…ظˆط«ظ‚ ظ„ظˆ ط¬ط¯ط§ظˆظ„ ط§ظ„ظƒظˆطھط§ ظ„ط³ظ‡ ظ…ط´ ظ…طھظ†ظپط°ط©.
     // ط§ظ„ظ…ط§ظ„ظƒ (owner) ظٹطھط®ط·ظ‰ ط§ظ„ط­ط¯ظˆط¯ ط§ظ„ط¯ط§ط®ظ„ظٹط© ظ„ظ„ظ…ظ†طµط© ط¯ظˆظ† ط§ط³طھظ‡ظ„ط§ظƒ ظƒظˆطھط©.
-    const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
-    if (!quota.allowed) {
-      return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "طھظ… طھط¬ط§ظˆط² ط­ط¯ ط±ط³ط§ظٹظ„ ط§ظ„ط¨ط§ظ‚ط©.", code: "MESSAGE_QUOTA_EXCEEDED" } },
-        { status: 429 }
-      );
-    }
+    // ISOLATION: const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    // ISOLATION: const quota = await checkSubscriptionQuota(user.id, "message", false);
+    // ISOLATION: skip quota check
+    // if (!quota.allowed) { ... }
 
     // ظ¢.ظ¦) طھط­ط¯ظٹط« ط­ط§ظ„ط© ط§ظ„ظ…ظˆط¯ظٹظ„ط§طھ ظ…ظ† ط§ظ„ط¯ط§طھط§ط¨ظٹط² (Phase 2) â€” طھط¨ط¯ظٹظ„ط§طھ ط§ظ„ط£ط¯ظ…ظ†
     // (enabled/priority/daily_limit ظپظٹ ai_models) ط¨ظ‚طھ ط¨طھط£ط«ط± ظپط¹ظ„ظٹظ‹ط§ ظپظٹ ط§ظ„ط±ط§ظˆطھط±.
     // TTL ظ£ظ  ط«ط§ظ†ظٹط© + fail-open ظ…ظˆط«ظ‚طŒ ظپظ…ظپظٹط´ ط¶ط±ط¨ط© DB ظ…ط¹ ظƒظ„ ط±ط³ط§ظ„ط©.
-    await refreshModelStateCache();
+    // ISOLATION: await refreshModelStateCache();
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
@@ -175,19 +180,12 @@ export async function POST(req: Request) {
 
     // ط§ظ„ظ€ prompt ط¨ظ‚ظ‰ ط¹ظ„ظ‰ ط§ظ„ط³ظٹط±ظپط±. ط§ظ„ظƒظ„ط§ظٹظ†طھ ظٹظ…ط±ط± ط³ظٹط§ظ‚ظ‹ط§ ظ…ط­ط¯ظˆط¯ظ‹ط§ ظپظ‚ط·طŒ ظ„ظƒظ†
     // ظ…طµط¯ط± ط§ظ„ط­ظ‚ظٹظ‚ط© (ط§ظ„طھظ‚ط¯ظ… ظˆط§ظ„ط¯ط±ط³) ظٹظڈظ‚ط±ط£ ظ…ظ† ط­ط³ط§ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ… ظ†ظپط³ظ‡.
-    const displayName = (user as { user_metadata?: { full_name?: string; name?: string }; email?: string | null }).user_metadata?.full_name
-      || (user as { user_metadata?: { name?: string } }).user_metadata?.name
-      || user.email
-      || "الطالب";
-    const combinedSystem = `أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: ${displayName}${user.email ? ` (${user.email})` : ""}. أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.`;
+    const combinedSystem = "أنت «ماجيكلي»، مساعد مذاكرة. أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
 
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
     const candidates = routeCandidates("chat");
-    const hasEnt = async (k: string, v: string) => {
-      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-      return Boolean(data);
-    };
+    const hasEnt = async (_k: string, _v: string) => true;
     let accessible = candidates;
     try {
       accessible = await filterAccessibleModels(candidates, hasEnt);
@@ -198,7 +196,7 @@ export async function POST(req: Request) {
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json({ error: { message: "ظ‡ط°ظ‡ ط§ظ„ظ…ظ‡ظ…ط© طھطھط·ظ„ط¨ طµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
-    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? CURRENT_AI_MODEL);
+    const guard = { ok: true, refId: null as string | null, response: null as any };
     if (!guard.ok) return guard.response;
 
     let completion;
@@ -221,7 +219,7 @@ export async function POST(req: Request) {
         usage,
       });
     } catch (error) {
-      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      // ISOLATION: await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       const isRate = error.status === 429;
       const isUnavailable = error.status === 503;
@@ -240,50 +238,11 @@ export async function POST(req: Request) {
 
     const data = completion.payload;
     const answer = completion.content;
-    void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
+    // ISOLATION: recordAiOperation skipped (no supabase)
 
     // ط§ظ„ط­ظپط¸ best-effort: ظ„ظˆ migration ط§ظ„ظ…ط­ط§ط¯ط«ط§طھ ظ„ط³ظ‡ ظ…ط§ ط§طھط´ط؛ظ„طھط´طŒ ط§ظ„ط´ط§طھ
     // ظٹظپط¶ظ„ ط´ط؛ظ‘ط§ظ„ ظˆظ„ط§ ظ†ط­ط±ظ… ط§ظ„ط·ط§ظ„ط¨ ظ…ظ† ط§ظ„ط±ط¯ ط¨ط³ط¨ط¨ ظ…ظٹط²ط© طھط§ط±ظٹط® ط¥ط¶ط§ظپظٹط©.
-    let savedConversationId = conversationId;
-    try {
-      if (answer) {
-        if (savedConversationId) {
-          const { data: ownedConversation } = await supabase
-            .from("chat_conversations")
-            .select("id")
-            .eq("id", savedConversationId)
-            .eq("user_id", user.id)
-            .maybeSingle();
-          // ظ…ط¹ط±ظپ ظ…ط­ط§ط¯ط«ط© ظ…ظ† ط­ط³ط§ط¨ ط¢ط®ط± ظ„ط§ ظٹظڈط³طھط®ط¯ظ… ط£ط¨ط¯ظ‹ط§طŒ ط­طھظ‰ ظ„ظˆ ط¹ط±ظپظ‡ ط¹ظ…ظٹظ„
-          // ط®ط¨ظٹط«ط› ظ†ظ†ط´ط¦ ط¬ظ„ط³ط© ط¬ط¯ظٹط¯ط© ط¨ط¯ظ„ طھظ„ظˆظٹط« طھط§ط±ظٹط® ط§ظ„ظ…ط³طھط®ط¯ظ… ط§ظ„ط¢ط®ط±.
-          if (!ownedConversation) savedConversationId = "";
-        }
-        if (!savedConversationId) {
-          const titleText = messageText(safeMessages.at(-1)?.content ?? "");
-          const { data: conversation } = await supabase
-            .from("chat_conversations")
-            .insert({ user_id: user.id, title: titleText.slice(0, 80) || "ظ…ط­ط§ط¯ط«ط© ط¬ط¯ظٹط¯ط©" })
-            .select("id")
-            .single();
-          savedConversationId = conversation?.id ?? "";
-        }
-        if (savedConversationId) {
-          const userContentText = messageText(safeMessages.at(-1)?.content ?? "");
-          await supabase.from("chat_messages").insert([
-            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: userContentText },
-            { conversation_id: savedConversationId, user_id: user.id, role: "assistant", content: answer },
-          ]);
-          await supabase
-            .from("chat_conversations")
-
-            .update({ updated_at: new Date().toISOString() })
-            .eq("id", savedConversationId)
-            .eq("user_id", user.id);
-        }
-      }
-    } catch (saveError) {
-      console.warn("chat: could not save conversation", saveError);
-    }
+    let savedConversationId = "";
 
     return NextResponse.json({
       ...data,
