@@ -401,8 +401,10 @@ export async function POST(req: Request) {
         { status: httpStatusForCode(publicError.code) }
       );
     }
-  } catch (error) {
-    console.error("api/ai route error:", error);
+  } catch (error: any) {
+    console.error("=== FATAL API ERROR ===");
+    console.error(error);
+    console.error("Message:", error?.message);
     return NextResponse.json(
       {
         success: false,
