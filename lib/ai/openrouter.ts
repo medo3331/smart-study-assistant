@@ -1,4 +1,5 @@
 import type {
+  AiChatMessage,
   AiChatPayload,
   AiChatRequest,
   AiChatResponse,
@@ -37,14 +38,21 @@ export function openrouterApiKey(): string | undefined {
 
 /** يبني رسالة متوافقة مع OpenAI مع دعم الرؤية عند توفر صورة إدخال. */
 export function buildVisionMessage(
-  message: { role: string; content: string },
+  message: AiChatMessage,
   imageData: string,
   mimeType: string
 ) {
+  const text =
+    typeof message.content === "string"
+      ? message.content
+      : message.content
+          .filter((part): part is { type: "text"; text: string } => part.type === "text")
+          .map((part) => part.text)
+          .join(" ");
   return {
     role: "user" as const,
     content: [
-      { type: "text", text: message.content },
+      { type: "text", text },
       {
         type: "image_url",
         image_url: { url: imageData.startsWith("data:") ? imageData : `data:${mimeType};base64,${imageData}` },
