@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { aiRouter } from "@/lib/ai/router";
@@ -15,9 +15,9 @@ import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 
-/** أقصى عدد رسايل بنمررها للموديل (الأحدث بس). */
+/** ط£ظ‚طµظ‰ ط¹ط¯ط¯ ط±ط³ط§ظٹظ„ ط¨ظ†ظ…ط±ط±ظ‡ط§ ظ„ظ„ظ…ظˆط¯ظٹظ„ (ط§ظ„ط£ط­ط¯ط« ط¨ط³). */
 const MAX_MESSAGES = 30;
-/** أقصى طول لأي رسالة واحدة. */
+/** ط£ظ‚طµظ‰ ط·ظˆظ„ ظ„ط£ظٹ ط±ط³ط§ظ„ط© ظˆط§ط­ط¯ط©. */
 const MAX_MESSAGE_CHARS = 8000;
 
 type IncomingMessage = { role?: unknown; content?: unknown };
@@ -34,36 +34,36 @@ function messageText(content: unknown): string {
 
 export async function POST(req: Request) {
   try {
-    // ١) لازم يكون مسجّل دخول — الراوت ده كان مفتوح للعالم كله
+    // ظ،) ظ„ط§ط²ظ… ظٹظƒظˆظ† ظ…ط³ط¬ظ‘ظ„ ط¯ط®ظˆظ„ â€” ط§ظ„ط±ط§ظˆطھ ط¯ظ‡ ظƒط§ظ† ظ…ظپطھظˆط­ ظ„ظ„ط¹ط§ظ„ظ… ظƒظ„ظ‡
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    // ٢) حدّ استخدام لكل مستخدم عشان فاتورة Groq
+    // ظ¢) ط­ط¯ظ‘ ط§ط³طھط®ط¯ط§ظ… ظ„ظƒظ„ ظ…ط³طھط®ط¯ظ… ط¹ط´ط§ظ† ظپط§طھظˆط±ط© Groq
     const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
-    // ٢.٥) كوتة الاشتراك للرسايل (Phase 1.5) — messages_per_2h كانت موجودة في
-    // الداتابيز من غير أي فرض فعلي. فحص + استهلاك من السيرفر قبل أي شغل غالي.
-    // fail-open موثق لو جداول الكوتا لسه مش متنفذة.
-    // المالك (owner) يتخطى الحدود الداخلية للمنصة دون استهلاك كوتة.
+    // ظ¢.ظ¥) ظƒظˆطھط© ط§ظ„ط§ط´طھط±ط§ظƒ ظ„ظ„ط±ط³ط§ظٹظ„ (Phase 1.5) â€” messages_per_2h ظƒط§ظ†طھ ظ…ظˆط¬ظˆط¯ط© ظپظٹ
+    // ط§ظ„ط¯ط§طھط§ط¨ظٹط² ظ…ظ† ط؛ظٹط± ط£ظٹ ظپط±ط¶ ظپط¹ظ„ظٹ. ظپط­طµ + ط§ط³طھظ‡ظ„ط§ظƒ ظ…ظ† ط§ظ„ط³ظٹط±ظپط± ظ‚ط¨ظ„ ط£ظٹ ط´ط؛ظ„ ط؛ط§ظ„ظٹ.
+    // fail-open ظ…ظˆط«ظ‚ ظ„ظˆ ط¬ط¯ط§ظˆظ„ ط§ظ„ظƒظˆطھط§ ظ„ط³ظ‡ ظ…ط´ ظ…طھظ†ظپط°ط©.
+    // ط§ظ„ظ…ط§ظ„ظƒ (owner) ظٹطھط®ط·ظ‰ ط§ظ„ط­ط¯ظˆط¯ ط§ظ„ط¯ط§ط®ظ„ظٹط© ظ„ظ„ظ…ظ†طµط© ط¯ظˆظ† ط§ط³طھظ‡ظ„ط§ظƒ ظƒظˆطھط©.
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", code: "MESSAGE_QUOTA_EXCEEDED" } },
+        { error: { message: quota.reasonAr ?? "طھظ… طھط¬ط§ظˆط² ط­ط¯ ط±ط³ط§ظٹظ„ ط§ظ„ط¨ط§ظ‚ط©.", code: "MESSAGE_QUOTA_EXCEEDED" } },
         { status: 429 }
       );
     }
 
-    // ٢.٦) تحديث حالة الموديلات من الداتابيز (Phase 2) — تبديلات الأدمن
-    // (enabled/priority/daily_limit في ai_models) بقت بتأثر فعليًا في الراوتر.
-    // TTL ٣٠ ثانية + fail-open موثق، فمفيش ضربة DB مع كل رسالة.
+    // ظ¢.ظ¦) طھط­ط¯ظٹط« ط­ط§ظ„ط© ط§ظ„ظ…ظˆط¯ظٹظ„ط§طھ ظ…ظ† ط§ظ„ط¯ط§طھط§ط¨ظٹط² (Phase 2) â€” طھط¨ط¯ظٹظ„ط§طھ ط§ظ„ط£ط¯ظ…ظ†
+    // (enabled/priority/daily_limit ظپظٹ ai_models) ط¨ظ‚طھ ط¨طھط£ط«ط± ظپط¹ظ„ظٹظ‹ط§ ظپظٹ ط§ظ„ط±ط§ظˆطھط±.
+    // TTL ظ£ظ  ط«ط§ظ†ظٹط© + fail-open ظ…ظˆط«ظ‚طŒ ظپظ…ظپظٹط´ ط¶ط±ط¨ط© DB ظ…ط¹ ظƒظ„ ط±ط³ط§ظ„ط©.
     await refreshModelStateCache();
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { error: { message: "البيانات المبعوتة غير صالحة." } },
+        { error: { message: "ط§ظ„ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط¨ط¹ظˆطھط© ط؛ظٹط± طµط§ظ„ط­ط©." } },
         { status: 400 }
       );
     }
@@ -80,12 +80,12 @@ export async function POST(req: Request) {
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
-        { error: { message: "مفيش رسايل مبعوتة." } },
+        { error: { message: "ظ…ظپظٹط´ ط±ط³ط§ظٹظ„ ظ…ط¨ط¹ظˆطھط©." } },
         { status: 400 }
       );
     }
 
-    // ٣) تنضيف الرسايل: الأدوار المسموحة بس، ونص مقصوص
+    // ظ£) طھظ†ط¶ظٹظپ ط§ظ„ط±ط³ط§ظٹظ„: ط§ظ„ط£ط¯ظˆط§ط± ط§ظ„ظ…ط³ظ…ظˆط­ط© ط¨ط³طŒ ظˆظ†طµ ظ…ظ‚طµظˆطµ
     let pdfFailed = false;
     let pdfTooLarge = false;
     let safeMessages: any;
@@ -131,14 +131,14 @@ export async function POST(req: Request) {
                   await parser.destroy();
                   const text = (result.text || "").trim();
                   if (text) {
-                    return { type: "text" as const, text: clampText(`هذا محتوى الملف: ${text}`, MAX_MESSAGE_CHARS) };
+                    return { type: "text" as const, text: clampText(`ظ‡ط°ط§ ظ…ط­طھظˆظ‰ ط§ظ„ظ…ظ„ظپ: ${text}`, MAX_MESSAGE_CHARS) };
                   }
                   pdfFailed = true;
                 } catch (e) {
                   console.warn("chat route PDF parse failed", e);
                   if ((e as Error)?.message !== "too large") pdfFailed = true;
                 }
-                return { type: "text" as const, text: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك." };
+                return { type: "text" as const, text: "طھط¹ط°ط± ظ‚ط±ط§ط،ط© ط§ظ„ظ†طµ ظ…ظ† ظ‡ط°ط§ ط§ظ„ظ€ PDF. ظٹط±ط¬ظ‰ ط±ظپط¹ طµظˆط±ط© ظ„ظ„طµظپط­ط© ط¨ط¯ظ„ط§ظ‹ ظ…ظ† ط°ظ„ظƒ." };
               }
               return { type: "image_url" as const, image_url: { url } };
             })
@@ -149,33 +149,33 @@ export async function POST(req: Request) {
     } catch (e) {
       console.warn("chat route message processing failed", e);
       return NextResponse.json(
-        { error: { message: "تعذر قراءة النص من هذا الـ PDF", code: "PDF_READ_FAILED" } },
+        { error: { message: "طھط¹ط°ط± ظ‚ط±ط§ط،ط© ط§ظ„ظ†طµ ظ…ظ† ظ‡ط°ط§ ط§ظ„ظ€ PDF", code: "PDF_READ_FAILED" } },
         { status: 400 }
       );
     }
 
     if (pdfTooLarge) {
       return NextResponse.json(
-        { error: { message: "الملف كبير جداً، الحد الأقصى 4 ميجابايت", code: "FILE_TOO_LARGE" } },
+        { error: { message: "ط§ظ„ظ…ظ„ظپ ظƒط¨ظٹط± ط¬ط¯ط§ظ‹طŒ ط§ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰ 4 ظ…ظٹط¬ط§ط¨ط§ظٹطھ", code: "FILE_TOO_LARGE" } },
         { status: 413 }
       );
     }
     if (pdfFailed) {
       return NextResponse.json(
-        { error: { message: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.", code: "PDF_READ_FAILED" } },
+        { error: { message: "طھط¹ط°ط± ظ‚ط±ط§ط،ط© ط§ظ„ظ†طµ ظ…ظ† ظ‡ط°ط§ ط§ظ„ظ€ PDF. ظٹط±ط¬ظ‰ ط±ظپط¹ طµظˆط±ط© ظ„ظ„طµظپط­ط© ط¨ط¯ظ„ط§ظ‹ ظ…ظ† ط°ظ„ظƒ.", code: "PDF_READ_FAILED" } },
         { status: 422 }
       );
     }
 
     if (safeMessages.length === 0) {
       return NextResponse.json(
-        { error: { message: "مفيش رسايل صالحة للإرسال." } },
+        { error: { message: "ظ…ظپظٹط´ ط±ط³ط§ظٹظ„ طµط§ظ„ط­ط© ظ„ظ„ط¥ط±ط³ط§ظ„." } },
         { status: 400 }
       );
     }
 
-    // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
-    // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
+    // ط§ظ„ظ€ prompt ط¨ظ‚ظ‰ ط¹ظ„ظ‰ ط§ظ„ط³ظٹط±ظپط±. ط§ظ„ظƒظ„ط§ظٹظ†طھ ظٹظ…ط±ط± ط³ظٹط§ظ‚ظ‹ط§ ظ…ط­ط¯ظˆط¯ظ‹ط§ ظپظ‚ط·طŒ ظ„ظƒظ†
+    // ظ…طµط¯ط± ط§ظ„ط­ظ‚ظٹظ‚ط© (ط§ظ„طھظ‚ط¯ظ… ظˆط§ظ„ط¯ط±ط³) ظٹظڈظ‚ط±ط£ ظ…ظ† ط­ط³ط§ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ… ظ†ظپط³ظ‡.
     let studentContext: any = {};
     let selectedMode = parseMode(mode, messageText(safeMessages.at(-1)?.content ?? ""));
     let toolFacts: any = {};
@@ -189,14 +189,14 @@ export async function POST(req: Request) {
     }
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
-    // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
+    // ط¯ظ…ط¬ ط´ط®طµظٹط© ط§ظ„ط·ط§ظ„ط¨ (Persona Builder) ظ…ط¹ ط§ظ„ط¨ط±ظˆظ…ط¨طھ ط§ظ„ط£ط³ط§ط³ظٹ
     let personaPrompt = "";
     try {
       personaPrompt = await buildSystemPrompt(user.id);
     } catch (e) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
-    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
+    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- ط§ظ„ط³ظٹط§ظ‚ ط§ظ„طھط¹ظ„ظٹظ…ظٹ ط§ظ„ط¥ط¶ط§ظپظٹ ---\n${system}` : system;
     void rememberSessionContext(supabase, user.id, studentContext, messageText(safeMessages.at(-1)?.content ?? ""));
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
@@ -207,24 +207,24 @@ export async function POST(req: Request) {
     };
     const accessible = await filterAccessibleModels(candidates, hasEnt);
     if (accessible.length === 0 && candidates.length > 0) {
-      return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+      return NextResponse.json({ error: { message: "ظ‡ط°ظ‡ ط§ظ„ظ…ظ‡ظ…ط© طھطھط·ظ„ط¨ طµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
     const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? CURRENT_AI_MODEL);
     if (!guard.ok) return guard.response;
 
     let completion;
     try {
-      // 🧾 Phase 5-C3 (pilot) — توليد هوية الطلب المنطقي **مرة واحدة**
-      // هنا، عند حدّ الطلب. وبعدين بتتنقّل زي ما هي لكل محاولة مزوّد
-      // جوه `completeChatInner` — من غير ما تتغيّر (مافيش أي حد بيكتب
-      // فيها). `attemptNo` هو الوحيد اللي بيتغيّر بين المحاولات.
+      // ًں§¾ Phase 5-C3 (pilot) â€” طھظˆظ„ظٹط¯ ظ‡ظˆظٹط© ط§ظ„ط·ظ„ط¨ ط§ظ„ظ…ظ†ط·ظ‚ظٹ **ظ…ط±ط© ظˆط§ط­ط¯ط©**
+      // ظ‡ظ†ط§طŒ ط¹ظ†ط¯ ط­ط¯ظ‘ ط§ظ„ط·ظ„ط¨. ظˆط¨ط¹ط¯ظٹظ† ط¨طھطھظ†ظ‚ظ‘ظ„ ط²ظٹ ظ…ط§ ظ‡ظٹ ظ„ظƒظ„ ظ…ط­ط§ظˆظ„ط© ظ…ط²ظˆظ‘ط¯
+      // ط¬ظˆظ‡ `completeChatInner` â€” ظ…ظ† ط؛ظٹط± ظ…ط§ طھطھط؛ظٹظ‘ط± (ظ…ط§ظپظٹط´ ط£ظٹ ط­ط¯ ط¨ظٹظƒطھط¨
+      // ظپظٹظ‡ط§). `attemptNo` ظ‡ظˆ ط§ظ„ظˆط­ظٹط¯ ط§ظ„ظ„ظٹ ط¨ظٹطھط؛ظٹظ‘ط± ط¨ظٹظ† ط§ظ„ظ…ط­ط§ظˆظ„ط§طھ.
       //
-      // ⚠️ **سلوك محفوظ 100%:** السطر ده بيقرا header وبيولّد UUID فقط.
-      //   مافيش تغيير في الـ guard ولا الـ limits ولا الـ credit ولا
-      //   ترتيب المزوّدين ولا الـ fallback ولا شكل الرد.
+      // âڑ ï¸ڈ **ط³ظ„ظˆظƒ ظ…ط­ظپظˆط¸ 100%:** ط§ظ„ط³ط·ط± ط¯ظ‡ ط¨ظٹظ‚ط±ط§ header ظˆط¨ظٹظˆظ„ظ‘ط¯ UUID ظپظ‚ط·.
+      //   ظ…ط§ظپظٹط´ طھط؛ظٹظٹط± ظپظٹ ط§ظ„ظ€ guard ظˆظ„ط§ ط§ظ„ظ€ limits ظˆظ„ط§ ط§ظ„ظ€ credit ظˆظ„ط§
+      //   طھط±طھظٹط¨ ط§ظ„ظ…ط²ظˆظ‘ط¯ظٹظ† ظˆظ„ط§ ط§ظ„ظ€ fallback ظˆظ„ط§ ط´ظƒظ„ ط§ظ„ط±ط¯.
       const usage = resolveUsageRequestContext(req, user.id);
 
-      // ����� ���� ������ �� ���� ��� System Prompt
+      // ï؟½ï؟½ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½ï؟½ï؟½ï؟½ ï؟½ï؟½ ï؟½ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½ System Prompt
     console.log("[api/chat] messages to provider:", JSON.stringify([{ role: "system", content: combinedSystem }, ...safeMessages]));
     completion = await aiRouter.completeChat("chat", {
         messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
@@ -240,8 +240,8 @@ export async function POST(req: Request) {
         {
           error: {
             message: isRate
-              ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية."
-              : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.",
+              ? "ط§ظ„ط®ط¯ظ…ط© ظ…ط´ط؛ظˆظ„ط© ط¯ظ„ظˆظ‚طھظٹ. ط­ط§ظˆظ„ طھط§ظ†ظٹ ط¨ط¹ط¯ ط´ظˆظٹط©."
+              : "ط­طµظ„ ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ط§طھطµط§ظ„ ط¨ط§ظ„ظ…ط³ط§ط¹ط¯. ط­ط§ظˆظ„ طھط§ظ†ظٹ.",
             code: isRate ? "PROVIDER_RATE_LIMIT" : isUnavailable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR",
           },
         },
@@ -253,8 +253,8 @@ export async function POST(req: Request) {
     const answer = completion.content;
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
 
-    // الحفظ best-effort: لو migration المحادثات لسه ما اتشغلتش، الشات
-    // يفضل شغّال ولا نحرم الطالب من الرد بسبب ميزة تاريخ إضافية.
+    // ط§ظ„ط­ظپط¸ best-effort: ظ„ظˆ migration ط§ظ„ظ…ط­ط§ط¯ط«ط§طھ ظ„ط³ظ‡ ظ…ط§ ط§طھط´ط؛ظ„طھط´طŒ ط§ظ„ط´ط§طھ
+    // ظٹظپط¶ظ„ ط´ط؛ظ‘ط§ظ„ ظˆظ„ط§ ظ†ط­ط±ظ… ط§ظ„ط·ط§ظ„ط¨ ظ…ظ† ط§ظ„ط±ط¯ ط¨ط³ط¨ط¨ ظ…ظٹط²ط© طھط§ط±ظٹط® ط¥ط¶ط§ظپظٹط©.
     let savedConversationId = conversationId;
     try {
       if (answer) {
@@ -265,15 +265,15 @@ export async function POST(req: Request) {
             .eq("id", savedConversationId)
             .eq("user_id", user.id)
             .maybeSingle();
-          // معرف محادثة من حساب آخر لا يُستخدم أبدًا، حتى لو عرفه عميل
-          // خبيث؛ ننشئ جلسة جديدة بدل تلويث تاريخ المستخدم الآخر.
+          // ظ…ط¹ط±ظپ ظ…ط­ط§ط¯ط«ط© ظ…ظ† ط­ط³ط§ط¨ ط¢ط®ط± ظ„ط§ ظٹظڈط³طھط®ط¯ظ… ط£ط¨ط¯ظ‹ط§طŒ ط­طھظ‰ ظ„ظˆ ط¹ط±ظپظ‡ ط¹ظ…ظٹظ„
+          // ط®ط¨ظٹط«ط› ظ†ظ†ط´ط¦ ط¬ظ„ط³ط© ط¬ط¯ظٹط¯ط© ط¨ط¯ظ„ طھظ„ظˆظٹط« طھط§ط±ظٹط® ط§ظ„ظ…ط³طھط®ط¯ظ… ط§ظ„ط¢ط®ط±.
           if (!ownedConversation) savedConversationId = "";
         }
         if (!savedConversationId) {
           const titleText = messageText(safeMessages.at(-1)?.content ?? "");
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: user.id, title: titleText.slice(0, 80) || "محادثة جديدة" })
+            .insert({ user_id: user.id, title: titleText.slice(0, 80) || "ظ…ط­ط§ط¯ط«ط© ط¬ط¯ظٹط¯ط©" })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
@@ -304,10 +304,11 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("chat route error:", error);
     return NextResponse.json(
-      { error: { message: "حصل خطأ غير متوقع أثناء الاتصال.", code: "INTERNAL_ERROR" } },
-      { status: 500 }
+      { error: { message: "ط­طµظ„ ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹ ط£ط«ظ†ط§ط، ط§ظ„ط§طھطµط§ظ„.", code: "INTERNAL_ERROR" } },
+      { status: 400 }
     );
   }
 }
 
 export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
+

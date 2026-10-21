@@ -56,38 +56,49 @@ export async function getStudentContext(
   userId: string,
   input: MagiclyContextInput
 ): Promise<StudentContext> {
-  const configId = shortText(input.configId);
-  const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
-  const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle"> = {
-    subject: shortText(input.subject) || "المادة الحالية",
-    lesson: shortText(input.lesson) || "الدرس الحالي",
-    learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
-  };
+  try {
+    const configId = shortText(input.configId);
+    const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
+    const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle"> = {
+      subject: shortText(input.subject) || "المادة الحالية",
+      lesson: shortText(input.lesson) || "الدرس الحالي",
+      learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
+    };
 
-  if (!configId) {
-    return { ...fallback, progress: { completed: 0, total: 0 }, memories: [] };
+    if (!configId) {
+      return { ...fallback, progress: { completed: 0, total: 0 }, memories: [] };
+    }
+
+    const [configResult, daysResult, memoryResult] = await Promise.all([
+      supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
+      supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
+      supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
+    ]);
+
+    const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
+    const currentDay = lessonDay === null ? undefined : days.find((day) => day.day === lessonDay);
+    const completed = days.filter((day) => day.is_completed).length;
+
+    return {
+      subject: shortText(configResult.data?.subject) || fallback.subject,
+      lesson: shortText(currentDay?.topic) || fallback.lesson,
+      learningStyle: isLearningStyle(currentDay?.learning_style)
+        ? currentDay.learning_style
+        : fallback.learningStyle,
+      progress: { completed, total: days.length },
+      // failure here is expected before running db/ai-learning.sql; chat continues normally.
+      memories: memoryResult.error ? [] : ((memoryResult.data ?? []) as Array<{ kind: string; value: string }>),
+    };
+  } catch (e) {
+    console.warn("getStudentContext failed, using fallback:", e);
+    return {
+      subject: shortText(input.subject) || "المادة الحالية",
+      lesson: shortText(input.lesson) || "الدرس الحالي",
+      learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
+      progress: { completed: 0, total: 0 },
+      memories: [],
+    };
   }
-
-  const [configResult, daysResult, memoryResult] = await Promise.all([
-    supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
-    supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
-    supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
-  ]);
-
-  const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
-  const currentDay = lessonDay === null ? undefined : days.find((day) => day.day === lessonDay);
-  const completed = days.filter((day) => day.is_completed).length;
-
-  return {
-    subject: shortText(configResult.data?.subject) || fallback.subject,
-    lesson: shortText(currentDay?.topic) || fallback.lesson,
-    learningStyle: isLearningStyle(currentDay?.learning_style)
-      ? currentDay.learning_style
-      : fallback.learningStyle,
-    progress: { completed, total: days.length },
-    // failure here is expected before running db/ai-learning.sql; chat continues normally.
-    memories: memoryResult.error ? [] : ((memoryResult.data ?? []) as Array<{ kind: string; value: string }>),
-  };
 }
 
 /** يشغّل الأدوات المناسبة لسؤال واحد قبل تكوين رد المساعد. */
