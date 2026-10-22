@@ -45,6 +45,10 @@ import {
   compressLectureMedia,
   needsCompression,
 } from "@/lib/media/lecture-compression";
+import {
+  chunkLectureFile,
+  MAX_CHUNK_BYTES,
+} from "@/lib/media/lecture-chunking";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -63,12 +67,10 @@ import {
 
 import {
   assertLectureFile,
-  chunkFileName,
   formatFileSize,
   LECTURE_FILE_ACCEPT,
   MAX_DIRECT_UPLOAD_BYTES,
   MAX_LECTURE_FILE_BYTES,
-  CHUNK_SIZE_BYTES,
   TranscriptionError,
   type LectureTranscript,
   type UploadTicket,
@@ -175,6 +177,53 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+/**
+ * 📦 يقرأ رد الراوت **كنص** الأول وبعدين يحاول يحوّله لـ JSON.
+ *
+ * ⚠️ **ليه مش `response.json()` مباشرة؟** لأن `response.json()` بيرمي
+ * `SyntaxError` لو الرد مش JSON خالص — وده بيحصل فعلاً مع:
+ *   - صفحة خطأ HTML من بروكسي/الاستضافة (مش JSON).
+ *   - رد 413/502 من حدّ المنصّة (نص عادي).
+ *   - رد اتقطع في النص (انقطاع شبكة).
+ *
+ * في الحالات دي `await response.json().catch(() => null)` بيرجّع `null`
+ * وبنعرض رسالة عامة — وده **سلوك كويس**، بس بنخسر السبب.
+ *
+ * بقراءة النص الأول بنقدر نعرف هل الرد JSON أصلاً، ونقدر نعرض جزء
+ * مفيد من الرد غير الـ JSON (زي صفحة HTML فيها سبب الخطأ) من غير ما
+ * نكسر الواجهة.
+ */
+async function readApiResponse(
+  response: Response,
+): Promise<{ payload: unknown; raw: string }> {
+  let raw = "";
+  try {
+    raw = await response.text();
+  } catch {
+    return { payload: null, raw: "" };
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) return { payload: null, raw };
+
+  // ⚠️ نحاول JSON بس لو الشكل يبان JSON من أوله — عشان ما نعملش
+  // parse فاشل على HTML ونضيّع الوقت.
+  if (
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[") ||
+    trimmed.startsWith('"')
+  ) {
+    try {
+      return { payload: JSON.parse(trimmed) as unknown, raw };
+    } catch {
+      // رد JSON مش مكتمل (انقطاع) — بنرجع null ونعرض رسالة عامة.
+      return { payload: null, raw };
+    }
+  }
+
+  return { payload: null, raw };
 }
 
 /** اسم ملف التنزيل: اسم المحاضرة الأصلي + .txt
@@ -385,7 +434,7 @@ export function LectureTranscriber() {
         body,
       });
 
-      const payload: unknown = await response.json().catch(() => null);
+      const { payload } = await readApiResponse(response);
 
       if (!response.ok) {
         setError(extractErrorMessage(payload, ERR_GENERIC));
@@ -424,7 +473,7 @@ export function LectureTranscriber() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path, filename: file?.name ?? "محاضرة", size: file?.size ?? 0 }),
       });
-      const payload: unknown = await response.json().catch(() => null);
+      const { payload } = await readApiResponse(response);
 
       if (!response.ok) {
         /* ⚠️ الملف لسه مرفوع (الخادم بيحذفه بعد النجاح بس) — فبنسيب
@@ -475,36 +524,49 @@ export function LectureTranscriber() {
   );
 
   /**
-   * transcribeChunks — تقسيم الملف الكبير إلى أجزاء وتفريغ كل جزء على حدة.
-   * الملفات الأكبر من 3 ميجا تُقسم وتُرسل تباعاً للـ API لتجنب حد Vercel (4.5 ميجا)
-   * وخطأ 422 من ElevenLabs على الملفات الكبيرة.
+   * transcribeChunks — تحضير أجزاء **صالحة** وتفريغ كل جزء على حدة.
    *
-   * ترجع النص المدمج من جميع الأجزاء بالترتيب.
+   * ⚠️ **ليه مش `File.slice()` بعد كده:**
+   * التقطيع البايتي بيقطع الملف في نص أي إطار — وده بيخرب الصيغ اللي
+   * فيها فهرس (WebM/MP4/MKV) أو header (WAV/M4A/FLAC). الجزء المكسور
+   * بيرجع 422 من المزوّد («ملف تالف»).
+   *
+   * الحل: `chunkLectureFile` بيحوّل الملف لصوت MP3 (إطارات مستقلة)
+   * وبيقسّمه لأجزاء مستقلة — كل جزء ملف صالح بذاته.
+   *
+   * وترجع النص المدمج من جميع الأجزاء بالترتيب.
    */
   const transcribeChunks = useCallback(
     async (sourceFile: File): Promise<string> => {
-      const chunkSize = CHUNK_SIZE_BYTES;
-      const totalChunks = Math.ceil(sourceFile.size / chunkSize);
+      /* ١) تجهيز الأجزاء — بالتحويل لـ MP3 لو محتاج. */
+      setStage("preparing");
+      const chunks = await chunkLectureFile(sourceFile, (progress) => {
+        setPreparePercent(Math.round(progress.ratio * 100));
+      });
+      setPreparePercent(0);
+
+      if (chunks.length === 0) {
+        throw new Error("مقدرناش نقسّم المحاضرة. جرّب ملف تاني.");
+      }
+
+      /* ٢) تفريغ كل جزء على حدة بالترتيب. */
       const parts: string[] = [];
+      const total = chunks.length;
 
-      setChunkProgress({ current: 0, total: totalChunks });
-
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize, sourceFile.size);
-        const chunk = sourceFile.slice(start, end);
+      for (let i = 0; i < total; i++) {
+        const chunk = chunks[i];
 
         setStage("transcribing");
         // 📊 الجزء الحالي (1-indexed عشان العرض للطالب يبقى «١ من ٨»).
-        setChunkProgress({ current: i + 1, total: totalChunks });
+        setChunkProgress({ current: i + 1, total });
 
         const form = new FormData();
-        // ⚠️ اسم الجزء لازم يحافظ على الامتداد الأصلي — ElevenLabs
-        // بيتعرف على الصيغة من الامتداد. `lecture.mp3.part1` امتداده
-        // `part1` وده **مش** مدعوم، فبنحطّ الامتداد في الآخر.
-        form.append("file", chunk, chunkFileName(sourceFile.name, i));
+        /* ⚠️ اسم الجزء لازم يحافظ على الامتداد — ElevenLabs بيتعرف
+           على الصيغة من الامتداد. `lecture.mp3.part1` امتداده `part1`
+           وده **مش** مدعوم، فبنحطّ الامتداد في الآخر. */
+        form.append("file", chunk.file, chunk.name);
         form.append("chunkIndex", String(i));
-        form.append("totalChunks", String(totalChunks));
+        form.append("totalChunks", String(total));
         form.append("fileName", sourceFile.name);
 
         const response = await fetch("/api/lecture-transcription/transcribe-chunk", {
@@ -512,7 +574,7 @@ export function LectureTranscriber() {
           body: form,
         });
 
-        const payload: unknown = await response.json().catch(() => null);
+        const { payload } = await readApiResponse(response);
         if (!response.ok) {
           throw new Error(
             extractErrorMessage(payload, "فشل تحويل جزء من المحاضرة. حاول تاني."),
@@ -557,7 +619,7 @@ export function LectureTranscriber() {
 
 
       // ── تقسيم الملف لأجزاء (تفريغ أجزاء متتابعة) ──
-      if (file.size > CHUNK_SIZE_BYTES) {
+      if (file.size > MAX_CHUNK_BYTES) {
         try {
           const mergedText = await transcribeChunks(file);
           if (!mergedText || mergedText.trim() === "") {
@@ -588,7 +650,7 @@ export function LectureTranscriber() {
               fileSize: file.size,
             }),
           });
-          const savePayload: unknown = await saveResponse.json().catch(() => null);
+          const { payload: savePayload } = await readApiResponse(saveResponse);
           if (!saveResponse.ok) {
             setError(extractErrorMessage(savePayload, ERR_GENERIC));
             setPhase("error");
@@ -625,7 +687,7 @@ export function LectureTranscriber() {
           size: file.size,
         }),
       });
-      const ticketPayload: unknown = await ticketResponse.json().catch(() => null);
+      const { payload: ticketPayload } = await readApiResponse(ticketResponse);
 
       /* التخزين مش مهيّأ في البيئة دي (سطر الأوامر الأول بيكشف ده) —
          نرجع للمسار القديم بدل ما نقفل الطالب برسالة. الملف

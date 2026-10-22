@@ -216,7 +216,31 @@ export function assertLectureFile(file: File): void {
  */
 
 /**
- * اسم الجزء المُرفع للراوت.
+ * الصيغ اللي **كل إطار فيها مستقل** — يعني لو الملف اتقطع بـ `File.slice()`
+ * بتبقى النتيجة **صالحة** للتفريغ.
+ *
+ * ⚠️ دي مش «كل صيغ الصوت» — دي صيغ الإطارات المستقلة بس (MP3/AAC).
+ * فيه صيغ تانية (M4A / AAC-in-MP4 / Opus-in-Ogg / FLAC / WAV) فيها
+ * **فهرس أو header** في أول الملف، فالقطعة المقطوعة مالها فهرس خالص
+ * والمزوّد بيرفضها بـ 422.
+ *
+ * ⚠️ ليه دي في ملف **مشترك** بين السيرفر والكلاينت: الواجهة بتستخدمها
+ * عشان تقرر تحوّل الملف لصوت MP3 قبل التقسيم، والسيرفر بيستخدمها
+ * عشان يرفض أي جزء يجيله بصيغة حاوية.
+ */
+export const INDEPENDENT_FRAME_EXTENSIONS = ["mp3", "aac"] as const;
+
+/**
+ * الصيغ اللي **مش** بتتقسم بأمان — لو وصلنا part بصيغة كده معناها
+ * إن الواجهة شغّلت المسار القديم (تقسيم بايتات) على ملف حاوية.
+ */
+export const CONTAINER_LECTURE_EXTENSIONS = [
+  "webm", "mp4", "mkv", "mov", "avi", "wmv", "flv", "mpeg", "mpg", "3gp",
+  "wav", "m4a", "flac", "ogg", "opus", "aiff",
+] as const;
+
+/**
+ * اسم الجزء المُرفع للاوت.
  *
  * ⚠️ **الامتداد لازم يفضل في الآخر** — ElevenLabs بيتعرف على صيغة الملف
  * من الامتداد، فالاسم `lecture.mp3` صحيح والاسم `lecture.mp3.part1` خطأ
@@ -278,6 +302,31 @@ export function assertLectureChunk(
       "نوع الملف مش مدعوم. استخدم تسجيل بصيغة MP3 أو WAV أو M4A أو MP4 أو AAC أو FLAC.",
       415,
       `ext=${ext} original=${originalName}`,
+    );
+  }
+
+  /* ⚠️ **فحص صلاحية الجزء نفسه** — دي الطبقة اللي كانت ناقصة وسببت
+   * خطأ 422 من المزوّد.
+   *
+   * لو الملف الأصلي كان حاوية (webm/mp4/m4a/wav/...) والواجهة بعتت
+   * جزء مقطوع بـ `File.slice()` — الجزء ده **مش ملف صالح** (فهرس/header
+   * ناقص)، والمزوّد هيرفضه بـ 422 برسالة غامضة.
+   *
+   * عشان كده الواجهة دلوقتي بتحوّل الملف لصوت MP3 الأول، والجزء
+   * بيوصلنا بامتداد mp3/aac (إطارات مستقلة). فلو وصلنا جزء بصيغة
+   * حاوية يبقى ده **خطأ في العميل** مش في الملف — ونرفضه برسالة
+   * واضحة بدل ما نرمي فلوس على نداء هيفشل. */
+  const chunkExt = lectureFileExtension(chunk.name);
+  const chunkIsIndependent = (
+    INDEPENDENT_FRAME_EXTENSIONS as readonly string[]
+  ).includes(chunkExt);
+
+  if (!chunkIsIndependent) {
+    throw new TranscriptionError(
+      "UNSUPPORTED_CHUNK_FORMAT",
+      "صيغة الجزء غير صالحة للتفريغ. جرّب ترفع المحاضرة تاني.",
+      415,
+      `chunkExt=${chunkExt} original=${originalName}`,
     );
   }
 }

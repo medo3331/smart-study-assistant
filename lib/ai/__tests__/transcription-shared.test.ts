@@ -219,20 +219,60 @@ describe("assertLectureChunk", () => {
     expect(() => assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK)).not.toThrow();
   });
 
-  it("بيفحص الامتداد من **الاسم الأصلي** مش من اسم الجزء", () => {
-    /* ⚠️ ده السبب اللي الدالة دي موجودة أصلاً: اسم الجزء في المتصفح
-       كان `lecture.mp3.part1` — وامتداده `part1` مش مدعوم. فلو فحصنا
-       اسم الجزء كان كل جزء هيرجع 415 والحاجة مش هتشتغل خالص. */
-    const chunk = fakeFile("lecture.mp3.part1", 1024, "audio/mpeg");
+  it("بيفحص امتداد **الجزء** — لازم يكون mp3/aac", () => {
+    /* ⚠️ قبل التغيير ده كان بيقفل على امتداد الاسم الأصلي. دلوقتي
+       القاعدة اتقلبت: الاسم الأصلي ممكن يكون أي صيغة مدعومة
+       (webm/mp4/wav...) بس **الجزء** لازم يوصلنا mp3/aac — لأن
+       دي الصيغ الوحيدة اللي إطاراتها مستقلة فبتتقسم بأمان. */
+    const chunk = fakeFile("lecture.part1.mp3", 1024, "audio/mpeg");
     expect(() => assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK)).not.toThrow();
   });
 
   it("يقبل الامتدادات المدعومة كلها في اسم الملف الأصلي", () => {
+    /* ⚠️ الاسم الأصلي بيقبل أي صيغة مدعومة — والجزء دايماً mp3/aac. */
     for (const ext of ["mp3", "wav", "m4a", "mp4", "aac", "flac"]) {
-      const chunk = fakeFile(`chunk.part1.${ext}`, 1024);
+      const chunk = fakeFile("chunk.part1.mp3", 1024, "audio/mpeg");
       expect(() =>
         assertLectureChunk(chunk, `محاضرة.${ext}`, MAX_CHUNK),
       ).not.toThrow();
+    }
+  });
+
+  it("يقبل جزء aac كمان", () => {
+    const chunk = fakeFile("lecture.part1.aac", 1024, "audio/aac");
+    expect(() => assertLectureChunk(chunk, "محاضرة.aac", MAX_CHUNK)).not.toThrow();
+  });
+
+  it("**يرفض** جزء بصيغة حاوية بـ UNSUPPORTED_CHUNK_FORMAT", () => {
+    /* ⚠️ ده حارس خطأ الـ 422: لو وصلنا part مقطوع من webm/mp4
+       (فهرس ناقص) لازم نرفضه بوضوح بدل ما نرمي فلوس على نداء
+       هيhfشل عند المزوّد. */
+    for (const ext of ["webm", "mp4", "wav", "m4a", "flac"]) {
+      const chunk = fakeFile(`lecture.part1.${ext}`, 1024, "audio/mpeg");
+      try {
+        assertLectureChunk(chunk, `محاضرة.${ext}`, MAX_CHUNK);
+        throw new Error("كان المفروض يرمي");
+      } catch (error) {
+        expect(error).toBeInstanceOf(TranscriptionError);
+        expect((error as TranscriptionError).code).toBe(
+          "UNSUPPORTED_CHUNK_FORMAT",
+        );
+        expect((error as TranscriptionError).status).toBe(415);
+      }
+    }
+  });
+
+  it("يرفض جزء امتداده مش mp3/aac حتى لو الاسم الأصلي mp3", () => {
+    /* ⚠️ الاسم الأصلي mp3 بس الجزء وصلنا `.part1` (امتداد غلط) —
+       ده خطأ عميل، والامتداد `part1` مش من الصيغ المستقلة. */
+    const chunk = fakeFile("lecture.part1", 1024, "audio/mpeg");
+    try {
+      assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK);
+      throw new Error("كان المفروض يرمي");
+    } catch (error) {
+      expect((error as TranscriptionError).code).toBe(
+        "UNSUPPORTED_CHUNK_FORMAT",
+      );
     }
   });
 
