@@ -200,6 +200,88 @@ export function assertLectureFile(file: File): void {
   }
 }
 
+/* ───────────────────────── عقد تقسيم الملفات ─────────────────────────
+ *
+ * لما الملف أكبر من CHUNK_SIZE_BYTES، المتصفح بيقسّمه بـ File.slice()
+ * وبيبعِت كل جزء لوحده. الجزء ده **مش ملف محاضرة كامل** — هو شريحة
+ * بايتات من ملف أكبر.
+ *
+ * ⚠️ فرق مهم عن assertLectureFile:
+ *   - ما بنتحققش من الحجم الأقصى (MAX_LECTURE_FILE_BYTES) — الجزء صغير
+ *     طالما هو جزء من ملف كبير.
+ *   - بنتحقق من **امتداد الملف الأصلي** (fileName) مش من اسم الجزء.
+ *     السبب: المتصفح بيسمّي الجزء `lecture.mp3.part1` — والامتداد الفعلي
+ *     هو `part1` وده **مش** في قائمة ElevenLabs المدعومة. فلو تحقّقنا من
+ *     اسم الجزء كان كل جزء هيرجع 415.
+ */
+
+/**
+ * اسم الجزء المُرفع للراوت.
+ *
+ * ⚠️ **الامتداد لازم يفضل في الآخر** — ElevenLabs بيتعرف على صيغة الملف
+ * من الامتداد، فالاسم `lecture.mp3` صحيح والاسم `lecture.mp3.part1` خطأ
+ * (امتداده `part1` — مش في القائمة المدعومة، وكل جزء هيرجع 415).
+ *
+ * فبنحطّ الرقم **قبل** الامتداد: `lecture.part1.mp3`.
+ *
+ * @param originalName اسم الملف الأصلي (زي `محاضرة.mp3`).
+ * @param index        رقم الجزء (صفر-indexed).
+ */
+export function chunkFileName(originalName: string, index: number): string {
+  const dot = originalName.lastIndexOf(".");
+  // مفيش امتداد (أو نقطة في الأول زي `.gitignore`) → نضيف اللاحقة بس.
+  if (dot <= 0) return `${originalName}.part${index + 1}`;
+  const base = originalName.slice(0, dot);
+  const ext = originalName.slice(dot + 1);
+  return `${base}.part${index + 1}.${ext}`;
+}
+
+/**
+ * يفحص جزء (chunk) من ملف محاضرة قبل تفريغه.
+ *
+ * @param chunk      الجزء المستلم في الطلب (الملف المرفوع).
+ * @param originalName اسم الملف **الأصلي** (زي `lecture.mp3`) — مصدر truth
+ *                    لامتداد الصيغة.
+ * @param maxBytes   أقصى حجم مسموح للجزء الواحد.
+ */
+export function assertLectureChunk(
+  chunk: File,
+  originalName: string,
+  maxBytes: number,
+): void {
+  if (chunk.size === 0) {
+    throw new TranscriptionError(
+      "EMPTY_FILE",
+      "الجزء فاضي. اختر ملف محاضرة فيه تسجيل فعلي.",
+      400,
+    );
+  }
+
+  if (chunk.size > maxBytes) {
+    throw new TranscriptionError(
+      "FILE_TOO_LARGE",
+      `حجم الجزء كبير أوي. أقصى حجم مسموح ${Math.round(
+        maxBytes / (1024 * 1024),
+      )} ميجابايت.`,
+      413,
+      `size=${chunk.size}`,
+    );
+  }
+
+  // الامتداد من **الاسم الأصلي** — دي النتيجة الصح.
+  const ext = lectureFileExtension(originalName);
+  const extAllowed = (ALLOWED_LECTURE_EXTENSIONS as readonly string[]).includes(ext);
+
+  if (!extAllowed) {
+    throw new TranscriptionError(
+      "UNSUPPORTED_TYPE",
+      "نوع الملف مش مدعوم. استخدم تسجيل بصيغة MP3 أو WAV أو M4A أو MP4 أو AAC أو FLAC.",
+      415,
+      `ext=${ext} original=${originalName}`,
+    );
+  }
+}
+
 /* ───────────────────────── عقد الرفع المباشر ─────────────────────────
  *
  *  المرحلة 2: بدل ما الملف يعدّي في جسم طلب الفانكشن، المتصفح

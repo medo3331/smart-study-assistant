@@ -22,14 +22,36 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { checkRateLimit } from "@/lib/api-guard";
 import { transcribeLectureFile } from "@/lib/ai/transcription";
-import { TranscriptionError } from "@/lib/ai/transcription-shared";
-
-/** ٣ تحويلات في الساعة لكل IP. */
-const IP_LIMIT = 3;
-const IP_WINDOW_MS = 60 * 60 * 1000;
+import {
+  assertLectureChunk,
+  TranscriptionError,
+} from "@/lib/ai/transcription-shared";
 
 /** أقصى حجم للجزء الواحد في الطلب (حمایة إضافية للواجهة). */
 const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
+
+/**
+ * 🔒 حدRate-limit على عدد الأجزاء في **الطلب الواحد** — حماية من إساءة
+ * الاستخدام (طلب 10.000 جزء صغير عشان يستهلك حصة الـ API).
+ *
+ * ⚠️ ملاحظة مهمة: الحد **مش** على عدد الطلبات في الساعة — ده على عدد
+ * الأجزاء اللي المتصفح بيبعتها في نفس الملف. ليش؟ لأن ملف واحد كبير
+ * (21 ميجا) بيتقسم إلى ~8 أجزاء، ولو كان الحد 3 كان الطلب الرابع هيرجع
+ * 429 والواجهة هتفشل في نص الملف.
+ */
+const MAX_CHUNKS_PER_REQUEST = 50;
+
+/**
+ * 💰 سقف الإنفاق: عدد الأجزاء المسموح تفريغها **في الساعة** لكل IP.
+ *
+ * الأجزاء بتتكلّف فلوس على ElevenLabs — كل جزء = نداء مدفوع. فالسقف
+ * بيحمي ميزانية التطبيق من حدّاد بيبعت قطع صغيرة كتير.
+ *
+ * الأرقام: 40 جزء × 3 ميجا ≈ 120 ميجا في الساعة. ده يكفي لملف محاضرة
+ * كامل (ساعة) ويترك مساحةRetry لو المستخدم جرّب تاني.
+ */
+const IP_CHUNK_LIMIT = 40;
+const IP_WINDOW_MS = 60 * 60 * 1000;
 
 export const maxDuration = 300;
 
@@ -37,7 +59,11 @@ export async function POST(request: NextRequest) {
   try {
     const forwarded = request.headers.get("x-forwarded-for") ?? "";
     const ip = forwarded.split(",")[0].trim() || "unknown";
-    const limited = checkRateLimit(`lecture-transcribe-chunk:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
+    const limited = checkRateLimit(
+      `lecture-transcribe-chunk:ip:${ip}`,
+      IP_CHUNK_LIMIT,
+      IP_WINDOW_MS,
+    );
     if (limited) return limited;
 
     const form = await request.formData();
@@ -71,6 +97,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🔒 سقف عدد الأجزاء في الملف الواحد — يمنع طلب مبالغ فيه في الحجم.
+    if (totalChunks > MAX_CHUNKS_PER_REQUEST) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "TOO_MANY_CHUNKS",
+            message: `الملف كبير أوي. أقصى عدد أجزاء ${MAX_CHUNKS_PER_REQUEST}.`,
+          },
+        },
+        { status: 413 },
+      );
+    }
+
     if (file.size === 0) {
       return NextResponse.json(
         { error: { code: "EMPTY_CHUNK", message: "الجزء فاضي." } },
@@ -91,6 +130,10 @@ export async function POST(request: NextRequest) {
         { status: 413 },
       );
     }
+
+    // 🔎 فحص امتداد **الملف الأصلي** — امتداد اسم الجزء (`.part1`) مش صالح.
+    // checkRateLimit خلّص فوق — فلو رجع error هنا المستخدم يقدر يجرب تاني.
+    assertLectureChunk(file, fileName, MAX_CHUNK_BYTES);
 
     // التفريغ عبر ElevenLabs (الجزء لوحده).
     const transcript = await transcribeLectureFile(file);

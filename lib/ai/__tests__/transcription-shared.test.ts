@@ -11,7 +11,10 @@ import { describe, it, expect } from "vitest";
 
 import {
   ALLOWED_LECTURE_EXTENSIONS,
+  assertLectureChunk,
   assertLectureFile,
+  chunkFileName,
+  CHUNK_SIZE_BYTES,
   formatFileSize,
   LECTURE_FILE_ACCEPT,
   MAX_DIRECT_UPLOAD_BYTES,
@@ -188,6 +191,127 @@ describe("MAX_DIRECT_UPLOAD_BYTES", () => {
 
   it("أقل من 4.5 ميجا (سقف جسم طلب Vercel)", () => {
     expect(MAX_DIRECT_UPLOAD_BYTES).toBeLessThanOrEqual(4.5 * 1024 * 1024);
+  });
+});
+
+describe("CHUNK_SIZE_BYTES", () => {
+  it("أقل من سقف جسم طلب Vercel (4.5 ميجا)", () => {
+    /* ⚠️ ده الحارس الأهم في التقسيم: لو الجزء عدّى 4.5 ميجا، الطلب
+       هيفشل عند المنصّة برسالة غامضة (413/500) والطالب مش هيعرف ليه. */
+    expect(CHUNK_SIZE_BYTES).toBeLessThanOrEqual(4.5 * 1024 * 1024);
+  });
+
+  it("أكبر من الـ 3 ميجا المتفق عليها عشان يفضل فيه هامش", () => {
+    expect(CHUNK_SIZE_BYTES).toBe(3 * 1024 * 1024);
+  });
+
+  it("أقل من MAX_DIRECT_UPLOAD_BYTES — الجزء أأمن من الملف الكامل", () => {
+    expect(CHUNK_SIZE_BYTES).toBeLessThanOrEqual(MAX_DIRECT_UPLOAD_BYTES);
+  });
+});
+
+describe("assertLectureChunk", () => {
+  /** حجم الجزء المسموح — نفس سقف الراوت. */
+  const MAX_CHUNK = 4 * 1024 * 1024;
+
+  it("يقبل جزء من ملف mp3 صالح", () => {
+    const chunk = fakeFile("lecture.part1.mp3", 1024, "audio/mpeg");
+    expect(() => assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK)).not.toThrow();
+  });
+
+  it("بيفحص الامتداد من **الاسم الأصلي** مش من اسم الجزء", () => {
+    /* ⚠️ ده السبب اللي الدالة دي موجودة أصلاً: اسم الجزء في المتصفح
+       كان `lecture.mp3.part1` — وامتداده `part1` مش مدعوم. فلو فحصنا
+       اسم الجزء كان كل جزء هيرجع 415 والحاجة مش هتشتغل خالص. */
+    const chunk = fakeFile("lecture.mp3.part1", 1024, "audio/mpeg");
+    expect(() => assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK)).not.toThrow();
+  });
+
+  it("يقبل الامتدادات المدعومة كلها في اسم الملف الأصلي", () => {
+    for (const ext of ["mp3", "wav", "m4a", "mp4", "aac", "flac"]) {
+      const chunk = fakeFile(`chunk.part1.${ext}`, 1024);
+      expect(() =>
+        assertLectureChunk(chunk, `محاضرة.${ext}`, MAX_CHUNK),
+      ).not.toThrow();
+    }
+  });
+
+  it("يرفض اسم أصلي بصيغة غير مدعومة بـ 415", () => {
+    const chunk = fakeFile("chunk.part1.pdf", 1024, "application/pdf");
+    try {
+      assertLectureChunk(chunk, "محاضرة.pdf", MAX_CHUNK);
+      throw new Error("كان المفروض يرمي");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TranscriptionError);
+      expect((error as TranscriptionError).code).toBe("UNSUPPORTED_TYPE");
+      expect((error as TranscriptionError).status).toBe(415);
+    }
+  });
+
+  it("يرفض الجزء الفاضي بـ 400", () => {
+    const chunk = fakeFile("lecture.part1.mp3", 0, "audio/mpeg");
+    try {
+      assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK);
+      throw new Error("كان المفروض يرمي");
+    } catch (error) {
+      expect((error as TranscriptionError).code).toBe("EMPTY_FILE");
+      expect((error as TranscriptionError).status).toBe(400);
+    }
+  });
+
+  it("يرفض الجزء الأكبر من السقف بـ 413", () => {
+    const oversize = {
+      size: MAX_CHUNK + 1,
+      name: "lecture.part1.mp3",
+      type: "audio/mpeg",
+    } as File;
+    try {
+      assertLectureChunk(oversize, "محاضرة.mp3", MAX_CHUNK);
+      throw new Error("كان المفروض يرمي");
+    } catch (error) {
+      expect((error as TranscriptionError).code).toBe("FILE_TOO_LARGE");
+      expect((error as TranscriptionError).status).toBe(413);
+    }
+  });
+
+  it("**مش** بيطبّق سقف الملف الكامل (1 جيجا) على الجزء", () => {
+    /* ⚠️ الفرق عن assertLectureFile: الجزء جزء من ملف أكبر، فلازم
+       يمرّ بسقف الجزء مش بسقف الملف الكامل. */
+    const chunk = fakeFile("lecture.part1.mp3", 1024, "audio/mpeg");
+    expect(() => assertLectureChunk(chunk, "محاضرة.mp3", MAX_CHUNK)).not.toThrow();
+  });
+});
+
+describe("chunkFileName", () => {
+  it("بيحافظ على الامتداد في الآخر — ElevenLabs بيتعرف على الصيغة منه", () => {
+    /* ⚠️ ده أخطر خطأ ممكن في التقسيم: لو الامتداد طلع في النص
+       (`lecture.mp3.part1`) فالعنصر كله هيرجع 415 من المزوّد. */
+    expect(chunkFileName("lecture.mp3", 0)).toBe("lecture.part1.mp3");
+    expect(chunkFileName("lecture.mp3", 7)).toBe("lecture.part8.mp3");
+  });
+
+  it("بيشتغل مع الأسماء العربية", () => {
+    expect(chunkFileName("محاضرة اليوم.m4a", 0)).toBe("محاضرة اليوم.part1.m4a");
+  });
+
+  it("بيحافظ على النقاط في اسم الملف (زي `lecture.final.mp3`)", () => {
+    expect(chunkFileName("lecture.final.mp3", 1)).toBe("lecture.final.part2.mp3");
+  });
+
+  it("لو مفيش امتداد — بيلحق اللاحقة بس", () => {
+    expect(chunkFileName("تسجيل", 0)).toBe("تسجيل.part1");
+  });
+
+  it("الامتداد الناتج **مدعوم** في كل الحالات", () => {
+    /* ⚠️ الملفات من غير امتداد (زي `تسجيل`) بتترفض **قبل** التقسيم —
+       `assertLectureFile` في الواجهة بتقبلها لأ، فالاسم المولّد منهم
+       (`تسجيل.part1`) امتداده `part1` — وده مش مدعوم. */
+    for (const name of ["lecture.mp3", "محاضرة.m4a", "lecture.final.wav"]) {
+      const generated = chunkFileName(name, 0);
+      const ext = lectureFileExtension(generated);
+      // لو الامتداد مش مدعوم، الـ chunk هيرجع 415 من الراوت.
+      expect(ALLOWED_LECTURE_EXTENSIONS as readonly string[]).toContain(ext);
+    }
   });
 });
 

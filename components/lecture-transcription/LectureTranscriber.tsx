@@ -63,6 +63,7 @@ import {
 
 import {
   assertLectureFile,
+  chunkFileName,
   formatFileSize,
   LECTURE_FILE_ACCEPT,
   MAX_DIRECT_UPLOAD_BYTES,
@@ -100,6 +101,18 @@ type Phase = "idle" | "working" | "done" | "error";
  *  الآخر من غير تقدّم، والرقم الوهمي كذب صريح. الوحيد اللي بيعرض
  *  نسبة هو **الرفع** — ودي حقيقية 100% (بايتم على المتصفح). */
 type Stage = "preparing" | "uploading" | "transcribing" | "finalizing";
+
+/**
+ * 📊 تقدّم تقسيم الملف إلى أجزاء.
+ *
+ * ⚠️ الفرق عن `uploadPercent`: التحويل العادي (ملف واحد) مفيش فيه نسبة
+ * لأن ElevenLabs مش بيبعت تقدّم — عرض «60%» هنا كذب. لكن لما الملف
+ * بيتقسم لأجزاء، **المتصفح** هو اللي بيعرف خلّص كام جزء فعلاً (لأنه
+ * هو اللي بيتبعع الطلبات). فالنسبة هنا **حقيقية 100%** — مش وهمية.
+ *
+ * `null` = مفيش تقسيم شغّال (الوضع العادي).
+ */
+type ChunkProgress = { current: number; total: number } | null;
 
 /**
  * رفع الملف **مباشرة** للتخزين عن طريق الـ signed URL بتاع الراوت.
@@ -233,6 +246,9 @@ export function LectureTranscriber() {
   /** نسبة رفع **حقيقية** (0..100). مش بتتحرك أثناء التحويل خالص —
    *  ElevenLabs مش بيبعت تقدّم، وإيهام الطالب بنسبة هنا كذب. */
   const [uploadPercent, setUploadPercent] = useState(0);
+  /** 📊 تقدّم تقسيم الملف لأجزاء — `null` = مفيش تقسيم (الوضع العادي).
+   *  النسبة هنا **حقيقية** لأن المتصفح هو اللي بيتبعع الطلبات واحد واحد. */
+  const [chunkProgress, setChunkProgress] = useState<ChunkProgress>(null);
   /** مسار الملف **بعد** ما اترفع فعلاً.
    *  ⚠️ ده اللي بيخلّي إعادة المحاولة ممكنة من غير رفع تاني: لو فشل
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
@@ -471,16 +487,22 @@ export function LectureTranscriber() {
       const totalChunks = Math.ceil(sourceFile.size / chunkSize);
       const parts: string[] = [];
 
+      setChunkProgress({ current: 0, total: totalChunks });
+
       for (let i = 0; i < totalChunks; i++) {
         const start = i * chunkSize;
         const end = Math.min(start + chunkSize, sourceFile.size);
         const chunk = sourceFile.slice(start, end);
 
         setStage("transcribing");
-        setUploadPercent(Math.round(((i + 1) / totalChunks) * 100));
+        // 📊 الجزء الحالي (1-indexed عشان العرض للطالب يبقى «١ من ٨»).
+        setChunkProgress({ current: i + 1, total: totalChunks });
 
         const form = new FormData();
-        form.append("file", chunk, `${sourceFile.name}.part${i + 1}`);
+        // ⚠️ اسم الجزء لازم يحافظ على الامتداد الأصلي — ElevenLabs
+        // بيتعرف على الصيغة من الامتداد. `lecture.mp3.part1` امتداده
+        // `part1` وده **مش** مدعوم، فبنحطّ الامتداد في الآخر.
+        form.append("file", chunk, chunkFileName(sourceFile.name, i));
         form.append("chunkIndex", String(i));
         form.append("totalChunks", String(totalChunks));
         form.append("fileName", sourceFile.name);
@@ -501,9 +523,11 @@ export function LectureTranscriber() {
         parts.push(chunkText);
       }
 
+      setChunkProgress(null);
+
       return parts.join(" ");
     },
-    [CHUNK_SIZE_BYTES],
+    [],
   );
 
 
@@ -532,7 +556,7 @@ export function LectureTranscriber() {
       }
 
 
-      // â”€â”€ ط§ظ„ظ…ظ„ظپ ظ£ظ‚ظ„ظ…ظ‡ ط§ظ„ظ…ط±ط­ظ„ط© (تفريغ أجزاء متتابعة) â”€â”€
+      // ── تقسيم الملف لأجزاء (تفريغ أجزاء متتابعة) ──
       if (file.size > CHUNK_SIZE_BYTES) {
         try {
           const mergedText = await transcribeChunks(file);
@@ -575,8 +599,17 @@ export function LectureTranscriber() {
           setTranscript(mergedTranscript);
           setPhase("done");
           return;
-        } catch {
-          setError(ERR_NETWORK);
+        } catch (error) {
+          /* ⚠️ بنفصل بين نوعين من الفشل:
+             - خطأ من الراوت (429 / 415 / ...) → الرسالة الأصلية مهمة
+               للطالب (مثلاً «استخدمت الخدمة كتير»).
+             - خطأ شبكة (fetch فشل) → رسالة عامة.
+             فلو بنبتلع الرسالة دايماً، الطالب مش هيعرف ليه فشل. */
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : ERR_NETWORK;
+          setError(message);
           setPhase("error");
           return;
         }
@@ -777,16 +810,18 @@ export function LectureTranscriber() {
                     ? "جاري رفع المحاضرة..."
                     : stage === "finalizing"
                       ? "جاري تجهيز النص..."
-                      : "تم رفع المحاضرة، جاري تحويلها إلى نص..."}
+                      : chunkProgress
+                        ? `جاري تفريغ الجزء ${chunkProgress.current} من ${chunkProgress.total}...`
+                        : "تم رفع المحاضرة، جاري تحويلها إلى نص..."}
                 </span>
               </div>
 
               {/* ⚠️ الشريط بيتحرك بنسبتين مختلفة حسب المرحلة:
                   - أثناء الرفع: عرض حقيقي من البايتات المرفوعة (integers).
-                  - أثناء التحويل: نبضة غير محددة، **من غير أي رقم** — لأن
-                    ElevenLabs مش بيبعت تقدّم وعرض «60%» هنا كذب.
-                  التحويل الطويل بيحصل بس في المرحلة دي لأن الملف غالباً
-                  بيكون أكبر من 4.5 ميجا. */}
+                  - أثناء تقسيم الملف: نسبة **حقيقية** — المتصفح بيعرف خلّص
+                    كام جزء فعلاً (هو اللي بيعمل الطلبات واحد واحد).
+                  - أثناء التحويل العادي: نبضة غير محددة، **من غير أي رقم** —
+                    لأن ElevenLabs مش بيبعت تقدّم وعرض «60%» هنا كذب. */}
               <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
                 {stage === "preparing" ? (
                   <div
@@ -798,6 +833,16 @@ export function LectureTranscriber() {
                     className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
                     style={{ width: `${Math.min(100, Math.max(2, uploadPercent))}%` }}
                   />
+                ) : chunkProgress ? (
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(2, (chunkProgress.current / chunkProgress.total) * 100),
+                      )}%`,
+                    }}
+                  />
                 ) : (
                   <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
                 )}
@@ -808,7 +853,9 @@ export function LectureTranscriber() {
                   ? `\u062c\u0627\u0631\u064a \u062c\u0647\u064a\u0632 \u0627\u0644\u0645\u0644\u0641 \u2014 ${preparePercent}%`
                   : stage === "uploading"
                   ? `الرفع مباشر للتخزين — ${uploadPercent}%`
-                  : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
+                  : chunkProgress
+                    ? `الملف كبير — بيتقسم ${chunkProgress.total} أجزاء، خلّص ${chunkProgress.current}.`
+                    : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
               </p>
             </div>
           ) : (

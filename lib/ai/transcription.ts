@@ -324,15 +324,28 @@ export async function transcribeLecture(file: File): Promise<LectureTranscript> 
 }
 
 /**
- * يحوّل جزء (chunk) من ملف محاضرة إلى نص عبر ElevenLabs — **رفق مباشر من
+ * يحوّل جزء (chunk) من ملف محاضرة إلى نص عبر ElevenLabs — **رفع مباشر من
  * المتصفح عبر السيرفر**.
  *
- * يُستدعى من `transcribe-chunk` لكل جزء على حدة. بيفضل التحقق من
- * `assertLectureFile` عشان يبقى الملف غير فارغ وسليم الامتداد، لكن **بدون**
- * التحقق من الحجم الأقصى (MAX_LECTURE_FILE_BYTES) لأن كل جزء منفرد صغير
- * (3 ميجا أو أقل) طالما هو جزء من ملف كبير.
+ * يُستدعى من `transcribe-chunk` لكل جزء على حدة. الفحص الفعلي بيتم في
+ * الراوت (`assertLectureChunk`) — هنا بنتأكد بس إن الملف مش فاضي، لأن
+ * اسم الجزء (`.part1`) مش صالح للفحص من هنا والامتداد الحقيقي في
+ * `fileName` الأصلي اللي بيبعته الراوت.
+ *
+ * ⚠️ ليش الدالة منفصلة عن `transcribeLecture` رغم إن bodies شبه متطابقة:
+ * الفرق في **العقد** مش في التنفيذ:
+ *   - `transcribeLecture` = ملف كامل → `assertLectureFile` (يفحص الحجم
+ *     الأقصى والامتداد من اسم الملف).
+ *   - `transcribeLectureFile` = جزء → الفحص في الراوت (يفحص الحجم الأقصى
+ *     للجزء بس، والامتداد من **الاسم الأصلي** مش من اسم الجزء).
+ * فصلهم بيبقي نية واضحة: لو signature واحدة وتغيّر الفحص، كنا هنكسر
+ * المسار التاني بصمت.
  */
 export async function transcribeLectureFile(file: File): Promise<LectureTranscript> {
+  if (file.size === 0) {
+    throw new TranscriptionError("EMPTY_FILE", "الجزء فاضي.", 400);
+  }
+
   return callElevenLabs(() => {
     const form = new FormData();
     appendCommonFields(form);
