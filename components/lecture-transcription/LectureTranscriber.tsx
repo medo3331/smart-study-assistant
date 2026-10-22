@@ -67,6 +67,7 @@ import {
   LECTURE_FILE_ACCEPT,
   MAX_DIRECT_UPLOAD_BYTES,
   MAX_LECTURE_FILE_BYTES,
+  CHUNK_SIZE_BYTES,
   TranscriptionError,
   type LectureTranscript,
   type UploadTicket,
@@ -458,6 +459,55 @@ export function LectureTranscriber() {
   );
 
   /**
+   * transcribeChunks — تقسيم الملف الكبير إلى أجزاء وتفريغ كل جزء على حدة.
+   * الملفات الأكبر من 3 ميجا تُقسم وتُرسل تباعاً للـ API لتجنب حد Vercel (4.5 ميجا)
+   * وخطأ 422 من ElevenLabs على الملفات الكبيرة.
+   *
+   * ترجع النص المدمج من جميع الأجزاء بالترتيب.
+   */
+  const transcribeChunks = useCallback(
+    async (sourceFile: File): Promise<string> => {
+      const chunkSize = CHUNK_SIZE_BYTES;
+      const totalChunks = Math.ceil(sourceFile.size / chunkSize);
+      const parts: string[] = [];
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, sourceFile.size);
+        const chunk = sourceFile.slice(start, end);
+
+        setStage("transcribing");
+        setUploadPercent(Math.round(((i + 1) / totalChunks) * 100));
+
+        const form = new FormData();
+        form.append("file", chunk, `${sourceFile.name}.part${i + 1}`);
+        form.append("chunkIndex", String(i));
+        form.append("totalChunks", String(totalChunks));
+        form.append("fileName", sourceFile.name);
+
+        const response = await fetch("/api/lecture-transcription/transcribe-chunk", {
+          method: "POST",
+          body: form,
+        });
+
+        const payload: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(
+            extractErrorMessage(payload, "فشل تحويل جزء من المحاضرة. حاول تاني."),
+          );
+        }
+
+        const chunkText = (payload as { text?: string } | null)?.text ?? "";
+        parts.push(chunkText);
+      }
+
+      return parts.join(" ");
+    },
+    [CHUNK_SIZE_BYTES],
+  );
+
+
+  /**
    * المسار الجديد (المرحلة 2): تذكرة ← رفع مباشر ← تفريغ.
    *
    * ⚠️ الملف **مش** بيمرّ في أي جسم طلب للفانكشن: بينزل من المتصفح
@@ -479,6 +529,57 @@ export function LectureTranscriber() {
       if (uploadedPath) {
         await transcribeUploaded(uploadedPath);
         return;
+      }
+
+
+      // â”€â”€ ط§ظ„ظ…ظ„ظپ ظ£ظ‚ظ„ظ…ظ‡ ط§ظ„ظ…ط±ط­ظ„ط© (تفريغ أجزاء متتابعة) â”€â”€
+      if (file.size > CHUNK_SIZE_BYTES) {
+        try {
+          const mergedText = await transcribeChunks(file);
+          if (!mergedText || mergedText.trim() === "") {
+            setError(ERR_GENERIC);
+            setPhase("error");
+            return;
+          }
+
+          const mergedTranscript: LectureTranscript = {
+            text: mergedText,
+            language: null,
+            languageProbability: null,
+            duration: null,
+            segments: [],
+            words: [],
+            provider: "elevenlabs",
+            model: "scribe_v2",
+          };
+
+          setStage("finalizing");
+          const saveResponse = await fetch("/api/lecture-transcription/save-transcript", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: mergedTranscript,
+              originalFilename: file.name,
+              storagePath: null,
+              fileSize: file.size,
+            }),
+          });
+          const savePayload: unknown = await saveResponse.json().catch(() => null);
+          if (!saveResponse.ok) {
+            setError(extractErrorMessage(savePayload, ERR_GENERIC));
+            setPhase("error");
+            return;
+          }
+          const info = readSaveInfo(savePayload);
+          setSaveInfo(info);
+          setTranscript(mergedTranscript);
+          setPhase("done");
+          return;
+        } catch {
+          setError(ERR_NETWORK);
+          setPhase("error");
+          return;
+        }
       }
 
       // ── الخطوة ١: تذكرة الرفع (JSON صغير) ──
@@ -548,7 +649,7 @@ export function LectureTranscriber() {
       setError(ERR_NETWORK);
       setPhase("error");
     }
-  }, [file, working, runDirect, uploadedPath, transcribeUploaded]);
+  }, [file, working, runDirect, uploadedPath, transcribeUploaded, transcribeChunks]);
 
   /** نسخ النص للحافظة — مع تنظيف المؤقّت عشان مايتسرّبش بين Copies. */
   const copyText = useCallback(async () => {

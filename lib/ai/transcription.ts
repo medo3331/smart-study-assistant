@@ -324,6 +324,24 @@ export async function transcribeLecture(file: File): Promise<LectureTranscript> 
 }
 
 /**
+ * يحوّل جزء (chunk) من ملف محاضرة إلى نص عبر ElevenLabs — **رفق مباشر من
+ * المتصفح عبر السيرفر**.
+ *
+ * يُستدعى من `transcribe-chunk` لكل جزء على حدة. بيفضل التحقق من
+ * `assertLectureFile` عشان يبقى الملف غير فارغ وسليم الامتداد، لكن **بدون**
+ * التحقق من الحجم الأقصى (MAX_LECTURE_FILE_BYTES) لأن كل جزء منفرد صغير
+ * (3 ميجا أو أقل) طالما هو جزء من ملف كبير.
+ */
+export async function transcribeLectureFile(file: File): Promise<LectureTranscript> {
+  return callElevenLabs(() => {
+    const form = new FormData();
+    appendCommonFields(form);
+    form.append("file", file, file.name);
+    return form;
+  });
+}
+
+/**
  * يحوّل ملف محاضرة إلى نص من **رابط موقّع** على تخزين — المرحلة 2.
  *
  * ⚠️ ليه ده مهم: ElevenLabs بيقبل `cloud_storage_url` كبديل للـ `file`

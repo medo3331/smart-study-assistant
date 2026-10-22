@@ -46,6 +46,13 @@ export const MAX_LECTURE_FILE_BYTES = 1024 * 1024 * 1024;
  */
 export const MAX_DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
 
+/**
+ * حجم الجزء (chunk) للتقسيم في المتصفح.
+ * الملفات الأكبر من هذا تُقسم إلى أجزاء وتُرسل واحدًا تلو الآخر للـ API
+ * لتجنب حد 4.5 ميجا في جسم طلب Vercel ولتجنب خطأ 422 من ElevenLabs على الملفات الكبيرة.
+ */
+export const CHUNK_SIZE_BYTES = 3 * 1024 * 1024;
+
 /** الامتدادات المدعومة — من قائمة ElevenLabs الرسمية (صوت + فيديو). */
 export const ALLOWED_LECTURE_EXTENSIONS = [
   // صوت
