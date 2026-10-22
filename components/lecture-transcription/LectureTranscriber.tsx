@@ -54,6 +54,7 @@ import {
   FileAudio,
   LoaderCircle,
   Mic,
+  PhoneCall,
   RotateCcw,
   Sparkles,
   Upload,
@@ -73,6 +74,11 @@ import {
 
 /* ───────────────────────── نصوص الواجهة ───────────────────────── */
 
+/** رقم دعم واتساب من متغيرات البيئة العامة للعميل (اختياري). */
+const SUPPORT_WHATSAPP =
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP
+    ? String(process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP).trim()
+: null;
 /** رسالة عامة لو الراوت رجّع 5xx من غير رسالة (بروكسي/بلا نت). */
 const ERR_GENERIC = "حصلت مشكلة أثناء تحويل المحاضرة. حاول مرة أخرى.";
 const ERR_NETWORK = "فيها مشكلة في الاتصال. اتأكد من الإنترنت وحاول تاني.";
@@ -726,7 +732,23 @@ export function LectureTranscriber() {
           className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4"
         >
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden />
-          <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+            {SUPPORT_WHATSAPP && (
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `https://wa.me/${SUPPORT_WHATSAPP}?text=السلام عليكم، أواجه مشكلة في تفريغ المحاضرة: ${error}`;
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }}
+                className="mt-2 inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--card-tertiary)]"
+                aria-label="تواصل مع الدعم عبر واتساب"
+              >
+                <PhoneCall size={16} aria-hidden />
+                <span>تواصل مع الدعم عبر واتساب</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
