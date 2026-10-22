@@ -44,13 +44,36 @@ export function ContextualNotification() {
         // to read from window/local prayer data or fall back to a safe no-message mode.
         // For minimal safe in-app notification: we rely ONLY on the verified calculation functions.
         // We load the service response pattern via the existing mechanism (same as usePrayerTimes hook).
-        const res = await fetch("/api/prayer-times").catch(() => null); // if endpoint exists; else skip
+        const res = await fetch("/api/islamic/prayer-times").catch(() => null); // if endpoint exists; else skip
         // If no endpoint, we do NOT invent data. We skip prayer-based message.
         if (!res || cancelled) return;
         const data = await res.json().catch(() => null);
-        if (!data || !data.timestamps) return;
-        const next = prayerMod.getNextPrayer(data);
-        const remainingMs = prayerMod.getTimeUntilNextPrayer(data);
+        if (!data || !data.times) return;
+        // المسار يُرجع `times` كنصوص أوقات (مثلاً "05:00")، لكن `next-prayer.ts` تتوقع
+        // `timestamps` كأرقام Unix ms ومع مفاتيح موحدة (sunrise/dhuhr وليس shuruq/dhuhur).
+        // بنحول البيانات قبل التمرير من غير ما نغيّر عقد المسار API.
+        const today = new Date();
+        const keyMap: Record<string, string> = {
+          fajr: "fajr",
+          shuruq: "sunrise",
+          dhuhur: "dhuhr",
+          asr: "asr",
+          maghrib: "maghrib",
+          isha: "isha",
+        };
+        const timestamps: Record<string, number> = {};
+        for (const [key, timeStr] of Object.entries(data.times)) {
+          const mappedKey = keyMap[key] ?? key;
+          const [hours, minutes] = (timeStr as string).split(":").map(Number);
+          if (Number.isInteger(hours) && Number.isInteger(minutes)) {
+            const d = new Date(today);
+            d.setHours(hours, minutes, 0, 0);
+            timestamps[mappedKey] = d.getTime();
+          }
+        }
+        const prayerData = { ...data, timestamps };
+        const next = prayerMod.getNextPrayer(prayerData);
+        const remainingMs = prayerMod.getTimeUntilNextPrayer(prayerData);
         if (next && remainingMs > 0 && remainingMs < 60 * 60 * 1000) {
           // Prayer approaching within 1 hour — contextual reason exists
           if (!cancelled) {
@@ -85,7 +108,7 @@ export function ContextualNotification() {
         const { data: profile, error } = await supabase
           .from("profiles")
           .select("streak, last_study_day")
-          .single();
+          .maybeSingle();
         if (cancelled) return;
         if (error || !profile) return;
         // Existing convention: daily_missions uses UTC; streak risk only shown if today

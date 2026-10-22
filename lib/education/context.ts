@@ -64,7 +64,11 @@ export async function getAvailableSubjects(supabase: SupabaseClient, ctx: Partia
           q = q.eq("track_id", ctx.trackId);
         } else {
           // Prefer general curriculum when no track, fallback to any if none
-          const { data: generalOnly } = await supabase.from("curricula").select("id").eq("stage_id", ctx.stageId).eq("grade_id", ctx.gradeId ?? "").is("track_id", null);
+          // ⚠️ Never send `grade_id=eq.` with an empty value — Supabase rejects it with 400.
+          // Only apply the grade filter when a grade is actually selected.
+          let gq = supabase.from("curricula").select("id").eq("stage_id", ctx.stageId).is("track_id", null);
+          if (ctx.gradeId) gq = gq.eq("grade_id", ctx.gradeId);
+          const { data: generalOnly } = await gq;
           if (generalOnly && generalOnly.length > 0) {
             curriculaIds = generalOnly.map((x: { id: string }) => x.id);
           } else {
