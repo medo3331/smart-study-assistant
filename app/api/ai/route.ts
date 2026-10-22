@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { resolveActor } from "@/lib/policy";
 import {
   isImplementedAiTask,
   runAiTask,
@@ -107,6 +108,16 @@ export async function POST(req: Request) {
 
     const limited = checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
+
+    // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
+    const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: { message: quota.reasonAr ?? "تم تجاوز حد الخدمة.", code: "QUOTA_EXCEEDED" } },
+        { status: 429 }
+      );
+    }
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {

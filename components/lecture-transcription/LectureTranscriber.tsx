@@ -13,15 +13,22 @@
 
    ⚠️ العقد مع السيرفر (3 نقاط):
      - POST /api/lecture-transcription/upload-url بـ JSON { filename,
-       contentType, size } ← بيرجّع { signedUrl, token, path, expiresIn }.
-       تذكرة مؤقتة على **مسار واحد**؛ مفيش أي صلاحية عامة على الباكيت.
+       contentType, size } ← بيرجّع { signedUrl, token, path, expiresIn,
+       ticketId, secret }. تذكرة مؤقتة على **مسار واحد**؛ مفيش أي صلاحية
+       عامة على الباكيت.
      - PUT المتصفح على signedUrl مباشرة (مش في الفانكشن) — وده اللي
        بيشيل حد الـ 4.5 ميجا.
      - POST /api/lecture-transcription/transcribe بـ JSON { path, filename,
-       size } ← بيرجّع `{ transcript: LectureTranscript }` (نفس المرحلة 1).
-     كلهم بيرجّعوا `{ error: { code, message } }` عند الفشل.
+       size, ticketId, secret? } ← بيرجّع `{ transcript: LectureTranscript }`
+       (نفس المرحلة 1).
+     كلهم بيرجعوا `{ error: { code, message } }` عند الفشل.
      **كل** الكلام عن ElevenLabs والأسعار معزول جوه
      `lib/ai/transcription.ts` — الكلاينت مش شايف ولا سطر منه.
+
+   🎫 تذاكر الملكية: `ticketId` (+ `secret` للزائر بلا جلسة) بيتصرفوا
+   من /upload-url وبيتبعتوا مع كل نداء لـ /transcribe. التذكرة بتستهلك
+   مع أول نجاح تفريغ (حتى لو الحفظ فشل) — فأي 404 من /transcribe معناها
+   «ارفع من جديد»، والعميل بيمسح المسار والتذكرة فورًا.
 
    ⚠️ الاستيراد: `lib/ai/transcription-shared` بس (مفيهوش `process.env`
    ولا `fetch`). استيراد `lib/ai/transcription` هنا كان هيعني كود المزوّد
@@ -44,12 +51,78 @@ import { useCallback, useRef, useState } from "react";
 import {
   compressLectureMedia,
   needsCompression,
+  getDeviceLimit,
 } from "@/lib/media/lecture-compression";
 import {
   chunkLectureFile,
   MAX_CHUNK_BYTES,
 } from "@/lib/media/lecture-chunking";
 import Link from "next/link";
+
+/** خصائص بطاقة الاسترداد — كلها قيم للعرض فقط، بلا أي بيانات مستخدم. */
+type RecoveryCardProps = {
+  stage: FailureStage;
+  attempts: number;
+  message: string;
+  working: boolean;
+  onAction: (action: RecoveryAction) => void;
+};
+
+/**
+ * بطاقة الاسترداد بعد الفشل — نفس ثيم Magicly (توكنات CSS فقط، بلا CSS جديد).
+ *
+ * ⚠️ تُرسَم فقط عندما: في رسالة خطأ + كود فشل معروف + المرحلة تستحق
+ * بطاقة (تجهيز/رفع — مش تفريغ، لأن التفريغ له زرّه «حاول تحويلها تاني»).
+ * كل زر فيها بينفّذ إجراءً حقيقيًا: إعادة يدوية (محاولة واحدة) /
+ * فتح منتقي الملفات / تعليمات التقسيم ظاهرة كنص / رابط `/ai-studio`.
+ * لا تُعرض أي أسماء ملفات أو أحجام أو روابط أو أسرار — العناوين
+ * والتفاصيل نصوص عربية ثابتة من `lecture-recovery`.
+ */
+function RecoveryCard({ stage, attempts, message, working, onAction }: RecoveryCardProps) {
+  const title = recoveryTitle(stage);
+  const blurb = recoveryBlurb(stage);
+  const options = recoveryOptions(stage, attempts);
+  const primaryClass =
+    "inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  const secondaryClass =
+    "inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-4 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <div role="alert" className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-4">
+      <p className="text-base font-bold text-[var(--text)]">{title}</p>
+      <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{blurb}</p>
+      <p className="mt-2 text-xs text-[var(--muted)]">{message}</p>
+      <div className="mt-3 flex flex-col gap-2">
+        {options.map((option: RecoveryOption) =>
+          option.action === "paste-text" ? (
+            <Link key={option.action} href="/ai-studio" className={secondaryClass}>
+              <span>{option.label}</span>
+            </Link>
+          ) : (
+            <button
+              key={option.action}
+              type="button"
+              onClick={() => onAction(option.action)}
+              disabled={working}
+              className={option.primary ? primaryClass : secondaryClass}
+            >
+              <span>{option.label}</span>
+            </button>
+          ),
+        )}
+      </div>
+      {/* تفاصيل كل خيار — التعليمات الكاملة للتقسيم ظاهرة هنا
+          كنص بلا زر وهمي، حسب القاعدة المتفق عليها. */}
+      <ul className="mt-3 space-y-1.5">
+        {options.map((option: RecoveryOption) => (
+          <li key={`detail-${option.action}`} className="text-xs leading-relaxed text-[var(--muted)]">
+            <span className="font-semibold text-[var(--text)]">{option.label}: </span>
+            {option.detail}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 import {
   AlertTriangle,
   Check,
@@ -89,6 +162,23 @@ const ERR_NETWORK = "فيها مشكلة في الاتصال. اتأكد من ا
 const ERR_NO_FILE = "اختر ملف المحاضرة الأول.";
 const ERR_UPLOAD = "فشل رفع المحاضرة. حاول مرة أخرى.";
 const ERR_UPLOAD_RETRY = "مقدرناش نجهّز رفع المحاضرة. حاول تاني بعد شوية.";
+/** 🎫 التذكرة استُهلكت/انتهت — الخادم رجّع الرد الموحد «ارفع من جديد». */
+const ERR_TICKET_INVALID = "التذكرة انتهت. ارفع المحاضرة من جديد.";
+
+/**
+ * كود فشل ثابت للتشخيص الآمن — بيُسجَّل في الكونسول وبيُلصق نسخة صغيرة
+ * منه مع رسالة الفشل في الواجهة، عشان نعرف **أي فرع بالتحديد** وقف
+ * من غير ما نحتاج من المستخدم يعيد إنتاج المشكلة ونحن عمالين نخمّن.
+ *
+ * ⚠️ **ممنوع أي بيانات مستخدم داخل الكود**: لا اسم الملف، لا الحجم,
+ * لا الرابط، لا التوكن، ولا محتوى رد الخادم — كود قصير ثابت بس.
+ * مثال: `upload.xhr` = فشل الـ PUT مباشرة، `prep.duration` = فشل
+ * قراءة مدة الملف قبل الضغط.
+ */
+function failCode(code: string, message: string): string {
+  console.warn(`[lecture-transcription] failure code=${code}`);
+  return `${message} (كود الخطأ: ${code})`;
+}
 
 /** الحدّ بالأرقام العربية-الهندية زي باقي الواجهة. */
 const MAX_SIZE_LABEL = formatFileSize(MAX_LECTURE_FILE_BYTES);
@@ -103,6 +193,14 @@ type Phase = "idle" | "working" | "done" | "error";
  *  الآخر من غير تقدّم، والرقم الوهمي كذب صريح. الوحيد اللي بيعرض
  *  نسبة هو **الرفع** — ودي حقيقية 100% (بايتم على المتصفح). */
 type Stage = "preparing" | "uploading" | "transcribing" | "finalizing";
+
+/** 🎫 تذكرة الملكية من ناحية العميل — اللي بيتخزن في الحالة.
+ *  `secret` موجود بس للزائر بلا جلسة (بيتبعت مع كل نداء تفريغ بدل
+ *  الكوكيز). ممنوع يظهر في أي رسالة/لوج/عنوان. */
+type OwnershipTicket = {
+  ticketId: string;
+  secret: string | null;
+};
 
 /**
  * 📊 تقدّم تقسيم الملف إلى أجزاء.
@@ -280,7 +378,8 @@ function readSaveInfo(payload: unknown): SaveInfo {
 /** المكوّن الرئيسي — كل حالة الشاشة في متغيرات واحدة واضحة. */
 export function LectureTranscriber() {
   const [file, setFile] = useState<File | null>(null);
-  // \ud83e\udde1 \u0627\u0633\u0645 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0623\u0635\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u0636\u063a\u0637 (\u0644\u0644\u0639\u0631\u0636 \u0648\u0627\u062d\u062f)
+
+// 🧡 اسم الملف الأصلي قبل الضغط (للعرض واحد)
   const [originalName, setOriginalName] = useState<string | null>(null);
   const [originalSize, setOriginalSize] = useState(0);
   const [preparing, setPreparing] = useState(false);
@@ -303,6 +402,10 @@ export function LectureTranscriber() {
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
    *  فالطالب يقدر يدوس «حاول تاني» ويكمّل من نفس الملف. */
   const [uploadedPath, setUploadedPath] = useState<string | null>(null);
+  /** 🎫 تذكرة الملكية المرتبطة بالمسار المرفوع — إلزامية في أي نداء
+   *  لـ /transcribe (الخادم مش بيقبل مسار من غيرها). بتتمسح مع المسار
+   *  في نفس الأماكن بالظبط عشان الاتنين يفضلوا متزامنين دايمًا. */
+  const [uploadTicket, setUploadTicket] = useState<OwnershipTicket | null>(null);
   /** 📚 نتيجة حفظ المحاضرة (المرحلة ٣).
    *
    *  ⚠️ دي **مش** نفس `phase`: دي بتقول «التفريغ نجح، بس المحاضرة
@@ -336,10 +439,14 @@ export function LectureTranscriber() {
       try {
         assertLectureFile(next);
       } catch (validationError) {
+        setFailureCode("file.invalid");
         setError(
-          validationError instanceof TranscriptionError
-            ? validationError.message
-            : ERR_GENERIC,
+          failCode(
+            "file.invalid",
+            validationError instanceof TranscriptionError
+              ? validationError.message
+              : ERR_GENERIC,
+          ),
         );
         setPhase("error");
         return;
@@ -351,9 +458,35 @@ export function LectureTranscriber() {
       const sourceName = next.name;
       const sourceSize = next.size;
 
+      // ⚠️ تحذير للملفات الكبيرة غير MP3 — لو الرفع فشل، المستخدم لازم يضغط الملف من تليفونه.
+      const MAX_WARN_BYTES = 45 * 1024 * 1024;
+      const isLossyAudio = /^audio\/(mpeg|mp3)$/i.test(next.type);
+      if (next.size > MAX_WARN_BYTES && !isLossyAudio) {
+        setLargeFileWarning(
+          "الملف أكبر من 45 ميجا. لو الرفع فشل، فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
+        );
+      } else {
+        setLargeFileWarning(null);
+      }
+
+      // ⚠️ فحص حد الجهاز قبل الضغط — إذا كان الملف أكبر من حد الجهاز، اعرض خطأ وتوقف.
+      const deviceLimit = getDeviceLimit();
+      if (next.size > deviceLimit) {
+        setError(
+          `الملف ${Math.round(next.size / 1024 / 1024)} ميجا — أكبر من الحد الأقصى لجهازك (${Math.round(
+            deviceLimit / 1024 / 1024,
+          )} ميجا). ممكن تضغطه بنفسك من هاتفك، أو قسمه لمحاضرتين.`
+        );
+        setPhase("error");
+        return;
+      }
+
       if (!needsCompression(next)) {
         // ⏭️ ملف صغير: نفس المسار القديم بالظبط، ومن غير تحميل FFmpeg.
         setFile(next);
+        setPendingFile(null);
+        setPrepareAttempts(0);
+        setFailureCode(null);
         setOriginalName(sourceName);
         setOriginalSize(0);
         setError(null);
@@ -361,10 +494,17 @@ export function LectureTranscriber() {
         setCopied(false);
         setPhase("idle");
         setUploadedPath(null);
+        setUploadTicket(null);
         setUploadPercent(0);
         return;
       }
 
+      /* 🧾 تتبّع إعادة التجهيز اليدوية: اختيار جديد = عدّاد جديد.
+         ⚠️ الضغطة الواحدة تشغّل محاولة واحدة بس؛ السقف في `MAX_MANUAL_RETRIES`
+         وبتتحكم فيه بطاقة الاسترداد (زر إعادة المحاولة بيختفي بعده). */
+      setPendingFile(next);
+      setPrepareAttempts((attempts) => attempts + 1);
+      setFailureCode(null);
       setPreparing(true);
       setPreparePercent(0);
       setPhase("working");
@@ -382,23 +522,64 @@ export function LectureTranscriber() {
         setCopied(false);
         setPhase("idle");
         setUploadedPath(null);
+        setUploadTicket(null);
         setUploadPercent(0);
       } catch (preparationError) {
         // ❌ مبنرفعش الملف الأصلي: حجمه هيعدّي حد Supabase.
         setFile(null);
         setOriginalName(null);
         setOriginalSize(0);
+        /* 🔎 كود الفرع بيحدّد أين وقف الضغط: قراءة المدة (`prep.duration`)
+            ولا تنفيذ ffmpeg (`prep.exec`) ولا الحجم النهائي (`prep.too_long`)
+            ولا تحميل المحرّك/كتابة الملف (`prep.other`). الأسماء دي بس —
+            بلا أي بيانات مستخدم. */
+        const reason =
+          preparationError instanceof Error ? preparationError.message : "";
+        const code =
+          reason === "still_too_large"
+            ? "prep.too_long"
+            : reason === "bad_duration"
+              ? "prep.duration"
+              : reason === "bad_media"
+                ? "prep.media"
+                : reason === "no_dom"
+                  ? "prep.no_dom"
+                  : reason.startsWith("ffmpeg_exit_")
+                    ? "prep.exec"
+                    : "prep.other";
         setError(
-          preparationError instanceof Error && preparationError.message === "still_too_large"
-            ? "المحاضرة طويلة أوي وحجمها كبير بعد الضغط. جرب تقسّمها على ملفين."
-            : "مقدرناش نجهّز الملف ده. جرّب ملف تاني أو أعد المحاولة.",
+          failCode(
+            code,
+            reason === "still_too_large"
+              ? "المحاضرة طويلة أوي وحجمها كبير بعد الضغط. جرب تقسّمها على ملفين."
+              : "مقدرناش نجهّز الملف ده. جرّب ملف تاني أو أعد المحاولة.",
+          ),
         );
+        setFailureCode(code);
         setPhase("error");
       } finally {
         setPreparing(false);
       }
     },
     [],
+  );
+
+  /** ينفّذ إجراء بطاقة الاسترداد المختار — كل إجراء حقيقي بلا استثناء:
+   *  - `retry-prepare`: يعيد التجهيز كاملًا على الملف المحفوظ (محاولة يدوية واحدة).
+   *  - `pick-smaller`: يفتح منتقي الملفات لاختيار نسخة أخف.
+   *  - `split-guide`: لا إجراء — التعليمات الكاملة معروضة أصلًا في تفاصيل الخيار.
+   *  - `paste-text`: رابط حقيقي لصفحة `/ai-studio` (يُرسَم في البطاقة نفسها). */
+  const handleRecovery = useCallback(
+    (action: RecoveryAction) => {
+      if (action === "retry-prepare") {
+        const target = pendingFile;
+        if (!target || working) return;
+        void selectFile(target);
+      } else if (action === "pick-smaller") {
+        openPicker();
+      }
+    },
+    [pendingFile, working, selectFile, openPicker],
   );
 
   /** يمسح الاختيار ويرجّع الشاشة لحالتها الأولى. */
@@ -409,7 +590,11 @@ export function LectureTranscriber() {
     setCopied(false);
     setPhase("idle");
     setUploadedPath(null);
+    setUploadTicket(null);
     setUploadPercent(0);
+    setPendingFile(null);
+    setPrepareAttempts(0);
+    setFailureCode(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -437,14 +622,16 @@ export function LectureTranscriber() {
       const { payload } = await readApiResponse(response);
 
       if (!response.ok) {
-        setError(extractErrorMessage(payload, ERR_GENERIC));
+        setFailureCode("direct.http");
+        setError(failCode("direct.http", extractErrorMessage(payload, ERR_GENERIC)));
         setPhase("error");
         return;
       }
 
       const result = (payload as { transcript?: LectureTranscript } | null)?.transcript;
       if (!result || typeof result.text !== "string" || result.text.trim() === "") {
-        setError(ERR_GENERIC);
+        setFailureCode("direct.bad_response");
+        setError(failCode("direct.bad_response", ERR_GENERIC));
         setPhase("error");
         return;
       }
@@ -452,7 +639,8 @@ export function LectureTranscriber() {
       setTranscript(result);
       setPhase("done");
     } catch {
-      setError(ERR_NETWORK);
+      setFailureCode("net.direct");
+      setError(failCode("net.direct", ERR_NETWORK));
       setPhase("error");
     }
   }, [file]);
@@ -462,24 +650,52 @@ export function LectureTranscriber() {
    *
    * منفصلة عن `run` عشان إعادة المحاولة بعد فشل تفريغ ترجع ل هنا
    * على طول — من غير ما نطلب تذكرة جديدة ولا نرفع 200 ميجا تاني.
+   *
+   * 🎫 بتاخد تذكرة الملكية بتاعة المسار — الخادم مش بيقبل المسار
+   * من غيرها (ده هو إغلاق IDOR نفسه).
    */
   const transcribeUploaded = useCallback(
-    async (path: string) => {
+    async (path: string, ticket: OwnershipTicket | null) => {
       setStage("transcribing");
       setUploadPercent(100);
 
       const response = await fetch("/api/lecture-transcription/transcribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, filename: file?.name ?? "محاضرة", size: file?.size ?? 0 }),
+        body: JSON.stringify({
+          path,
+          filename: file?.name ?? "محاضرة",
+          size: file?.size ?? 0,
+          ticketId: ticket?.ticketId ?? "",
+          ...(ticket?.secret ? { secret: ticket.secret } : {}),
+        }),
       });
       const { payload } = await readApiResponse(response);
 
       if (!response.ok) {
-        /* ⚠️ الملف لسه مرفوع (الخادم بيحذفه بعد النجاح بس) — فبنسيب
-           `uploadedPath` متسجّل، والزر بيرجع لـ «حاول تاني» ويكمّل من
-           نفس الملف. ده أهم فرق عن المرحلة 1. */
-        setError(extractErrorMessage(payload, ERR_GENERIC));
+        /* 🎫 404 = الرد الموحد: التذكرة غلط/مش بتاعتك/منتهية/مستهلكة.
+           إعادة المحاولة بنفس التذكرة مستحيلة — بنمسح المسار والتذكرة
+           عشان الزر يرجع «تحويل إلى نص» والرفع يبدأ من جديد. */
+        if (response.status === 404) {
+          setUploadedPath(null);
+          setUploadTicket(null);
+          setFailureCode("transcribe.ticket_invalid");
+          setError(
+            failCode(
+              "transcribe.ticket_invalid",
+              extractErrorMessage(payload, ERR_TICKET_INVALID),
+            ),
+          );
+          setPhase("error");
+          return false;
+        }
+        /* 423 = فيه تفريغ جاري على نفس الملف (المالك صح). التذكرة لسه
+           سليمة — بنسيب المسار والتذكرة عشان «حاول تاني» يشتغل بعد شوية.
+           أي فشل تاني: نفس السلوك القديم — الملف لسه مرفوع (الخادم
+           بيحذفه بعد النجاح بس)، فبنسيب `uploadedPath` متسجّل، والزر
+           بيرجع لـ «حاول تاني» ويكمّل من نفس الملف. */
+        setFailureCode("transcribe.http");
+        setError(failCode("transcribe.http", extractErrorMessage(payload, ERR_GENERIC)));
         setPhase("error");
         return false;
       }
@@ -487,24 +703,19 @@ export function LectureTranscriber() {
       setStage("finalizing");
       const result = (payload as { transcript?: LectureTranscript } | null)?.transcript;
       if (!result || typeof result.text !== "string" || result.text.trim() === "") {
-        setError(ERR_GENERIC);
+        setFailureCode("transcribe.bad_response");
+        setError(failCode("transcribe.bad_response", ERR_GENERIC));
         setPhase("error");
         return false;
       }
 
       /* 📚 حالة الحفظ — بتتقري من نفس الرد (المرحلة ٣).
        *
-       * ⚠️ **الفرق الحاسم عن السلوك القديم في `uploadedPath`**: الكود
-       * القديم كان بيمسح المسار دايماً عند النجاح لأن الخادم كان
-       * بيحذف الملف دايماً. دلوقتي الخادم بيحذف **بس لو الحفظ نجح**:
-       *
-       *   - حفظ نجح  → الملف اتمسح في السيرفر فعلاً، فنمسح المسار عندنا
-       *                 عادي. (إلا لو الحفظ زائر — الملف بيفضل متروك
-       *                 للـ lifecycle، فبنمسح المسار برضه عشان متقعدش
-       *                 في حالة "محاولة تاني" ميتة.)
-       *   - حفظ فشل  → السيرفر **سيب** الملف عمداً. هنا البند ده هو
-       *                 اللي بيخلّي «حاول تاني» تشتغل: بنحسب المسار
-       *                 تاني ونترك `phase` على "done" مع عرض النص.
+       * 🎫 التذكرة استُهلكت مع نجاح التفريغ نفسه (حتى لو الحفظ فشل
+       * بعدها — سيناريو 14): الخادم رجّع النص، فأي «حاول تاني» على نفس
+       * التذكرة هيرجع 404. بنمسح المسار والتذكرة في الحالتين عشان
+       * الزر مايقعدش في حالة «حاول تاني» ميتة — «محاضرة جديدة» هي
+       * الطريق الوحيد بعد النجاح.
        *
        * ملاحظة: `transcribeUploaded` بترجّع `true` و`phase = "done"`
        * في الحالتين — لأن **التفريغ نجح** في الحالتين. الفرق بيترجمه
@@ -512,10 +723,8 @@ export function LectureTranscriber() {
        */
       const info = readSaveInfo(payload);
       setSaveInfo(info);
-      if (info.saved) {
-        // الملف اتمسح في السيرفر — مش فايدة نحتفظ بالمسار.
-        setUploadedPath(null);
-      }
+      setUploadedPath(null);
+      setUploadTicket(null);
       setTranscript(result);
       setPhase("done");
       return true;
@@ -611,9 +820,10 @@ export function LectureTranscriber() {
     try {
       /* ⚠️ الملف ده مرفوع خلاص من محاولة سابقة (فشل التفريغ مثلاً):
          نكمّل من عند التفريغ — رفع 200 ميجا تاني معناه دقائق ضايعة
-         على الطالب ونصيب من الفاتورة. */
-      if (uploadedPath) {
-        await transcribeUploaded(uploadedPath);
+         على الطالب ونصيب من الفاتورة. التذكرة لازم تكون موجودة مع
+         المسار (الاتنين بيتمسحوا وبيترجعوا مع بعض دايمًا). */
+      if (uploadedPath && uploadTicket) {
+        await transcribeUploaded(uploadedPath, uploadTicket);
         return;
       }
 
@@ -699,10 +909,14 @@ export function LectureTranscriber() {
            هتفشل عند المنصّة برسالة غامضة — بنرفضها هنا برسالة
            مفهومة. الملف الصغير لسه هيشتغل عادي. */
         if (file.size > MAX_DIRECT_UPLOAD_BYTES) {
+          setFailureCode("storage.disabled");
           setError(
-            `حجم الملف كبير أوي والرفع المباشر مش متاح حالياً. الحد في الوضع ده ${formatFileSize(
-              MAX_DIRECT_UPLOAD_BYTES,
-            )}. جرّب تاني بعد شوية.`,
+            failCode(
+              "storage.disabled",
+              `حجم الملف كبير أوي والرفع المباشر مش متاح حالياً. الحد في الوضع ده ${formatFileSize(
+                MAX_DIRECT_UPLOAD_BYTES,
+              )}. جرّب تاني بعد شوية.`,
+            ),
           );
           setPhase("error");
           return;
@@ -712,14 +926,17 @@ export function LectureTranscriber() {
       }
 
       if (!ticketResponse.ok) {
-        setError(extractErrorMessage(ticketPayload, ERR_UPLOAD_RETRY));
+        setFailureCode("ticket.http");
+        setError(failCode("ticket.http", extractErrorMessage(ticketPayload, ERR_UPLOAD_RETRY)));
         setPhase("error");
         return;
       }
 
       const ticket = ticketPayload as UploadTicket | null;
-      if (!ticket?.signedUrl || !ticket.token || !ticket.path) {
-        setError(ERR_UPLOAD_RETRY);
+      // 🎫 ticketId إلزامي — من غيره الخادم بيرفض التفريغ أصلًا.
+      if (!ticket?.signedUrl || !ticket.token || !ticket.path || typeof ticket.ticketId !== "string") {
+        setFailureCode("ticket.invalid");
+        setError(failCode("ticket.invalid", ERR_UPLOAD_RETRY));
         setPhase("error");
         return;
       }
@@ -729,22 +946,34 @@ export function LectureTranscriber() {
       try {
         await uploadDirect(ticket.signedUrl, ticket.token, file, setUploadPercent);
       } catch {
-        setError(ERR_UPLOAD);
+        setFailureCode("upload.xhr");
+        setError(
+          failCode(
+            "upload.xhr",
+            "الملف أكبر من الحد المسموح للرفع. فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
+          )
+        );
         setPhase("error");
         return;
       }
 
-      // الملف بقى في مكانه — لو التفريغ فشل، إعادة المحاولة هتكمل منه.
+      // الملف بقى في مكانه — المسار + التذكرة مع بعض دايمًا.
       setUploadedPath(ticket.path);
+      setUploadTicket({ ticketId: ticket.ticketId, secret: ticket.secret ?? null });
 
       // ── الخطوات ٣ و ٤: تفريغ + عرض ──
-      await transcribeUploaded(ticket.path);
+      await transcribeUploaded(ticket.path, {
+        ticketId: ticket.ticketId,
+        secret: ticket.secret ?? null,
+      });
     } catch {
       // فشل fetch نفسه = نت فاصل أو الصفحة اتقفلت
-      setError(ERR_NETWORK);
+      setFailureCode("net.run");
+      setError(failCode("net.run", ERR_NETWORK));
       setPhase("error");
     }
   }, [file, working, runDirect, uploadedPath, transcribeUploaded, transcribeChunks]);
+  }, [file, working, runDirect, uploadedPath, uploadTicket, transcribeUploaded]);
 
   /** نسخ النص للحافظة — مع تنظيف المؤقّت عشان مايتسرّبش بين Copies. */
   const copyText = useCallback(async () => {
@@ -844,7 +1073,7 @@ export function LectureTranscriber() {
                 {file.type ? ` · ${file.type}` : ""}
                 {originalSize > 0 ? (
                   <span className="text-[var(--accent)]">
-                    {` \u00b7 \u062a\u0645 \u0636\u063a\u0637\u0647 \u0645\u0646 ${formatFileSize(originalSize)}`}
+                    {` · تم ضغطه من ${formatFileSize(originalSize)}`}
                   </span>
                 ) : null}
               </p>
@@ -912,7 +1141,7 @@ export function LectureTranscriber() {
 
               <p className="mt-2 text-center text-xs text-[var(--muted)]">
                 {stage === "preparing"
-                  ? `\u062c\u0627\u0631\u064a \u062c\u0647\u064a\u0632 \u0627\u0644\u0645\u0644\u0641 \u2014 ${preparePercent}%`
+                  ? `جاري تجهيز الملف — ${preparePercent}%`
                   : stage === "uploading"
                   ? `الرفع مباشر للتخزين — ${uploadPercent}%`
                   : chunkProgress
@@ -932,6 +1161,33 @@ export function LectureTranscriber() {
               <span>{uploadedPath ? "حاول تحويلها تاني" : "تحويل إلى نص"}</span>
             </button>
           )}
+        </div>
+      )}
+
+{/* ───────── بطاقة الاسترداد بعد الفشل ─────────
+          ⚠️ بتظهر بس لما: في رسالة خطأ + كود فشل معروف + المرحلة تستحق
+          بطاقة (تجهيز/رفع — مش تفريغ، لأن التفريغ له زرّه «حاول تحويلها
+          تاني»). الخيارات جاية من `recoveryOptions` حسب المرحلة وعدد
+          المحاولات — وكل زر فيها بينفّذ إجراءً حقيقيًا:
+          إعادة يدوية / فتح المنتقي / تعليمات / رابط `/ai-studio`. */}
+      {error && failureCode && needsRecoveryCard(stageFromCode(failureCode)) && (
+        <RecoveryCard
+          stage={stageFromCode(failureCode)}
+          attempts={prepareAttempts}
+          message={error}
+          working={working}
+          onAction={handleRecovery}
+        />
+      )}
+
+      {/* ───────── تحذير الملف الكبير ───────── */}
+      {largeFileWarning && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"
+        >
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" aria-hidden />
+          <p className="text-sm leading-relaxed text-[var(--text)]">{largeFileWarning}</p>
         </div>
       )}
 

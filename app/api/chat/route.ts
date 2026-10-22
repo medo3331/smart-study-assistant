@@ -8,6 +8,7 @@ import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMo
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { resolveActor } from "@/lib/policy";
 import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
@@ -33,10 +34,19 @@ export async function POST(req: Request) {
     // ٢.٥) كوتة الاشتراك للرسايل (Phase 1.5) — messages_per_2h كانت موجودة في
     // الداتابيز من غير أي فرض فعلي. فحص + استهلاك من السيرفر قبل أي شغل غالي.
     // fail-open موثق لو جداول الكوتا لسه مش متنفذة.
-    const quota = await checkSubscriptionQuota(user.id, "message");
+    // المالك (owner) يتخطى الحدود الداخلية للمنصة دون استهلاك كوتة.
+    const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", code: "MESSAGE_QUOTA_EXCEEDED" } },
+        {
+          error: {
+            message:
+              quota.reasonAr ??
+              "لقد وصلت للحد الأقصى للمحادثة مع المساعد الذكي (30 رسالة). الميزات الأساسية (الشرح والأسئلة والاختبارات) ما زالت متاحة لك بدون حدود.",
+            code: "MESSAGE_QUOTA_EXCEEDED",
+          },
+        },
         { status: 429 }
       );
     }

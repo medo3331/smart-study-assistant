@@ -44,6 +44,7 @@ import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
 // نفس حالة الصفحة الحقيقية (profiles / study_days / activity_log) بدون أي مصدر بيانات جديد.
 import { HeroCard } from "./components/HeroCard";
 import { StatCards } from "./components/StatCards";
+import { UserQrCard } from "./components/UserQrCard";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
 import { EconomyStrip } from "./components/EconomyVisibility";
@@ -1803,6 +1804,9 @@ export default function DashboardPage() {
           />
 
           {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
+
+          {/* كارت الكود الشخصي (QR) — يظهر في مكان واضح فور دخول الداشبورد */}
+          <UserQrCard />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
             {/* 🐣 الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في

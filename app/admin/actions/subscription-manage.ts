@@ -6,7 +6,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { getAdminRole, isOwnerEmail } from "@/lib/auth-roles";
+import { resolveActor } from "@/lib/policy";
 
 export interface SubscriptionStatus {
   user_id: string;
@@ -166,9 +166,8 @@ export async function extendSubscription(
   try {
     // ── 1) حماية Owner-only (نفس activateSubscription — مش مجرد إخفاء زر)
     const supabaseClient = createServiceClient();
-    const role = await getAdminRole(supabaseClient, adminUserId, adminEmail);
-    const isActualOwner = role === "owner" || isOwnerEmail(adminEmail ?? null);
-    if (!isActualOwner) {
+    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    if (!actor.isOwner) {
       await recordAuditLog({
         ...auditBase,
         details: { op: "extend", lookup, duration_days: extraDays, rejected_by: adminUserId, reason: "non_owner_attempt_rejected" },

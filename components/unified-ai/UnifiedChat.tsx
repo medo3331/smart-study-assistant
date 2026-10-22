@@ -124,10 +124,19 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       setLoading(false);
 
       if (!res.ok || !data?.ok) {
-        const code = (data?.code as string | undefined) || (data?.error?.code as string | undefined) || "";
+        const code =
+          (data?.code as string | undefined) ||
+          (data?.error?.code as string | undefined) ||
+          "";
+        // استخراج الرسالة العربية من السيربر بأ múltiples الحقول المحتملة:
+        // reasonAr (من /api/chat)، message (مستوى أعلى)، error.message، error كنص
         const rawError =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
-          (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ.");
+          (res.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "حدث خطأ.");
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
         const supportAction = { label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true };
 

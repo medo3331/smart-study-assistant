@@ -26,6 +26,38 @@ import { loadFfmpeg } from "./ffmpeg-engine";
 /** هد الأمان: Supabase سابطاعًاًّضعًاًيًن 50 MB — محافظناً منهاً. */
 export const MAX_UPLOAD_BYTES = 45 * 1024 * 1024;
 
+/**
+ * حدود حجم الملف حسب سعة ذاكرة الجهاز — لحماية من OOM في ffmpeg.wasm.
+ *
+ * deviceMemory متوفر في Chrome/Edge/Brave، مش متوفر في Safari.
+ * fallback لـ user-agent للسفاري وأجهزة قديمة.
+ *
+ * الحدود:
+ * - RAM ≤ 2GB  → 40MB  (أجهزة قديمة / موبايل'entrée级)
+ * - RAM ≤ 4GB  → 60MB  (موبايل متوسط)
+ * - RAM ≤ 8GB  → 100MB (كمبيوتر متوسط)
+ * - RAM > 8GB  → 120MB (كمبيوتر قوي)
+ *
+ * fallback UA:
+ * - iOS → 60MB
+ * - Android → 80MB
+ * - desktop → 120MB
+ */
+export function getDeviceLimit(): number {
+  const ram = (navigator as any).deviceMemory;
+  if (typeof ram === "number" && ram > 0) {
+    if (ram <= 2) return 40 * 1024 * 1024;
+    if (ram <= 4) return 60 * 1024 * 1024;
+    if (ram <= 8) return 100 * 1024 * 1024;
+    return 120 * 1024 * 1024;
+  }
+  // Fallback UA لـ Safari وأجهزة لا تدعم deviceMemory
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return 60 * 1024 * 1024;
+  if (/Android/i.test(ua)) return 80 * 1024 * 1024;
+  return 120 * 1024 * 1024;
+}
+
 /** سلّم الضغط من العوادة للموديلات في الملذارات. */
 export const BITRATE_LADDER_KBPS = [64, 48, 32] as const;
 
@@ -53,8 +85,17 @@ export type CompressResult = {
   retries: number;
 };
 
-/** الملف كبير من الحد — مافيش ملمس بالضغط مطلًًاً. */
-export function needsCompression(file: Pick<File, "size">): boolean {
+/** الملف كبير من الحد — مفيش مساس بالضغط مطلقًا. */
+export function needsCompression(file: Pick<File, "size" | "type">): boolean {
+  const LOSSY_TYPES = new Set([
+    "audio/mpeg",
+    "audio/mp3",
+  ]);
+  if (LOSSY_TYPES.has(file.type)) return false;
+
+  const deviceLimit = getDeviceLimit();
+  if (file.size > deviceLimit) return false;
+
   return file.size > MAX_UPLOAD_BYTES;
 }
 
@@ -117,6 +158,47 @@ export function mp3Filename(originalName: string): string {
  * كمان، ولو كل وحد حملّ الـ core (32 ميجا) لحمّلناه مرتين.
  */
 export { disposeCompressionEngine, loadFfmpeg } from "./ffmpeg-engine";
+async function loadFfmpeg(onProgress?: (ratio: number) => void) {
+  if (ffmpegSingleton) return ffmpegSingleton;
+
+  onProgress?.(0.02);
+  const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+
+  const ffmpeg = new FFmpeg();
+  ffmpeg.on("progress", ({ progress }) => {
+    onProgress?.(Math.min(1, Math.max(0, progress)));
+  });
+
+  onProgress?.(0.05);
+  // ⚠️ single-thread core: مايحتاجش هدرز COOP/COEP إصلاً.
+  const FFMPEG_CDN = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
+  try {
+    await ffmpeg.load({
+      coreURL: `${FFMPEG_CDN}/ffmpeg-core.js`,
+      wasmURL: `${FFMPEG_CDN}/ffmpeg-core.wasm`,
+    });
+  } catch (cdnError) {
+    console.warn("[ffmpeg] CDN load failed, falling back to local", cdnError);
+    await ffmpeg.load({
+      coreURL: "/ffmpeg/ffmpeg-core.js",
+      wasmURL: "/ffmpeg/ffmpeg-core.wasm",
+    });
+  }
+
+  ffmpegSingleton = ffmpeg;
+  return ffmpeg;
+}
+
+/** تخلّص المثال من الذاكرة—تماماً للمرة الجاية القادمة. */
+export async function disposeCompressionEngine(): Promise<void> {
+  const engine = ffmpegSingleton as { terminate?: () => void } | null;
+  ffmpegSingleton = null;
+  try {
+    engine?.terminate?.();
+  } catch {
+    // إهداء التخلّص ماياهماش لنا يؤثّر على العرض.
+  }
+}
 
 /**
  * يضغط ملف محاضرة إلى MP3 Mono أصغر من 45 MB.

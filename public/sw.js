@@ -162,6 +162,15 @@ self.addEventListener("fetch", (event) => {
   // طلبات RSC (تنقّل ناعم داخل التطبيق) وبيانات Next الديناميكية — شبكة.
   if (request.headers.get("RSC") === "1" || url.searchParams.has("_rsc")) return;
 
+  // Bypass SW interception for large WASM/ffmpeg assets.
+  // Reason: respondWith+cache.put on ~32MB ffmpeg-core.wasm returns Response.error() (see FFmpeg loading report). Let browser fetch directly.
+  const isLargeWasmAsset =
+    url.pathname.startsWith("/ffmpeg/") ||
+    url.pathname.includes("/wasm/") ||
+    url.pathname.endsWith(".wasm");
+
+  if (isLargeWasmAsset) return;
+
   // أصول ثابتة → كاش-أول.
   if (isStaticAsset(url)) {
     event.respondWith(cacheFirst(request, STATIC));

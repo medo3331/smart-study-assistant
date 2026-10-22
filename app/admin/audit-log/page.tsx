@@ -13,7 +13,7 @@ interface AuditRow {
   resource_type: string | null;
   resource_id: string | null;
   details: unknown;
-  timestamp: string;
+  created_at: string;
   result: string;
 }
 
@@ -69,7 +69,7 @@ export default async function AuditLogPage({
   const offset = (pageNum - 1) * PAGE_SIZE;
   const hasFilters = Boolean(fAction || fResult || fActor || fRtype || fFrom || fTo);
 
-  const selectCols = "id, actor_email, action, resource_type, resource_id, details, timestamp, result";
+  const selectCols = "id, actor_email, action, resource_type, resource_id, details, created_at, result";
   let rows: AuditRow[] = [];
   let totalCount: number | null = null;
   let readError: string | null = null;
@@ -78,30 +78,30 @@ export default async function AuditLogPage({
   try {
     const service = createServiceClient();
     source = "service_role";
-    let q = service.from("audit_log").select(selectCols, { count: "exact" });
+    let q = service.from("admin_audit_log").select(selectCols, { count: "exact" });
     if (fAction) q = q.eq("action", fAction);
     if (fResult) q = q.eq("result", fResult);
     if (fActor) q = q.ilike("actor_email", `%${fActor}%`);
     if (fRtype) q = q.eq("resource_type", fRtype);
-    if (fFrom) q = q.gte("timestamp", fFrom);
-    if (fTo) q = q.lte("timestamp", `${fTo}T23:59:59.999Z`);
+    if (fFrom) q = q.gte("created_at", fFrom);
+    if (fTo) q = q.lte("created_at", `${fTo}T23:59:59.999Z`);
     const { data, error, count } = await q
-      .order("timestamp", { ascending: false })
+      .order("created_at", { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
     rows = (data ?? []) as AuditRow[];
     totalCount = count;
   } catch (serviceError) {
     try {
-      let q = supabase.from("audit_log").select(selectCols, { count: "exact" });
+      let q = supabase.from("admin_audit_log").select(selectCols, { count: "exact" });
       if (fAction) q = q.eq("action", fAction);
       if (fResult) q = q.eq("result", fResult);
       if (fActor) q = q.ilike("actor_email", `%${fActor}%`);
       if (fRtype) q = q.eq("resource_type", fRtype);
-      if (fFrom) q = q.gte("timestamp", fFrom);
-      if (fTo) q = q.lte("timestamp", `${fTo}T23:59:59.999Z`);
+      if (fFrom) q = q.gte("created_at", fFrom);
+      if (fTo) q = q.lte("created_at", `${fTo}T23:59:59.999Z`);
       const { data, error, count } = await q
-        .order("timestamp", { ascending: false })
+        .order("created_at", { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
       if (error) throw new Error(error.message);
       rows = (data ?? []) as AuditRow[];
@@ -252,7 +252,7 @@ export default async function AuditLogPage({
                       {formatDetails(log.details)}
                     </pre>
                   </td>
-                  <td className="p-3 text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleString("ar-EG")}</td>
+                  <td className="p-3 text-[10px] text-slate-500">{new Date(log.created_at).toLocaleString("ar-EG")}</td>
                   <td className="p-3">
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded ${

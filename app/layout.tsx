@@ -7,6 +7,7 @@ import { LanguageProvider } from '../lib/i18n/LanguageProvider';
 import { AudioProvider } from '@/components/audio/AudioProvider';
 import { QuranAudioProvider } from '@/hooks/useQuranAudio';
 import { SupportWidget } from '@/components/SupportWidget';
+import { ReferralBootstrap } from "@/components/ReferralBootstrap";
 import { FloatingAssistant } from '@/components/FloatingAssistant';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { JsonLd } from '@/components/JsonLd';
@@ -184,7 +185,7 @@ const noFlashTheme = `
   if(p){document.documentElement.setAttribute('data-pack',p);}
   var l=localStorage.getItem('locale');
   if(l==='en'){document.documentElement.lang='en';document.documentElement.dir='ltr';}
-}catch(e){try{document.documentElement.setAttribute('data-theme','warm-dark');}catch(_){}})();
+}catch(e){try{document.documentElement.setAttribute('data-theme','warm-dark');}catch(_){}}})();
 `;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -213,6 +214,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <AudioProvider>
               <QuranAudioProvider>{children}</QuranAudioProvider>
               <SupportWidget />
+              {/* لاقط تتبع الإحالات: ?ref= → localStorage → تسجيل أول دخول. null UI. */}
+              <ReferralBootstrap />
               <FloatingAssistant />
             </AudioProvider>
           </LanguageProvider>

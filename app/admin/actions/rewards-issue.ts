@@ -9,12 +9,13 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { getAdminRole, isOwnerEmail } from "@/lib/auth-roles";
+import { resolveActor, actorHasPermission } from "@/lib/policy";
 
 export type RewardType = "limit_boost" | "trial_week" | "pro_week" | "upload_credits";
 
 export interface IssueRewardInput {
-  recipientUserId: string; // UUID from auth.users / profiles
+  recipientUserId?: string; // UUID from auth.users / profiles (يُفضل recipientEmail)
+  recipientEmail?: string;  // البريد الإلكتروني — يُحلّ لـ UUID سيرفر-side
   rewardType: RewardType;
   rewardValue: number;     // e.g., +50 for limit_boost, 7 for trial/pro week, 10 for upload_credits
   durationDays?: number | null; // only for trial/pro week
@@ -38,15 +39,14 @@ export async function issueReward(
   try {
     // ── EPIC-2 Authorization Guard: ONLY Owner (rewards.manage = owner only)
     const supabaseClient = createServiceClient();
-    const role = await getAdminRole(supabaseClient, adminUserId, adminEmail);
-    const isActualOwner = role === "owner" || isOwnerEmail(adminEmail ?? null);
-    if (!isActualOwner) {
+    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    if (!actorHasPermission(actor, "rewards.manage")) {
       await recordAuditLog({
         actor: adminUserId,
         actor_email: adminEmail,
         action: "rewards.manage",
         resource_type: "reward",
-        resource_id: input.recipientUserId,
+        resource_id: input.recipientUserId ?? null,
         details: {
           recipient_user_id: input.recipientUserId,
           reward_type: input.rewardType,
@@ -65,6 +65,51 @@ export async function issueReward(
     }
 
     const privileged = createServiceClient();
+
+    // ── حل المستلم: الإيميل يُحلّ لـ UUID سيرفر-side (لا ثقة في UUID من العميل وحده)
+    let recipientUserId = (input.recipientUserId ?? "").trim();
+    const recipientEmail = (input.recipientEmail ?? "").trim().toLowerCase();
+    if (!recipientUserId && recipientEmail) {
+      // 1) profiles.email أولاً
+      const { data: profileRow } = await privileged
+        .from("profiles")
+        .select("id")
+        .eq("email", recipientEmail)
+        .maybeSingle();
+      recipientUserId = (profileRow as { id?: string } | null)?.id ?? "";
+      // 2) fallback: auth.users عبر service_role
+      if (!recipientUserId) {
+        try {
+          const { data } = await privileged.auth.admin.listUsers();
+          recipientUserId = data.users.find((u) => (u.email ?? "").toLowerCase() === recipientEmail)?.id ?? "";
+        } catch { /* يبقى فارغاً — نرجع خطأ واضح أدناه */ }
+      }
+    }
+    if (!recipientUserId) {
+      await recordAuditLog({
+        actor: adminUserId,
+        actor_email: adminEmail,
+        action: "rewards.manage",
+        resource_type: "reward",
+        resource_id: recipientEmail || null,
+        details: {
+          recipient_email: recipientEmail || null,
+          reward_type: input.rewardType,
+          reason: "recipient_not_found",
+        },
+        result: "FAIL",
+      });
+      return {
+        ok: false,
+        message: recipientEmail
+          ? `الإيميل غير موجود: ${recipientEmail}`
+          : "حدد المستلم: البريد الإلكتروني أو User UUID",
+        error: "recipient_not_found",
+        rewardId: null,
+        auditId: null,
+      };
+    }
+
     let subscriptionActivationUsed = false;
     let activationId: string | null = null;
 
@@ -76,7 +121,7 @@ export async function issueReward(
       const { data: userProfile } = await privileged
         .from("profiles")
         .select("id")
-        .eq("id", input.recipientUserId)
+        .eq("id", recipientUserId)
         .maybeSingle();
       if (!userProfile) {
         await recordAuditLog({
@@ -84,9 +129,10 @@ export async function issueReward(
           actor_email: adminEmail,
           action: "rewards.manage",
           resource_type: "reward",
-          resource_id: input.recipientUserId,
+          resource_id: recipientUserId,
           details: {
-            recipient_user_id: input.recipientUserId,
+            recipient_user_id: recipientUserId,
+            recipient_email: recipientEmail || null,
             reward_type: input.rewardType,
             reason: "recipient_profile_not_found",
             via_subscription_activations: true,
@@ -101,8 +147,8 @@ export async function issueReward(
       const { data: activationData, error: activationError } = await privileged
         .from("subscription_activations")
         .insert({
-          user_code: `REWARD-${input.recipientUserId.slice(0, 8)}`,
-          user_id: input.recipientUserId,
+          user_code: `REWARD-${recipientUserId.slice(0, 8)}-${Date.now().toString(36)}`,
+          user_id: recipientUserId,
           plan_key: planKey,
           duration_days: input.durationDays || 7,
           activated_by: adminUserId,
@@ -117,9 +163,10 @@ export async function issueReward(
           actor_email: adminEmail,
           action: "rewards.manage",
           resource_type: "reward",
-          resource_id: input.recipientUserId,
+          resource_id: recipientUserId,
           details: {
-            recipient_user_id: input.recipientUserId,
+            recipient_user_id: recipientUserId,
+            recipient_email: recipientEmail || null,
             reward_type: input.rewardType,
             reason: "subscription_activation_insert_failed",
             error: activationError.message,
@@ -138,7 +185,7 @@ export async function issueReward(
     const { data: rewardData, error: rewardError } = await privileged
       .from("rewards_issued")
       .insert({
-        recipient_user_id: input.recipientUserId,
+        recipient_user_id: recipientUserId,
         reward_type: input.rewardType,
         reward_value: input.rewardValue,
         duration_days: (input.rewardType === "trial_week" || input.rewardType === "pro_week") ? (input.durationDays || 7) : null,
@@ -154,9 +201,10 @@ export async function issueReward(
         actor_email: adminEmail,
         action: "rewards.manage",
         resource_type: "reward",
-        resource_id: input.recipientUserId,
+        resource_id: recipientUserId,
         details: {
-          recipient_user_id: input.recipientUserId,
+          recipient_user_id: recipientUserId,
+          recipient_email: recipientEmail || null,
           reward_type: input.rewardType,
           reason: "rewards_issued_insert_failed",
           error: rewardError.message,
@@ -176,9 +224,10 @@ export async function issueReward(
       actor_email: adminEmail,
       action: "rewards.manage",
       resource_type: "reward",
-      resource_id: input.recipientUserId,
+      resource_id: recipientUserId,
       details: {
-        recipient_user_id: input.recipientUserId,
+        recipient_user_id: recipientUserId,
+        recipient_email: recipientEmail || null,
         reward_type: input.rewardType,
         reward_value: input.rewardValue,
         duration_days: (input.rewardType === "trial_week" || input.rewardType === "pro_week") ? (input.durationDays || 7) : null,
@@ -193,7 +242,7 @@ export async function issueReward(
 
     return {
       ok: true,
-      message: `تم إصدار مكافأة ${input.rewardType} للمستخدم ${input.recipientUserId.slice(0, 8)}... (Audit: ${auditResult.id || "none"})`,
+      message: `تم إصدار مكافأة ${input.rewardType} للمستخدم ${recipientEmail || recipientUserId.slice(0, 8)}... (Audit: ${auditResult.id || "none"})`,
       rewardId,
       auditId: auditResult.id,
       subscriptionActivationUsed,
