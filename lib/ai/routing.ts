@@ -680,7 +680,7 @@ export async function completeChatWithProviderFallback(
         error instanceof AiProviderError
           ? error.status
           : error instanceof OpenAI.APIError
-            ? error.status ?? 500
+             ? (error as { status?: number }).status ?? 500
             : 500;
       console.warn(`[ai/fallback] provider ${cfg.name} failed (status=${status}):`, error instanceof Error ? error.message : error);
       if (ctx) {

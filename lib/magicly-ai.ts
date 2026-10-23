@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
 
@@ -165,9 +165,9 @@ export async function rememberSessionContext(
  */
 function getUsefulMemorySignals(message: string, userId: string) {
   const find = (pattern: RegExp) => pattern.exec(message)?.[1]?.trim().slice(0, 120);
-  const weakTopic = find(/(?:        ?:  ?|         (?:  ?|     ?:  ?   )\s+([^ .! !\n]{2,120})/i);
-  const commonMistake = find(/(?:       |         |        )\s+([^ .! !\n]{2,120})/i);
-  const completedTopic = find(/(?:    |     |      \s+([^ .! !\n]{2,120})/i);
+   const weakTopic = find(/(?:weak|weakness)\b.{0,20}\b([^ .!?]{2,120})/i);
+   const commonMistake = find(/(?:mistake|error)\b.{0,20}\b([^ .!?]{2,120})/i);
+   const completedTopic = find(/(?:completed|done)\b.{0,20}\b([^ .!?]{2,120})/i);
 
   return [
     weakTopic && { user_id: userId, kind: "weak_topic", value: weakTopic },
