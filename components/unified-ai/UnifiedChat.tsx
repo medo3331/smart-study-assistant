@@ -16,7 +16,7 @@ import { SITE_LINKS } from "@/lib/site-links";
 
 function supportWhatsappHref(code?: string, detail?: string) {
   const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
-  const text = `                                    code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
+  const text = (code ? ` (${code})` : "") + (detail ? `: ${detail}` : "");
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}text=${encodeURIComponent(text)}`;
 }
@@ -39,7 +39,7 @@ type LessonContext = {
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "     !           Magic.                         /                                        },
+    { role: "assistant", content: "Hello! I am your AI study assistant. How can I help you today?", },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -140,10 +140,10 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         // ??      AI Credits     (402)              ??
         if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
           const info = {
-            error: "     AI Credits          ,
-            message: "                                                                                                         ",
+            error: "Insufficient AI Credits.",
+            message: "You do not have enough credits for this request. Please visit the store to purchase more credits.",
             actions: [
-              { label: "               , href: "/store" },
+              { label: "Buy Credits", href: "/store" },
               supportAction,
             ],
             kind: "credits" as const,
@@ -156,10 +156,10 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         // ??               (403)              ??
         if (res.status === 403 || code === "MODEL_ACCESS_REQUIRED") {
           const info = {
-            error: rawError || "                        ",
-            message: "                                                                                     ,
+            error: rawError || "Model access required.",
+            message: "You need to upgrade your plan to access this model. Please visit the pricing page.",
             actions: [
-              { label: "                          ", href: "/pricing" },
+              { label: "Upgrade Plan", href: "/pricing" },
               supportAction,
             ],
             kind: "access" as const,
@@ -176,7 +176,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             message: data?.message || "                                                                                                    ",
             actions: (data?.actions as { label: string; href: string }[]) || [
               { label: "                          ", href: "/pricing" },
-              { label: "               , href: "/store" },
+              { label: "Buy Credits", href: "/store" },
               supportAction,
             ],
             retryAfterHours: data?.retryAfterHours as number | undefined,
@@ -218,14 +218,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       removeAttachment();
     } catch {
       setLoading(false);
-      const supportHref = supportWhatsappHref("NETWORK", "                    ");
+      const supportHref = supportWhatsappHref("NETWORK", "Network Error");
       setRateLimitInfo({
-        error: "              ,
-        message: "                                                              ",
-        actions: [{ label: "                        ", href: supportHref, external: true }],
+        error: "Network Error.",
+        message: "Unable to connect to the server. Please check your internet connection.",
+        actions: [{ label: "Contact Support", href: supportHref, external: true }],
         kind: "technical",
       });
-      setMessages((m) => [...m, { role: "assistant", content: "                                           " }]);
+      setMessages((m) => [...m, { role: "assistant", content: "Network error occurred." }]);
     }
   };
 
@@ -237,7 +237,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         </button>
         <button
           onClick={() => {
-            setMessages([{ role: "assistant", content: "     !           Magic.                         /                                        }]);
+             setMessages([{ role: "assistant", content: "Hello! How can I help you?" }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}
@@ -249,12 +249,12 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       </div>
 
       {/*                (                                    ) */}
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="             >
+      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Study Modes">
         {([
-          { id: "explain", label: "        },
-          { id: "quiz", label: "         },
-          { id: "summarize", label: "       },
-          { id: "review", label: "        },
+           { id: "explain", label: "Explain" },
+           { id: "quiz", label: "Quiz" },
+           { id: "summarize", label: "Summarize" },
+           { id: "review", label: "Review" },
         ] as const).map((m) => (
           <button
             key={m.id}
@@ -309,14 +309,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             <button
               onClick={removeAttachment}
               className="absolute top-1 left-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80 text-[10px]"
-              aria-label="             
+               aria-label="Remove attachment"
             >
               <X size={12} />
             </button>
           </div>
-          <div className="text-xs text-ink-soft">
+          <div className="text-xs">
             <p className="font-medium">{attachment.file.name}</p>
-            <p>                 OCR              /       </p>
+            <p>OCR processing...</p>
           </div>
         </div>
       )}
@@ -365,14 +365,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           onClick={send}
           disabled={loading || (!input.trim() && !attachment)}
-          aria-label="                 className="p-2.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-40 transition"
+           aria-label="Send message"
         >
           <Send size={18} />
         </button>
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-        <p className="text-[11px] text-ink-soft">Magic                 p>
+         <p className="text-[11px] text-ink-soft">Magic</p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
           <Sparkles size={12} /> <span>Magic</span>
         </div>

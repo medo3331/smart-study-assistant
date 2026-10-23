@@ -79,8 +79,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3)                                                   const safeMessages = (messages as IncomingMessage[])
-      .slice(-MAX_MESSAGES)
+    // 3) const safeMessages = (messages as IncomingMessage[])
+    const safeMessages = (messages as IncomingMessage[]).slice(-MAX_MESSAGES)
       .filter(
         (m) =>
           m &&
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("chat route error:", error);
     return NextResponse.json(
-      { error: { message: "                                 , code: "INTERNAL_ERROR" } },
+      { error: { message: "Internal server error", code: "INTERNAL_ERROR" } },
       { status: 500 }
     );
   }

@@ -66,15 +66,15 @@ export async function getStudentContext(
   const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
   const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle" | "studyField" | "learningGoal"> = {
     subject: shortText(input.subject) || "              ",
-    lesson: shortText(input.lesson) || "             ,
+    lesson: shortText(input.lesson) || "              ",
     learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
     studyField: shortText(input.studyField) || "",
     learningGoal: shortText(input.learningGoal) || "",
   };
 
   if (!configId) {
-    //           ??? configur                        profiles             const { data: profile } = await supabase
-      .from("profiles")
+    // config profiles
+    const { data: profile } = await supabase
       .select("study_field, learning_goal")
       .eq("id", userId)
       .maybeSingle();
@@ -195,28 +195,24 @@ export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyM
     ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")
     : "                                ";
 
-  return withDiagramGuidelines(`                                            .                                                
+  return withDiagramGuidelines(`Study context for the user.
 
-               
--         ${context.studyField ? `             ${context.studyField}` : "     }
--                 ${context.learningGoal || "               }
 
--         ${context.subject}
--        ${context.lesson}
--       : ${context.progress.completed}/${context.progress.total}            
--              : ${context.learningStyle}
--                    ${memories}
-${toolFacts.length ? `-              : ${toolFacts.join(" ")}` : ""}
 
-            :
--                                                                 
--                                                                                                    .
--                                                                  
--                                                 
--                                                               .
+- Study field: ${context.studyField ? `in ${context.studyField}` : "unknown"}
+- Learning goal: ${context.learningGoal || "not specified"}
+
+- Subject: ${context.subject}
+- Lesson: ${context.lesson}
+- Progress: ${context.progress.completed}/${context.progress.total} lessons
+- Memories: ${memories}
+${toolFacts.length ? `- Tool facts: ${toolFacts.join(" ")}` : ""}
+
+Style guide:
 - ${STYLE_GUIDE[context.learningStyle]}
 
-              ${mode}.
-${MODE_GUIDE[mode]}`);
-}
+${mode}.
 
+${MODE_GUIDE[mode]}`);
+
+}
