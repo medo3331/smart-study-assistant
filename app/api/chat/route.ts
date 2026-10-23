@@ -165,7 +165,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const data = completion.payload;
+    const data = completion.payload ?? {};
     const answer = completion.content;
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
 
@@ -210,6 +210,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ...data,
+      content: answer,
+      message: answer,
       conversationId: savedConversationId || undefined,
       suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
     });

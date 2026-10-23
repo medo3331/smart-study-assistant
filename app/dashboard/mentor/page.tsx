@@ -34,7 +34,13 @@ export default function MentorPage() {
     { role: "assistant", content: WELCOME },
   ]);
   const [input, setInput] = useState("");
+  const [memories, setMemories] = useState<Array<{ kind: string; value: string; updated_at: string }>>([]);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [editingMemory, setEditingMemory] = useState<{ kind: string; value: string } | null>(null);
+  const [editValue, setEditValue] = useState("");
   const [sending, setSending] = useState(false);
+  const [deletingMemory, setDeletingMemory] = useState<{ kind: string; value: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -55,9 +61,77 @@ export default function MentorPage() {
     }
   }, [session, supabase]);
 
+  const loadMemories = useCallback(async () => {
+    if (session.status !== "ready") return;
+    setMemoryLoading(true);
+    setMemoryError(null);
+    try {
+      const response = await fetch("/api/ai/memory");
+      if (!response.ok) throw new Error("memory_load_failed");
+      const data = await response.json();
+      setMemories(data.memories ?? []);
+    } catch {
+      setMemoryError("تعذر تحميل الذاكرة.");
+    } finally {
+      setMemoryLoading(false);
+    }
+  }, [session.status]);
+
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    loadMemories();
+  }, [loadMemories]);
+
+  const deleteMemory = async (memory: { kind: string; value: string }) => {
+    if (!confirm("هل تريد حذف هذه الذاكرة؟")) return;
+    setDeletingMemory(memory);
+    try {
+      const response = await fetch("/api/ai/memory", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: memory.kind, value: memory.value }),
+      });
+      if (!response.ok) throw new Error("memory_delete_failed");
+      setMemories((prev) => prev.filter((m) => !(m.kind === memory.kind && m.value === memory.value)));
+    } catch {
+      alert("تعذر حذف الذاكرة.");
+    } finally {
+      setDeletingMemory(null);
+    }
+  };
+
+  const startEditMemory = (memory: { kind: string; value: string }) => {
+    setEditingMemory(memory);
+    setEditValue(memory.value);
+  };
+
+  const saveEditMemory = async () => {
+    if (!editingMemory) return;
+    const newValue = editValue.trim();
+    if (!newValue) return;
+    try {
+      const response = await fetch("/api/ai/memory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: editingMemory.kind, oldValue: editingMemory.value, newValue }),
+      });
+      if (!response.ok) throw new Error("memory_update_failed");
+      setMemories((prev) =>
+        prev.map((m) =>
+          m.kind === editingMemory.kind && m.value === editingMemory.value
+            ? { ...m, value: newValue, updated_at: new Date().toISOString() }
+            : m
+        )
+      );
+      setEditingMemory(null);
+      setEditValue("");
+    } catch {
+      alert("تعذر تعديل الذاكرة.");
+    }
+  };
 
   useEffect(() => {
     if (!activeConversationId || session.status !== "ready") return;
@@ -238,6 +312,42 @@ export default function MentorPage() {
               ))}
             </div>
           )}
+
+          <div className="mt-4 rounded-[var(--r-md)] border border-rule bg-paper-2 p-3">
+            <p className="text-sm font-semibold text-ink mb-2">ذاكرة التعلم</p>
+            {memoryLoading ? (
+              <p className="text-xs text-ink-soft">جارٍ تحميل الذاكرة...</p>
+            ) : memoryError ? (
+              <p className="text-xs text-red-600">{memoryError}</p>
+            ) : memories.length === 0 ? (
+              <p className="text-xs text-ink-soft">لا توجد ذكريات محفوظة بعد.</p>
+            ) : (
+              <div className="space-y-2">
+                {memories.map((memory) => (
+                  <div key={`${memory.kind}-${memory.value}`} className="rounded border border-rule bg-paper p-2">
+                    {editingMemory?.kind === memory.kind && editingMemory?.value === memory.value ? (
+                      <div className="space-y-2">
+                        <input value={editValue} onChange={(e) => setEditValue(e.target.value)} className="w-full rounded border border-rule bg-paper-2 px-2 py-1 text-xs" />
+                        <div className="flex gap-2">
+                          <button onClick={saveEditMemory} className="text-xs text-marker">حفظ</button>
+                          <button onClick={() => setEditingMemory(null)} className="text-xs text-ink-soft">إلغاء</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs font-medium text-ink">{memory.kind}</p>
+                        <p className="text-xs text-ink-soft break-words">{memory.value}</p>
+                        <div className="mt-1 flex gap-3">
+                          <button onClick={() => startEditMemory(memory)} className="text-[10px] text-ink-soft hover:text-ink">تعديل</button>
+                          <button onClick={() => deleteMemory(memory)} disabled={deletingMemory?.kind === memory.kind && deletingMemory?.value === memory.value} className="text-[10px] text-red-600 hover:text-red-700 disabled:opacity-50">حذف</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </aside>
 
         <main className="lg:col-span-9 flex flex-col border border-rule rounded-[var(--r-lg)] bg-paper">
