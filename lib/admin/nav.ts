@@ -81,6 +81,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "admins.manage",
     icon: "Settings",
   },
+  {
+    href: "/admin/ai-usage",
+    label: "استخدام الذكاء الاصطناعي",
+    description: "تقرير Shadow لاستخدام AI (ai_usage_events) — قراءة فقط",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */
