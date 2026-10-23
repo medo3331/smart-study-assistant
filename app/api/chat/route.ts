@@ -3,12 +3,211 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   console.log("API Chat Route Started - MINIMAL");
   try {
+<<<<<<< HEAD
     const body = await req.json().catch(() => ({}));
     return NextResponse.json({ ok: true, echo: body }, { status: 200 });
   } catch (error: any) {
     console.error("=== FATAL API ERROR ===");
     console.error(error);
     console.error("Message:", error?.message);
+=======
+    //   )                                                                                                  
+    const { user, supabase, response: authError } = await requireUser("message");
+    if (authError) return authError;
+
+    //   )                                                                 Groq
+    const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
+    if (limited) return limited;
+
+    //   .  )                                          (Phase 1.5)     messages_per_2h                           
+    //                                                    .        +                                                               .
+    // fail-open                                                               .
+    //              (owner)                                                                                     .
+    const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        {
+          error: {
+            message:
+              quota.reasonAr ??
+              "                                                                                      (30           ).                                 (                                                  )                                                .",
+            code: "MESSAGE_QUOTA_EXCEEDED",
+          },
+        },
+        { status: 429 }
+      );
+    }
+
+    //   .  )                                                                (Phase 2)                                
+    // (enabled/priority/daily_limit      ai_models)                                                   .
+    // TTL                 + fail-open                                DB                     .
+    await refreshModelStateCache();
+
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { error: { message: "                                                   ." } },
+        { status: 400 }
+      );
+    }
+
+    const { messages, mode, context } = body as {
+      messages?: unknown;
+      mode?: unknown;
+      context?: MagiclyContextInput;
+      conversationId?: unknown;
+    };
+    const conversationId = typeof (body as { conversationId?: unknown }).conversationId === "string"
+      ? clampText((body as { conversationId: string }).conversationId, 80)
+      : "";
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return NextResponse.json(
+        { error: { message: "                                ." } },
+        { status: 400 }
+      );
+    }
+
+    //   )                          :                                                         
+    const safeMessages = (messages as IncomingMessage[])
+      .slice(-MAX_MESSAGES)
+      .filter(
+        (m) =>
+          m &&
+          (m.role === "user" || m.role === "assistant") &&
+          typeof m.content === "string" &&
+          m.content.trim().length > 0
+      )
+      .map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: clampText(m.content, MAX_MESSAGE_CHARS),
+      }));
+
+    if (safeMessages.length === 0) {
+      return NextResponse.json(
+        { error: { message: "                                             ." } },
+        { status: 400 }
+      );
+    }
+
+    //        prompt                             .                                                                      
+    //                         (                         )                                                   .
+    const studentContext = await getStudentContext(supabase, user.id, context ?? {});
+    const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
+    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
+    const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+
+    //                                (Persona Builder)                                     
+    let personaPrompt = "";
+    try {
+      personaPrompt = await buildSystemPrompt(user.id);
+    } catch (e) {
+      console.warn("Persona prompt build failed, falling back to base system prompt:", e);
+    }
+    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n---                                              ---\n${system}` : system;
+    void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
+
+    // Phase H: entitlement filter + 1 credit gate (403 before reserve)
+    const candidates = routeCandidates("chat");
+    const hasEnt = async (k: string, v: string) => {
+      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+      return Boolean(data);
+    };
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    if (accessible.length === 0 && candidates.length > 0) {
+      return NextResponse.json({ error: { message: "                                           .                                 .", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+    }
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? CURRENT_AI_MODEL);
+    if (!guard.ok) return guard.response;
+
+    let completion;
+    try {
+      //      Phase 5-C3 (pilot)                                                   **                 **
+      //                                  .                                                                          
+      //        `completeChatInner`                                   (                               
+      //         ). `attemptNo`                                                                    .
+      //
+      //        **                    100%:**                            header                UUID       .
+      //                                     guard               limits               credit       
+      //                                               fallback                       .
+      const usage = resolveUsageRequestContext(req, user.id);
+
+      completion = await aiRouter.completeChat("chat", {
+        messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
+        temperature: 0.7,
+        usage,
+      });
+    } catch (error) {
+      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      if (!(error instanceof AiProviderError)) throw error;
+      const isRate = error.status === 429;
+      const isUnavailable = error.status === 503;
+      return NextResponse.json(
+        {
+          error: {
+            message: isRate
+              ? "                                      .                                  ."
+              : "                                                        .                  .",
+            code: isRate ? "PROVIDER_RATE_LIMIT" : isUnavailable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR",
+          },
+        },
+        { status: isUnavailable ? 503 : isRate ? 429 : 502 }
+      );
+    }
+
+    const data = completion.payload;
+    const answer = completion.content;
+    void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
+
+    //            best-effort:      migration                                                           
+    //                                                                                                         .
+    let savedConversationId = conversationId;
+    try {
+      if (answer) {
+        if (savedConversationId) {
+          const { data: ownedConversation } = await supabase
+            .from("chat_conversations")
+            .select("id")
+            .eq("id", savedConversationId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+          //                                                                                                          
+          //                                                                                                 .
+          if (!ownedConversation) savedConversationId = "";
+        }
+        if (!savedConversationId) {
+          const { data: conversation } = await supabase
+            .from("chat_conversations")
+            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "                       " })
+            .select("id")
+            .single();
+          savedConversationId = conversation?.id ?? "";
+        }
+        if (savedConversationId) {
+          await supabase.from("chat_messages").insert([
+            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: safeMessages.at(-1)?.content ?? "" },
+            { conversation_id: savedConversationId, user_id: user.id, role: "assistant", content: answer },
+          ]);
+          await supabase
+            .from("chat_conversations")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", savedConversationId)
+            .eq("user_id", user.id);
+        }
+      }
+    } catch (saveError) {
+      console.warn("chat: could not save conversation", saveError);
+    }
+
+    return NextResponse.json({
+      ...data,
+      conversationId: savedConversationId || undefined,
+      suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
+    });
+  } catch (error) {
+    console.error("chat route error:", error);
+>>>>>>> origin/main
     return NextResponse.json(
       {
         ok: false,
