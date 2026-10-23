@@ -1,5 +1,5 @@
 import mammoth from 'mammoth';
-import { PDFParse } from 'pdf-parse';
+import { extractText } from 'unpdf';
 
 /* ==========================================================================
    استخراج النص من ملف مرفوع — الكود المشترك بين راوتين
