@@ -137,19 +137,19 @@ export type AdminPermissionKey =
   | "users.read" | "users.ban" | "users.unban" | "users.impersonate" | "users.regenerate_code"
   | "plans.manage" | "trial.manage" | "models.manage" | "rewards.manage"
   | "admins.manage" | "files.moderate" | "audit.read"
-  | "subscriptions.manage" | "credits.manage";
+  | "subscriptions.manage" | "credits.manage" | "announcements.manage";
 
 export const ADMIN_PERMISSION_KEYS: AdminPermissionKey[] = [
   "users.read", "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
   "plans.manage", "trial.manage", "models.manage", "rewards.manage",
-  "admins.manage", "files.moderate", "audit.read", "subscriptions.manage", "credits.manage",
+  "admins.manage", "files.moderate", "audit.read", "subscriptions.manage", "credits.manage", "announcements.manage",
 ];
 
 /** أي العمليات تعتبر حساسة وتحتاج تسجيل في audit_log. */
 export const SENSITIVE_ACTIONS: AdminPermissionKey[] = [
   "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
   "plans.manage", "trial.manage", "models.manage", "rewards.manage",
-  "admins.manage", "files.moderate", "subscriptions.manage", "credits.manage",
+  "admins.manage", "files.moderate", "subscriptions.manage", "credits.manage", "announcements.manage",
 ];
 
 export interface AdminPermissionRecord {
@@ -173,6 +173,7 @@ export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRec
   "audit.read":         { key: "audit.read", allowed_roles: ["owner","admin","support"], is_sensitive: false },
   "subscriptions.manage": { key: "subscriptions.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
   "credits.manage":       { key: "credits.manage", allowed_roles: ["owner"], is_sensitive: true },
+  "announcements.manage": { key: "announcements.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
 };
 
 /** قراءة الصلاحيات من جدول site_admins (مع دعم الـpermissions column الجديد). */
