@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 export default function NotificationBell(){
  const [open,setOpen]=useState(false);
  const [data,setData]=useState<any>({notifications:[],unread:0});
- const load=async()=>{const r=await fetch("/api/notifications");const d=await r.json();if(d.success)setData(d);};
+ const [error,setError]=useState<string|null>(null);
+ const load=async()=>{const r=await fetch("/api/notifications");const d=await r.json();if(d.success){setData(d);setError(null);}else{setData({notifications:[],unread:0});setError(d.error||"Failed to load notifications.");}};
  useEffect(()=>{load();const i=setInterval(load,30000);return()=>clearInterval(i);},[]);
  const markRead=(id:string)=>fetch("/api/notifications",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})}).then(load);
  const markAll=()=>fetch("/api/notifications",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({all:true})}).then(load);
@@ -21,6 +22,7 @@ export default function NotificationBell(){
           </div>
         ))}
         {data.notifications.length===0&&<div className="text-sm">لا توجد إشعارات</div>}
+         {error&&<div className="text-sm text-red-600">{error}</div>}
       </div>
     )}
   </div>
