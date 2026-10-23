@@ -2,12 +2,12 @@
 /* eslint-disable @next/next/no-img-element -- previewUrl is dynamic blob URL, next/image not suitable */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 /**
- * Unified Chat â€” ÙˆØ§Ø¬Ù‡Ø© ÙˆØ§Ø­Ø¯Ø© ÙÙ‚Ø· Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù….
- * Ù„Ø§ ÙŠØ¸Ù‡Ø± AgentRouter / OCR / 11 Agents Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù….
- * Upload: ğŸ“ (PDF/text) / ğŸ–¼ï¸ (image) â†’ Preview â†’ OCR Ø¥Ø°Ø§ Ù„Ø²Ù… â†’ Router Ø¯Ø§Ø®Ù„ÙŠ â†’ Response.
- * ÙŠÙƒØ¨ÙØ± Ø§Ù„Ø·Ù„Ø¨ Ø¹Ù„Ù‰ /api/unified-ai ÙˆÙŠØ¯ÙŠØ± OCR + Router Ø®Ù„Ù Ø§Ù„ÙƒÙˆØ§Ù„ÙŠØ³.
+ * Unified Chat — æÇÌåÉ æÇÍÏÉ İŞØ ááãÓÊÎÏã.
+ * áÇ íÙåÑ AgentRouter / OCR / 11 Agents ááãÓÊÎÏã.
+ * Upload: ?? (PDF/text) / ??? (image) ? Preview ? OCR ÅĞÇ áÒã ? Router ÏÇÎáí ? Response.
+ * íßÈõÑ ÇáØáÈ Úáì /api/unified-ai æíÏíÑ OCR + Router Îáİ ÇáßæÇáíÓ.
  */
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
@@ -15,11 +15,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { SITE_LINKS } from "@/lib/site-links";
-import { createClient } from "@/lib/supabase/client";
 
 function supportWhatsappHref(code?: string, detail?: string) {
   const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
-  const text = `Ø£Ù‡Ù„Ø§Ù‹ØŒ Ø¹Ù†Ø¯ÙŠ Ù…Ø´ÙƒÙ„Ø© ÙÙŠ Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯ Ø§Ù„Ø°ÙƒÙŠ${code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
+  const text = `ÃåáÇğ¡ ÚäÏí ãÔßáÉ İí ÇáãÓÇÚÏ ÇáĞßí${code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}text=${encodeURIComponent(text)}`;
 }
@@ -41,8 +40,9 @@ type LessonContext = {
 
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
-  const [profileInfo, setProfileInfo] = useState<{ name: string; subject: string }>({ name: "Ø§Ù„Ø·Ø§Ù„Ø¨", subject: "Ù…ÙˆØ§Ø¯Ùƒ" });
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { role: "assistant", content: "ÃåáÇğ! ÃäÇ ãÓÇÚÏ Magic. ÇßÊÈ ÓÄÇáß¡ Ãæ ÇÑİÚ ÕæÑÉ/ãáİ — æÓÃÓÇÚÏß. áÇ ÊÍÊÇÌ áÇÎÊíÇÑ æßíá." },
+  ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -61,52 +61,6 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("display_name, study_field")
-          .eq("id", user.id)
-          .maybeSingle();
-        let subject = (profile as any)?.study_field || "";
-        if (!subject) {
-          const { data } = await supabase
-            .from("user_subjects")
-            .select("subjects(name)")
-            .eq("user_id", user.id)
-            .limit(1);
-          subject = (data as any)?.[0]?.subjects?.name || "";
-        }
-        const name =
-          (profile as any)?.display_name ||
-          (user.user_metadata as any)?.full_name ||
-          "Ø§Ù„Ø·Ø§Ù„Ø¨";
-        if (!cancelled) {
-          setProfileInfo({ name, subject: subject || "Ù…ÙˆØ§Ø¯Ùƒ" });
-        }
-      } catch {
-        // best-effort
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    setMessages([
-      {
-        role: "assistant",
-        content: `Ø£Ù‡Ù„Ø§Ù‹ ÙŠØ§ ${profileInfo.name} ğŸ‘‹ØŒ Ø£Ù†Ø§ Ù…Ø¹Ù„Ù…Ùƒ Ø§Ù„Ø´Ø®ØµÙŠ. Ø¥ÙŠÙ‡ Ø§Ù„Ù„ÙŠ Ù‡Ù†Ø°Ø§ÙƒØ±Ù‡ Ø§Ù„Ù†Ù‡Ø§Ø±Ø¯Ø© ÙÙŠ ${profileInfo.subject}ØŸ`,
-      },
-    ]);
-  }, [profileInfo]);
-
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>, kind: "file" | "image") => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -124,7 +78,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
     const text = input.trim();
     if (!text && !attachment) return;
 
-    const userMsg: ChatMsg = { role: "user", content: text || "(Ù…Ù„Ù/ØµÙˆØ±Ø© Ù…Ø±ÙÙ‚)", attachmentName: attachment?.file.name };
+    const userMsg: ChatMsg = { role: "user", content: text || "(ãáİ/ÕæÑÉ ãÑİŞ)", attachmentName: attachment?.file.name };
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
@@ -140,16 +94,16 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           formData.append("imageInput", attachment.file, attachment.file.name);
         }
       }
-      // Pass context language + lesson context (Ù…Ø®ÙÙŠ Ø¹Ù† Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…)
+      // Pass context language + lesson context (ãÎİí Úä ÇáãÓÊÎÏã)
       const ctx: Record<string, unknown> = {};
       if (initialContext && typeof initialContext === "object") {
         Object.assign(ctx, initialContext);
       }
       if (!ctx.language) ctx.language = "ar";
-      // Ø°Ø§ÙƒØ±Ø© Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© + ÙˆØ¶Ø¹ Ø§Ù„Ù…Ø°Ø§ÙƒØ±Ø© (ÙƒØ§Ù†ÙˆØ§ ÙÙŠ /api/chat â€” Ø§ØªÙˆØ­Ø¯ÙˆØ§ Ù‡Ù†Ø§)
+      // ĞÇßÑÉ ÇáãÍÇÏËÉ + æÖÚ ÇáãĞÇßÑÉ (ßÇäæÇ İí /api/chat — ÇÊæÍÏæÇ åäÇ)
       if (conversationId) ctx.conversationId = conversationId;
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
-      // Ø­Ù‚Ù† Ø³ÙŠØ§Ù‚ Ø§Ù„Ø¯Ø±Ø³ Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ Ø¥Ø°Ø§ Ù…ØªÙˆÙØ± â€” ÙŠØ¨Ø¹Øª Ù„Ù„Ù€ API ÙƒÙ€ hidden system prompt
+      // ÍŞä ÓíÇŞ ÇáÏÑÓ ÇáÍŞíŞí ÅĞÇ ãÊæİÑ — íÈÚÊ ááÜ API ßÜ hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
           title: lesson.title || "",
@@ -170,28 +124,29 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       setLoading(false);
 
       if (!res.ok || !data?.ok) {
-        const code = (data?.code as string | undefined) || (data?.error?.code as string | undefined) || "";
+        const code =
+          (data?.code as string | undefined) ||
+          (data?.error?.code as string | undefined) ||
+          "";
+        // ÇÓÊÎÑÇÌ ÇáÑÓÇáÉ ÇáÚÑÈíÉ ãä ÇáÓíÑÈÑ ÈÃ m?ltiples ÇáÍŞæá ÇáãÍÊãáÉ:
+        // reasonAr (ãä /api/chat)¡ message (ãÓÊæì ÃÚáì)¡ error.message¡ error ßäÕ
         const rawError =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
-          (res.status === 429 ? "ÙˆØµÙ„Øª Ù„Ù„Ø­Ø¯ Ø§Ù„Ø£Ù‚ØµÙ‰ Ù„Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„Ù…Ø¬Ø§Ù†ÙŠ." : "Ø­Ø¯Ø« Ø®Ø·Ø£.");
-        if (code === "PDF_READ_FAILED") {
-          setMessages((m) => [...m, { role: "assistant", content: "ØªØ¹Ø°Ø± Ù‚Ø±Ø§Ø¡Ø© Ø§Ù„Ù†Øµ Ù…Ù† Ù‡Ø°Ø§ Ø§Ù„Ù€ PDF. ÙŠØ±Ø¬Ù‰ Ø±ÙØ¹ ØµÙˆØ±Ø© Ù„Ù„ØµÙØ­Ø© Ø¨Ø¯Ù„Ø§Ù‹ Ù…Ù† Ø°Ù„Ùƒ." }]);
-          return;
-        }
-        if (code === "FILE_TOO_LARGE") {
-          setMessages((m) => [...m, { role: "assistant", content: "Ø§Ù„Ù…Ù„Ù ÙƒØ¨ÙŠØ± Ø¬Ø¯Ø§Ù‹ØŒ Ø§Ù„Ø­Ø¯ Ø§Ù„Ø£Ù‚ØµÙ‰ 4 Ù…ÙŠØ¬Ø§Ø¨Ø§ÙŠØª" }]);
-          return;
-        }
+          (res.status === 429
+            ? "æÕáÊ ááÍÏ ÇáÃŞÕì ááÑÓÇÆá ÇáãÓãæÍ ÈåÇ İí ÎØÊß ÇáÍÇáíÉ. íÑÌì ÇáÇäÊÙÇÑ Ãæ ÊÑŞíÉ ÎØÊß."
+            : "ÍÏË ÎØÃ.");
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
-        const supportAction = { label: "ÙƒÙ„Ù… Ø§Ù„Ø¯Ø¹Ù… Ø§Ù„ÙÙ†ÙŠ (ÙˆØ§ØªØ³Ø§Ø¨)", href: supportHref, external: true };
+        const supportAction = { label: "ßáã ÇáÏÚã Çáİäí (æÇÊÓÇÈ)", href: supportHref, external: true };
 
-        // â”€â”€ Ø±ØµÙŠØ¯ AI Credits Ø®Ù„Øµ (402) â€” Ù…Ø´ Ø¹Ø·Ù„ ÙÙ†ÙŠ â”€â”€
+        // ?? ÑÕíÏ AI Credits ÎáÕ (402) — ãÔ ÚØá İäí ??
         if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
           const info = {
-            error: "Ø±ØµÙŠØ¯ AI Credits Ù„Ø§ ÙŠÙƒÙÙŠ.",
-            message: "Ø¯ÙŠ Ù…Ø´ Ù…Ø´ÙƒÙ„Ø© ÙÙŠ Ø§Ù„Ù…ÙˆÙ‚Ø¹ â€” Ø±ØµÙŠØ¯Ùƒ Ø®Ù„Øµ. Ø§Ø´ØªØ±Ù Ø­Ø²Ù…Ø© Ù…Ù† Ø§Ù„Ù…ØªØ¬Ø±ØŒ Ø£Ùˆ ÙƒÙ„Ù… Ø§Ù„Ø¯Ø¹Ù… Ø§Ù„ÙÙ†ÙŠ Ø¹Ù„Ù‰ ÙˆØ§ØªØ³Ø§Ø¨ Ù„Ùˆ Ø´Ø§ÙŠÙ Ø¥Ù† Ø¯Ù‡ ØºÙ„Ø·.",
+            error: "ÑÕíÏ AI Credits áÇ íßİí.",
+            message: "Ïí ãÔ ãÔßáÉ İí ÇáãæŞÚ — ÑÕíÏß ÎáÕ. ÇÔÊÑö ÍÒãÉ ãä ÇáãÊÌÑ¡ Ãæ ßáã ÇáÏÚã Çáİäí Úáì æÇÊÓÇÈ áæ ÔÇíİ Åä Ïå ÛáØ.",
             actions: [
-              { label: "Ø´Ø±Ø§Ø¡ Ø­Ø²Ù…Ø© Ø±ØµÙŠØ¯", href: "/store" },
+              { label: "ÔÑÇÁ ÍÒãÉ ÑÕíÏ", href: "/store" },
               supportAction,
             ],
             kind: "credits" as const,
@@ -201,13 +156,13 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           return;
         }
 
-        // â”€â”€ ØµÙ„Ø§Ø­ÙŠØ© Ù…Ø·Ù„ÙˆØ¨Ø© (403) â€” Ù…Ø´ Ø¹Ø·Ù„ ÙÙ†ÙŠ â”€â”€
+        // ?? ÕáÇÍíÉ ãØáæÈÉ (403) — ãÔ ÚØá İäí ??
         if (res.status === 403 || code === "MODEL_ACCESS_REQUIRED") {
           const info = {
-            error: rawError || "Ù‡Ø°Ù‡ Ø§Ù„Ù…ÙŠØ²Ø© ØªØªØ·Ù„Ø¨ ØµÙ„Ø§Ø­ÙŠØ©.",
-            message: "Ø­Ø³Ø§Ø¨Ùƒ Ø´ØºØ§Ù„ ØªÙ…Ø§Ù…ØŒ Ø¨Ø³ Ø§Ù„Ù†Ù…ÙˆØ°Ø¬ Ø¯Ù‡ Ù…Ø­ØªØ§Ø¬ Ø§Ø´ØªØ±Ø§Ùƒ Ø£Ùˆ ØµÙ„Ø§Ø­ÙŠØ©. Ø§Ø´ØªØ±Ùƒ Ù…Ù† Ø§Ù„Ù…ØªØ¬Ø± Ø£Ùˆ ÙƒÙ„Ù… Ø§Ù„Ø¯Ø¹Ù….",
+            error: rawError || "åĞå ÇáãíÒÉ ÊÊØáÈ ÕáÇÍíÉ.",
+            message: "ÍÓÇÈß ÔÛÇá ÊãÇã¡ ÈÓ ÇáäãæĞÌ Ïå ãÍÊÇÌ ÇÔÊÑÇß Ãæ ÕáÇÍíÉ. ÇÔÊÑß ãä ÇáãÊÌÑ Ãæ ßáã ÇáÏÚã.",
             actions: [
-              { label: "Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ ÙÙŠ Ø§Ù„Ø®Ø·Ø© Ø§Ù„Ù…Ø¯ÙÙˆØ¹Ø©", href: "/pricing" },
+              { label: "ÇáÇÔÊÑÇß İí ÇáÎØÉ ÇáãÏİæÚÉ", href: "/pricing" },
               supportAction,
             ],
             kind: "access" as const,
@@ -217,14 +172,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           return;
         }
 
-        // â”€â”€ Rate Limit ØªÙˆØ¬ÙŠÙ‡ÙŠ (429) â”€â”€
+        // ?? Rate Limit ÊæÌíåí (429) ??
         if (res.status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "GUEST_RATE_LIMIT") {
           const info = {
             error: rawError,
-            message: data?.message || "ÙŠÙ…ÙƒÙ†Ùƒ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø± Ù„Ø­ÙŠÙ† ØªØ¬Ø¯Ø¯ Ø§Ù„Ø±ØµÙŠØ¯ Ø§Ù„Ù…Ø¬Ø§Ù†ÙŠØŒ Ø£Ùˆ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ ÙÙŠ Ø§Ù„Ø®Ø·Ø© Ø§Ù„Ù…Ø¯ÙÙˆØ¹Ø© Ù„Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ø§Ø³ØªØ®Ø¯Ø§Ù… ØºÙŠØ± Ù…Ø­Ø¯ÙˆØ¯!",
+            message: data?.message || "íãßäß ÇáÇäÊÙÇÑ áÍíä ÊÌÏÏ ÇáÑÕíÏ ÇáãÌÇäí¡ Ãæ ÇáÇÔÊÑÇß İí ÇáÎØÉ ÇáãÏİæÚÉ ááÍÕæá Úáì ÇÓÊÎÏÇã ÛíÑ ãÍÏæÏ!",
             actions: (data?.actions as { label: string; href: string }[]) || [
-              { label: "Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ ÙÙŠ Ø§Ù„Ø®Ø·Ø© Ø§Ù„Ù…Ø¯ÙÙˆØ¹Ø©", href: "/pricing" },
-              { label: "Ø´Ø±Ø§Ø¡ Ø­Ø²Ù…Ø© Ø±ØµÙŠØ¯", href: "/store" },
+              { label: "ÇáÇÔÊÑÇß İí ÇáÎØÉ ÇáãÏİæÚÉ", href: "/pricing" },
+              { label: "ÔÑÇÁ ÍÒãÉ ÑÕíÏ", href: "/store" },
               supportAction,
             ],
             retryAfterHours: data?.retryAfterHours as number | undefined,
@@ -234,15 +189,15 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             kind: "limit" as const,
           };
           setRateLimitInfo(info);
-          // Ø£ÙŠØ¶Ø§Ù‹ Ø£Ø¶Ù Ø±Ø³Ø§Ù„Ø© ÙÙŠ Ø³Ø¬Ù„ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ù„Ù„ØªÙˆØ¶ÙŠØ­
+          // ÃíÖÇğ ÃÖİ ÑÓÇáÉ İí ÓÌá ÇáãÍÇÏËÉ ááÊæÖíÍ
           setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
           return;
         }
 
-        // â”€â”€ Ø¹Ø·Ù„ ÙÙ†ÙŠ (500/502/503 Ø£Ùˆ PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) â”€â”€
+        // ?? ÚØá İäí (500/502/503 Ãæ PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) ??
         const technicalInfo = {
-          error: "Ø¹Ø·Ù„ ÙÙ†ÙŠ Ù…Ø¤Ù‚Øª.",
-          message: `Ø§Ù„Ù…Ø´ÙƒÙ„Ø© Ù…Ù† Ø¹Ù†Ø¯Ù†Ø§ Ù…Ø´ Ù…Ù† Ø±ØµÙŠØ¯Ùƒ${code ? ` (${code})` : ""}. Ø­Ø§ÙˆÙ„ ØªØ§Ù†ÙŠ Ø¨Ø¹Ø¯ Ø´ÙˆÙŠØ©ØŒ ÙˆÙ„Ùˆ Ø§ØªÙƒØ±Ø±Øª Ø§Ø¨Ø¹ØªÙ„Ù†Ø§ Ø¹Ù„Ù‰ ÙˆØ§ØªØ³Ø§Ø¨ ÙˆÙ‡Ù†Ø­Ù„Ù‡Ø§.`,
+          error: "ÚØá İäí ãÄŞÊ.",
+          message: `ÇáãÔßáÉ ãä ÚäÏäÇ ãÔ ãä ÑÕíÏß${code ? ` (${code})` : ""}. ÍÇæá ÊÇäí ÈÚÏ ÔæíÉ¡ æáæ ÇÊßÑÑÊ ÇÈÚÊáäÇ Úáì æÇÊÓÇÈ æåäÍáåÇ.`,
           actions: [supportAction],
           kind: "technical" as const,
         };
@@ -251,16 +206,16 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         return;
       }
 
-      // Ù†Ø¬Ø­ â€” Ø§Ù…Ø³Ø­ Ø­Ø§Ù„Ø© Ø§Ù„Ù€ rate limit Ø§Ù„Ø³Ø§Ø¨Ù‚Ø©
+      // äÌÍ — ÇãÓÍ ÍÇáÉ ÇáÜ rate limit ÇáÓÇÈŞÉ
       setRateLimitInfo(null);
 
-      // Ø°Ø§ÙƒØ±Ø© Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©: Ø§Ù„Ø³ÙŠØ±ÙØ± Ø±Ø¬Ù‘Ø¹ Ù…Ø¹Ø±Ù Ø§Ù„Ø¬Ù„Ø³Ø©
+      // ĞÇßÑÉ ÇáãÍÇÏËÉ: ÇáÓíÑİÑ ÑÌøÚ ãÚÑİ ÇáÌáÓÉ
       if (typeof data?.conversationId === "string" && data.conversationId) {
         setConversationId(data.conversationId);
       }
 
-      // Show assistant response â€” Ù†Ø¸ÙŠÙ Ø¨Ø¯ÙˆÙ† Ø£ÙŠ Ø°ÙƒØ± Ù„Ù„ÙˆÙƒÙŠÙ„
-      const assistantText = data?.answer || "ØªÙ… Ø§Ù„Ù…Ø¹Ø§Ù„Ø¬Ø© Ø¹Ø¨Ø± Unified AI.";
+      // Show assistant response — äÙíİ ÈÏæä Ãí ĞßÑ ááæßíá
+      const assistantText = data?.answer || "Êã ÇáãÚÇáÌÉ ÚÈÑ Unified AI.";
 
       setMessages((m) => [
         ...m,
@@ -269,43 +224,43 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       removeAttachment();
     } catch {
       setLoading(false);
-      const supportHref = supportWhatsappHref("NETWORK", "ØªØ¹Ø°Ø± Ø§Ù„Ø§ØªØµØ§Ù„ Ø¨Ø§Ù„Ø®Ø§Ø¯Ù…");
+      const supportHref = supportWhatsappHref("NETWORK", "ÊÚĞÑ ÇáÇÊÕÇá ÈÇáÎÇÏã");
       setRateLimitInfo({
-        error: "ØªØ¹Ø°Ø± Ø§Ù„Ø§ØªØµØ§Ù„.",
-        message: "Ø§ØªØ£ÙƒØ¯ Ù…Ù† Ø§Ù„Ø¥Ù†ØªØ±Ù†Øª ÙˆØ­Ø§ÙˆÙ„ ØªØ§Ù†ÙŠØŒ ÙˆÙ„Ùˆ Ø§Ù„Ù…Ø´ÙƒÙ„Ø© Ù…Ø³ØªÙ…Ø±Ø© ÙƒÙ„Ù…Ù†Ø§ ÙˆØ§ØªØ³Ø§Ø¨.",
-        actions: [{ label: "ÙƒÙ„Ù… Ø§Ù„Ø¯Ø¹Ù… Ø§Ù„ÙÙ†ÙŠ (ÙˆØ§ØªØ³Ø§Ø¨)", href: supportHref, external: true }],
+        error: "ÊÚĞÑ ÇáÇÊÕÇá.",
+        message: "ÇÊÃßÏ ãä ÇáÅäÊÑäÊ æÍÇæá ÊÇäí¡ æáæ ÇáãÔßáÉ ãÓÊãÑÉ ßáãäÇ æÇÊÓÇÈ.",
+        actions: [{ label: "ßáã ÇáÏÚã Çáİäí (æÇÊÓÇÈ)", href: supportHref, external: true }],
         kind: "technical",
       });
-      setMessages((m) => [...m, { role: "assistant", content: "ØªØ¹Ø°Ø± Ø§Ù„Ø§ØªØµØ§Ù„. Ø§ØªØ£ÙƒØ¯ Ù…Ù† Ø§Ù„Ø¥Ù†ØªØ±Ù†Øª ÙˆØ­Ø§ÙˆÙ„ ØªØ§Ù†ÙŠ." }]);
+      setMessages((m) => [...m, { role: "assistant", content: "ÊÚĞÑ ÇáÇÊÕÇá. ÇÊÃßÏ ãä ÇáÅäÊÑäÊ æÍÇæá ÊÇäí." }]);
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="Ø§Ù„Ø±Ø¬ÙˆØ¹ Ù„Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…">
-          â† Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…
+        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="ÇáÑÌæÚ ááæÍÉ ÇáÊÍßã">
+          ? áæÍÉ ÇáÊÍßã
         </button>
         <button
           onClick={() => {
-            setMessages([{ role: "assistant", content: `Ø£Ù‡Ù„Ø§Ù‹ ÙŠØ§ ${profileInfo.name} ğŸ‘‹ØŒ Ø£Ù†Ø§ Ù…Ø¹Ù„Ù…Ùƒ Ø§Ù„Ø´Ø®ØµÙŠ. Ø¥ÙŠÙ‡ Ø§Ù„Ù„ÙŠ Ù‡Ù†Ø°Ø§ÙƒØ±Ù‡ Ø§Ù„Ù†Ù‡Ø§Ø±Ø¯Ø© ÙÙŠ ${profileInfo.subject}ØŸ` }]);
+            setMessages([{ role: "assistant", content: "ÃåáÇğ! ÃäÇ ãÓÇÚÏ Magic. ÇßÊÈ ÓÄÇáß¡ Ãæ ÇÑİÚ ÕæÑÉ/ãáİ — æÓÃÓÇÚÏß. áÇ ÊÍÊÇÌ áÇÎÊíÇÑ æßíá." }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}
           className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition"
-          aria-label="Ù…Ø­Ø§Ø¯Ø«Ø© Ø¬Ø¯ÙŠØ¯Ø©"
+          aria-label="ãÍÇÏËÉ ÌÏíÏÉ"
         >
-          âœ¦ Ù…Ø­Ø§Ø¯Ø«Ø© Ø¬Ø¯ÙŠØ¯Ø©
+          ? ãÍÇÏËÉ ÌÏíÏÉ
         </button>
       </div>
 
-      {/* Ø£ÙˆØ¶Ø§Ø¹ Ø§Ù„Ù…Ø°Ø§ÙƒØ±Ø© (ÙƒØ§Ù†Øª ÙÙŠ Ù…Ø³Ø§Ø¹Ø¯ Ø§Ù„Ø¯Ø§Ø´Ø¨ÙˆØ±Ø¯ â€” Ø§ØªÙˆØ­Ø¯Øª Ù‡Ù†Ø§) */}
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="ÙˆØ¶Ø¹ Ø§Ù„Ù…Ø°Ø§ÙƒØ±Ø©">
+      {/* ÃæÖÇÚ ÇáãĞÇßÑÉ (ßÇäÊ İí ãÓÇÚÏ ÇáÏÇÔÈæÑÏ — ÇÊæÍÏÊ åäÇ) */}
+      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="æÖÚ ÇáãĞÇßÑÉ">
         {([
-          { id: "explain", label: "Ø§Ø´Ø±Ø­Ù„ÙŠ" },
-          { id: "quiz", label: "Ø§Ø®ØªØ¨Ø±Ù†ÙŠ" },
-          { id: "summarize", label: "Ù„Ø®ØµÙ„ÙŠ" },
-          { id: "review", label: "Ø±Ø§Ø¬Ø¹Ù„ÙŠ" },
+          { id: "explain", label: "ÇÔÑÍáí" },
+          { id: "quiz", label: "ÇÎÊÈÑäí" },
+          { id: "summarize", label: "áÎÕáí" },
+          { id: "review", label: "ÑÇÌÚáí" },
         ] as const).map((m) => (
           <button
             key={m.id}
@@ -334,7 +289,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                 <MarkdownRenderer>{msg.content}</MarkdownRenderer>
               )}
               {msg.attachmentName && (
-                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">ğŸ“ {msg.attachmentName}</span>
+                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>
               )}
             </div>
           </div>
@@ -342,7 +297,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         {loading && (
           <div className="flex justify-end">
             <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
-              <LoaderCircle className="w-4 h-4 animate-spin" /> Ø¬Ø§Ø±Ù‰ Ø§Ù„Ù…Ø¹Ø§Ù„Ø¬Ø©...
+              <LoaderCircle className="w-4 h-4 animate-spin" /> ÌÇÑì ÇáãÚÇáÌÉ...
             </div>
           </div>
         )}
@@ -355,19 +310,19 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             {attachment.kind === "image" ? (
               <img src={attachment.previewUrl} alt="preview" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF / Ù…Ù„Ù</div>
+              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF / ãáİ</div>
             )}
             <button
               onClick={removeAttachment}
               className="absolute top-1 left-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80 text-[10px]"
-              aria-label="Ø¥Ø²Ø§Ù„Ø© Ø§Ù„Ù…Ø±ÙÙ‚"
+              aria-label="ÅÒÇáÉ ÇáãÑİŞ"
             >
               <X size={12} />
             </button>
           </div>
           <div className="text-xs text-ink-soft">
             <p className="font-medium">{attachment.file.name}</p>
-            <p>Ø³ÙŠØªÙ… Ù…Ø¹Ø§Ù„Ø¬ØªÙ‡ Ø¹Ø¨Ø± OCR Ø¥Ø°Ø§ ÙƒØ§Ù†Øª ØµÙˆØ±Ø©/Ù…Ù„Ù Ù†ØµÙŠ</p>
+            <p>ÓíÊã ãÚÇáÌÊå ÚÈÑ OCR ÅĞÇ ßÇäÊ ÕæÑÉ/ãáİ äÕí</p>
           </div>
         </div>
       )}
@@ -377,7 +332,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          aria-label="Ø±ÙØ¹ Ù…Ù„Ù"
+          aria-label="ÑİÚ ãáİ"
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <Paperclip size={20} />
@@ -385,7 +340,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           type="button"
           onClick={() => imageInputRef.current?.click()}
-          aria-label="Ø±ÙØ¹ ØµÙˆØ±Ø©"
+          aria-label="ÑİÚ ÕæÑÉ"
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <ImagePlus size={20} />
@@ -408,7 +363,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           dir="rtl"
           rows={1}
           className="flex-1 bg-transparent text-sm font-body resize-none outline-none py-2 min-h-[36px] max-h-[120px]"
-          placeholder="Ø§ÙƒØªØ¨ Ø³Ø¤Ø§Ù„Ùƒ... (ØµÙˆØ±Ø© Ø£Ùˆ Ù…Ù„Ù Ù…Ø±ÙÙ‚ ÙŠÙØ¹Ø§Ù„Ø¬ Ø¹Ø¨Ø± OCR)"
+          placeholder="ÇßÊÈ ÓÄÇáß... (ÕæÑÉ Ãæ ãáİ ãÑİŞ íõÚÇáÌ ÚÈÑ OCR)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
@@ -416,7 +371,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           onClick={send}
           disabled={loading || (!input.trim() && !attachment)}
-          aria-label="Ø¥Ø±Ø³Ø§Ù„"
+          aria-label="ÅÑÓÇá"
           className="p-2.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-40 transition"
         >
           <Send size={18} />
@@ -424,7 +379,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-        <p className="text-[11px] text-ink-soft">Magic â€” Ù…Ø³Ø§Ø¹Ø¯Ùƒ Ø§Ù„Ø°ÙƒÙŠ</p>
+        <p className="text-[11px] text-ink-soft">Magic — ãÓÇÚÏß ÇáĞßí</p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
           <Sparkles size={12} /> <span>Magic</span>
         </div>
@@ -444,8 +399,8 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
               {rateLimitInfo.retryAfterHours && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2 flex items-center gap-1">
                   <Clock size={12} />
-                  Ø³ÙŠØªÙ… ØªØ¬Ø¯ÙŠØ¯ Ø±ØµÙŠØ¯Ùƒ Ø§Ù„Ù…Ø¬Ø§Ù†ÙŠ Ø¨Ø¹Ø¯ {rateLimitInfo.retryAfterHours} Ø³Ø§Ø¹Ø§Øª
-                  {rateLimitInfo.retryAfter ? ` (Ø­ÙˆØ§Ù„ÙŠ ${Math.ceil(rateLimitInfo.retryAfter / 60)} Ø¯Ù‚ÙŠÙ‚Ø©)` : ""}
+                  ÓíÊã ÊÌÏíÏ ÑÕíÏß ÇáãÌÇäí ÈÚÏ {rateLimitInfo.retryAfterHours} ÓÇÚÇÊ
+                  {rateLimitInfo.retryAfter ? ` (ÍæÇáí ${Math.ceil(rateLimitInfo.retryAfter / 60)} ÏŞíŞÉ)` : ""}
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-3">
@@ -467,24 +422,17 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                       href={a.href}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
                     >
-                      {a.label.includes("Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ") ? <Crown size={14} /> : <ShoppingBag size={14} />}
+                      {a.label.includes("ÇáÇÔÊÑÇß") ? <Crown size={14} /> : <ShoppingBag size={14} />}
                       {a.label}
                     </Link>
                   )
                 )}
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
-                >
-                  <Crown size={14} />
-                  ØªØ±Ù‚ÙŠØ© Ø§Ù„Ø¢Ù†
-                </Link>
               </div>
             </div>
             <button
               onClick={() => setRateLimitInfo(null)}
               className="shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-amber-700 dark:text-amber-300"
-              aria-label="Ø¥ØºÙ„Ø§Ù‚"
+              aria-label="ÅÛáÇŞ"
             >
               <X size={16} />
             </button>

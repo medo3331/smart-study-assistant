@@ -11,6 +11,8 @@ export interface MagiclyContextInput {
   subject?: unknown;
   lesson?: unknown;
   learningStyle?: unknown;
+  studyField?: unknown;
+  learningGoal?: unknown;
 }
 
 export interface StudentContext {
@@ -19,6 +21,10 @@ export interface StudentContext {
   learningStyle: "practical" | "visual" | "academic";
   progress: { completed: number; total: number };
   memories: Array<{ kind: string; value: string }>;
+  /** ÇáÊÎÕÕ ÇáÏÑÇÓí ááØÇáÈ (ãä profiles.study_field) */
+  studyField: string;
+  /** ÇáåÏİ ÇáÊÚáíãí ááØÇáÈ (ãä profiles.learning_goal) */
+  learningGoal: string;
 }
 
 type LearningStyle = StudentContext["learningStyle"];
@@ -39,69 +45,76 @@ export function parseMode(value: unknown, latestMessage: string): MagiclyMode {
   }
 
   const text = latestMessage.toLowerCase();
-  if (/Ø§Ø®ØªØ¨Ø±Ù†ÙŠ|Ø§Ø®ØªØ¨Ø§Ø±|ÙƒÙˆÙŠØ²|quiz/.test(text)) return "quiz";
-  if (/Ù„Ø®[Ù‘ØµØµ]|Ù…Ù„Ø®Øµ|summary/.test(text)) return "summarize";
-  if (/Ø±Ø§Ø¬Ø¹Ù†ÙŠ|Ù…Ø±Ø§Ø¬Ø¹Ø©|review/.test(text)) return "review";
-  if (/ÙÙ„Ø§Ø´|flashcard/.test(text)) return "flashcards";
-  if (/Ù…Ù„Ù|Ù…Ø­Ø§Ø¶Ø±Ø©|pdf|ØµÙˆØ±Ø©/.test(text)) return "file";
+  if (/ÇÎÊÈÑäí|ÇÎÊÈÇÑ|ßæíÒ|quiz/.test(text)) return "quiz";
+  if (/áÎ[øÕÕ]|ãáÎÕ|summary/.test(text)) return "summarize";
+  if (/ÑÇÌÚäí|ãÑÇÌÚÉ|review/.test(text)) return "review";
+  if (/İáÇÔ|flashcard/.test(text)) return "flashcards";
+  if (/ãáİ|ãÍÇÖÑÉ|pdf|ÕæÑÉ/.test(text)) return "file";
   return "explain";
 }
 
 /**
- * ÙŠÙ‚Ø±Ø£ Ø§Ù„Ø­Ø¯ Ø§Ù„Ø£Ø¯Ù†Ù‰ Ø§Ù„Ù…ÙÙŠØ¯ Ù„Ù„ØªØ¯Ø±ÙŠØ³ Ù…Ù† Ø§Ù„Ø­Ø³Ø§Ø¨ØŒ Ù…Ø¹ fallback Ø¢Ù…Ù† Ù„Ùˆ migration
- * Ø§Ù„Ø°Ø§ÙƒØ±Ø© Ù„Ù… ØªÙØ´ØºÙ‘Ù„ Ø¨Ø¹Ø¯. Ù„Ø§ Ù†Ø¹ÙŠØ¯ Ù†ØµÙˆØµ Ø§Ù„Ù…Ù„ÙØ§Øª Ø£Ùˆ ØªØ§Ø±ÙŠØ® Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ø¨Ø§Ù„ÙƒØ§Ù…Ù„.
+ * íŞÑÃ ÇáÍÏ ÇáÃÏäì ÇáãİíÏ ááÊÏÑíÓ ãä ÇáÍÓÇÈ¡ ãÚ fallback Âãä áæ migration
+ * ÇáĞÇßÑÉ áã ÊõÔÛøá ÈÚÏ. áÇ äÚíÏ äÕæÕ ÇáãáİÇÊ Ãæ ÊÇÑíÎ ÇáãÍÇÏËÉ ÈÇáßÇãá.
  */
 export async function getStudentContext(
   supabase: SupabaseClient,
   userId: string,
   input: MagiclyContextInput
 ): Promise<StudentContext> {
-  try {
-    const configId = shortText(input.configId);
-    const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
-    const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle"> = {
-      subject: shortText(input.subject) || "Ø§Ù„Ù…Ø§Ø¯Ø© Ø§Ù„Ø­Ø§Ù„ÙŠØ©",
-      lesson: shortText(input.lesson) || "Ø§Ù„Ø¯Ø±Ø³ Ø§Ù„Ø­Ø§Ù„ÙŠ",
-      learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
-    };
+  const configId = shortText(input.configId);
+  const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
+  const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle" | "studyField" | "learningGoal"> = {
+    subject: shortText(input.subject) || "ÇáãÇÏÉ ÇáÍÇáíÉ",
+    lesson: shortText(input.lesson) || "ÇáÏÑÓ ÇáÍÇáí",
+    learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
+    studyField: shortText(input.studyField) || "",
+    learningGoal: shortText(input.learningGoal) || "",
+  };
 
-    if (!configId) {
-      return { ...fallback, progress: { completed: 0, total: 0 }, memories: [] };
-    }
-
-    const [configResult, daysResult, memoryResult] = await Promise.all([
-      supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
-      supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
-      supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
-    ]);
-
-    const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
-    const currentDay = lessonDay === null ? undefined : days.find((day) => day.day === lessonDay);
-    const completed = days.filter((day) => day.is_completed).length;
+  if (!configId) {
+    // ÍÊì áæ ãÇ???? configur¡ äÌáÈ ÇáÊÎÕÕ æÇáåÏİ ãä profiles Åä æõÌÏ
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("study_field, learning_goal")
+      .eq("id", userId)
+      .maybeSingle();
 
     return {
-      subject: shortText(configResult.data?.subject) || fallback.subject,
-      lesson: shortText(currentDay?.topic) || fallback.lesson,
-      learningStyle: isLearningStyle(currentDay?.learning_style)
-        ? currentDay.learning_style
-        : fallback.learningStyle,
-      progress: { completed, total: days.length },
-      // failure here is expected before running db/ai-learning.sql; chat continues normally.
-      memories: memoryResult.error ? [] : ((memoryResult.data ?? []) as Array<{ kind: string; value: string }>),
-    };
-  } catch (e) {
-    console.warn("getStudentContext failed, using fallback:", e);
-    return {
-      subject: shortText(input.subject) || "Ø§Ù„Ù…Ø§Ø¯Ø© Ø§Ù„Ø­Ø§Ù„ÙŠØ©",
-      lesson: shortText(input.lesson) || "Ø§Ù„Ø¯Ø±Ø³ Ø§Ù„Ø­Ø§Ù„ÙŠ",
-      learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
+      ...fallback,
       progress: { completed: 0, total: 0 },
       memories: [],
+      studyField: profile?.study_field ?? fallback.studyField,
+      learningGoal: profile?.learning_goal ?? fallback.learningGoal,
     };
   }
+
+  const [configResult, daysResult, memoryResult, profileResult] = await Promise.all([
+    supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
+    supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
+    supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
+    supabase.from("profiles").select("study_field, learning_goal").eq("id", userId).maybeSingle(),
+  ]);
+
+  const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
+  const currentDay = lessonDay === null ? undefined : days.find((day) => day.day === lessonDay);
+  const completed = days.filter((day) => day.is_completed).length;
+
+  return {
+    subject: shortText(configResult.data?.subject) || fallback.subject,
+    lesson: shortText(currentDay?.topic) || fallback.lesson,
+    learningStyle: isLearningStyle(currentDay?.learning_style)
+      ? currentDay.learning_style
+      : fallback.learningStyle,
+    progress: { completed, total: days.length },
+    // failure here is expected before running db/ai-learning.sql; chat continues normally.
+    memories: memoryResult.error ? [] : ((memoryResult.data ?? []) as Array<{ kind: string; value: string }>),
+    studyField: profileResult.data?.study_field ?? fallback.studyField,
+    learningGoal: profileResult.data?.learning_goal ?? fallback.learningGoal,
+  };
 }
 
-/** ÙŠØ´ØºÙ‘Ù„ Ø§Ù„Ø£Ø¯ÙˆØ§Øª Ø§Ù„Ù…Ù†Ø§Ø³Ø¨Ø© Ù„Ø³Ø¤Ø§Ù„ ÙˆØ§Ø­Ø¯ Ù‚Ø¨Ù„ ØªÙƒÙˆÙŠÙ† Ø±Ø¯ Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯. */
+/** íÔÛøá ÇáÃÏæÇÊ ÇáãäÇÓÈÉ áÓÄÇá æÇÍÏ ŞÈá Êßæíä ÑÏ ÇáãÓÇÚÏ. */
 export async function getStudyToolFacts(
   supabase: SupabaseClient,
   userId: string,
@@ -118,19 +131,19 @@ export async function getStudyToolFacts(
     searchUserFiles(supabase, userId, latestMessage),
   ]);
 
-  const facts = [`Ø§Ù„ØªÙ‚Ø¯Ù… Ø§Ù„Ù…Ø­Ø¯Ø«: ${progress.completed}/${progress.total}.`];
-  if (lesson) facts.push(`Ø§Ù„Ø¯Ø±Ø³ Ø§Ù„Ù…ÙØªÙˆØ­: ${lesson.topic}${lesson.isCompleted ? " (Ù…ÙƒØªÙ…Ù„)" : ""}.`);
-  if (files.length) facts.push(`Ù…ÙˆØ§Ø¯ Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ø§Ù„Ø³Ø¤Ø§Ù„: ${files.map((file) => `${file.title}: ${file.snippet}`).join(" | ")}`);
+  const facts = [`ÇáÊŞÏã ÇáãÍÏË: ${progress.completed}/${progress.total}.`];
+  if (lesson) facts.push(`ÇáÏÑÓ ÇáãİÊæÍ: ${lesson.topic}${lesson.isCompleted ? " (ãßÊãá)" : ""}.`);
+  if (files.length) facts.push(`ãæÇÏ ãÑÊÈØÉ ÈÇáÓÄÇá: ${files.map((file) => `${file.title}: ${file.snippet}`).join(" | ")}`);
 
   if (lesson && shouldMarkCurrentLessonComplete(latestMessage)) {
     const updated = await updateStudyProgress(supabase, userId, lesson.id, true);
-    if (updated) facts.push("ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø±Ø³ Ø§Ù„Ø­Ø§Ù„ÙŠ ÙƒÙ…ÙƒØªÙ…Ù„ Ø¨Ù†Ø§Ø¡Ù‹ Ø¹Ù„Ù‰ Ø·Ù„Ø¨ Ø§Ù„Ø·Ø§Ù„Ø¨ Ø§Ù„ØµØ±ÙŠØ­.");
+    if (updated) facts.push("Êã ÊÓÌíá ÇáÏÑÓ ÇáÍÇáí ßãßÊãá ÈäÇÁğ Úáì ØáÈ ÇáØÇáÈ ÇáÕÑíÍ.");
   }
 
   return facts;
 }
 
-/** ÙŠØ­ÙØ¸ Ø­Ù‚Ø§Ø¦Ù‚ Ù…ÙÙŠØ¯Ø© ÙˆØ«Ø§Ø¨ØªØ© ÙÙ‚Ø·ØŒ ÙˆÙ„ÙŠØ³ Ø£ÙŠ Ù…Ø­Ø§Ø¯Ø«Ø© Ø£Ùˆ Ø¨ÙŠØ§Ù†Ø§Øª Ø­Ø³Ø§Ø³Ø©. */
+/** íÍİÙ ÍŞÇÆŞ ãİíÏÉ æËÇÈÊÉ İŞØ¡ æáíÓ Ãí ãÍÇÏËÉ Ãæ ÈíÇäÇÊ ÍÓÇÓÉ. */
 export async function rememberSessionContext(
   supabase: SupabaseClient,
   userId: string,
@@ -148,14 +161,14 @@ export async function rememberSessionContext(
 }
 
 /**
- * Ø¨Ù†Ø®Ø²Ù‘Ù† Ø¥Ø´Ø§Ø±Ø§Øª Ø¯Ø±Ø§Ø³ÙŠØ© ØµØ±ÙŠØ­Ø© Ù‚Ø§Ù„Ù‡Ø§ Ø§Ù„Ø·Ø§Ù„Ø¨ Ø¨Ù†ÙØ³Ù‡ ÙÙ‚Ø·. Ù…ÙÙŠØ´ Ø§Ø³ØªÙ†ØªØ§Ø¬Ø§Øª
- * Ù†ÙØ³ÙŠØ© Ø£Ùˆ Ù†Ø³Ø® Ù„Ù„Ù…Ø­Ø§Ø¯Ø«Ø©: Ø§Ù„Ù‡Ø¯Ù Ø¥Ù† Ø§Ù„Ù…ÙŠÙ…ÙˆØ±ÙŠ ØªØ³Ø§Ø¹Ø¯ ÙÙŠ Ø§Ù„Ø¬Ù„Ø³Ø© Ø§Ù„Ø¬Ø§ÙŠØ©.
+ * ÈäÎÒøä ÅÔÇÑÇÊ ÏÑÇÓíÉ ÕÑíÍÉ ŞÇáåÇ ÇáØÇáÈ ÈäİÓå İŞØ. ãİíÔ ÇÓÊäÊÇÌÇÊ
+ * äİÓíÉ Ãæ äÓÎ ááãÍÇÏËÉ: ÇáåÏİ Åä ÇáãíãæÑí ÊÓÇÚÏ İí ÇáÌáÓÉ ÇáÌÇíÉ.
  */
 function getUsefulMemorySignals(message: string, userId: string) {
   const find = (pattern: RegExp) => pattern.exec(message)?.[1]?.trim().slice(0, 120);
-  const weakTopic = find(/(?:Ù…Ø´ ÙØ§Ù‡Ù…(?:Ø©)?|Ù…Ø´ Ù…Ø³ØªÙˆØ¹Ø¨(?:Ø©)?|Ø¶Ø¹ÙŠÙ(?:Ø©)? ÙÙŠ)\s+([^ØŒ.!ØŸ!\n]{2,120})/i);
-  const commonMistake = find(/(?:ØºÙ„Ø·Øª ÙÙŠ|Ø¨ØªÙ„ØºØ¨Ø· ÙÙŠ|Ø¨Ù„Ø®Ø¨Ø· ÙÙŠ)\s+([^ØŒ.!ØŸ!\n]{2,120})/i);
-  const completedTopic = find(/(?:Ø®Ù„ØµØª|Ø£Ù†Ù‡ÙŠØª|Ø°Ø§ÙƒØ±Øª)\s+([^ØŒ.!ØŸ!\n]{2,120})/i);
+  const weakTopic = find(/(?:ãÔ İÇåã(?:É)?|ãÔ ãÓÊæÚÈ(?:É)?|ÖÚíİ(?:É)? İí)\s+([^¡.!¿!\n]{2,120})/i);
+  const commonMistake = find(/(?:ÛáØÊ İí|ÈÊáÛÈØ İí|ÈáÎÈØ İí)\s+([^¡.!¿!\n]{2,120})/i);
+  const completedTopic = find(/(?:ÎáÕÊ|ÃäåíÊ|ĞÇßÑÊ)\s+([^¡.!¿!\n]{2,120})/i);
 
   return [
     weakTopic && { user_id: userId, kind: "weak_topic", value: weakTopic },
@@ -165,43 +178,47 @@ function getUsefulMemorySignals(message: string, userId: string) {
 }
 
 const STYLE_GUIDE = {
-  practical: "Ø§Ø³ØªØ®Ø¯Ù… Ù…Ø«Ø§Ù„Ù‹Ø§ Ø¹Ù…Ù„ÙŠÙ‹Ø§ Ù‚Ø±ÙŠØ¨Ù‹Ø§ Ù…Ù† Ø­ÙŠØ§Ø© Ø§Ù„Ø·Ø§Ù„Ø¨.",
-  visual: "Ø§Ø³ØªØ®Ø¯Ù… ØªØ±ØªÙŠØ¨Ù‹Ø§ Ø¨ØµØ±ÙŠÙ‹Ø§ Ø¨Ø³ÙŠØ·Ù‹Ø§ Ø£Ùˆ Ù…Ø®Ø·Ø·Ù‹Ø§ Ù†ØµÙŠÙ‹Ø§ Ø¹Ù†Ø¯ Ø§Ù„Ø­Ø§Ø¬Ø©.",
-  academic: "Ø­Ø§ÙØ¸ Ø¹Ù„Ù‰ Ø§Ù„ØªØ¹Ø±ÙŠÙ Ø§Ù„Ø¯Ù‚ÙŠÙ‚ Ø«Ù… Ø¨Ø³Ù‘Ø·Ù‡ Ø¨Ù„ØºØ© Ø³Ù‡Ù„Ø©.",
+  practical: "ÇÓÊÎÏã ãËÇáğÇ ÚãáíğÇ ŞÑíÈğÇ ãä ÍíÇÉ ÇáØÇáÈ.",
+  visual: "ÇÓÊÎÏã ÊÑÊíÈğÇ ÈÕÑíğÇ ÈÓíØğÇ Ãæ ãÎØØğÇ äÕíğÇ ÚäÏ ÇáÍÇÌÉ.",
+  academic: "ÍÇİÙ Úáì ÇáÊÚÑíİ ÇáÏŞíŞ Ëã ÈÓøØå ÈáÛÉ ÓåáÉ.",
 } as const;
 
 const MODE_GUIDE: Record<MagiclyMode, string> = {
-  explain: "Ø§ØªØ¨Ø¹ Teaching Flow: Ø´Ø±Ø­ Ø¨Ø³ÙŠØ· Ù‚ØµÙŠØ±ØŒ Ø«Ù… Ù…Ø«Ø§Ù„ ÙˆØ§Ø¶Ø­ØŒ Ø«Ù… Ø³Ø¤Ø§Ù„ ÙˆØ§Ø­Ø¯ Ù„Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„ÙÙ‡Ù…. Ù„Ø§ ØªØ¹Ø·Ù Ø§Ù„Ø¥Ø¬Ø§Ø¨Ø© Ø¹Ù„Ù‰ Ø³Ø¤Ø§Ù„ Ø§Ù„ØªØ­Ù‚Ù‚ Ø¥Ù„Ø§ Ø¨Ø¹Ø¯ Ø±Ø¯ Ø§Ù„Ø·Ø§Ù„Ø¨.",
-  quiz: "Ø§ØµÙ†Ø¹ Ø§Ø®ØªØ¨Ø§Ø±Ù‹Ø§ ØªØ¯Ø±ÙŠØ¬ÙŠÙ‹Ø§: Ø³Ø¤Ø§Ù„ ÙˆØ§Ø­Ø¯ ÙÙŠ ÙƒÙ„ Ø±Ø³Ø§Ù„Ø©ØŒ ÙˆØ§Ù†ØªØ¸Ø± Ø§Ù„Ø¥Ø¬Ø§Ø¨Ø©ØŒ Ø«Ù… ØµØ­Ø­Ù‡Ø§ ÙˆØ§Ø´Ø±Ø­ Ø§Ù„ØºÙ„Ø·Ø© Ø¨Ø§Ø®ØªØµØ§Ø± Ù‚Ø¨Ù„ Ø§Ù„Ø³Ø¤Ø§Ù„ Ø§Ù„ØªØ§Ù„ÙŠ.",
-  summarize: "Ù‚Ø¯Ù‘Ù… Ù…Ù„Ø®ØµÙ‹Ø§ Ù…Ø±ØªØ¨Ù‹Ø§ Ù…Ù† Ø§Ù„Ù†Ù‚Ø§Ø· Ø§Ù„Ø£Ø³Ø§Ø³ÙŠØ© ÙÙ‚Ø·ØŒ Ø«Ù… Ø§Ù‚ØªØ±Ø­ Ø£Ù‡Ù… Ù†Ù‚Ø·Ø© ÙŠØ±Ø§Ø¬Ø¹Ù‡Ø§ Ø§Ù„Ø·Ø§Ù„Ø¨.",
-  review: "Ø§Ø¨Ø¯Ø£ Ø¨Ø£ÙƒØ«Ø± Ø§Ù„Ù†Ù‚Ø§Ø· Ø¹Ø±Ø¶Ø© Ù„Ù„Ù‘Ø¨Ø³ØŒ ÙˆØ±Ø§Ø¬Ø¹Ù‡Ø§ ÙƒØ³Ø¤Ø§Ù„ ÙˆØ¬ÙˆØ§Ø¨ Ù‚ØµÙŠØ± Ø¨Ø¯Ù„ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§Ø¶Ø±Ø© ÙƒØ§Ù…Ù„Ø©.",
-  file: "Ø§Ù„ØªØ²Ù… Ø¨Ø§Ù„Ù†Øµ Ø§Ù„Ù…Ø±ÙÙ‚. Ø§Ø¨Ø¯Ø£ Ø¨Ø®Ø±ÙŠØ·Ø© Ø³Ø±ÙŠØ¹Ø© Ù„Ù…Ø§ ÙÙŠ Ø§Ù„Ù…Ù„ÙØŒ Ø«Ù… Ø§Ø´Ø±Ø­ Ø£Ù‡Ù… ÙÙƒØ±Ø© ÙˆÙ…Ø«Ø§Ù„Ù‹Ø§ Ø¹Ù„ÙŠÙ‡Ø§ØŒ Ø«Ù… Ø§Ø³Ø£Ù„ Ø³Ø¤Ø§Ù„ ØªØ­Ù‚Ù‚ ÙˆØ§Ø­Ø¯.",
-  flashcards: "Ø£Ù†Ø´Ø¦ ÙÙ„Ø§Ø´ ÙƒØ§Ø±Ø¯Ø² Ù‚ØµÙŠØ±Ø© Ù…Ù† Ø§Ù„Ù…Ø­ØªÙˆÙ‰: Ø³Ø¤Ø§Ù„ ÙˆØ§Ø¶Ø­ ÙÙŠ Ø³Ø·Ø± ÙˆØ¥Ø¬Ø§Ø¨ØªÙ‡ ÙÙŠ Ø³Ø·Ø±. Ø§Ø¨Ø¯Ø£ Ø¨Ù€5 ÙÙ‚Ø·ØŒ ÙˆÙ„Ø§ ØªØ¶Ù Ù…Ø¹Ù„ÙˆÙ…Ø© Ù…Ù† Ø®Ø§Ø±Ø¬ Ø§Ù„Ù…Ø§Ø¯Ø©.",
+  explain: "ÇÊÈÚ Teaching Flow: ÔÑÍ ÈÓíØ ŞÕíÑ¡ Ëã ãËÇá æÇÖÍ¡ Ëã ÓÄÇá æÇÍÏ ááÊÍŞŞ ãä Çáİåã. áÇ ÊÚØö ÇáÅÌÇÈÉ Úáì ÓÄÇá ÇáÊÍŞŞ ÅáÇ ÈÚÏ ÑÏ ÇáØÇáÈ.",
+  quiz: "ÇÕäÚ ÇÎÊÈÇÑğÇ ÊÏÑíÌíğÇ: ÓÄÇá æÇÍÏ İí ßá ÑÓÇáÉ¡ æÇäÊÙÑ ÇáÅÌÇÈÉ¡ Ëã ÕÍÍåÇ æÇÔÑÍ ÇáÛáØÉ ÈÇÎÊÕÇÑ ŞÈá ÇáÓÄÇá ÇáÊÇáí.",
+  summarize: "ŞÏøã ãáÎÕğÇ ãÑÊÈğÇ ãä ÇáäŞÇØ ÇáÃÓÇÓíÉ İŞØ¡ Ëã ÇŞÊÑÍ Ãåã äŞØÉ íÑÇÌÚåÇ ÇáØÇáÈ.",
+  review: "ÇÈÏÃ ÈÃßËÑ ÇáäŞÇØ ÚÑÖÉ ááøÈÓ¡ æÑÇÌÚåÇ ßÓÄÇá æÌæÇÈ ŞÕíÑ ÈÏá ÅÚÇÏÉ ÇáãÍÇÖÑÉ ßÇãáÉ.",
+  file: "ÇáÊÒã ÈÇáäÕ ÇáãÑİŞ. ÇÈÏÃ ÈÎÑíØÉ ÓÑíÚÉ áãÇ İí Çáãáİ¡ Ëã ÇÔÑÍ Ãåã İßÑÉ æãËÇáğÇ ÚáíåÇ¡ Ëã ÇÓÃá ÓÄÇá ÊÍŞŞ æÇÍÏ.",
+  flashcards: "ÃäÔÆ İáÇÔ ßÇÑÏÒ ŞÕíÑÉ ãä ÇáãÍÊæì: ÓÄÇá æÇÖÍ İí ÓØÑ æÅÌÇÈÊå İí ÓØÑ. ÇÈÏÃ ÈÜ5 İŞØ¡ æáÇ ÊÖİ ãÚáæãÉ ãä ÎÇÑÌ ÇáãÇÏÉ.",
 };
 
 export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyMode, toolFacts: string[] = []) {
   const memories = context.memories.length
     ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")
-    : "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø°ÙƒØ±ÙŠØ§Øª Ù…ÙÙŠØ¯Ø© Ù…Ø­ÙÙˆØ¸Ø© Ø¨Ø¹Ø¯.";
+    : "áÇ ÊæÌÏ ĞßÑíÇÊ ãİíÏÉ ãÍİæÙÉ ÈÚÏ.";
 
-  return withDiagramGuidelines(`Ø£Ù†Øª Â«Ù…Ø§Ø¬ÙŠÙƒÙ„ÙŠÂ»ØŒ Ù…Ø³Ø§Ø¹Ø¯ Ù…Ø°Ø§ÙƒØ±Ø© Ù…ØµØ±ÙŠ Ø®ÙÙŠÙ ÙˆØ·Ø¨ÙŠØ¹ÙŠ. Ù‡Ø¯ÙÙƒ ÙÙ‡Ù… Ø§Ù„Ø·Ø§Ù„Ø¨ ÙˆØªØ¯Ø±ÙŠØ¨Ù‡ØŒ ÙˆÙ„ÙŠØ³ Ù…Ø¬Ø±Ø¯ Ø¥Ø¹Ø·Ø§Ø¡ Ø¥Ø¬Ø§Ø¨Ø©.
+  return withDiagramGuidelines(`ÃäÊ «ãÇÌíßáí»¡ ãÓÇÚÏ ãĞÇßÑÉ ãÕÑí Îİíİ æØÈíÚí. åÏİß İåã ÇáØÇáÈ æÊÏÑíÈå¡ æáíÓ ãÌÑÏ ÅÚØÇÁ ÅÌÇÈÉ.
 
-Ø§Ù„Ø³ÙŠØ§Ù‚ Ø§Ù„Ù…ÙˆØ«ÙˆÙ‚:
-- Ø§Ù„Ù…Ø§Ø¯Ø©: ${context.subject}
-- Ø§Ù„Ø¯Ø±Ø³: ${context.lesson}
-- Ø§Ù„ØªÙ‚Ø¯Ù…: ${context.progress.completed}/${context.progress.total} Ø¯Ø±ÙˆØ³ Ù…ÙƒØªÙ…Ù„Ø©
-- Ø£Ø³Ù„ÙˆØ¨ Ø§Ù„ØªØ¹Ù„Ù‘Ù…: ${context.learningStyle}
-- ØªÙØ¶ÙŠÙ„Ø§Øª Ù…ÙÙŠØ¯Ø© ÙÙ‚Ø·: ${memories}
-${toolFacts.length ? `- Ù†ØªØ§Ø¦Ø¬ Ø§Ù„Ø£Ø¯ÙˆØ§Øª: ${toolFacts.join(" ")}` : ""}
+ÇáÓíÇŞ ÇáãæËæŞ:
+- ÇáØÇáÈ: ${context.studyField ? `ØÇáÈ İí ÊÎÕÕ ${context.studyField}` : "ØÇáÈ"}
+- ÇáåÏİ ÇáÊÚáíãí: ${context.learningGoal || "ÊØæíÑ ÇáãåÇÑÇÊ"}
 
-Ù‚ÙˆØ§Ø¹Ø¯ Ø§Ù„ÙƒÙ„Ø§Ù…:
-- Ø§ÙƒØªØ¨ Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠØ© Ø§Ù„Ù…ØµØ±ÙŠØ© Ø§Ù„ÙˆØ§Ø¶Ø­Ø©ØŒ Ø¨Ù‡Ø¯ÙˆØ¡ ÙˆØ¨Ù„Ø§ Ù…Ø¨Ø§Ù„ØºØ© Ø£Ùˆ Ù„ØºØ© ØªØ³ÙˆÙŠÙ‚ÙŠØ©.
-- Ù„Ø§ ØªØ®ØªØ±Ø¹ Ù…Ø¹Ù„ÙˆÙ…Ø© Ù…Ù† Ù…Ù„Ù ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯. Ø¥Ù† Ù†Ù‚ØµØª Ù…Ø¹Ù„ÙˆÙ…Ø© Ù…Ø¤Ø«Ø±Ø©ØŒ Ø§Ø³Ø£Ù„ Ø³Ø¤Ø§Ù„ Ù…ØªØ§Ø¨Ø¹Ø© ÙˆØ§Ø­Ø¯Ù‹Ø§ Ù…Ø­Ø¯Ø¯Ù‹Ø§ Ù‚Ø¨Ù„ Ø§Ù„Ø§ÙØªØ±Ø§Ø¶.
-- Ù„Ø§ ØªØ®ØªÙ… Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ ØªÙ„Ù‚Ø§Ø¦ÙŠÙ‹Ø§ Ø¨Ù€Â«ÙƒÙŠÙ ÙŠÙ…ÙƒÙ†Ù†ÙŠ Ù…Ø³Ø§Ø¹Ø¯ØªÙƒØŸÂ» Ø£Ùˆ Ø¯Ø¹ÙˆØ§Øª Ù…ØªÙƒØ±Ø±Ø©.
-- Ù„Ø§ ØªÙƒØ±Ø± Ù…Ø§ Ù‚Ø§Ù„Ù‡ Ø§Ù„Ø·Ø§Ù„Ø¨Ø› Ø§Ø¯Ø®Ù„ ÙÙŠ Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯Ø© Ù…Ø¨Ø§Ø´Ø±Ø©.
-- Ø§Ø¬Ø¹Ù„ Ø§Ù„Ø±Ø¯ Ù…Ù†Ø§Ø³Ø¨Ù‹Ø§ Ù„Ù„Ù…ÙˆØ¨Ø§ÙŠÙ„: ÙÙ‚Ø±Ø§Øª Ù‚ØµÙŠØ±Ø© ÙˆÙ†Ù‚Ø§Ø· Ù‚Ù„ÙŠÙ„Ø© Ø¹Ù†Ø¯ Ø§Ù„Ø­Ø§Ø¬Ø©.
+- ÇáãÇÏÉ: ${context.subject}
+- ÇáÏÑÓ: ${context.lesson}
+- ÇáÊŞÏã: ${context.progress.completed}/${context.progress.total} ÏÑæÓ ãßÊãáÉ
+- ÃÓáæÈ ÇáÊÚáøã: ${context.learningStyle}
+- ÊİÖíáÇÊ ãİíÏÉ İŞØ: ${memories}
+${toolFacts.length ? `- äÊÇÆÌ ÇáÃÏæÇÊ: ${toolFacts.join(" ")}` : ""}
+
+ŞæÇÚÏ ÇáßáÇã:
+- ÇßÊÈ ÈÇáÚÑÈíÉ ÇáãÕÑíÉ ÇáæÇÖÍÉ¡ ÈåÏæÁ æÈáÇ ãÈÇáÛÉ Ãæ áÛÉ ÊÓæíŞíÉ.
+- áÇ ÊÎÊÑÚ ãÚáæãÉ ãä ãáİ ÛíÑ ãæÌæÏ. Åä äŞÕÊ ãÚáæãÉ ãÄËÑÉ¡ ÇÓÃá ÓÄÇá ãÊÇÈÚÉ æÇÍÏğÇ ãÍÏÏğÇ ŞÈá ÇáÇİÊÑÇÖ.
+- áÇ ÊÎÊã ÇáÑÓÇÆá ÊáŞÇÆíğÇ ÈÜ«ßíİ íãßääí ãÓÇÚÏÊß¿» Ãæ ÏÚæÇÊ ãÊßÑÑÉ.
+- áÇ ÊßÑÑ ãÇ ŞÇáå ÇáØÇáÈº ÇÏÎá İí ÇáãÓÇÚÏÉ ãÈÇÔÑÉ.
+- ÇÌÚá ÇáÑÏ ãäÇÓÈğÇ ááãæÈÇíá: İŞÑÇÊ ŞÕíÑÉ æäŞÇØ ŞáíáÉ ÚäÏ ÇáÍÇÌÉ.
 - ${STYLE_GUIDE[context.learningStyle]}
 
-Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ø­Ø§Ù„ÙŠ: ${mode}.
+ÇáæÖÚ ÇáÍÇáí: ${mode}.
 ${MODE_GUIDE[mode]}`);
 }
+
