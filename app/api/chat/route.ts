@@ -23,7 +23,8 @@ type IncomingMessage = { role?: unknown; content?: unknown };
 
 export async function POST(req: Request) {
   try {
-    // 1)                                                           const { user, supabase, response: authError } = await requireUser("message");
+    // 1) Require user
+    const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
     // 2)                                    Groq
@@ -101,18 +102,21 @@ export async function POST(req: Request) {
     }
 
     //     prompt                                                       
-    //              (                                                const studentContext = await getStudentContext(supabase, user.id, context ?? {});
+    // Build student context
+    const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
-    //                  (Persona Builder)                         let personaPrompt = "";
+    let personaPrompt = "";
+    // Persona Builder
     try {
       personaPrompt = await buildSystemPrompt(user.id);
     } catch (e) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
-    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n---                          --\n${system}` : system;
+
+    const combinedSystem = personaPrompt ? personaPrompt + "\n\n--- Magicly System ---\n" + system : system;
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)

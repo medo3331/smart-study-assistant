@@ -127,8 +127,8 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           (data?.error?.code as string | undefined) ||
           "";
         //                                       m?ltiples                :
-        // reasonAr (   /api/chat)  message (             error.message  error             const rawError =
-          (data?.reasonAr as string | undefined) ||
+         // reasonAr (   /api/chat)  message (             error.message  error
+         const rawError =
           (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
           (res.status === 429
@@ -209,8 +209,8 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         setConversationId(data.conversationId);
       }
 
-      // Show assistant response                                 const assistantText = data?.answer || "                Unified AI.";
-
+       // Show assistant response
+       const assistantText = data?.answer || "Unified AI.";
       setMessages((m) => [
         ...m,
         { role: "assistant", content: assistantText },

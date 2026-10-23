@@ -74,11 +74,12 @@ export async function getStudentContext(
 
   if (!configId) {
     // config profiles
+    // config profiles
     const { data: profile } = await supabase
+      .from("profiles")
       .select("study_field, learning_goal")
       .eq("id", userId)
       .maybeSingle();
-
     return {
       ...fallback,
       progress: { completed: 0, total: 0 },
@@ -164,9 +165,9 @@ export async function rememberSessionContext(
  */
 function getUsefulMemorySignals(message: string, userId: string) {
   const find = (pattern: RegExp) => pattern.exec(message)?.[1]?.trim().slice(0, 120);
-  const weakTopic = find(/(?:        ?:  ?|         (?:  ?|     ?:  ?   )\s+([^ .! !\n]{2,120})/i);
-  const commonMistake = find(/(?:       |         |        )\s+([^ .! !\n]{2,120})/i);
-  const completedTopic = find(/(?:    |     |      \s+([^ .! !\n]{2,120})/i);
+  const weakTopic = find(/(?:weak|topic)\s+([^ .! !\n]{2,120})/i);
+  const commonMistake = find(/(?:mistake|error)\s+([^ .! !\n]{2,120})/i);
+  const completedTopic = find(/(?:completed|done)\s+([^ .! !\n]{2,120})/i);
 
   return [
     weakTopic && { user_id: userId, kind: "weak_topic", value: weakTopic },
