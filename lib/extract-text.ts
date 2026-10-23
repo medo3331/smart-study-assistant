@@ -258,10 +258,10 @@ export async function extractTextFromFile(
     // PDF مكسور أو محمي بباسورد بيرمي من جوه pdf-parse — ده خطأ متوقّع
     // مش كراش، فلازم يوصل للمستخدم كرسالة مفهومة.
     try {
-      const parser = new PDFParse({ data: Buffer.from(buffer) });
-      const result = await parser.getText();
-      await parser.destroy();
-      text = result.text || '';
+       const result = await extractText(new Uint8Array(buffer), { mergePages: true });
+        text = Array.isArray(result.text) ? result.text.join("\n") : (result.text || "");
+
+
     } catch (err) {
       console.error('PDF parse failed:', err);
       throw new ExtractError(
