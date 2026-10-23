@@ -1,4 +1,4 @@
-   import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
 
@@ -21,9 +21,9 @@ export interface StudentContext {
   learningStyle: "practical" | "visual" | "academic";
   progress: { completed: number; total: number };
   memories: Array<{ kind: string; value: string }>;
-  /**                                          (     profiles.study_field) */
+  /**                       (   profiles.study_field) */
   studyField: string;
-  /**                                          (     profiles.learning_goal) */
+  /**                       (   profiles.learning_goal) */
   learningGoal: string;
 }
 
@@ -45,81 +45,35 @@ export function parseMode(value: unknown, latestMessage: string): MagiclyMode {
   }
 
   const text = latestMessage.toLowerCase();
-  if (/              |            |        |quiz/.test(text)) return "quiz";
-  if (/    [      ]|        |summary/.test(text)) return "summarize";
-  if (/            |            |review/.test(text)) return "review";
-  if (/        |flashcard/.test(text)) return "flashcards";
-  if (/      |            |pdf|        /.test(text)) return "file";
+  if (/                    quiz/.test(text)) return "quiz";
+  if (/      ]|     summary/.test(text)) return "summarize";
+  if (/              review/.test(text)) return "review";
+  if (/    |flashcard/.test(text)) return "flashcards";
+  if (/   |       pdf|    /.test(text)) return "file";
   return "explain";
 }
 
 /**
- *                                                                                     fallback             migration
- *                                        .                                                                                      .
+ *                                               fallback         igration
+ *                      .                                                
  */
 export async function getStudentContext(
   supabase: SupabaseClient,
   userId: string,
   input: MagiclyContextInput
 ): Promise<StudentContext> {
-<<<<<<< HEAD
-  try {
-    const configId = shortText(input.configId);
-    const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
-    const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle"> = {
-      subject: shortText(input.subject) || "                           ",
-      lesson: shortText(input.lesson) || "                       ",
-      learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
-    };
-
-    if (!configId) {
-      return { ...fallback, progress: { completed: 0, total: 0 }, memories: [] };
-    }
-
-    const [configResult, daysResult, memoryResult] = await Promise.all([
-      supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
-      supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
-      supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
-    ]);
-
-    const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
-    const currentDay = lessonDay === null ? undefined : days.find((day) => day.day === lessonDay);
-    const completed = days.filter((day) => day.is_completed).length;
-
-    return {
-      subject: shortText(configResult.data?.subject) || fallback.subject,
-      lesson: shortText(currentDay?.topic) || fallback.lesson,
-      learningStyle: isLearningStyle(currentDay?.learning_style)
-        ? currentDay.learning_style
-        : fallback.learningStyle,
-      progress: { completed, total: days.length },
-      // failure here is expected before running db/ai-learning.sql; chat continues normally.
-      memories: memoryResult.error ? [] : ((memoryResult.data ?? []) as Array<{ kind: string; value: string }>),
-    };
-  } catch (e) {
-    console.warn("getStudentContext failed, using fallback:", e);
-    return {
-      subject: shortText(input.subject) || "                           ",
-      lesson: shortText(input.lesson) || "                       ",
-      learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
-      progress: { completed: 0, total: 0 },
-      memories: [],
-    };
-  }
-=======
   const configId = shortText(input.configId);
   const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
   const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle" | "studyField" | "learningGoal"> = {
-    subject: shortText(input.subject) || "                           ",
-    lesson: shortText(input.lesson) || "                       ",
+    subject: shortText(input.subject) || "              ",
+    lesson: shortText(input.lesson) || "             ,
     learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
     studyField: shortText(input.studyField) || "",
     learningGoal: shortText(input.learningGoal) || "",
   };
 
   if (!configId) {
-    //                            configur                                           profiles              
-    const { data: profile } = await supabase
+    //           ??? configur                        profiles             const { data: profile } = await supabase
       .from("profiles")
       .select("study_field, learning_goal")
       .eq("id", userId)
@@ -157,10 +111,9 @@ export async function getStudentContext(
     studyField: profileResult.data?.study_field ?? fallback.studyField,
     learningGoal: profileResult.data?.learning_goal ?? fallback.learningGoal,
   };
->>>>>>> origin/main
 }
 
-/**                                                                                                     . */
+/**                                                       . */
 export async function getStudyToolFacts(
   supabase: SupabaseClient,
   userId: string,
@@ -177,19 +130,19 @@ export async function getStudyToolFacts(
     searchUserFiles(supabase, userId, latestMessage),
   ]);
 
-  const facts = [`                         : ${progress.completed}/${progress.total}.`];
-  if (lesson) facts.push(`                         : ${lesson.topic}${lesson.isCompleted ? " (          )" : ""}.`);
-  if (files.length) facts.push(`                                    : ${files.map((file) => `${file.title}: ${file.snippet}`).join(" | ")}`);
+  const facts = [`               ${progress.completed}/${progress.total}.`];
+  if (lesson) facts.push(`               ${lesson.topic}${lesson.isCompleted ? " (      " : ""}.`);
+  if (files.length) facts.push(`                   : ${files.map((file) => `${file.title}: ${file.snippet}`).join(" | ")}`);
 
   if (lesson && shouldMarkCurrentLessonComplete(latestMessage)) {
     const updated = await updateStudyProgress(supabase, userId, lesson.id, true);
-    if (updated) facts.push("                                                                                                       .");
+    if (updated) facts.push("                                                         ");
   }
 
   return facts;
 }
 
-/**                                                                                                             . */
+/**                                                              */
 export async function rememberSessionContext(
   supabase: SupabaseClient,
   userId: string,
@@ -207,14 +160,13 @@ export async function rememberSessionContext(
 }
 
 /**
- *                                                                                            .                            
- *                                        :                                                                           .
+ *                                                  .                 *                                                                 
  */
 function getUsefulMemorySignals(message: string, userId: string) {
   const find = (pattern: RegExp) => pattern.exec(message)?.[1]?.trim().slice(0, 120);
-  const weakTopic = find(/(?:             (?:  )?|                 (?:  )?|        (?:  )?     )\s+([^  .!  !\n]{2,120})/i);
-  const commonMistake = find(/(?:             |                 |               )\s+([^  .!  !\n]{2,120})/i);
-  const completedTopic = find(/(?:        |          |          )\s+([^  .!  !\n]{2,120})/i);
+  const weakTopic = find(/(?:        ?:  ?|         (?:  ?|     ?:  ?   )\s+([^ .! !\n]{2,120})/i);
+  const commonMistake = find(/(?:       |         |        )\s+([^ .! !\n]{2,120})/i);
+  const completedTopic = find(/(?:    |     |      \s+([^ .! !\n]{2,120})/i);
 
   return [
     weakTopic && { user_id: userId, kind: "weak_topic", value: weakTopic },
@@ -224,47 +176,47 @@ function getUsefulMemorySignals(message: string, userId: string) {
 }
 
 const STYLE_GUIDE = {
-  practical: "                                                                              .",
-  visual: "                                                                                                      .",
-  academic: "                                                                             .",
+  practical: "                                           ",
+  visual: "                                                       .",
+  academic: "                                           ",
 } as const;
 
 const MODE_GUIDE: Record<MagiclyMode, string> = {
-  explain: "         Teaching Flow:                                                                                                        .                                                                                          .",
-  quiz: "                                          :                                                                                                                                                               .",
-  summarize: "                                                                                                                                          .",
-  review: "                                                                                                                                                  .",
-  file: "                                  .                                                                                                                                                             .",
-  flashcards: "                                                           :                                                         .              5                                                               .",
+  explain: "     Teaching Flow:                                                                                                              ",
+  quiz: "                                                                                                               ",
+  summarize: "                                                                            ",
+  review: "                                                                               .",
+  file: "                                                                                                           ",
+  flashcards: "                                                                          5                                    ",
 };
 
 export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyMode, toolFacts: string[] = []) {
   const memories = context.memories.length
     ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")
-    : "                                                         .";
+    : "                                ";
 
-  return withDiagramGuidelines(`                                                                                  .                                                                                      .
+  return withDiagramGuidelines(`                                            .                                                
 
-                           :
--             : ${context.studyField ? `                       ${context.studyField}` : "        "}
--                            : ${context.learningGoal || "                           "}
+               
+-         ${context.studyField ? `             ${context.studyField}` : "     }
+-                 ${context.learningGoal || "               }
 
--             : ${context.subject}
--           : ${context.lesson}
--             : ${context.progress.completed}/${context.progress.total}                      
--                          : ${context.learningStyle}
--                                 : ${memories}
-${toolFacts.length ? `-                          : ${toolFacts.join(" ")}` : ""}
+-         ${context.subject}
+-        ${context.lesson}
+-       : ${context.progress.completed}/${context.progress.total}            
+-              : ${context.learningStyle}
+-                    ${memories}
+${toolFacts.length ? `-              : ${toolFacts.join(" ")}` : ""}
 
-                       :
--                                                                                                                      .
--                                                           .                                                                                                                         .
--                                                                                                                        .
--                                                                                       .
--                                                  :                                                                .
+            :
+-                                                                 
+-                                                                                                    .
+-                                                                  
+-                                                 
+-                                                               .
 - ${STYLE_GUIDE[context.learningStyle]}
 
-                       : ${mode}.
+              ${mode}.
 ${MODE_GUIDE[mode]}`);
 }
 

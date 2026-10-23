@@ -1,28 +1,39 @@
 import { NextResponse } from "next/server";
+import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { aiRouter } from "@/lib/ai/router";
+import { AiProviderError } from "@/lib/ai/types";
+import { recordAiOperation } from "@/lib/ai/operations";
+import { suggestAgentFromText } from "@/lib/ai/agents";
+import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
+import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { resolveActor } from "@/lib/policy";
+import { refreshModelStateCache } from "@/lib/ai/model-state";
+import { routeCandidates } from "@/lib/ai/routing";
+import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+
+/**                                          ). */
+const MAX_MESSAGES = 30;
+/**                         . */
+const MAX_MESSAGE_CHARS = 8000;
+
+type IncomingMessage = { role?: unknown; content?: unknown };
 
 export async function POST(req: Request) {
-  console.log("API Chat Route Started - MINIMAL");
   try {
-<<<<<<< HEAD
-    const body = await req.json().catch(() => ({}));
-    return NextResponse.json({ ok: true, echo: body }, { status: 200 });
-  } catch (error: any) {
-    console.error("=== FATAL API ERROR ===");
-    console.error(error);
-    console.error("Message:", error?.message);
-=======
-    //   )                                                                                                  
-    const { user, supabase, response: authError } = await requireUser("message");
+    // 1)                                                           const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    //   )                                                                 Groq
+    // 2)                                    Groq
     const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
-    //   .  )                                          (Phase 1.5)     messages_per_2h                           
-    //                                                    .        +                                                               .
-    // fail-open                                                               .
-    //              (owner)                                                                                     .
+    // 2.5)                       (Phase 1.5)   messages_per_2h               
+    //                                   +                                    
+    // fail-open                                    
+    //        (owner)                                              .
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
@@ -31,7 +42,7 @@ export async function POST(req: Request) {
           error: {
             message:
               quota.reasonAr ??
-              "                                                                                      (30           ).                                 (                                                  )                                                .",
+              "                                                30       .                  (                          )                            ",
             code: "MESSAGE_QUOTA_EXCEEDED",
           },
         },
@@ -39,15 +50,14 @@ export async function POST(req: Request) {
       );
     }
 
-    //   .  )                                                                (Phase 2)                                
-    // (enabled/priority/daily_limit      ai_models)                                                   .
-    // TTL                 + fail-open                                DB                     .
+    // 2.6)                                   (Phase 2)                      // (enabled/priority/daily_limit    ai_models)                            .
+    // TTL 30       + fail-open                  DB             
     await refreshModelStateCache();
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { error: { message: "                                                   ." } },
+        { error: { message: "                           ." } },
         { status: 400 }
       );
     }
@@ -64,13 +74,12 @@ export async function POST(req: Request) {
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
-        { error: { message: "                                ." } },
+        { error: { message: "                 ." } },
         { status: 400 }
       );
     }
 
-    //   )                          :                                                         
-    const safeMessages = (messages as IncomingMessage[])
+    // 3)                                                   const safeMessages = (messages as IncomingMessage[])
       .slice(-MAX_MESSAGES)
       .filter(
         (m) =>
@@ -86,26 +95,24 @@ export async function POST(req: Request) {
 
     if (safeMessages.length === 0) {
       return NextResponse.json(
-        { error: { message: "                                             ." } },
+        { error: { message: "                        ." } },
         { status: 400 }
       );
     }
 
-    //        prompt                             .                                                                      
-    //                         (                         )                                                   .
-    const studentContext = await getStudentContext(supabase, user.id, context ?? {});
+    //     prompt                                                       
+    //              (                                                const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
-    //                                (Persona Builder)                                     
-    let personaPrompt = "";
+    //                  (Persona Builder)                         let personaPrompt = "";
     try {
       personaPrompt = await buildSystemPrompt(user.id);
     } catch (e) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
-    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n---                                              ---\n${system}` : system;
+    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n---                          --\n${system}` : system;
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
@@ -116,21 +123,19 @@ export async function POST(req: Request) {
     };
     const accessible = await filterAccessibleModels(candidates, hasEnt);
     if (accessible.length === 0 && candidates.length > 0) {
-      return NextResponse.json({ error: { message: "                                           .                                 .", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+      return NextResponse.json({ error: { message: "                                           ", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
     const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? CURRENT_AI_MODEL);
     if (!guard.ok) return guard.response;
 
     let completion;
     try {
-      //      Phase 5-C3 (pilot)                                                   **                 **
-      //                                  .                                                                          
-      //        `completeChatInner`                                   (                               
-      //         ). `attemptNo`                                                                    .
+      // ?? Phase 5-C3 (pilot)                            **         **
+      //                                                                    //      completeChatInner`                    (                        //      . `attemptNo`                                     .
       //
-      //        **                    100%:**                            header                UUID       .
-      //                                     guard               limits               credit       
-      //                                               fallback                       .
+      // ?? **           100%:**                header         UUID     
+      //                      guard         limits         credit    
+      //                           fallback             .
       const usage = resolveUsageRequestContext(req, user.id);
 
       completion = await aiRouter.completeChat("chat", {
@@ -147,8 +152,8 @@ export async function POST(req: Request) {
         {
           error: {
             message: isRate
-              ? "                                      .                                  ."
-              : "                                                        .                  .",
+              ? "                                         "
+              : "                              .           ",
             code: isRate ? "PROVIDER_RATE_LIMIT" : isUnavailable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR",
           },
         },
@@ -160,8 +165,7 @@ export async function POST(req: Request) {
     const answer = completion.content;
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
 
-    //            best-effort:      migration                                                           
-    //                                                                                                         .
+    //       best-effort:    migration                                     //                                                           
     let savedConversationId = conversationId;
     try {
       if (answer) {
@@ -172,14 +176,14 @@ export async function POST(req: Request) {
             .eq("id", savedConversationId)
             .eq("user_id", user.id)
             .maybeSingle();
-          //                                                                                                          
-          //                                                                                                 .
+          //                                                           
+          //                                                      
           if (!ownedConversation) savedConversationId = "";
         }
         if (!savedConversationId) {
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "                       " })
+            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "            " })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
@@ -207,16 +211,9 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("chat route error:", error);
->>>>>>> origin/main
     return NextResponse.json(
-      {
-        ok: false,
-        error: error?.message || "Unknown server error",
-        details: error?.stack || "No stack trace",
-      },
+      { error: { message: "                                 , code: "INTERNAL_ERROR" } },
       { status: 500 }
     );
   }
 }
-
-export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };

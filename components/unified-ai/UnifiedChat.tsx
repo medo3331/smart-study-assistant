@@ -2,12 +2,10 @@
 /* eslint-disable @next/next/no-img-element -- previewUrl is dynamic blob URL, next/image not suitable */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 /**
- * Unified Chat                                                  .
- *               AgentRouter / OCR / 11 Agents                 .
- * Upload:      (PDF/text) /         (image)     Preview     OCR                   Router                Response.
- *                              /api/unified-ai            OCR + Router                        .
+ * Unified Chat                              *         AgentRouter / OCR / 11 Agents            * Upload: ?? (PDF/text) / ??? (image) ? Preview ? OCR         ? Router         Response.
+ *                  api/unified-ai       OCR + Router              
  */
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
@@ -15,11 +13,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { SITE_LINKS } from "@/lib/site-links";
-import { createClient } from "@/lib/supabase/client";
 
 function supportWhatsappHref(code?: string, detail?: string) {
   const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
-  const text = `                                                               ${code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
+  const text = `                                    code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}text=${encodeURIComponent(text)}`;
 }
@@ -41,8 +38,9 @@ type LessonContext = {
 
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
-  const [profileInfo, setProfileInfo] = useState<{ name: string; subject: string }>({ name: "            ", subject: "          " });
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { role: "assistant", content: "     !           Magic.                         /                                        },
+  ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -61,52 +59,6 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("display_name, study_field")
-          .eq("id", user.id)
-          .maybeSingle();
-        let subject = (profile as any)?.study_field || "";
-        if (!subject) {
-          const { data } = await supabase
-            .from("user_subjects")
-            .select("subjects(name)")
-            .eq("user_id", user.id)
-            .limit(1);
-          subject = (data as any)?.[0]?.subjects?.name || "";
-        }
-        const name =
-          (profile as any)?.display_name ||
-          (user.user_metadata as any)?.full_name ||
-          "            ";
-        if (!cancelled) {
-          setProfileInfo({ name, subject: subject || "          " });
-        }
-      } catch {
-        // best-effort
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    setMessages([
-      {
-        role: "assistant",
-        content: `                ${profileInfo.name}                                      .                                                      ${profileInfo.subject}  `,
-      },
-    ]);
-  }, [profileInfo]);
-
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>, kind: "file" | "image") => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -124,7 +76,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
     const text = input.trim();
     if (!text && !attachment) return;
 
-    const userMsg: ChatMsg = { role: "user", content: text || "(      /                 )", attachmentName: attachment?.file.name };
+    const userMsg: ChatMsg = { role: "user", content: text || "(   /          ", attachmentName: attachment?.file.name };
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
@@ -140,16 +92,16 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           formData.append("imageInput", attachment.file, attachment.file.name);
         }
       }
-      // Pass context language + lesson context (                              )
+      // Pass context language + lesson context (                )
       const ctx: Record<string, unknown> = {};
       if (initialContext && typeof initialContext === "object") {
         Object.assign(ctx, initialContext);
       }
       if (!ctx.language) ctx.language = "ar";
-      //                             +                         (                /api/chat                          )
+      //                +              (         /api/chat              )
       if (conversationId) ctx.conversationId = conversationId;
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
-      //                                                                                 API      hidden system prompt
+      //                                             API    hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
           title: lesson.title || "",
@@ -174,37 +126,24 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           (data?.code as string | undefined) ||
           (data?.error?.code as string | undefined) ||
           "";
-        //                                                                       m  ltiples                              :
-        // reasonAr (     /api/chat)   message (                   )   error.message   error       
-        const rawError =
+        //                                       m?ltiples                :
+        // reasonAr (   /api/chat)  message (             error.message  error             const rawError =
           (data?.reasonAr as string | undefined) ||
           (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
-<<<<<<< HEAD
-          (res.status === 429 ? "                                                                ." : "             .");
-        if (code === "PDF_READ_FAILED") {
-          setMessages((m) => [...m, { role: "assistant", content: "                                                PDF.                                                             ." }]);
-          return;
-        }
-        if (code === "FILE_TOO_LARGE") {
-          setMessages((m) => [...m, { role: "assistant", content: "                                                     4                 " }]);
-          return;
-        }
-=======
           (res.status === 429
-            ? "                                                                                                .                                                   ."
-            : "             .");
->>>>>>> origin/main
+            ? "                                                    .                            ."
+            : "        ");
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
-        const supportAction = { label: "                             (            )", href: supportHref, external: true };
+        const supportAction = { label: "                        ", href: supportHref, external: true };
 
-        //                 AI Credits        (402)                              
+        // ??      AI Credits     (402)              ??
         if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
           const info = {
-            error: "         AI Credits              .",
-            message: "                                                            .                                                                                                                             .",
+            error: "     AI Credits          ,
+            message: "                                                                                                         ",
             actions: [
-              { label: "                          ", href: "/store" },
+              { label: "               , href: "/store" },
               supportAction,
             ],
             kind: "credits" as const,
@@ -214,13 +153,13 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           return;
         }
 
-        //                                  (403)                              
+        // ??               (403)              ??
         if (res.status === 403 || code === "MODEL_ACCESS_REQUIRED") {
           const info = {
-            error: rawError || "                                           .",
-            message: "                                                                                                 .                                                    .",
+            error: rawError || "                        ",
+            message: "                                                                                     ,
             actions: [
-              { label: "                                                 ", href: "/pricing" },
+              { label: "                          ", href: "/pricing" },
               supportAction,
             ],
             kind: "access" as const,
@@ -230,14 +169,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           return;
         }
 
-        //        Rate Limit              (429)       
+        // ?? Rate Limit        (429) ??
         if (res.status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "GUEST_RATE_LIMIT") {
           const info = {
             error: rawError,
-            message: data?.message || "                                                                                                                                                                                       !",
+            message: data?.message || "                                                                                                    ",
             actions: (data?.actions as { label: string; href: string }[]) || [
-              { label: "                                                 ", href: "/pricing" },
-              { label: "                          ", href: "/store" },
+              { label: "                          ", href: "/pricing" },
+              { label: "               , href: "/store" },
               supportAction,
             ],
             retryAfterHours: data?.retryAfterHours as number | undefined,
@@ -247,15 +186,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             kind: "limit" as const,
           };
           setRateLimitInfo(info);
-          //                                                                         
-          setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
+          //                                                   setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
           return;
         }
 
-        //                      (500/502/503      PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR)       
+        // ??         (500/502/503    PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) ??
         const technicalInfo = {
-          error: "                      .",
-          message: `                                                   ${code ? ` (${code})` : ""}.                                                                                                          .`,
+          error: "             ",
+          message: `                            ${code ? ` (${code})` : ""}.                                                           `,
           actions: [supportAction],
           kind: "technical" as const,
         };
@@ -264,16 +202,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         return;
       }
 
-      //                                     rate limit               
-      setRateLimitInfo(null);
+      //                     rate limit               setRateLimitInfo(null);
 
-      //                            :                                              
+      //                                         
       if (typeof data?.conversationId === "string" && data.conversationId) {
         setConversationId(data.conversationId);
       }
 
-      // Show assistant response                                               
-      const assistantText = data?.answer || "                             Unified AI.";
+      // Show assistant response                                 const assistantText = data?.answer || "                Unified AI.";
 
       setMessages((m) => [
         ...m,
@@ -282,43 +218,43 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       removeAttachment();
     } catch {
       setLoading(false);
-      const supportHref = supportWhatsappHref("NETWORK", "                                      ");
+      const supportHref = supportWhatsappHref("NETWORK", "                    ");
       setRateLimitInfo({
-        error: "                       .",
-        message: "                                                                                                                 .",
-        actions: [{ label: "                             (            )", href: supportHref, external: true }],
+        error: "              ,
+        message: "                                                              ",
+        actions: [{ label: "                        ", href: supportHref, external: true }],
         kind: "technical",
       });
-      setMessages((m) => [...m, { role: "assistant", content: "                       .                                                     ." }]);
+      setMessages((m) => [...m, { role: "assistant", content: "                                           " }]);
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="                                    ">
-                                   
+        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="                   ">
+          ?            
         </button>
         <button
           onClick={() => {
-            setMessages([{ role: "assistant", content: `                ${profileInfo.name}                                      .                                                      ${profileInfo.subject}  ` }]);
+            setMessages([{ role: "assistant", content: "     !           Magic.                         /                                        }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}
           className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition"
-          aria-label="                       "
+          aria-label="            "
         >
-                                     
+          ?             
         </button>
       </div>
 
-      {/*                             (                                                                   ) */}
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="                       ">
+      {/*                (                                    ) */}
+      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="             >
         {([
-          { id: "explain", label: "            " },
-          { id: "quiz", label: "              " },
-          { id: "summarize", label: "          " },
-          { id: "review", label: "            " },
+          { id: "explain", label: "        },
+          { id: "quiz", label: "         },
+          { id: "summarize", label: "       },
+          { id: "review", label: "        },
         ] as const).map((m) => (
           <button
             key={m.id}
@@ -347,7 +283,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                 <MarkdownRenderer>{msg.content}</MarkdownRenderer>
               )}
               {msg.attachmentName && (
-                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">     {msg.attachmentName}</span>
+                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>
               )}
             </div>
           </div>
@@ -355,7 +291,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         {loading && (
           <div className="flex justify-end">
             <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
-              <LoaderCircle className="w-4 h-4 animate-spin" />                          ...
+              <LoaderCircle className="w-4 h-4 animate-spin" />              ...
             </div>
           </div>
         )}
@@ -368,19 +304,19 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             {attachment.kind === "image" ? (
               <img src={attachment.previewUrl} alt="preview" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF /       </div>
+              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF /    </div>
             )}
             <button
               onClick={removeAttachment}
               className="absolute top-1 left-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80 text-[10px]"
-              aria-label="                       "
+              aria-label="             
             >
               <X size={12} />
             </button>
           </div>
           <div className="text-xs text-ink-soft">
             <p className="font-medium">{attachment.file.name}</p>
-            <p>                               OCR                         /             </p>
+            <p>                 OCR              /       </p>
           </div>
         </div>
       )}
@@ -390,7 +326,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          aria-label="             "
+          aria-label="       "
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <Paperclip size={20} />
@@ -398,7 +334,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           type="button"
           onClick={() => imageInputRef.current?.click()}
-          aria-label="               "
+          aria-label="        "
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <ImagePlus size={20} />
@@ -421,7 +357,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           dir="rtl"
           rows={1}
           className="flex-1 bg-transparent text-sm font-body resize-none outline-none py-2 min-h-[36px] max-h-[120px]"
-          placeholder="                   ... (                                                  OCR)"
+          placeholder="           .. (                            OCR)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
@@ -429,15 +365,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           onClick={send}
           disabled={loading || (!input.trim() && !attachment)}
-          aria-label="          "
-          className="p-2.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-40 transition"
+          aria-label="                 className="p-2.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-40 transition"
         >
           <Send size={18} />
         </button>
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-        <p className="text-[11px] text-ink-soft">Magic                            </p>
+        <p className="text-[11px] text-ink-soft">Magic                 p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
           <Sparkles size={12} /> <span>Magic</span>
         </div>
@@ -457,8 +392,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
               {rateLimitInfo.retryAfterHours && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2 flex items-center gap-1">
                   <Clock size={12} />
-                                                                       {rateLimitInfo.retryAfterHours}           
-                  {rateLimitInfo.retryAfter ? ` (           ${Math.ceil(rateLimitInfo.retryAfter / 60)}           )` : ""}
+                                               {rateLimitInfo.retryAfterHours}                         {rateLimitInfo.retryAfter ? ` (       {Math.ceil(rateLimitInfo.retryAfter / 60)}      )` : ""}
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-3">
@@ -480,24 +414,17 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                       href={a.href}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
                     >
-                      {a.label.includes("                ") ? <Crown size={14} /> : <ShoppingBag size={14} />}
+                      {a.label.includes("        ") ? <Crown size={14} /> : <ShoppingBag size={14} />}
                       {a.label}
                     </Link>
                   )
                 )}
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
-                >
-                  <Crown size={14} />
-                                     
-                </Link>
               </div>
             </div>
             <button
               onClick={() => setRateLimitInfo(null)}
               className="shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-amber-700 dark:text-amber-300"
-              aria-label="          "
+              aria-label="     "
             >
               <X size={16} />
             </button>
