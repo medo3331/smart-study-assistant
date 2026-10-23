@@ -54,15 +54,9 @@ import {
   getDeviceLimit,
 } from "@/lib/media/lecture-compression";
 import {
-  needsRecoveryCard,
-  recoveryBlurb,
-  recoveryOptions,
-  recoveryTitle,
-  stageFromCode,
-  type RecoveryAction,
-  type RecoveryOption,
-  type FailureStage,
-} from "@/lib/media/lecture-recovery";
+  chunkLectureFile,
+  MAX_CHUNK_BYTES,
+} from "@/lib/media/lecture-chunking";
 import Link from "next/link";
 
 /** خصائص بطاقة الاسترداد — كلها قيم للعرض فقط، بلا أي بيانات مستخدم. */
@@ -137,6 +131,7 @@ import {
   FileAudio,
   LoaderCircle,
   Mic,
+  PhoneCall,
   RotateCcw,
   Sparkles,
   Upload,
@@ -156,6 +151,11 @@ import {
 
 /* ───────────────────────── نصوص الواجهة ───────────────────────── */
 
+/** رقم دعم واتساب من متغيرات البيئة العامة للعميل (اختياري). */
+const SUPPORT_WHATSAPP =
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP
+    ? String(process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP).trim()
+: null;
 /** رسالة عامة لو الراوت رجّع 5xx من غير رسالة (بروكسي/بلا نت). */
 const ERR_GENERIC = "حصلت مشكلة أثناء تحويل المحاضرة. حاول مرة أخرى.";
 const ERR_NETWORK = "فيها مشكلة في الاتصال. اتأكد من الإنترنت وحاول تاني.";
@@ -201,6 +201,18 @@ type OwnershipTicket = {
   ticketId: string;
   secret: string | null;
 };
+
+/**
+ * 📊 تقدّم تقسيم الملف إلى أجزاء.
+ *
+ * ⚠️ الفرق عن `uploadPercent`: التحويل العادي (ملف واحد) مفيش فيه نسبة
+ * لأن ElevenLabs مش بيبعت تقدّم — عرض «60%» هنا كذب. لكن لما الملف
+ * بيتقسم لأجزاء، **المتصفح** هو اللي بيعرف خلّص كام جزء فعلاً (لأنه
+ * هو اللي بيتبعع الطلبات). فالنسبة هنا **حقيقية 100%** — مش وهمية.
+ *
+ * `null` = مفيش تقسيم شغّال (الوضع العادي).
+ */
+type ChunkProgress = { current: number; total: number } | null;
 
 /**
  * رفع الملف **مباشرة** للتخزين عن طريق الـ signed URL بتاع الراوت.
@@ -263,6 +275,53 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+/**
+ * 📦 يقرأ رد الراوت **كنص** الأول وبعدين يحاول يحوّله لـ JSON.
+ *
+ * ⚠️ **ليه مش `response.json()` مباشرة؟** لأن `response.json()` بيرمي
+ * `SyntaxError` لو الرد مش JSON خالص — وده بيحصل فعلاً مع:
+ *   - صفحة خطأ HTML من بروكسي/الاستضافة (مش JSON).
+ *   - رد 413/502 من حدّ المنصّة (نص عادي).
+ *   - رد اتقطع في النص (انقطاع شبكة).
+ *
+ * في الحالات دي `await response.json().catch(() => null)` بيرجّع `null`
+ * وبنعرض رسالة عامة — وده **سلوك كويس**، بس بنخسر السبب.
+ *
+ * بقراءة النص الأول بنقدر نعرف هل الرد JSON أصلاً، ونقدر نعرض جزء
+ * مفيد من الرد غير الـ JSON (زي صفحة HTML فيها سبب الخطأ) من غير ما
+ * نكسر الواجهة.
+ */
+async function readApiResponse(
+  response: Response,
+): Promise<{ payload: unknown; raw: string }> {
+  let raw = "";
+  try {
+    raw = await response.text();
+  } catch {
+    return { payload: null, raw: "" };
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) return { payload: null, raw };
+
+  // ⚠️ نحاول JSON بس لو الشكل يبان JSON من أوله — عشان ما نعملش
+  // parse فاشل على HTML ونضيّع الوقت.
+  if (
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[") ||
+    trimmed.startsWith('"')
+  ) {
+    try {
+      return { payload: JSON.parse(trimmed) as unknown, raw };
+    } catch {
+      // رد JSON مش مكتمل (انقطاع) — بنرجع null ونعرض رسالة عامة.
+      return { payload: null, raw };
+    }
+  }
+
+  return { payload: null, raw };
 }
 
 /** اسم ملف التنزيل: اسم المحاضرة الأصلي + .txt
@@ -335,19 +394,9 @@ export function LectureTranscriber() {
   /** نسبة رفع **حقيقية** (0..100). مش بتتحرك أثناء التحويل خالص —
    *  ElevenLabs مش بيبعت تقدّم، وإيهام الطالب بنسبة هنا كذب. */
   const [uploadPercent, setUploadPercent] = useState(0);
-  /** الملف الأصلي المختار — محتفظ بيه لإعادة التجهيز اليدوية من بطاقة
-   *  الاسترداد. ⚠️ مش بيترفع أبدًا إلا بعد ما الضغط ينجح: فرع الفشل
-   *  بيمسح `file` لكن بيسيب ده للضغطة الجاية فقط. */
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  /** عدد محاولات التجهيز اليدوية للملف الحالي — بتتصفّر مع كل اختيار جديد.
-   *  ⚠️ السقف في `MAX_MANUAL_RETRIES` عشان مافيش حلقات مكلفة:
-   *  بعدها بطاقة الاسترداد بتخفي زر إعادة المحاولة. */
-  const [prepareAttempts, setPrepareAttempts] = useState(0);
-  /** كود الفشل الأخير (`failCode`) — بيحدّد بطاقة الاسترداد المعروضة.
-   *  ⚠️ كود ثابت بلا أي بيانات مستخدم: لا اسم ملف ولا حجم ولا روابط. */
-  const [failureCode, setFailureCode] = useState<string | null>(null);
-  /** تحذير للملفات الكبيرة غير MP3 — قبل ما يدخلوا الضغط (ffmpeg). */
-  const [largeFileWarning, setLargeFileWarning] = useState<string | null>(null);
+  /** 📊 تقدّم تقسيم الملف لأجزاء — `null` = مفيش تقسيم (الوضع العادي).
+   *  النسبة هنا **حقيقية** لأن المتصفح هو اللي بيتبعع الطلبات واحد واحد. */
+  const [chunkProgress, setChunkProgress] = useState<ChunkProgress>(null);
   /** مسار الملف **بعد** ما اترفع فعلاً.
    *  ⚠️ ده اللي بيخلّي إعادة المحاولة ممكنة من غير رفع تاني: لو فشل
    *  التفريغ، الخادم سيب الملف في مكانه (بيحذفه بعد النجاح بس)،
@@ -570,7 +619,7 @@ export function LectureTranscriber() {
         body,
       });
 
-      const payload: unknown = await response.json().catch(() => null);
+      const { payload } = await readApiResponse(response);
 
       if (!response.ok) {
         setFailureCode("direct.http");
@@ -621,7 +670,7 @@ export function LectureTranscriber() {
           ...(ticket?.secret ? { secret: ticket.secret } : {}),
         }),
       });
-      const payload: unknown = await response.json().catch(() => null);
+      const { payload } = await readApiResponse(response);
 
       if (!response.ok) {
         /* 🎫 404 = الرد الموحد: التذكرة غلط/مش بتاعتك/منتهية/مستهلكة.
@@ -684,6 +733,76 @@ export function LectureTranscriber() {
   );
 
   /**
+   * transcribeChunks — تحضير أجزاء **صالحة** وتفريغ كل جزء على حدة.
+   *
+   * ⚠️ **ليه مش `File.slice()` بعد كده:**
+   * التقطيع البايتي بيقطع الملف في نص أي إطار — وده بيخرب الصيغ اللي
+   * فيها فهرس (WebM/MP4/MKV) أو header (WAV/M4A/FLAC). الجزء المكسور
+   * بيرجع 422 من المزوّد («ملف تالف»).
+   *
+   * الحل: `chunkLectureFile` بيحوّل الملف لصوت MP3 (إطارات مستقلة)
+   * وبيقسّمه لأجزاء مستقلة — كل جزء ملف صالح بذاته.
+   *
+   * وترجع النص المدمج من جميع الأجزاء بالترتيب.
+   */
+  const transcribeChunks = useCallback(
+    async (sourceFile: File): Promise<string> => {
+      /* ١) تجهيز الأجزاء — بالتحويل لـ MP3 لو محتاج. */
+      setStage("preparing");
+      const chunks = await chunkLectureFile(sourceFile, (progress) => {
+        setPreparePercent(Math.round(progress.ratio * 100));
+      });
+      setPreparePercent(0);
+
+      if (chunks.length === 0) {
+        throw new Error("مقدرناش نقسّم المحاضرة. جرّب ملف تاني.");
+      }
+
+      /* ٢) تفريغ كل جزء على حدة بالترتيب. */
+      const parts: string[] = [];
+      const total = chunks.length;
+
+      for (let i = 0; i < total; i++) {
+        const chunk = chunks[i];
+
+        setStage("transcribing");
+        // 📊 الجزء الحالي (1-indexed عشان العرض للطالب يبقى «١ من ٨»).
+        setChunkProgress({ current: i + 1, total });
+
+        const form = new FormData();
+        /* ⚠️ اسم الجزء لازم يحافظ على الامتداد — ElevenLabs بيتعرف
+           على الصيغة من الامتداد. `lecture.mp3.part1` امتداده `part1`
+           وده **مش** مدعوم، فبنحطّ الامتداد في الآخر. */
+        form.append("file", chunk.file, chunk.name);
+        form.append("chunkIndex", String(i));
+        form.append("totalChunks", String(total));
+        form.append("fileName", sourceFile.name);
+
+        const response = await fetch("/api/lecture-transcription/transcribe-chunk", {
+          method: "POST",
+          body: form,
+        });
+
+        const { payload } = await readApiResponse(response);
+        if (!response.ok) {
+          throw new Error(
+            extractErrorMessage(payload, "فشل تحويل جزء من المحاضرة. حاول تاني."),
+          );
+        }
+
+        const chunkText = (payload as { text?: string } | null)?.text ?? "";
+        parts.push(chunkText);
+      }
+
+      setChunkProgress(null);
+
+      return parts.join(" ");
+    },
+    [],
+  );
+
+
+  /**
    * المسار الجديد (المرحلة 2): تذكرة ← رفع مباشر ← تفريغ.
    *
    * ⚠️ الملف **مش** بيمرّ في أي جسم طلب للفانكشن: بينزل من المتصفح
@@ -708,6 +827,66 @@ export function LectureTranscriber() {
         return;
       }
 
+
+      // ── تقسيم الملف لأجزاء (تفريغ أجزاء متتابعة) ──
+      if (file.size > MAX_CHUNK_BYTES) {
+        try {
+          const mergedText = await transcribeChunks(file);
+          if (!mergedText || mergedText.trim() === "") {
+            setError(ERR_GENERIC);
+            setPhase("error");
+            return;
+          }
+
+          const mergedTranscript: LectureTranscript = {
+            text: mergedText,
+            language: null,
+            languageProbability: null,
+            duration: null,
+            segments: [],
+            words: [],
+            provider: "elevenlabs",
+            model: "scribe_v2",
+          };
+
+          setStage("finalizing");
+          const saveResponse = await fetch("/api/lecture-transcription/save-transcript", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: mergedTranscript,
+              originalFilename: file.name,
+              storagePath: null,
+              fileSize: file.size,
+            }),
+          });
+          const { payload: savePayload } = await readApiResponse(saveResponse);
+          if (!saveResponse.ok) {
+            setError(extractErrorMessage(savePayload, ERR_GENERIC));
+            setPhase("error");
+            return;
+          }
+          const info = readSaveInfo(savePayload);
+          setSaveInfo(info);
+          setTranscript(mergedTranscript);
+          setPhase("done");
+          return;
+        } catch (error) {
+          /* ⚠️ بنفصل بين نوعين من الفشل:
+             - خطأ من الراوت (429 / 415 / ...) → الرسالة الأصلية مهمة
+               للطالب (مثلاً «استخدمت الخدمة كتير»).
+             - خطأ شبكة (fetch فشل) → رسالة عامة.
+             فلو بنبتلع الرسالة دايماً، الطالب مش هيعرف ليه فشل. */
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : ERR_NETWORK;
+          setError(message);
+          setPhase("error");
+          return;
+        }
+      }
+
       // ── الخطوة ١: تذكرة الرفع (JSON صغير) ──
       const ticketResponse = await fetch("/api/lecture-transcription/upload-url", {
         method: "POST",
@@ -718,7 +897,7 @@ export function LectureTranscriber() {
           size: file.size,
         }),
       });
-      const ticketPayload: unknown = await ticketResponse.json().catch(() => null);
+      const { payload: ticketPayload } = await readApiResponse(ticketResponse);
 
       /* التخزين مش مهيّأ في البيئة دي (سطر الأوامر الأول بيكشف ده) —
          نرجع للمسار القديم بدل ما نقفل الطالب برسالة. الملف
@@ -793,6 +972,7 @@ export function LectureTranscriber() {
       setError(failCode("net.run", ERR_NETWORK));
       setPhase("error");
     }
+  }, [file, working, runDirect, uploadedPath, transcribeUploaded, transcribeChunks]);
   }, [file, working, runDirect, uploadedPath, uploadTicket, transcribeUploaded]);
 
   /** نسخ النص للحافظة — مع تنظيف المؤقّت عشان مايتسرّبش بين Copies. */
@@ -921,16 +1101,18 @@ export function LectureTranscriber() {
                     ? "جاري رفع المحاضرة..."
                     : stage === "finalizing"
                       ? "جاري تجهيز النص..."
-                      : "تم رفع المحاضرة، جاري تحويلها إلى نص..."}
+                      : chunkProgress
+                        ? `جاري تفريغ الجزء ${chunkProgress.current} من ${chunkProgress.total}...`
+                        : "تم رفع المحاضرة، جاري تحويلها إلى نص..."}
                 </span>
               </div>
 
               {/* ⚠️ الشريط بيتحرك بنسبتين مختلفة حسب المرحلة:
                   - أثناء الرفع: عرض حقيقي من البايتات المرفوعة (integers).
-                  - أثناء التحويل: نبضة غير محددة، **من غير أي رقم** — لأن
-                    ElevenLabs مش بيبعت تقدّم وعرض «60%» هنا كذب.
-                  التحويل الطويل بيحصل بس في المرحلة دي لأن الملف غالباً
-                  بيكون أكبر من 4.5 ميجا. */}
+                  - أثناء تقسيم الملف: نسبة **حقيقية** — المتصفح بيعرف خلّص
+                    كام جزء فعلاً (هو اللي بيعمل الطلبات واحد واحد).
+                  - أثناء التحويل العادي: نبضة غير محددة، **من غير أي رقم** —
+                    لأن ElevenLabs مش بيبعت تقدّم وعرض «60%» هنا كذب. */}
               <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
                 {stage === "preparing" ? (
                   <div
@@ -942,6 +1124,16 @@ export function LectureTranscriber() {
                     className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
                     style={{ width: `${Math.min(100, Math.max(2, uploadPercent))}%` }}
                   />
+                ) : chunkProgress ? (
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(2, (chunkProgress.current / chunkProgress.total) * 100),
+                      )}%`,
+                    }}
+                  />
                 ) : (
                   <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
                 )}
@@ -952,7 +1144,9 @@ export function LectureTranscriber() {
                   ? `جاري تجهيز الملف — ${preparePercent}%`
                   : stage === "uploading"
                   ? `الرفع مباشر للتخزين — ${uploadPercent}%`
-                  : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
+                  : chunkProgress
+                    ? `الملف كبير — بيتقسم ${chunkProgress.total} أجزاء، خلّص ${chunkProgress.current}.`
+                    : "المحاضرات الطويلة ممكن تاخد دقائق — سيب الصفحة مفتوحة."}
               </p>
             </div>
           ) : (
@@ -1004,7 +1198,23 @@ export function LectureTranscriber() {
           className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4"
         >
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden />
-          <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+            {SUPPORT_WHATSAPP && (
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `https://wa.me/${SUPPORT_WHATSAPP}?text=السلام عليكم، أواجه مشكلة في تفريغ المحاضرة: ${error}`;
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }}
+                className="mt-2 inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--card-tertiary)]"
+                aria-label="تواصل مع الدعم عبر واتساب"
+              >
+                <PhoneCall size={16} aria-hidden />
+                <span>تواصل مع الدعم عبر واتساب</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 

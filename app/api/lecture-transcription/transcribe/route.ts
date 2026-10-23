@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     if (!isStorageConfigured()) {
       throw new TranscriptionError(
         "STORAGE_NOT_CONFIGURED",
-        "تحويل المحاضرات غير متاح حالياً.",
+        "إعدادات التخزين غير مضبوطة. رفع المحاضرات الكبيرة غير متاح حالياً.",
         503,
       );
     }

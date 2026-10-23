@@ -21,6 +21,8 @@
  * حتى متعدد ╗ ════ ═════════════════════════════════════════════════════════════════════════════════════════════════════════
  */
 
+import { loadFfmpeg } from "./ffmpeg-engine";
+
 /** هد الأمان: Supabase سابطاعًاًّضعًاًيًن 50 MB — محافظناً منهاً. */
 export const MAX_UPLOAD_BYTES = 45 * 1024 * 1024;
 
@@ -150,23 +152,12 @@ export function mp3Filename(originalName: string): string {
 }
 /* ═══════════════════════════════════════════════════════════ المحرّك ═════════════════════════════════════════════════════════════════════ */
 
-/** نقاطة FFmpeg مشتردة، معاذ حتى تُستخدم مجدداً، وبيتثتان للكل استخدام. */
-let ffmpegSingleton: unknown | null = null;
-
 /**
- * حمّل FFmpeg.wasm بطول ستر واحد.
- *
- * ⚠️ **التأخير المحرك هنا.** ال `import` داخلي في جواء الداعة
- * — ماتحملش على الصفحة أبداً. لمن يفترض بداية.
- *
- * ⚠️ **الـ core من نفس أصل الموقع** (public/ffmpeg) مش من CDN.
- * النسخة على unpkg حوالي 32 ميجا، والمستخدمين عندنا إنترنت بطيء —
- * فالتخزين محلي معناه طلب على نفس النطاق، بيستفيد من الكاش،
- * والموقع مايبقاش شارد على CDN تاني.
- *
- * ⚠️ ودي سبب كمان إزاي نقدر نستخدم نواة مفردة من غير COOP/COEP:
- *   التحميل من نفس الأصل مافيش cross-origin فيه خالص.
+ * ⚠️ المحرّك نفسه جوّه `lib/media/ffmpeg-engine.ts` — **Singleton واحد**
+ * للصفحة كلها، مش نسخة لكل مستورِد. استخدمنا الكود ده في تقسيم الملفات
+ * كمان، ولو كل وحد حملّ الـ core (32 ميجا) لحمّلناه مرتين.
  */
+export { disposeCompressionEngine, loadFfmpeg } from "./ffmpeg-engine";
 async function loadFfmpeg(onProgress?: (ratio: number) => void) {
   if (ffmpegSingleton) return ffmpegSingleton;
 
@@ -245,12 +236,7 @@ export async function compressLectureMedia(
     bitrateForDuration(durationSeconds) as (typeof BITRATE_LADDER_KBPS)[number],
   );
 
-  const ffmpeg = (await loadFfmpeg((ratio) => onProgress?.({ ratio, bitrateKbps: 0 }))) as {
-    writeFile: (n: string, d: Uint8Array) => Promise<boolean>;
-    exec: (a: string[]) => Promise<number>;
-    readFile: (n: string) => Promise<Uint8Array>;
-    deleteFile: (n: string) => Promise<boolean>;
-  };
+  const ffmpeg = await loadFfmpeg((ratio) => onProgress?.({ ratio, bitrateKbps: 0 }));
   const { fetchFile } = await import("@ffmpeg/util");
 
   const inputName = "input.media";

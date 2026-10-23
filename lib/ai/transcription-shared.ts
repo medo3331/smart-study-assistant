@@ -46,6 +46,13 @@ export const MAX_LECTURE_FILE_BYTES = 1024 * 1024 * 1024;
  */
 export const MAX_DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
 
+/**
+ * حجم الجزء (chunk) للتقسيم في المتصفح.
+ * الملفات الأكبر من هذا تُقسم إلى أجزاء وتُرسل واحدًا تلو الآخر للـ API
+ * لتجنب حد 4.5 ميجا في جسم طلب Vercel ولتجنب خطأ 422 من ElevenLabs على الملفات الكبيرة.
+ */
+export const CHUNK_SIZE_BYTES = 3 * 1024 * 1024;
+
 /** الامتدادات المدعومة — من قائمة ElevenLabs الرسمية (صوت + فيديو). */
 export const ALLOWED_LECTURE_EXTENSIONS = [
   // صوت
@@ -113,7 +120,7 @@ export type LectureTranscript = {
   /** الموديل اللي تولّد بيه النص — للتشخيص. */
   model: string;
   /** المزوّد — ثابت دلوقتي، بس بيوضّح العقد لو اتضاف مزوّد تاني. */
-  provider: "elevenlabs";
+  provider: "elevenlabs" | "groq";
 };
 
 /** خطأ مفهوم ومصنّف — الراوت بيترجمه لـ HTTP + رسالة عربية آمنة.
@@ -189,6 +196,137 @@ export function assertLectureFile(file: File): void {
       "نوع الملف مش مدعوم. استخدم تسجيل بصيغة MP3 أو WAV أو M4A أو MP4 أو AAC أو FLAC.",
       415,
       `ext=${ext} mime=${file.type}`,
+    );
+  }
+}
+
+/* ───────────────────────── عقد تقسيم الملفات ─────────────────────────
+ *
+ * لما الملف أكبر من CHUNK_SIZE_BYTES، المتصفح بيقسّمه بـ File.slice()
+ * وبيبعِت كل جزء لوحده. الجزء ده **مش ملف محاضرة كامل** — هو شريحة
+ * بايتات من ملف أكبر.
+ *
+ * ⚠️ فرق مهم عن assertLectureFile:
+ *   - ما بنتحققش من الحجم الأقصى (MAX_LECTURE_FILE_BYTES) — الجزء صغير
+ *     طالما هو جزء من ملف كبير.
+ *   - بنتحقق من **امتداد الملف الأصلي** (fileName) مش من اسم الجزء.
+ *     السبب: المتصفح بيسمّي الجزء `lecture.mp3.part1` — والامتداد الفعلي
+ *     هو `part1` وده **مش** في قائمة ElevenLabs المدعومة. فلو تحقّقنا من
+ *     اسم الجزء كان كل جزء هيرجع 415.
+ */
+
+/**
+ * الصيغ اللي **كل إطار فيها مستقل** — يعني لو الملف اتقطع بـ `File.slice()`
+ * بتبقى النتيجة **صالحة** للتفريغ.
+ *
+ * ⚠️ دي مش «كل صيغ الصوت» — دي صيغ الإطارات المستقلة بس (MP3/AAC).
+ * فيه صيغ تانية (M4A / AAC-in-MP4 / Opus-in-Ogg / FLAC / WAV) فيها
+ * **فهرس أو header** في أول الملف، فالقطعة المقطوعة مالها فهرس خالص
+ * والمزوّد بيرفضها بـ 422.
+ *
+ * ⚠️ ليه دي في ملف **مشترك** بين السيرفر والكلاينت: الواجهة بتستخدمها
+ * عشان تقرر تحوّل الملف لصوت MP3 قبل التقسيم، والسيرفر بيستخدمها
+ * عشان يرفض أي جزء يجيله بصيغة حاوية.
+ */
+export const INDEPENDENT_FRAME_EXTENSIONS = ["mp3", "aac"] as const;
+
+/**
+ * الصيغ اللي **مش** بتتقسم بأمان — لو وصلنا part بصيغة كده معناها
+ * إن الواجهة شغّلت المسار القديم (تقسيم بايتات) على ملف حاوية.
+ */
+export const CONTAINER_LECTURE_EXTENSIONS = [
+  "webm", "mp4", "mkv", "mov", "avi", "wmv", "flv", "mpeg", "mpg", "3gp",
+  "wav", "m4a", "flac", "ogg", "opus", "aiff",
+] as const;
+
+/**
+ * اسم الجزء المُرفع للاوت.
+ *
+ * ⚠️ **الامتداد لازم يفضل في الآخر** — ElevenLabs بيتعرف على صيغة الملف
+ * من الامتداد، فالاسم `lecture.mp3` صحيح والاسم `lecture.mp3.part1` خطأ
+ * (امتداده `part1` — مش في القائمة المدعومة، وكل جزء هيرجع 415).
+ *
+ * فبنحطّ الرقم **قبل** الامتداد: `lecture.part1.mp3`.
+ *
+ * @param originalName اسم الملف الأصلي (زي `محاضرة.mp3`).
+ * @param index        رقم الجزء (صفر-indexed).
+ */
+export function chunkFileName(originalName: string, index: number): string {
+  const dot = originalName.lastIndexOf(".");
+  // مفيش امتداد (أو نقطة في الأول زي `.gitignore`) → نضيف اللاحقة بس.
+  if (dot <= 0) return `${originalName}.part${index + 1}`;
+  const base = originalName.slice(0, dot);
+  const ext = originalName.slice(dot + 1);
+  return `${base}.part${index + 1}.${ext}`;
+}
+
+/**
+ * يفحص جزء (chunk) من ملف محاضرة قبل تفريغه.
+ *
+ * @param chunk      الجزء المستلم في الطلب (الملف المرفوع).
+ * @param originalName اسم الملف **الأصلي** (زي `lecture.mp3`) — مصدر truth
+ *                    لامتداد الصيغة.
+ * @param maxBytes   أقصى حجم مسموح للجزء الواحد.
+ */
+export function assertLectureChunk(
+  chunk: File,
+  originalName: string,
+  maxBytes: number,
+): void {
+  if (chunk.size === 0) {
+    throw new TranscriptionError(
+      "EMPTY_FILE",
+      "الجزء فاضي. اختر ملف محاضرة فيه تسجيل فعلي.",
+      400,
+    );
+  }
+
+  if (chunk.size > maxBytes) {
+    throw new TranscriptionError(
+      "FILE_TOO_LARGE",
+      `حجم الجزء كبير أوي. أقصى حجم مسموح ${Math.round(
+        maxBytes / (1024 * 1024),
+      )} ميجابايت.`,
+      413,
+      `size=${chunk.size}`,
+    );
+  }
+
+  // الامتداد من **الاسم الأصلي** — دي النتيجة الصح.
+  const ext = lectureFileExtension(originalName);
+  const extAllowed = (ALLOWED_LECTURE_EXTENSIONS as readonly string[]).includes(ext);
+
+  if (!extAllowed) {
+    throw new TranscriptionError(
+      "UNSUPPORTED_TYPE",
+      "نوع الملف مش مدعوم. استخدم تسجيل بصيغة MP3 أو WAV أو M4A أو MP4 أو AAC أو FLAC.",
+      415,
+      `ext=${ext} original=${originalName}`,
+    );
+  }
+
+  /* ⚠️ **فحص صلاحية الجزء نفسه** — دي الطبقة اللي كانت ناقصة وسببت
+   * خطأ 422 من المزوّد.
+   *
+   * لو الملف الأصلي كان حاوية (webm/mp4/m4a/wav/...) والواجهة بعتت
+   * جزء مقطوع بـ `File.slice()` — الجزء ده **مش ملف صالح** (فهرس/header
+   * ناقص)، والمزوّد هيرفضه بـ 422 برسالة غامضة.
+   *
+   * عشان كده الواجهة دلوقتي بتحوّل الملف لصوت MP3 الأول، والجزء
+   * بيوصلنا بامتداد mp3/aac (إطارات مستقلة). فلو وصلنا جزء بصيغة
+   * حاوية يبقى ده **خطأ في العميل** مش في الملف — ونرفضه برسالة
+   * واضحة بدل ما نرمي فلوس على نداء هيفشل. */
+  const chunkExt = lectureFileExtension(chunk.name);
+  const chunkIsIndependent = (
+    INDEPENDENT_FRAME_EXTENSIONS as readonly string[]
+  ).includes(chunkExt);
+
+  if (!chunkIsIndependent) {
+    throw new TranscriptionError(
+      "UNSUPPORTED_CHUNK_FORMAT",
+      "صيغة الجزء غير صالحة للتفريغ. جرّب ترفع المحاضرة تاني.",
+      415,
+      `chunkExt=${chunkExt} original=${originalName}`,
     );
   }
 }
