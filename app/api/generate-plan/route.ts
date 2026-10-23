@@ -1,7 +1,10 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
@@ -34,6 +37,17 @@ export async function POST(req: Request) {
     // ٢) حدّ استخدام: توليد الخطة أغلى طلب عندنا
     const limited = checkRateLimit(`plan:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
+
+    // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
+    const actor = await resolveActor(supabase, user.id, user.email ?? null);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد الخدمة.", retryable: false },
+        { status: 429 }
+      );
+    }
+
     // Phase H: 1 credit gate (free model, but still costs 1 credit)
     guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;
@@ -122,8 +136,12 @@ export async function POST(req: Request) {
     let lastError: unknown = null;
 
     // التنقل بين المفاتيح وتجاهل أي مفتاح به خطأ أو منتهي
+    // Phase 5-C4 (shadow): one event per ACTUAL provider request in this loop.
+    const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "study_plan" });
+    let attemptNo = 0;
     for (const apiKey of apiKeys) {
       try {
+      const doneMs = startProviderAttempt();
         const groq = new Groq({ apiKey });
         const completion = await groq.chat.completions.create({
           model: GROQ_MODELS.fast,
@@ -134,7 +152,9 @@ export async function POST(req: Request) {
         });
 
         rawContent = completion.choices[0]?.message?.content || "";
+        await recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
         if (rawContent) break; // عند نجاح أي مفتاح نخرج فوراً
+        await recordDirectProviderAttempt({ usage, feature: "study_plan", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs() });
       } catch (err) {
         console.warn(`فشل المفتاح الحالي (${errorDetails(err).message})، جاري تجربة المفتاح التالي...`);
         lastError = err;

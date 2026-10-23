@@ -1,18 +1,15 @@
 /**
- * 📊 كوتة الاشتراك — checkSubscriptionQuota (Phase 1.5)
- *
- * الفجوة الأصلية: مفيش أي فحص لكوتة الرسايل في مسارات الـAI — العمود
- * subscription_quotas.messages_24h كان موجود في الداتابيز من غير أي قارئ/كاتب،
- * والحد subscription_plans.messages_per_2h مكانش بيتقرأ في رن تايم خالص.
+ * 📊 كوتة الاشتراك — checkSubscriptionQuota (Phase G)
  *
  * التصميم:
- *   - نافذة التتبع الحالية 24 ساعة (messages_24h + last_reset_at، نفس دلالات
- *     app/api/upload/route.ts). الحد اليومي المكافئ = messages_per_2h × 12.
- *     التقييد الدقيق بنافذة ساعتين محتاج عمود window_start جديد — مؤجل للمرحلة 4
- *     مع توحيد الحدود (موثق في app/admin/settings/page.tsx).
- *   - fail-open لو الجداول مش متنفذة بعد (الشات ميقعش بسبب migration ناقصة) —
- *     قرار availability موثق هنا وفي EPIC_AUDIT_REPORT.md.
+ *   - استهلاك ذري عبر RPC public.consume_subscription_quota (فحص + زيادة في معاملة واحدة).
+ *   - Idempotency: المفتاح quota:<userId>:<kind>:<period> يضمن عدم الاستهلاك المكرر عند إعادة المحاولة.
+ *     الـ period مشتق من اليوم بالتقويم UTC (date_trunc('day', now() AT TIME ZONE 'UTC')) بحيث
+ *     يتطابق تماماً مع فترة الـ reset في الـ RPC والـ lazy reset.
+ *   - fail-open / fail-closed حسب متغير البيئة QUOTA_FAIL_OPEN (الافتراضي: false — fail-closed للأمان).
+ *     fail-open يُفعل فقط عندما QUOTA_FAIL_OPEN=true صريحاً، ويُسجل تنبيه عند كل حدث.
  *   - مسارات الأدمن معفية منطقيًا (الأدمن بيقرأ الكوتا مش بيستهلكها).
+ *   - المالك (owner) يتخطى الحدود الداخلية للمنصة بالكامل — لا يتم استدعاء RPC للمالك.
  *
  * Server-only — بيستخدم service_role (بيتجاوز RLS)، متتصدرش للمتصفح أبدًا.
  */
@@ -26,82 +23,116 @@ export interface QuotaCheckResult {
   kind: QuotaKind;
   planKey: string;
   used: number;
-  /** -1 = غير معروف (fail-open) */
+  /** -1 = غير معروف (fail-open)، 0 = مالك يتخطى الحدود الداخلية */
   limit: number;
   resetAt: string | null;
   reasonAr?: string;
+  /** true إذا تم تجاوز الفحص لأن المستخدم مالك (بypass للحدود الداخلية) */
+  ownerBypass?: boolean;
 }
 
-const DAY_MS = 24 * 3600 * 1000;
-/** كم نافذة ساعتين في اليوم — لاشتقاق الحد اليومي من messages_per_2h. */
-const WINDOWS_PER_DAY = 12;
+/** اليوم بالتقويم UTC كمفتاح فترة — يتطابق مع date_trunc('day') في الـ RPC والـ lazy reset. */
+function quotaPeriodKey(): string {
+  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD (UTC)
+}
+
+/** مفتاح العنفة (idempotency key): يضمن عدم الاستهلاك المكرر لنفس المستخدم/النوع/اليوم. */
+function quotaIdempotencyKey(userId: string, kind: QuotaKind): string {
+  return `quota:${userId}:${kind}:${quotaPeriodKey()}`;
+}
+
+/** سياسة fail-open: لو true يُسمح بالطلب عند تعطل الـRPC، لو false يُرفض الطلب (fail-closed).
+ *  الافتراضي: fail-closed (false). fail-open يُفعل فقط عندما QUOTA_FAIL_OPEN=true صريحاً. */
+function isFailOpenEnabled(): boolean {
+  return process.env.QUOTA_FAIL_OPEN === "true";
+}
+
+/** تسجيل تنبيه منظم عند تفعيل fail-open —可用于.alerting خارجي. */
+function logQuotaFailOpen(userId: string, kind: QuotaKind, error: unknown): void {
+  const msg = (error as { message?: string })?.message || String(error);
+  console.error(
+    JSON.stringify({
+      event: "quota_fail_open",
+      severity: "high",
+      user_id: userId,
+      kind,
+      reason: "rpc_or_table_unavailable",
+      error: msg,
+      timestamp: new Date().toISOString(),
+      policy: "fail-open — request allowed without quota consumption",
+    })
+  );
+}
 
 /** Fallbacks لو subscription_plans مش متاحة — نفس seeds db/epic2-admin-rbac-audit-schema.sql:157-161. */
 const FALLBACK_MESSAGES_PER_2H: Record<string, number> = { free: 20, pro: 100, ultra: 500 };
 const FALLBACK_UPLOADS_DAILY: Record<string, number> = { free: 5, pro: 30, ultra: 60 };
 
 /**
- * فحص + استهلاك كوتة في خطوة واحدة (ذرّي بما تسمح به العمليات المتتالية على
- * نفس السطر — نفس نمط upload route). لو مسموح بيستهلك 1 من الكوتا فورًا.
+ * فحص + استهلاك كوتة في خطوة واحدة ذرّية عبر RPC.
+ * لو مسموح بيستهلك 1 من الكوتا فورًا، ويرجع نتيجة موحّدة.
+ *
+ * @param isOwner — إذا كان المستخدم مالك، يتم تجاوز الفحص نهائيًا (بypass للحدود الداخلية)
+ *                  دون استدعاء الـRPC، ويُرجع النتيجة بـ ownerBypass=true.
  */
-export async function checkSubscriptionQuota(userId: string, kind: QuotaKind): Promise<QuotaCheckResult> {
-  const now = new Date();
+export async function checkSubscriptionQuota(
+  userId: string,
+  kind: QuotaKind,
+  isOwner = false
+): Promise<QuotaCheckResult> {
+  // ── المالك يتخطى الحدود الداخلية للمنصة (كوتة الاشتراك، رصيد AI) دون استدعاء RPC
+  if (isOwner) {
+    return {
+      allowed: true,
+      kind,
+      planKey: "owner",
+      used: 0,
+      limit: -1,
+      resetAt: null,
+      reasonAr: "المالك — تجاوز الحدود الداخلية (لا يوجد استهلاك كوتة)",
+      ownerBypass: true,
+    };
+  }
+
   try {
     const privileged = createServiceClient();
+    const idempotencyKey = quotaIdempotencyKey(userId, kind);
 
-    // 1) قراءة الكوتا + lazy reset لنافذة الـ24 ساعة
-    const { data: quotaRow, error: quotaErr } = await privileged
-      .from("subscription_quotas")
-      .select("messages_24h, uploads_today, last_reset_at")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (quotaErr) throw quotaErr;
+    // استدعاء الـRPC الذري: فحص حد + تسجيل مفتاح العنفة + استهلاك — في معاملة واحدة
+    const { data, error } = await privileged.rpc("consume_subscription_quota", {
+      p_user_id: userId,
+      p_kind: kind,
+      p_idempotency_key: idempotencyKey,
+    } as unknown as { p_user_id: string; p_kind: string; p_idempotency_key: string });
 
-    let used = kind === "message" ? (quotaRow?.messages_24h ?? 0) : (quotaRow?.uploads_today ?? 0);
-    let resetAt: string | null = quotaRow?.last_reset_at ?? null;
-    if (resetAt && now.getTime() - new Date(resetAt).getTime() > DAY_MS) {
-      used = 0;
-      resetAt = now.toISOString();
-      await privileged.from("subscription_quotas").update({
-        messages_24h: 0,
-        uploads_today: 0,
-        last_reset_at: resetAt,
-        updated_at: resetAt,
-      }).eq("user_id", userId);
+    if (error) throw error;
+
+    const result = data as { allowed: boolean; used: number; limit: number; reset_at: string | null; already_consumed: boolean } | null;
+    if (!result) {
+      throw new Error("consume_subscription_quota returned no data");
     }
 
-    // 2) باقة المستخدم من entitlements (نفس منطق upload route — القيمة الخام أو free)
-    const { data: ent } = await privileged
-      .from("entitlements")
-      .select("value")
-      .eq("user_id", userId)
-      .eq("kind", "plan")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const planKey = typeof ent?.value === "string" && ent.value ? ent.value : "free";
-
-    // 3) الحدود من subscription_plans، مع fallback مطابق للـseeds لو الجدول مش متاح
-    const { data: planRow } = await privileged
-      .from("subscription_plans")
-      .select("messages_per_2h, uploads_daily")
-      .eq("plan_key", planKey)
-      .maybeSingle();
-
-    let limit: number;
-    if (kind === "message") {
-      const per2h = typeof planRow?.messages_per_2h === "number"
-        ? planRow.messages_per_2h
-        : (FALLBACK_MESSAGES_PER_2H[planKey] ?? FALLBACK_MESSAGES_PER_2H.free);
-      limit = per2h * WINDOWS_PER_DAY; // حد يومي مكافئ — قرار موثق أعلى الملف
-    } else {
-      limit = typeof planRow?.uploads_daily === "number"
-        ? planRow.uploads_daily
-        : (FALLBACK_UPLOADS_DAILY[planKey] ?? FALLBACK_UPLOADS_DAILY.free);
+    // تحديد خطة المستخدم للعرض (من quotas table أو fallback)
+    let planKey = "free";
+    try {
+      const { data: ent } = await privileged
+        .from("entitlements")
+        .select("value")
+        .eq("user_id", userId)
+        .eq("kind", "plan")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (typeof ent?.value === "string" && ent.value) planKey = ent.value;
+    } catch {
+      // plan stays "free" on error
     }
 
-    // 4) فرض الحد
-    if (used >= limit) {
+    const limit = result.limit;
+    const used = result.used;
+    const resetAt = result.reset_at ?? null;
+
+    if (!result.allowed) {
       return {
         allowed: false,
         kind,
@@ -115,22 +146,43 @@ export async function checkSubscriptionQuota(userId: string, kind: QuotaKind): P
       };
     }
 
-    // 5) استهلاك 1 من الكوتا (upsert على user_id)
-    const nextMessages = kind === "message" ? used + 1 : (quotaRow?.messages_24h ?? 0);
-    const nextUploads = kind === "upload" ? used + 1 : (quotaRow?.uploads_today ?? 0);
-    await privileged.from("subscription_quotas").upsert({
-      user_id: userId,
-      plan_key: planKey,
-      messages_24h: nextMessages,
-      uploads_today: nextUploads,
-      last_reset_at: resetAt ?? now.toISOString(),
-      updated_at: now.toISOString(),
-    }, { onConflict: "user_id" });
-
-    return { allowed: true, kind, planKey, used: used + 1, limit, resetAt };
+    return {
+      allowed: true,
+      kind,
+      planKey,
+      used,
+      limit,
+      resetAt,
+      ...(result.already_consumed ? { reasonAr: "تم استهلاك هذه الكوتا سابقًا (عنفة مكررة)" } : undefined),
+    };
   } catch (e) {
-    // fail-open موثق: لو جداول الكوتا مش متنفذة بعد، الشات/الرفع ميقعوش.
-    console.warn("[quota-check] subscription quota unavailable — allowing (fail-open, documented):", e);
-    return { allowed: true, kind, planKey: "unknown", used: 0, limit: -1, resetAt: null };
+    // fail-open / fail-closed وفقًا لسياسة متغير البيئة
+    if (isFailOpenEnabled()) {
+      logQuotaFailOpen(userId, kind, e);
+      return { allowed: true, kind, planKey: "unknown", used: 0, limit: -1, resetAt: null };
+    }
+    // fail-closed: رفض الطلب عند تعطل الكوتة — لا يُسمح بالتجاوز بدون تتبع
+    const msg = (e as { message?: string })?.message || String(e);
+    console.error(
+      JSON.stringify({
+        event: "quota_fail_closed",
+        severity: "critical",
+        user_id: userId,
+        kind,
+        reason: "rpc_or_table_unavailable",
+        error: msg,
+        timestamp: new Date().toISOString(),
+        policy: "fail-closed — request rejected",
+      })
+    );
+    return {
+      allowed: false,
+      kind,
+      planKey: "unknown",
+      used: 0,
+      limit: -1,
+      resetAt: null,
+      reasonAr: "نظام الكوتة غير متاح حاليًا. حاول مرة أخرى لاحقًا.",
+    };
   }
 }

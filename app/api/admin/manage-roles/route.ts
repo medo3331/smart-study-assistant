@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getAdminRole } from "@/lib/auth-roles";
+import { resolveActor } from "@/lib/policy";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
 
@@ -14,9 +14,9 @@ export async function POST(req: Request) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const role = await getAdminRole(supabase, user?.id || null, user?.email);
+  const actor = await resolveActor(supabase, user?.id || null, user?.email ?? null);
 
-  if (role !== "owner") {
+  if (!actor.isOwner) {
     return NextResponse.json({ error: "غير مصرح — للمالك فقط" }, { status: 403 });
   }
 

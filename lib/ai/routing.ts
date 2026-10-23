@@ -1,4 +1,5 @@
 import type {
+  AiChatMessage,
   AiChatRequest,
   AiChatResponse,
   AiImageGenerationRequest,
@@ -22,6 +23,34 @@ import {
 } from "./models";
 import { withConcurrencyLimit } from "./queue";
 import { getRuntimePriority, isModelRuntimeEnabled } from "./model-state";
+import type { AiUsageContext } from "./usage-context";
+import { recordAiUsage, type UsageStatus } from "./usage-accounting";
+import { scheduleUsageRecording } from "./usage-scheduler";
+
+/**
+ * 🗺️ يحوّل نتيجة محاولة المزوّد لحالة `ai_usage_events`.
+ *
+ * ⚠️ **مش قرار تسعير** — دي تصنيف للأدلة بس. Phase 5-C5 هيقرر بعدين
+ *   هل `429` أو `timeout` يُحتسب ولا لأ. إحنا بنسجّل اللي حصل بالظبط.
+ *
+ * | الحالة في الكود                | معناها                        | `status`               |
+ * |--------------------------------|-------------------------------|------------------------|
+ * | رجّع استجابة                   | نجح                           | `completed`            |
+ * | `EMPTY_RESPONSE`               | ردّ، بس الناتج غير صالح       | `failed_after_response` |
+ * | `AiProviderError` تاني         | فشل قبل ما يردّ أصلاً      | `failed_no_response`   |
+ * | أي استثناء تاني (مش مزوّد)      | خطأ تنفيذ                 | `error`                |
+ *
+ * ⚠️ `skipped` **مش بنستخدمه هنا** عن قصد: التخطّي قبل أي نداء مزوّد
+ *   (cooldown / مزوّد مش مُهيّأ) **مش بيولّد سطر أصلاً** — لأنه مش
+ *   محاولة. لو استعملناه كنا بنكسر عقد "صف لكل محاولة فعلية" وبنقيس
+ *   providers ما اتنادتش، يخلّط تحليل C5.
+ */
+function mapAttemptStatus(error: unknown): UsageStatus {
+  if (!(error instanceof AiProviderError)) return "error";
+  // ⚠️ رجّع ردّ بس الناتج مش مستخدم → الفرق بين "مفيش رد" و"رد فاشل".
+  if (error.reasonCode === "EMPTY_RESPONSE") return "failed_after_response";
+  return "failed_no_response";
+}
 
 /**
  * AI Boundary (Phase A) — لا coupling مع Economy بعد.
@@ -194,10 +223,17 @@ function shouldTryNextCandidate(status: number): boolean {
  *
  * البوابة الموحّدة في كل الحالات: enabled + freeEndpoint + تهيئة المزوّد + صحته.
  */
-export function routeCandidates(task: AiTaskType, now: Date = new Date()): RouteCandidate[] {
-  void now; // نقطة توسّع مستقبلية (sticky sessions / budget windows) — مش مستخدمة حاليًا.
-  const required = TASK_CAPABILITIES[task];
-  const primaryProvider = AI_PROVIDER_BY_TASK[task];
+export function routeCandidates(
+  task: AiTaskType,
+  now: Date = new Date(),
+  options?: { hasImage?: boolean }
+): RouteCandidate[] {
+  void now;
+  const hasImage = Boolean(options?.hasImage);
+  const required = hasImage
+    ? [...TASK_CAPABILITIES[task], "vision" as AiCapability]
+    : TASK_CAPABILITIES[task];
+  const primaryProvider = hasImage ? "openrouter" : AI_PROVIDER_BY_TASK[task];
   const allowPaid = paidModelsAllowed();
   const candidates: RouteCandidate[] = [];
 
@@ -230,6 +266,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
   for (const modelId of TASK_MODEL_PREFERENCE[task] ?? []) {
     const preferred = MODEL_REGISTRY.find((model) => model.id === modelId);
     if (!preferred || !isUsable(preferred.provider)) continue;
+    if (hasImage && preferred.provider === "gemini") continue;
     pushIfEligible(preferred.provider, preferred.id);
   }
 
@@ -253,7 +290,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
 
   // مزوّدات بديلة — بس اللي حالتهم بتسمح بالاستخدام الآن.
   const otherProviders = [...new Set(MODEL_REGISTRY.map((m) => m.provider))].filter(
-    (p) => p !== primaryProvider
+    (p) => p !== primaryProvider && !(hasImage && p === "gemini")
   );
   for (const provider of otherProviders) {
     if (!isUsable(provider)) continue;
@@ -268,6 +305,15 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
   return candidates;
 }
 
+function detectImageInMessages(messages: AiChatMessage[]): boolean {
+  for (const m of messages) {
+    if (Array.isArray(m.content)) {
+      if (m.content.some((part) => part && part.type === "image_url")) return true;
+    }
+  }
+  return false;
+}
+
 export class AiRouter {
   private readonly providers: Partial<Record<AiProviderName, AiTextProvider>>;
 
@@ -279,33 +325,98 @@ export class AiRouter {
     return AI_PROVIDER_BY_TASK[task];
   }
 
-  async completeChat(task: AiTaskType, input: AiChatRequest): Promise<AiRoutedResponse> {
-    return withConcurrencyLimit(() => this.completeChatInner(task, input));
+  /**
+   * @param usage **اختياري**: سياق الطلب المنطقي. لو اتمرّر، بنسجّل **محاولة
+   *   لكل نداء مزوّد فعلي**. لو اتخطّى، المسجّل بيشتغل عادي و**مافيش
+   *   تسجيل** — وده اللي بيخلّي C3 صفر سلوك على المسارات اللي لسه
+   *   ما اتربطتش (دي C4).
+   */
+  async completeChat(
+    task: AiTaskType,
+    input: AiChatRequest,
+    usage?: AiUsageContext,
+  ): Promise<AiRoutedResponse> {
+    return withConcurrencyLimit(() => this.completeChatInner(task, input, usage));
   }
 
-  private async completeChatInner(task: AiTaskType, input: AiChatRequest): Promise<AiRoutedResponse> {
-    const required = TASK_CAPABILITIES[task];
-    const mediaOnly = required.some((capability) => capability === "vision" || capability === "file_analysis");
+  private async completeChatInner(
+    task: AiTaskType,
+    input: AiChatRequest,
+    usage?: AiUsageContext,
+  ): Promise<AiRoutedResponse> {
+    /**
+     * 🧭 السياق الواحد للطلب المنطقي — بيتحدّد **مرة واحدة** هنا.
+     *
+     * ⚠️ ليه `input.usage` الأول؟ لأن الـ route بيمرّره جوه
+     *   `AiChatRequest` (أضيق تغيير ممكن). والمعامل الصريح موجود لو حد
+     *   مرّره يدويًا من غير ما يعدّل الـ input.
+     *
+     * 🚫 **مافيش جيل هنا:** لو `usage` غايب، النتيجة `undefined` ←
+     *   المسجّل بيشتغل ومافيش تسجيل. الهوية بتتولّد عند حدّ الطلب
+     *   (`resolveUsageRequestContext`) مش هنا — وده اللي بيمنع تكرار
+     *   أو ضياع الـ identity.
+     */
+    const ctx = usage ?? input.usage;
+    const hasImage = detectImageInMessages(input.messages) || Boolean((input as { imageDataUrl?: string }).imageDataUrl);
+    const mediaOnly = TASK_CAPABILITIES[task].some((capability) => capability === "vision" || capability === "file_analysis");
 
     // مهام الوسائط: بدون أي fallback عابر للقدرات.
     if (mediaOnly || task === "image_generation") {
       const providerName = this.getProviderName(task);
       const provider = this.providers[providerName];
       if (!provider) throw new Error(`AI provider \"${providerName}\" is not available for task \"${task}\".`);
+      // 🧾 الطلب ده محاولة واحدة دايمًا (مافيش fallback قبل الوسائط)،
+      //   فـ attemptNo = 0 ومكانش فيه أي حدث قبله.
+      const startedAt = Date.now();
       try {
         const response = await provider.completeChat(input);
         recordProviderResult(providerName, { ok: true });
+        // 🧾 نقطة قياس #1 — نفس حدّ المزوّد الحقيقي، مش حوالين النداء.
+        if (ctx) {
+          await scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: providerName,
+            model: response.model,
+            status: "completed",
+            units: 1,
+            promptTokens: response.usage?.promptTokens,
+            completionTokens: response.usage?.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "media", source: ctx.source, ...ctx.diagnostics },
+          }));
+        }
         return response;
       } catch (error) {
         if (error instanceof AiProviderError) {
           recordProviderResult(providerName, { ok: false, status: error.status, reason: `HTTP ${error.status}` });
+        }
+        // 🧾 نقطة قياس #1 (فشل) — بنسجّل قبل إعادة الرمي، مش بعدها، عشان
+        //   النتيجة بتتغيّر أصلاً لو الـ recording نجح.
+        if (ctx) {
+          await scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: providerName,
+            model: input.model,
+            status: mapAttemptStatus(error),
+            units: 1,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "media", source: ctx.source, ...ctx.diagnostics },
+          }));
         }
         throw error;
       }
     }
 
     const attempts: RouterAttempt[] = [];
-    const candidates = routeCandidates(task);
+    const candidates = routeCandidates(task, new Date(), { hasImage });
 
     if (candidates.length === 0) {
       throw new AiRouteError(
@@ -342,11 +453,49 @@ export class AiRouter {
 
       const request: AiChatRequest = candidate.model ? { ...input, model: candidate.model } : input;
       const startedAt = Date.now();
+      // 🧾 ترقيم المحاولات: بنلتقط القيمة **قبل** الزيادة، فالأول = 0.
+      //
+      // ⚠️ **ليه العدّاد موجود هنا بالظبط:** السطر ده بيجي بعد كل الـ
+      //   pre-flight skips (مزوّد مش مُهيّأ / cooldown) — فبنية العدّاد
+      //   نفسها **ضامنة** إن attemptNo بيتحسب للمحاولات الفعلية بس،
+      //   ومزوّد ما اتنادىش ما بياخدش رقم. ده اللي بيحقق شرط
+      //   "pre-flight skip ما بيولّدش حدث" من غير أي منطق إضافي.
+      const attemptNo = attemptsMade;
       attemptsMade++;
       try {
         const response = await provider.completeChat(request);
         recordProviderResult(candidate.provider, { ok: true, latencyMs: Date.now() - startedAt });
         attempts.push({ provider: candidate.provider, model: candidate.model ?? response.model, ok: true });
+        // 🧾 ★ نقطة القياس الحقيقية — جوّه الـ fallback loop، عند
+        //   `provider.completeChat` بالظبط. سطر واحد لكل محاولة.
+        //
+        //   ⚠️ `operationId` و `idempotencyKey` **ثابتين** من الـ context
+        //   الواحد بتاع الطلب المنطقي — الفرق الوحيد بين السطرين هو
+        //   `attemptNo` (0=Groq، 1=NVIDIA). دي كل الفكرة: طلب واحد
+        //   ب-advances جوه، مش سطر واحد لكل request.
+        //
+        //   🛡️ `void` مقصود: بنسجّل **بشكل مقطوع** (fire-and-forget) عشان
+        //   بطء/تعطّل الـ DB مايضيفش latency لرد المستخدم. و`recordAiUsage`
+        //   متصمّم إنه مايرميش أبدًا، فمافيش خطر unhandled rejection.
+        if (ctx) {
+          await scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo,
+            provider: candidate.provider,
+            model: candidate.model ?? response.model,
+            status: "completed",
+            units: 1,
+            // ⚠️ بنحفظ اللي المزوّد رجّعه بس — مافيش أي تقدير. المزوّد
+            //   اللي مش بيرجّع usage بيسجّل null وده صحيح.
+            promptTokens: response.usage?.promptTokens,
+            completionTokens: response.usage?.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "chat", source: ctx.source, attemptCount: attemptNo + 1, ...ctx.diagnostics },
+          }));
+        }
         return attempts.length > 1
           ? { ...response, fallback: { attempts: [...attempts] } }
           : response;
@@ -368,6 +517,35 @@ export class AiRouter {
           }
         );
         attempts.push({ provider: candidate.provider, model: candidate.model, ok: false, reason });
+
+        // 🧾 ★ نقطة القياس (فشل) — **قبل** كل قرارات الـ fallback اللي
+        //   تحت (break / exclude). لازم نسجّل المحاولة الفاشلة دي حتى لو
+        //   الـ fallback وقف بعدها، وإلا هنشوف "المحاولة الأولى اللي نجحت"
+        //   من غير أي دليل إن دي كانت المحاولة التانية.
+        if (ctx) {
+          await scheduleUsageRecording(() => recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx?.feature ?? task,
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo,
+            provider: candidate.provider,
+            model: candidate.model,
+            status: mapAttemptStatus(error),
+            // ⚠️ units = 1 **للأدلة** — مش بيقف عند الفشل. Phase 5-C5
+            //   هيقرر بعدين هل الفشل ده يُحتسب في billing ولا لأ. إحنا
+//   بنسجّل إن المزوّد اتنادى فعلاً، وده هو القرار الفيصل.
+            units: 1,
+            latencyMs: Date.now() - startedAt,
+            metadata: {
+              path: "chat",
+              source: ctx.source,
+              attemptCount: attemptNo + 1,
+              httpStatus: error instanceof AiProviderError ? error.status : null,
+              reason,
+            },
+          }));
+        }
 
         if (!(error instanceof AiProviderError)) throw error;
         if (!shouldTryNextCandidate(error.status)) break;
@@ -420,3 +598,111 @@ export class AiRouter {
     }
   }
 }
+
+// Phase G append
+import OpenAI from "openai";
+
+export type MultiProviderConfig = {
+  name: string;
+  baseURL: string;
+  apiKeyEnv: string;
+  model: string;
+};
+
+export const AI_PROVIDERS: MultiProviderConfig[] = [
+  { name: "groq", baseURL: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "llama-3.3-70b-versatile" },
+  { name: "openrouter", baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", model: "meta-llama/llama-3-8b-instruct:free" },
+  { name: "mistral", baseURL: "https://api.mistral.ai/v1", apiKeyEnv: "MISTRAL_API_KEY", model: "mistral-small-latest" },
+  { name: "together", baseURL: "https://api.together.xyz/v1", apiKeyEnv: "TOGETHER_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free" },
+  { name: "cerebras", baseURL: "https://api.cerebras.ai/v1", apiKeyEnv: "CEREBRAS_API_KEY", model: "llama3.1-8b" },
+  { name: "sambanova", baseURL: "https://api.sambanova.ai/v1", apiKeyEnv: "SAMBANOVA_API_KEY", model: "Meta-Llama-3.3-70B-Instruct" },
+  { name: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1", apiKeyEnv: "FIREWORKS_API_KEY", model: "accounts/fireworks/models/llama-v3p3-70b-instruct" },
+  { name: "hyperbolic", baseURL: "https://api.hyperbolic.xyz/v1", apiKeyEnv: "HYPERBOLIC_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct" },
+  { name: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai", apiKeyEnv: "DEEPINFRA_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct" },
+  { name: "novita", baseURL: "https://api.novita.ai/v3/openai", apiKeyEnv: "NOVITA_API_KEY", model: "meta-llama/llama-3.3-70b-instruct" },
+];
+
+export async function completeChatWithProviderFallback(
+  input: AiChatRequest,
+  usage?: AiUsageContext
+): Promise<AiChatResponse> {
+  const ctx = usage ?? input.usage;
+  for (const cfg of AI_PROVIDERS) {
+    const apiKey = process.env[cfg.apiKeyEnv]?.trim();
+    if (!apiKey) {
+      console.warn(`[ai/fallback] skipping provider ${cfg.name}: missing ${cfg.apiKeyEnv}`);
+      continue;
+    }
+    const startedAt = Date.now();
+    try {
+      const client = new OpenAI({ apiKey, baseURL: cfg.baseURL });
+      const completion = await client.chat.completions.create({
+        model: input.model ?? cfg.model,
+        messages: input.messages as any,
+        temperature: input.temperature ?? 0.7,
+      });
+      const content = completion.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw new AiProviderError("Empty response", 200, cfg.name as AiProviderName, "EMPTY_RESPONSE");
+      }
+      const response: AiChatResponse = {
+        provider: cfg.name as AiProviderName,
+        model: typeof completion.model === "string" ? completion.model : cfg.model,
+        content,
+        payload: completion as any,
+        usage: {
+          promptTokens: completion.usage?.prompt_tokens,
+          completionTokens: completion.usage?.completion_tokens,
+        },
+      };
+      if (ctx) {
+        await scheduleUsageRecording(() =>
+          recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx.feature ?? "chat",
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: cfg.name as AiProviderName,
+            model: response.model,
+            status: "completed",
+            units: 1,
+            promptTokens: response.usage?.promptTokens,
+            completionTokens: response.usage?.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "fallback", source: ctx.source },
+          })
+        );
+      }
+      return response;
+    } catch (error) {
+      const status =
+        error instanceof AiProviderError
+          ? error.status
+          : error instanceof OpenAI.APIError
+            ? error.status ?? 500
+            : 500;
+      console.warn(`[ai/fallback] provider ${cfg.name} failed (status=${status}):`, error instanceof Error ? error.message : error);
+      if (ctx) {
+        await scheduleUsageRecording(() =>
+          recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx.feature ?? "chat",
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: cfg.name as AiProviderName,
+            model: cfg.model,
+            status: mapAttemptStatus(error),
+            units: 1,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "fallback", source: ctx.source, httpStatus: status },
+          })
+        );
+      }
+      continue;
+    }
+  }
+  throw new AiProviderError("All AI providers failed", 503, "groq" as AiProviderName);
+}
+

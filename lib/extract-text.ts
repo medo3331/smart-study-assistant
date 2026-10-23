@@ -1,5 +1,5 @@
 import mammoth from 'mammoth';
-import { extractText, getDocumentProxy } from 'unpdf';
+import { PDFParse } from 'pdf-parse';
 
 /* ==========================================================================
    استخراج النص من ملف مرفوع — الكود المشترك بين راوتين
@@ -255,16 +255,17 @@ export async function extractTextFromFile(
   let text = '';
 
   if (kind === 'pdf') {
-    // PDF مكسور أو محمي بباسورد بيرمي من جوه unpdf — ده خطأ متوقّع
+    // PDF مكسور أو محمي بباسورد بيرمي من جوه pdf-parse — ده خطأ متوقّع
     // مش كراش، فلازم يوصل للمستخدم كرسالة مفهومة.
     try {
-      const pdf = await getDocumentProxy(buffer);
-      const extracted = await extractText(pdf, { mergePages: true });
-      text = extracted.text;
+      const parser = new PDFParse({ data: Buffer.from(buffer) });
+      const result = await parser.getText();
+      await parser.destroy();
+      text = result.text || '';
     } catch (err) {
       console.error('PDF parse failed:', err);
       throw new ExtractError(
-        'مقدرتش أفتح ملف الـ PDF ده. لو محمي بباسورد شيل الحماية وجرّب تاني.',
+        'تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.',
         422
       );
     }
@@ -298,9 +299,11 @@ export async function extractTextFromFile(
 
   if (!text.trim()) {
     throw new ExtractError(
-      kind === 'image'
-        ? 'مفيش نص واضح في الصورة. اتأكد إنها مش مقلوبة والكتابة باينة.'
-        : 'مفيش نص اتقرا من الملف ده.',
+      kind === 'pdf'
+        ? 'تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.'
+        : kind === 'image'
+          ? 'مفيش نص واضح في الصورة. اتأكد إنها مش مقلوبة والكتابة باينة.'
+          : 'مفيش نص اتقرا من الملف ده.',
       422
     );
   }

@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 
 /** Islamic/Worship domain types */
 export interface PrayerTime {

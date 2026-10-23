@@ -78,6 +78,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
       // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
       { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
       { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
+      // 📚 محاضراتي — محاضرات المستخدم المحفوظة وتفريغها (المرحلة ٣).
+      // جنب بنك الامتحانات: الاتنين «محتوى الطالب الخاص» — محاضراته هو.
+      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
       { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
@@ -91,6 +94,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "achievements", icon: "🏆", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
       { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
       { id: "rewards", icon: "🪙", label: "سجل المكافآت", latin: "Rewards", href: "/rewards" },
+      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
       { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
       { id: "leaderboard", icon: "🥇", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
       // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب

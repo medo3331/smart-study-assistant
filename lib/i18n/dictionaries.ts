@@ -193,6 +193,22 @@ export type Dictionary = {
   login_forgot_submit: string;
   login_reset_title: string;
   login_reset_submit: string;
+  login_otp_title: string;
+  login_otp_label: string;
+  login_otp_placeholder: string;
+  login_otp_submit: string;
+  login_otp_resend: string;
+  login_otp_hint: string;
+  login_otp_err: string;
+  login_otp_sent: string;
+  login_otp_back: string;
+  login_help_btn: string;
+  login_help_title: string;
+  login_help_step1: string;
+  login_help_step2: string;
+  login_help_step3: string;
+  login_help_step4: string;
+  login_need_help: string;
   login_back_signin: string;
   login_ok_reset_sent: string;
   login_ok_reset: string;
@@ -606,6 +622,22 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     login_forgot_submit: 'إرسال رابط الاسترجاع',
     login_reset_title: 'تعيين كلمة سر جديدة',
     login_reset_submit: 'حفظ كلمة السر الجديدة',
+    login_otp_title: 'تأكيد الكود',
+    login_otp_label: 'كود التأكيد',
+    login_otp_placeholder: '000000',
+    login_otp_submit: 'تأكيد الكود',
+    login_otp_resend: 'إعادة إرسال الكود',
+    login_otp_hint: 'ابعتنا كود من 6 أرقام على إيميلك — اكتبه هنا، أو افتح الرابط اللي في الإيميل لو فضّلت.',
+    login_otp_err: 'الكود غير صحيح أو منتهي الصلاحية. جرّب تاني.',
+    login_otp_sent: 'الكود وصلك على إيميلك — اكتبه هنا.',
+    login_otp_back: 'رجوع',
+    login_help_btn: '؟ إرشادات',
+    login_help_title: 'إزاي تبدأ: التسجيل والدخول بالكود',
+    login_help_step1: 'اعمل حساب جديد بالإيميل وكلمة السر — أو جرّب كزائر من غير تسجيل.',
+    login_help_step2: 'لو التسجيل محتاج تأكيد، هيوصلك كود من 6 أرقام على إيميلك: اكتبه في شاشة «تأكيد الكود» أو افتح الرابط اللي في الإيميل.',
+    login_help_step3: 'نسيت كلمة السر؟ اضغط «نسيت كلمة السر؟»، اكتب إيميلك، ثم حط الكود اللي يوصلك واختار باسورد جديد.',
+    login_help_step4: 'بعد كده سجّل دخولك عادي بالإيميل والباسورد — وتقدّمك كله محفوظ في حسابك.',
+    login_need_help: 'محتاج مساعدة في المشكلة دي؟',
     login_back_signin: 'الرجوع لتسجيل الدخول',
     login_ok_reset_sent: 'لو الإيميل مسجّل، هتوصلك رسالة فيها رابط لتعيين كلمة سر جديدة.',
     login_ok_reset: 'تم تغيير كلمة السر. تقدر تسجّل دخولك دلوقتي.',
@@ -997,6 +1029,22 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     login_forgot_submit: 'Send reset link',
     login_reset_title: 'Choose a new password',
     login_reset_submit: 'Save new password',
+    login_otp_title: 'Verify code',
+    login_otp_label: 'Confirmation code',
+    login_otp_placeholder: '000000',
+    login_otp_submit: 'Verify code',
+    login_otp_resend: 'Resend code',
+    login_otp_hint: 'We sent a 6-digit code to your email — enter it here, or open the link in the email if you prefer.',
+    login_otp_err: 'Wrong or expired code. Try again.',
+    login_otp_sent: 'The code is in your email — enter it here.',
+    login_otp_back: 'Back',
+    login_help_btn: '? Guide',
+    login_help_title: 'Getting started: sign-up & code login',
+    login_help_step1: 'Create an account with your email and password — or try as a guest with no sign-up.',
+    login_help_step2: 'If sign-up requires confirmation, you get a 6-digit code by email: enter it on the "Verify code" screen, or open the link in the email.',
+    login_help_step3: 'Forgot your password? Click "Forgot your password?", enter your email, then type the code you receive and pick a new password.',
+    login_help_step4: 'After that, just sign in with your email and password — all your progress is saved to your account.',
+    login_need_help: 'Need help with this problem?',
     login_back_signin: 'Back to sign in',
     login_ok_reset_sent: 'If that email is registered, we sent a link to reset your password.',
     login_ok_reset: 'Your password has been changed. You can sign in now.',

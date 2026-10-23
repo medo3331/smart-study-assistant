@@ -58,7 +58,7 @@ export async function POST(req: Request) {
          • حد استخدام على الـ IP للزوار (أقل من المسجّلين)
          • قايمة صفحات مقفولة (KNOWN_PAGES)
          • قص كل النصوص بـ clampText
-         • مفيش كتابة في الداتابيز خالص — لوج وإيميل بس
+         • الزائر: لوج وإيميل بس — والمسجّل بيتحفظ كمان في جدول user_feedback
        ------------------------------------------------------------------ */
     const supabase = await createClient();
     const {
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     const comment = clampText(body.comment, MAX_COMMENT_CHARS).trim();
     const featureLabel = clampText(body.featureLabel, MAX_META_CHARS).trim();
 
-    if (rating !== "up" && rating !== "down") {
+    if (typeof rating !== "number" || !Number.isInteger(rating) || rating < 1 || rating > 5) {
       return NextResponse.json(
         { success: false, error: "قيمة التقييم غير صالحة." },
         { status: 400 }
@@ -109,12 +109,31 @@ export async function POST(req: Request) {
     // الـ IP داتا شخصية ومالهاش لازمة في قراءة رأي.
     const who = user ? `user: ${user.id}` : "زائر (مش مسجّل)";
     console.log(
-      `[feedback] ${stamp} | ${rating === "up" ? "👍" : "👎"} | صفحة: ${page}` +
+      `[feedback] ${stamp} | ${"⭐".repeat(rating)} (${rating}/5) | صفحة: ${page}` +
         `${featureLabel ? ` | ${featureLabel}` : ""} | ${who}` +
         `${comment ? `\n  التعليق: ${comment}` : ""}`
     );
 
-    // ٢) بعدين الإيميل — لو مظبوط
+    // ٢) الحفظ في user_feedback — بس لو المستخدم مسجّل
+    //    (سياسة الإدراج بتشترط auth.uid()، فالزائر بيتجاهَل هنا ويبقى
+    //    في اللوج والإيميل زي ما هو)
+    if (user) {
+      const { error: insertError } = await supabase
+        .from("user_feedback")
+        .insert({
+          user_id: user.id,
+          page,
+          feature_label: featureLabel || null,
+          rating,
+          comment: comment || null,
+        });
+      if (insertError) {
+        // فشل الحفظ مايوصلش للمستخدم — الرأي اتسجّل في اللوج والإيميل ماشي
+        console.error("[feedback] فشل حفظ user_feedback:", insertError.message);
+      }
+    }
+
+    // ٣) بعدين الإيميل — لو مظبوط
     const apiKey = process.env.RESEND_API_KEY?.trim();
     const to = process.env.FEEDBACK_EMAIL_TO?.trim();
     // Resend بيطلب دومين متحقّق. onboarding@resend.dev بيشتغل من غير
@@ -131,20 +150,20 @@ export async function POST(req: Request) {
     }
 
     const subject =
-      rating === "down"
-        ? `👎 مشكلة في ${featureLabel || page}`
-        : `👍 إعجاب بـ ${featureLabel || page}`;
+      rating <= 2
+        ? `(${rating}/5) مشكلة في ${featureLabel || page}`
+        : `(${rating}/5) إعجاب بـ ${featureLabel || page}`;
 
     // نص عادي مش HTML: مفيش أي داعي نحقن نص مستخدم في ماركب.
     // النص بيتعرض كـ text/plain فأي وسوم فيه بتبان كنص مش بتتنفّذ.
     const lines = [
-      `التقييم: ${rating === "up" ? "👍 عجبته" : "👎 مش عجبته"}`,
+      `التقييم: ${rating} من 5 نجوم${rating <= 2 ? " — محتاج انتباه" : ""}`,
       `الصفحة: ${page}`,
       featureLabel ? `الميزة: ${featureLabel}` : null,
       `المستخدم: ${user ? user.email ?? user.id : "زائر (مش مسجّل)"}`,
       `الوقت: ${stamp}`,
       "",
-      comment ? `إيه المشكلة:\n${comment}` : "(مافيش تعليق مكتوب)",
+      comment ? `الاقتراح/المشكلة:\n${comment}` : "(مافيش تعليق مكتوب)",
     ].filter(Boolean);
 
     try {

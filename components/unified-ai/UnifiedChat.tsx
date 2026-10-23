@@ -7,7 +7,7 @@
  * Upload: 📎 (PDF/text) / 🖼️ (image) → Preview → OCR إذا لزم → Router داخلي → Response.
  * يكبُر الطلب على /api/unified-ai ويدير OCR + Router خلف الكواليس.
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
@@ -15,6 +15,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { SITE_LINKS } from "@/lib/site-links";
+import { createClient } from "@/lib/supabase/client";
 
 function supportWhatsappHref(code?: string, detail?: string) {
   const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
@@ -40,9 +41,8 @@ type LessonContext = {
 
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك. لا تحتاج لاختيار وكيل." },
-  ]);
+  const [profileInfo, setProfileInfo] = useState<{ name: string; subject: string }>({ name: "الطالب", subject: "موادك" });
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -60,6 +60,52 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name, study_field")
+          .eq("id", user.id)
+          .maybeSingle();
+        let subject = (profile as any)?.study_field || "";
+        if (!subject) {
+          const { data } = await supabase
+            .from("user_subjects")
+            .select("subjects(name)")
+            .eq("user_id", user.id)
+            .limit(1);
+          subject = (data as any)?.[0]?.subjects?.name || "";
+        }
+        const name =
+          (profile as any)?.display_name ||
+          (user.user_metadata as any)?.full_name ||
+          "الطالب";
+        if (!cancelled) {
+          setProfileInfo({ name, subject: subject || "موادك" });
+        }
+      } catch {
+        // best-effort
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setMessages([
+      {
+        role: "assistant",
+        content: `أهلاً يا ${profileInfo.name} 👋، أنا معلمك الشخصي. إيه اللي هنذاكره النهاردة في ${profileInfo.subject}؟`,
+      },
+    ]);
+  }, [profileInfo]);
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>, kind: "file" | "image") => {
     const f = e.target.files?.[0];
@@ -128,6 +174,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         const rawError =
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
           (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ.");
+        if (code === "PDF_READ_FAILED") {
+          setMessages((m) => [...m, { role: "assistant", content: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك." }]);
+          return;
+        }
+        if (code === "FILE_TOO_LARGE") {
+          setMessages((m) => [...m, { role: "assistant", content: "الملف كبير جداً، الحد الأقصى 4 ميجابايت" }]);
+          return;
+        }
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
         const supportAction = { label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true };
 
@@ -234,7 +288,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         </button>
         <button
           onClick={() => {
-            setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك. لا تحتاج لاختيار وكيل." }]);
+            setMessages([{ role: "assistant", content: `أهلاً يا ${profileInfo.name} 👋، أنا معلمك الشخصي. إيه اللي هنذاكره النهاردة في ${profileInfo.subject}؟` }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}
@@ -418,6 +472,13 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                     </Link>
                   )
                 )}
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
+                >
+                  <Crown size={14} />
+                  ترقية الآن
+                </Link>
               </div>
             </div>
             <button

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "d585d352-5ee0-44ec-a555-0a53e137c75d",
+    "subject_id": "6d91c3bb-ccbc-4e82-9d1c-f744d55cd4ec",
+    "academic_year_id": "7161282c-9f5e-43a7-9bfa-7dbe77d40123",
+    "title": "Thanaweya Amma — General Secondary — Final Mathematics — 2024",
+    "exam_date": null,
+    "duration_minutes": null,
+    "total_marks": null,
+    "exam_file_path": null,
+    "answer_file_path": null,
+    "source_name": "Ministry of Education — Egypt (MOE)",
+    "source_url": "https://moe.gov.eg/ar/elearningenterypage/e-learning",
+    "is_published": false,
+    "created_at": "2026-09-03T07:02:42.008Z",
+    "updated_at": "2026-09-03T07:02:42.008Z"
+  },
+  {
+    "id": "cb474fda-25b1-41e1-b55c-0de26bff46e6",
+    "subject_id": "6d91c3bb-ccbc-4e82-9d1c-f744d55cd4ec",
+    "academic_year_id": "7161282c-9f5e-43a7-9bfa-7dbe77d40123",
+    "title": "Thanaweya Amma — General Secondary — Final Mathematics — 2024",
+    "exam_date": null,
+    "duration_minutes": null,
+    "total_marks": null,
+    "exam_file_path": null,
+    "answer_file_path": null,
+    "source_name": "Ministry of Education — Egypt (MOE)",
+    "source_url": "https://moe.gov.eg/ar/elearningenterypage/e-learning",
+    "is_published": false,
+    "created_at": "2026-09-04T00:03:10.273Z",
+    "updated_at": "2026-09-04T00:03:10.273Z"
+  }
+]

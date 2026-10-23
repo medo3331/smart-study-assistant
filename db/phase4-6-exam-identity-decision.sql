@@ -1,0 +1,87 @@
+-- ============================================================================
+-- Phase 4.6 — record the exam identity decision
+-- ----------------------------------------------------------------------------
+-- This file changes no data. It attaches a comment to two columns that are
+-- deliberately null, because a null nobody explained and a null somebody
+-- decided to leave are different things: the first is an oversight waiting
+-- to be "fixed", the second is a decision that will survive the next
+-- person who notices it.
+--
+-- ════════════════════════════════════════════════════════════════════════════
+-- exam_code stays NULL
+-- ════════════════════════════════════════════════════════════════════════════
+-- The column was added in 4.2 and left null in 4.3, when the only candidate
+-- was MATH-2024-FINAL-R1. That was rejected because it asserts a year and a
+-- round that nothing in the database corroborates:
+--
+--   past_exams.title           Thanaweya Amma ... Final Mathematics - 2024
+--   academic_years.label       2023-2024
+--   past_exams.exam_date       NULL
+--   past_exam_questions.source_question_id
+--                              08603b83-... , the id the questions were
+--                              imported from, whose bank slug read
+--                              moe_mathematica_exam_2023_first_round_verified
+--
+-- So the title says 2024, the academic year straddles two years, the exam
+-- date states nothing, and the lineage of every one of the ten questions
+-- points back to a record that called the paper 2023 first round. A code
+-- carries whichever of those you type into it, and there is no fourth
+-- source to break the tie.
+--
+-- Setting MATH-THAN-2024-DIAG was considered and rejected for the same
+-- reason, plus one more: "DIAG" describes what the exam is currently used
+-- for, not what it is. The moment the exam is published or used for
+-- practice the code would be wrong, and a stable identity that expires
+-- with the current feature is not an identity. exam_code is meant to be
+-- the thing that stays the same.
+--
+-- What would settle it: the original paper, and the ten questions read
+-- against it. Until then there is one null here rather than two claims
+-- disagreeing in the same table.
+-- ============================================================================
+
+comment on column public.past_exams.exam_code is
+  'Stable external identifier for the exam. Deliberately NULL: the year and sitting are contradicted across our own records (title says 2024, academic_year is 2023-2024, exam_date is null, and every question''s source_question_id traces to a bank slug reading "2023_first_round"). Set it when the original paper is reviewed and the ten questions are read against it. A code must be a stable identity, so it may not carry a year we cannot prove nor a purpose that will change.';
+
+-- ============================================================================
+-- is_published stays false
+-- ============================================================================
+-- The RLS read policy on past_exams is (is_published = true), so this flag is
+-- what decides whether the exam appears on /exams. It is false because the
+-- exam is currently input to the diagnostic engine and nothing else.
+--
+-- The two things are deliberately kept apart. "Verified enough to measure a
+-- student against" is a real fact about these ten questions and is recorded
+-- on each one: verification_status = 'verified' is what
+-- /api/diagnostic/start filters on. "Published for students to browse" is a
+-- claim about the exam as an artefact -- that the paper is the one it claims
+-- to be, and that these ten questions are from it. /api/exam-bank/questions
+-- reads through RLS and therefore refuses the exam, which is correct.
+--
+-- A student on /exams should be able to trust that the paper is the one the
+-- title names. That needs the original source, a settled year, a stable
+-- exam_code, and the ten questions checked against the paper. Until then the
+-- diagnostic works and /exams shows nothing, and neither of those is a bug.
+-- ============================================================================
+
+comment on column public.past_exams.is_published is
+  'Whether this exam appears on /exams. Deliberately false: the exam currently feeds the diagnostic engine only, and publishing it would assert that the paper is the one the title names. Diagnostic eligibility is a separate fact, carried on each question as verification_status and checked by /api/diagnostic/start. The four things publication needs are an official source, a settled year, a stable exam_code, and the ten questions read against the original paper.';
+
+-- ============================================================================
+-- VERIFICATION (run after)
+-- ============================================================================
+-- 1. No data moved; only the comments changed:
+--    select exam_code, is_published from past_exams;
+--    EXPECTED: NULL, false
+--
+-- 2. The decisions are readable in the catalog:
+--    select col_description('public.past_exams'::regclass, attnum) is not null
+--      from pg_attribute
+--     where attrelid='public.past_exams'::regclass and attname='exam_code';
+--    EXPECTED: true
+--
+-- 3. The diagnostic still serves its ten questions, which is the whole
+--    point of keeping the two facts apart:
+--    node scripts/smoke/smoke-4.4h.mjs
+--    EXPECTED: 0 failed
+-- ============================================================================
