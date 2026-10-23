@@ -82,6 +82,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "Settings",
   },
   {
+    href: "/admin/ai-usage",
+    label: "استخدام الذكاء الاصطناعي",
+    description: "تقرير Shadow لاستخدام AI (ai_usage_events) — قراءة فقط",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
+  {
     href: "/admin/runtime-errors",
     label: "أخطاء Runtime",
     description: "مراقبة أخطاء الإنتاج (قراءة فقط)",
