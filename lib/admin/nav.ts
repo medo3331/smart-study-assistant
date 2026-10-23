@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -94,6 +94,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "مراقبة أخطاء الإنتاج (قراءة فقط)",
     permission: "audit.read",
     icon: "ScrollText",
+  },
+  {
+    href: "/admin/announcements",
+    label: "الإعلانات",
+    description: "إنشاء وتعديل وحذف إعلانات المستخدمين (metadata + scheduling)",
+    permission: "announcements.manage",
+    icon: "Megaphone",
   },
 ];
 
