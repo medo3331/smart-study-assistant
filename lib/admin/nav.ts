@@ -81,6 +81,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "admins.manage",
     icon: "Settings",
   },
+  {
+    href: "/admin/runtime-errors",
+    label: "أخطاء Runtime",
+    description: "مراقبة أخطاء الإنتاج (قراءة فقط)",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */
