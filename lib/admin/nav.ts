@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
