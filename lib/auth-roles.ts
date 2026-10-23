@@ -137,19 +137,19 @@ export type AdminPermissionKey =
   | "users.read" | "users.ban" | "users.unban" | "users.impersonate" | "users.regenerate_code"
   | "plans.manage" | "trial.manage" | "models.manage" | "rewards.manage"
   | "admins.manage" | "files.moderate" | "audit.read"
-  | "subscriptions.manage" | "credits.manage" | "announcements.manage";
+  | "subscriptions.manage" | "credits.manage" | "announcements.manage" | "support.manage";
 
 export const ADMIN_PERMISSION_KEYS: AdminPermissionKey[] = [
   "users.read", "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
   "plans.manage", "trial.manage", "models.manage", "rewards.manage",
-  "admins.manage", "files.moderate", "audit.read", "subscriptions.manage", "credits.manage", "announcements.manage",
+  "admins.manage", "files.moderate", "audit.read", "subscriptions.manage", "credits.manage", "announcements.manage", "support.manage",
 ];
 
 /** أي العمليات تعتبر حساسة وتحتاج تسجيل في audit_log. */
 export const SENSITIVE_ACTIONS: AdminPermissionKey[] = [
   "users.ban", "users.unban", "users.impersonate", "users.regenerate_code",
   "plans.manage", "trial.manage", "models.manage", "rewards.manage",
-  "admins.manage", "files.moderate", "subscriptions.manage", "credits.manage", "announcements.manage",
+  "admins.manage", "files.moderate", "subscriptions.manage", "credits.manage", "announcements.manage", "support.manage",
 ];
 
 export interface AdminPermissionRecord {
@@ -174,6 +174,7 @@ export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRec
   "subscriptions.manage": { key: "subscriptions.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
   "credits.manage":       { key: "credits.manage", allowed_roles: ["owner"], is_sensitive: true },
   "announcements.manage": { key: "announcements.manage", allowed_roles: ["owner","admin"], is_sensitive: true },
+  "support.manage": { key: "support.manage", allowed_roles: ["owner","admin","support"], is_sensitive: true },
 };
 
 /** قراءة الصلاحيات من جدول site_admins (مع دعم الـpermissions column الجديد). */

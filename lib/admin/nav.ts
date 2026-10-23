@@ -102,6 +102,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "announcements.manage",
     icon: "Megaphone",
   },
+  {
+    href: "/admin/support",
+    label: "الدعم",
+    description: "صندوق بريد الدعم والتذاكر",
+    permission: "support.manage",
+    icon: "LifeBuoy",
+  },
+
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */
