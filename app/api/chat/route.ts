@@ -104,7 +104,7 @@ export async function POST(req: Request) {
 
     //     prompt                                                       
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
-    let studentName = "ط§ظ„ط·ط§ظ„ط¨";
+     let studentName = "الطالب";
   try {
     const { data: profile } = await supabase
       .from("profiles")
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
 
   const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
-    const system = `ط£ظ†طھ ظ…ط¹ظ„ظ… ط´ط®طµظٹ ط°ظƒظٹ ظˆظ„ط·ظٹظپ. طھطھط­ط¯ط« ط¨ط§ظ„ظ„ط؛ط© ط§ظ„ط¹ط±ط¨ظٹط© ط¯ط§ط¦ظ…ط§ظ‹. ط³ط§ط¹ط¯ ط§ظ„ط·ط§ظ„ط¨ ظپظٹ ظپظ‡ظ… ط§ظ„ظ…ظˆط§ط¯ ط§ظ„ط¯ط±ط§ط³ظٹط©.\n\nط§ط³ظ… ط§ظ„ط·ط§ظ„ط¨: ${studentName}\nط§ظ„ظ…ط§ط¯ط© ط§ظ„ط­ط§ظ„ظٹط©: ${studentContext.subject || "ط؛ظٹط± ظ…ط­ط¯ط¯ط©"}`;
+     const system = `أنت معلم شخصي ذكي ولطيف. تتحدث باللغة العربية دائماً. ساعد الطالب في فهم المواد الدراسية.\n\nاسم الطالب: ${studentName}\nالمادة الحالية: ${studentContext.subject || "غير محددة"}`;
 
   const combinedSystem = system;
   void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");

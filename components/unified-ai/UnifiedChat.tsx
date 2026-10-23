@@ -39,7 +39,7 @@ type LessonContext = {
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "ط£ظ‡ظ„ط§ظ‹! ط£ظ†ط§ ظ…ط³ط§ط¹ط¯ظƒ ط§ظ„ط°ظƒظٹ ظ„ظ„ط¯ط±ط§ط³ط©. ظƒظٹظپ ط£ظ‚ط¯ط± ط£ط³ط§ط¹ط¯ظƒ ط§ظ„ظٹظˆظ…طں", },
+    { role: "assistant", content: "أهلاً! أنا مساعدك الذكي للدراسة. كيف أقدر أساعدك اليوم؟", },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -237,7 +237,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         </button>
         <button
           onClick={() => {
-             setMessages([{ role: "assistant", content: "ط£ظ‡ظ„ط§ظ‹! ط£ظ†ط§ ظ…ط³ط§ط¹ط¯ظƒ ط§ظ„ط°ظƒظٹ ظ„ظ„ط¯ط±ط§ط³ط©. ظƒظٹظپ ط£ظ‚ط¯ط± ط£ط³ط§ط¹ط¯ظƒ ط§ظ„ظٹظˆظ…طں" }]);
+             setMessages([{ role: "assistant", content: "أهلاً! أنا مساعدك الذكي للدراسة. كيف أقدر أساعدك اليوم؟" }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}

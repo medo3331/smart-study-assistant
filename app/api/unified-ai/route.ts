@@ -605,7 +605,7 @@ export async function POST(req: Request) {
       }
     }
     console.error("unified-ai route error:", (e as Error)?.message || String(e));
-    return NextResponse.json({ ok: false, error: "ط­ط¯ط« ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹. ط¬ط±ط¨ ظ…ط±ط© ط£ط®ط±ظ‰.", code: "INTERNAL_ERROR" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "حدث خطأ", code: "INTERNAL_ERROR" }, { status: 200 });
   }
 }
 // export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
