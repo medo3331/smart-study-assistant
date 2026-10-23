@@ -1,5 +1,7 @@
 import mammoth from 'mammoth';
-import { PDFParse } from 'pdf-parse';
+// PDF parsing is intentionally loaded dynamically inside extractTextFromFile so
+// ordinary chat requests never evaluate pdfjs-dist (which requires browser
+// globals such as DOMMatrix in Node.js).
 
 /* ==========================================================================
    استخراج النص من ملف مرفوع — الكود المشترك بين راوتين
@@ -258,6 +260,7 @@ export async function extractTextFromFile(
     // PDF مكسور أو محمي بباسورد بيرمي من جوه pdf-parse — ده خطأ متوقّع
     // مش كراش، فلازم يوصل للمستخدم كرسالة مفهومة.
     try {
+      const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: Buffer.from(buffer) });
       const result = await parser.getText();
       await parser.destroy();

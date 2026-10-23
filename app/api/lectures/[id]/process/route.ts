@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -105,6 +106,7 @@ export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const traceId = createTraceId();
   try {
     // ── ١) المصادقة: من الجلسة، لا من الـ body ──
     const supabase = await createClient();
@@ -285,6 +287,16 @@ export async function POST(
     // الصح — والطالب هيشوف رسالة غلط (مثلاً تفريغ فاضي يطلع «الخدمة
     // مش متاحة»).
     if (error instanceof StudyContentError) {
+      void recordRuntimeError({
+        route: "/api/lectures/[id]/process",
+        feature: "lecture",
+        category: classifyError(error, "internal"),
+        errorType: error.code || "StudyContentError",
+        traceId,
+        outcome: "failed",
+        message: error instanceof Error ? error.message : String(error),
+        userId: null,
+      });
       console.error(`lectures/process: [${error.code}] ${error.message}`);
       return NextResponse.json(
         { success: false, error: { code: error.code, message: error.message } },
@@ -297,8 +309,17 @@ export async function POST(
       // لوج تشخيصي للخطأ الأصلي؛ الرد بياخد الرسالة الآمنة بس.
       console.error("lectures/process: خطأ غير متوقع", error);
     }
+    void recordRuntimeError({
+      route: "/api/lectures/[id]/process",
+      feature: "lecture",
+      category: classifyError(error, "internal"),
+      errorType: error instanceof Error ? error.name : "Error",
+      traceId,
+      outcome: "failed",
+      message: error instanceof Error ? error.message : String(error),
+      userId: null,
+    });
     return NextResponse.json(
-      { success: false, error: { code: safe.code, message: safe.message } },
       { status: safe.status },
     );
   }

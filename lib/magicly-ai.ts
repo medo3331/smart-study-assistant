@@ -150,14 +150,17 @@ export async function rememberSessionContext(
   context: StudentContext,
   latestMessage = ""
 ) {
-  const rows: Array<{ user_id: string; kind: string; value: string }> = [
-    { user_id: userId, kind: "recent_subject", value: context.subject },
-    { user_id: userId, kind: "preferred_style", value: context.learningStyle },
-    { user_id: userId, kind: "recent_lesson", value: context.lesson },
-    ...getUsefulMemorySignals(latestMessage, userId),
-  ];
+const now = new Date().toISOString();
+  const rows: Array<{ user_id: string; kind: string; value: string; updated_at: string }> = [
+    { user_id: userId, kind: "recent_subject", value: context.subject, updated_at: now },
+    { user_id: userId, kind: "preferred_style", value: context.learningStyle, updated_at: now },
+    { user_id: userId, kind: "recent_lesson", value: context.lesson, updated_at: now },
+    ...getUsefulMemorySignals(latestMessage, userId).map((row) => ({ ...row, updated_at: now })),
+  ].filter((row) => row.value && row.value.trim().length > 0);
 
-  await supabase.from("ai_memories").upsert(rows, { onConflict: "user_id,kind,value" });
+if (rows.length > 0) {
+    await supabase.from("ai_memories").upsert(rows, { onConflict: "user_id,kind,value" });
+  }
 }
 
 /**

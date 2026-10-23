@@ -5,8 +5,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { resolveActor } from "@/lib/policy";
 import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
 
 export async function uploadFile(formData: FormData) {
+  const traceId = createTraceId();
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -110,6 +112,16 @@ export async function uploadFile(formData: FormData) {
 
     return { ok: true, message: "تم رفع الملف بنجاح" };
   } catch (e: any) {
+    void recordRuntimeError({
+      route: "/api/upload",
+      feature: "upload",
+      category: classifyError(e, "upload"),
+      errorType: e?.name || "Error",
+      traceId,
+      outcome: "failed",
+      message: e instanceof Error ? e.message : String(e),
+      userId: null,
+    });
     return { ok: false, message: "خطأ في رفع الملف: " + (e?.message || String(e)), error: String(e) };
   }
 }

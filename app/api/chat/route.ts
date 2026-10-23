@@ -13,6 +13,7 @@ import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
 
 /**                                          ). */
 const MAX_MESSAGES = 30;
@@ -22,6 +23,7 @@ const MAX_MESSAGE_CHARS = 8000;
 type IncomingMessage = { role?: unknown; content?: unknown };
 
 export async function POST(req: Request) {
+  const traceId = createTraceId();
   try {
     // 1) Require user
     const { user, supabase, response: authError } = await requireUser("message");
@@ -148,6 +150,17 @@ export async function POST(req: Request) {
         usage,
       });
     } catch (error) {
+      void recordRuntimeError({
+        route: "/api/chat",
+        feature: "chat",
+        category: classifyError(error, "provider"),
+        errorType: error instanceof Error ? error.name : "Error",
+        traceId,
+        outcome: "failed",
+        message: error instanceof Error ? error.message : String(error),
+        userId: user?.id ?? null,
+        metadata: { status: (error as { status?: number })?.status },
+      });
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       const isRate = error.status === 429;
@@ -165,7 +178,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const data = completion.payload;
+    const data = completion.payload ?? {};
     const answer = completion.content;
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
 
@@ -210,10 +223,22 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ...data,
+      content: answer,
+      message: answer,
       conversationId: savedConversationId || undefined,
       suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
     });
   } catch (error) {
+    void recordRuntimeError({
+      route: "/api/chat",
+      feature: "chat",
+      category: classifyError(error, "internal"),
+      errorType: error instanceof Error ? error.name : "Error",
+      traceId,
+      outcome: "failed",
+      message: error instanceof Error ? error.message : String(error),
+      userId: null,
+    });
     console.error("chat route error:", error);
     return NextResponse.json(
       { error: { message: "Internal server error", code: "INTERNAL_ERROR" } },
