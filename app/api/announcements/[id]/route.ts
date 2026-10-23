@@ -53,15 +53,17 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
   if(body.publish_at!==undefined){publishAt=parseDate(body.publish_at); if(publishAt===undefined)return NextResponse.json({success:false,error:"Invalid publish_at."},{status:400}); updates.publish_at=publishAt?publishAt.toISOString():publishAt;}
   if(body.expires_at!==undefined){expiresAt=parseDate(body.expires_at); if(expiresAt===undefined)return NextResponse.json({success:false,error:"Invalid expires_at."},{status:400}); updates.expires_at=expiresAt?expiresAt.toISOString():expiresAt;}
   if(Object.keys(updates).length===0)return NextResponse.json({success:false,error:"No fields to update."},{status:400});
-  const now=new Date();
-  if(updates.status==="published"){
-   const p=publishAt===undefined?undefined:publishAt;
-   const e=expiresAt===undefined?undefined:expiresAt;
-   if(e&&e<=now)return NextResponse.json({success:false,error:"Published announcement cannot already be expired."},{status:400});
-  }
-  if(publishAt!==undefined&&expiresAt!==undefined&&publishAt&&expiresAt&&publishAt>=expiresAt)return NextResponse.json({success:false,error:"publish_at must be before expires_at."},{status:400});
-  updates.updated_at=new Date().toISOString();
   const service=createServiceClient();
+  const {data:existing,error:existingError}=await service.from("announcements").select("status,publish_at,expires_at").eq("id",id).maybeSingle();
+  if(existingError){console.error("[announcements] PATCH",existingError.message);return NextResponse.json({success:false,error:"Failed to load announcement."},{status:500});}
+  if(!existing)return NextResponse.json({success:false,error:"Announcement not found."},{status:404});
+  const now=new Date();
+  const nextStatus=updates.status??existing.status;
+  const nextPublish=publishAt===undefined?(existing.publish_at?new Date(existing.publish_at):null):publishAt;
+  const nextExpires=expiresAt===undefined?(existing.expires_at?new Date(existing.expires_at):null):expiresAt;
+  if(nextPublish&&nextExpires&&nextPublish>=nextExpires)return NextResponse.json({success:false,error:"publish_at must be before expires_at."},{status:400});
+  if(nextStatus==="published"&&nextExpires&&nextExpires<=now)return NextResponse.json({success:false,error:"Published announcement cannot already be expired."},{status:400});
+  updates.updated_at=new Date().toISOString();
   const {data,error}=await service.from("announcements").update(updates).eq("id",id).select("*").maybeSingle();
   if(error){console.error("[announcements] PATCH",error.message);return NextResponse.json({success:false,error:"Failed to update announcement."},{status:500});}
   if(!data)return NextResponse.json({success:false,error:"Announcement not found."},{status:404});

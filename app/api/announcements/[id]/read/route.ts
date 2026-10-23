@@ -11,7 +11,15 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)return NextResponse.json({success:false,error:"Authentication required."},{status:401});
-  const {data:ann,error:annError}=await supabase.from("announcements").select("id").eq("id",id).maybeSingle();
+  const now=new Date().toISOString();
+  const {data:ann,error:annError}=await supabase
+    .from("announcements")
+    .select("id")
+    .eq("id",id)
+    .eq("status","published")
+    .or(`publish_at.is.null,publish_at.lte.${now}`)
+    .or(`expires_at.is.null,expires_at.gt.${now}`)
+    .maybeSingle();
   if(annError){console.error("[announcements read]",annError.message);return NextResponse.json({success:false,error:"Failed to verify announcement."},{status:500});}
   if(!ann)return NextResponse.json({success:false,error:"Announcement not found or not active."},{status:404});
   const {error}=await supabase.from("announcement_reads").insert({announcement_id:id,user_id:user.id});
