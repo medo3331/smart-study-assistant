@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable @next/next/no-img-element -- previewUrl is dynamic blob URL, next/image not suitable */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 /**
@@ -39,7 +39,7 @@ type LessonContext = {
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "Hello! I am your AI study assistant. How can I help you today?", },
+    { role: "assistant", content: "ط£ظ‡ظ„ط§ظ‹! ط£ظ†ط§ ظ…ط³ط§ط¹ط¯ظƒ ط§ظ„ط°ظƒظٹ ظ„ظ„ط¯ط±ط§ط³ط©. ظƒظٹظپ ط£ظ‚ط¯ط± ط£ط³ط§ط¹ط¯ظƒ ط§ظ„ظٹظˆظ…طں", },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -127,7 +127,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           (data?.error?.code as string | undefined) ||
           "";
         //                                       m?ltiples                :
-        // reasonAr (   /api/chat)  message (             error.message  error             const rawError =
+         const rawError =
           (data?.reasonAr as string | undefined) ||
           (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
@@ -209,7 +209,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         setConversationId(data.conversationId);
       }
 
-      // Show assistant response                                 const assistantText = data?.answer || "                Unified AI.";
+       const assistantText = data?.answer || " unified AI.";
 
       setMessages((m) => [
         ...m,
@@ -237,7 +237,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         </button>
         <button
           onClick={() => {
-             setMessages([{ role: "assistant", content: "Hello! How can I help you?" }]);
+             setMessages([{ role: "assistant", content: "ط£ظ‡ظ„ط§ظ‹! ط£ظ†ط§ ظ…ط³ط§ط¹ط¯ظƒ ط§ظ„ط°ظƒظٹ ظ„ظ„ط¯ط±ط§ط³ط©. ظƒظٹظپ ط£ظ‚ط¯ط± ط£ط³ط§ط¹ط¯ظƒ ط§ظ„ظٹظˆظ…طں" }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}
@@ -280,7 +280,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
               {msg.role === "user" ? (
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
-                <MarkdownRenderer>{msg.content}</MarkdownRenderer>
+                <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>

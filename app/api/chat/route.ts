@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
@@ -25,7 +25,7 @@ type IncomingMessage = { role?: unknown; content?: unknown };
 export async function POST(req: Request) {
   const traceId = createTraceId();
   try {
-    // 1)                                                           const { user, supabase, response: authError } = await requireUser("message");
+    const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
     // 2)                                    Groq
@@ -103,19 +103,25 @@ export async function POST(req: Request) {
     }
 
     //     prompt                                                       
-    //              (                                                const studentContext = await getStudentContext(supabase, user.id, context ?? {});
-    const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
-    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
-    const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+    const studentContext = await getStudentContext(supabase, user.id, context ?? {});
+    let studentName = "ط§ظ„ط·ط§ظ„ط¨";
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.full_name) studentName = profile.full_name;
+  } catch (e) {
+    console.warn("Could not load student name", e);
+  }
 
-    //                  (Persona Builder)                         let personaPrompt = "";
-    try {
-      personaPrompt = await buildSystemPrompt(user.id);
-    } catch (e) {
-      console.warn("Persona prompt build failed, falling back to base system prompt:", e);
-    }
-    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n---                          --\n${system}` : system;
-    void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
+  const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
+    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
+    const system = `ط£ظ†طھ ظ…ط¹ظ„ظ… ط´ط®طµظٹ ط°ظƒظٹ ظˆظ„ط·ظٹظپ. طھطھط­ط¯ط« ط¨ط§ظ„ظ„ط؛ط© ط§ظ„ط¹ط±ط¨ظٹط© ط¯ط§ط¦ظ…ط§ظ‹. ط³ط§ط¹ط¯ ط§ظ„ط·ط§ظ„ط¨ ظپظٹ ظپظ‡ظ… ط§ظ„ظ…ظˆط§ط¯ ط§ظ„ط¯ط±ط§ط³ظٹط©.\n\nط§ط³ظ… ط§ظ„ط·ط§ظ„ط¨: ${studentName}\nط§ظ„ظ…ط§ط¯ط© ط§ظ„ط­ط§ظ„ظٹط©: ${studentContext.subject || "ط؛ظٹط± ظ…ط­ط¯ط¯ط©"}`;
+
+  const combinedSystem = system;
+  void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
     const candidates = routeCandidates("chat");

@@ -75,6 +75,7 @@ export async function getStudentContext(
   if (!configId) {
     // config profiles
     const { data: profile } = await supabase
+      .from("profiles")
       .select("study_field, learning_goal")
       .eq("id", userId)
       .maybeSingle();
