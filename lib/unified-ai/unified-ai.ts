@@ -18,6 +18,7 @@ import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
+import { extractTextFromFile, detectFileKind } from "../extract-text";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
@@ -217,6 +218,23 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
           metadata: undefined,
           reasoning: undefined,
         };
+        console.error("OCR error (resilient):", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
+        extractedText = "";
+        ocrMeta = { engineUsed: 3, confidence: "low" };
+        const isPdf = detectFileKind(file.type, file.name) === "pdf";
+        if (isPdf) {
+          return {
+            ok: false,
+            agentUsed: "unknown",
+            answer: "",
+            error: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.",
+            errorCode: "PDF_READ_FAILED",
+            extractedText: undefined,
+            metadata: undefined,
+            reasoning: undefined,
+          };
+        }
+        // Continue for non-PDF — don't throw
       }
     }
 

@@ -84,7 +84,7 @@ const DAILY_BUDGET = 40;
  * (الـ lease بتاع التذكرة 12 دقيقة بيسمح لطلب جديد يستحوذ لو الفانكشن
  * ماتت في النص — شوف lib/ai/tickets.ts.)
  */
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 /** هوية صاحب الطلب من الجلسة — null لو زائر بلا جلسة. */
 async function resolveSessionUserId(): Promise<string | null> {

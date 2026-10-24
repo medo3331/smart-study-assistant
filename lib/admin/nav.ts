@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -81,6 +81,42 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "admins.manage",
     icon: "Settings",
   },
+  {
+    href: "/admin/ai-usage",
+    label: "استخدام الذكاء الاصطناعي",
+    description: "تقرير Shadow لاستخدام AI (ai_usage_events) — قراءة فقط",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
+  {
+    href: "/admin/runtime-errors",
+    label: "أخطاء Runtime",
+    description: "مراقبة أخطاء الإنتاج (قراءة فقط)",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
+  {
+    href: "/admin/announcements",
+    label: "الإعلانات",
+    description: "إنشاء وتعديل وحذف إعلانات المستخدمين (metadata + scheduling)",
+    permission: "announcements.manage",
+    icon: "Megaphone",
+  },
+  {
+    href: "/admin/announcement-emails",
+    label: "إرسال إعلان بالبريد",
+    description: "حملات بريد يدوية للإعلانات — اختيار مستلمين، مراجعة، تأكيد",
+    permission: "announcements.manage",
+    icon: "Megaphone",
+  },
+  {
+    href: "/admin/support",
+    label: "الدعم",
+    description: "صندوق بريد الدعم والتذاكر",
+    permission: "support.manage",
+    icon: "LifeBuoy",
+  },
+
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */

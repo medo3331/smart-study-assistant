@@ -167,11 +167,11 @@ function SmartContentViewer({ topic, subject, edu }: { topic: string; subject: s
     }[mode as "simple" | "academic" | "visual" | "practical"];
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // NOTE: /api/chat does NOT read `systemInstruction` from the request body —
+          // NOTE: /api/ai/generate does NOT read `systemInstruction` from the request body —
           // it builds the system prompt server-side (lib/ai/prompt-builder.ts +
           // lib/magicly-ai.ts). This string is currently dead weight. It is kept in
           // sync with the server tone so the two do not drift apart, but changing it

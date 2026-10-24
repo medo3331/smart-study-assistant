@@ -96,14 +96,14 @@ afterEach(async () => {
 
 describe("ط§ظ„ظ‚ط±ط§ط±ط© â€” ط§ظ„ط­ط¯ ظˆط§ظ„ط¹ط¯ط§ط¯ط©", () => {
   it("âœ… 45 MB طھظƒط³ط±ظٹط§ظ† ط£ط³ط·ط± ظ…ظ† ط§ظ„ظ…ط¹ط§ط¬ط©", () => {
-    expect(needsCompression({ size: mb(45) })).toBe(false);
-    expect(needsCompression({ size: mb(44) })).toBe(false);
-    expect(needsCompression({ size: 0 })).toBe(false);
+    expect(needsCompression({ type: "video/mp4", size: mb(45) })).toBe(false);
+    expect(needsCompression({ type: "video/mp4", size: mb(44) })).toBe(false);
+    expect(needsCompression({ type: "video/mp4", size: 0 })).toBe(false);
   });
 
   it("âœ… ط£ظƒط¨ط± ظ…ظ† 45 MB ظٹط­طھط§ط¬ ط¶ط؛ط·", () => {
-    expect(needsCompression({ size: mb(45) + 1 })).toBe(true);
-    expect(needsCompression({ size: mb(51) })).toBe(true);
+    expect(needsCompression({ type: "video/mp4", size: mb(45) + 1 })).toBe(true);
+    expect(needsCompression({ type: "video/mp4", size: mb(51) })).toBe(true);
   });
 
   it("âœ… ط§ظ„ظ…ط¹ط§ط¯ط§طھ: 64â†’48â†’32â†’24 ط­ط³ط¨ ط§ظ„ظ…ط¯ط©", () => {

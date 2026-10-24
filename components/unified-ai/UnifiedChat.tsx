@@ -2,10 +2,8 @@
 /* eslint-disable @next/next/no-img-element -- previewUrl is dynamic blob URL, next/image not suitable */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 /**
- * Unified Chat — واجهة واحدة فقط للمستخدم.
- * لا يظهر AgentRouter / OCR / 11 Agents للمستخدم.
- * Upload: 📎 (PDF/text) / 🖼️ (image) → Preview → OCR إذا لزم → Router داخلي → Response.
- * يكبُر الطلب على /api/unified-ai ويدير OCR + Router خلف الكواليس.
+ * Unified Chat                              *         AgentRouter / OCR / 11 Agents            * Upload: ?? (PDF/text) / ??? (image) ? Preview ? OCR         ? Router         Response.
+ *                  api/unified-ai       OCR + Router              
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -18,7 +16,7 @@ import { SITE_LINKS } from "@/lib/site-links";
 
 function supportWhatsappHref(code?: string, detail?: string) {
   const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
-  const text = `أهلاً، عندي مشكلة في المساعد الذكي${code ? ` (${code})` : ""}${detail ? `: ${detail}` : ""}`;
+  const text = (code ? ` (${code})` : "") + (detail ? `: ${detail}` : "");
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}text=${encodeURIComponent(text)}`;
 }
@@ -41,7 +39,7 @@ type LessonContext = {
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك. لا تحتاج لاختيار وكيل." },
+    { role: "assistant", content: "Hello! I am your AI study assistant. How can I help you today?", },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -127,7 +125,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
     const text = input.trim();
     if (!text && !attachment) return;
 
-    const userMsg: ChatMsg = { role: "user", content: text || "(ملف/صورة مرفق)", attachmentName: attachment?.file.name };
+    const userMsg: ChatMsg = { role: "user", content: text || "(   /          ", attachmentName: attachment?.file.name };
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
@@ -143,16 +141,16 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           formData.append("imageInput", attachment.file, attachment.file.name);
         }
       }
-      // Pass context language + lesson context (مخفي عن المستخدم)
+      // Pass context language + lesson context (                )
       const ctx: Record<string, unknown> = {};
       if (initialContext && typeof initialContext === "object") {
         Object.assign(ctx, initialContext);
       }
       if (!ctx.language) ctx.language = "ar";
-      // ذاكرة المحادثة + وضع المذاكرة (كانوا في /api/chat — اتوحدوا هنا)
+      //                +              (         /api/chat              )
       if (conversationId) ctx.conversationId = conversationId;
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
-      // حقن سياق الدرس الحقيقي إذا متوفر — يبعت للـ API كـ hidden system prompt
+      //                                             API    hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
           title: lesson.title || "",
@@ -173,20 +171,28 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       setLoading(false);
 
       if (!res.ok || !data?.ok) {
-        const code = (data?.code as string | undefined) || (data?.error?.code as string | undefined) || "";
-        const rawError =
+        const code =
+          (data?.code as string | undefined) ||
+          (data?.error?.code as string | undefined) ||
+          "";
+        //                                       m?ltiples                :
+         // reasonAr (   /api/chat)  message (             error.message  error
+         const rawError =
+          (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
-          (res.status === 429 ? "وصلت للحد الأقصى للاستخدام المجاني." : "حدث خطأ.");
+          (res.status === 429
+            ? "                                                    .                            ."
+            : "        ");
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
-        const supportAction = { label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true };
+        const supportAction = { label: "                        ", href: supportHref, external: true };
 
-        // ── رصيد AI Credits خلص (402) — مش عطل فني ──
+        // ??      AI Credits     (402)              ??
         if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
           const info = {
-            error: "رصيد AI Credits لا يكفي.",
-            message: "دي مش مشكلة في الموقع — رصيدك خلص. اشترِ حزمة من المتجر، أو كلم الدعم الفني على واتساب لو شايف إن ده غلط.",
+            error: "Insufficient AI Credits.",
+            message: "You do not have enough credits for this request. Please visit the store to purchase more credits.",
             actions: [
-              { label: "شراء حزمة رصيد", href: "/store" },
+              { label: "Buy Credits", href: "/store" },
               supportAction,
             ],
             kind: "credits" as const,
@@ -196,13 +202,13 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           return;
         }
 
-        // ── صلاحية مطلوبة (403) — مش عطل فني ──
+        // ??               (403)              ??
         if (res.status === 403 || code === "MODEL_ACCESS_REQUIRED") {
           const info = {
-            error: rawError || "هذه الميزة تتطلب صلاحية.",
-            message: "حسابك شغال تمام، بس النموذج ده محتاج اشتراك أو صلاحية. اشترك من المتجر أو كلم الدعم.",
+            error: rawError || "Model access required.",
+            message: "You need to upgrade your plan to access this model. Please visit the pricing page.",
             actions: [
-              { label: "الاشتراك في الخطة المدفوعة", href: "/pricing" },
+              { label: "Upgrade Plan", href: "/pricing" },
               supportAction,
             ],
             kind: "access" as const,
@@ -212,14 +218,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           return;
         }
 
-        // ── Rate Limit توجيهي (429) ──
+        // ?? Rate Limit        (429) ??
         if (res.status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "GUEST_RATE_LIMIT") {
           const info = {
             error: rawError,
-            message: data?.message || "يمكنك الانتظار لحين تجدد الرصيد المجاني، أو الاشتراك في الخطة المدفوعة للحصول على استخدام غير محدود!",
+            message: data?.message || "                                                                                                    ",
             actions: (data?.actions as { label: string; href: string }[]) || [
-              { label: "الاشتراك في الخطة المدفوعة", href: "/pricing" },
-              { label: "شراء حزمة رصيد", href: "/store" },
+              { label: "                          ", href: "/pricing" },
+              { label: "Buy Credits", href: "/store" },
               supportAction,
             ],
             retryAfterHours: data?.retryAfterHours as number | undefined,
@@ -229,15 +235,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             kind: "limit" as const,
           };
           setRateLimitInfo(info);
-          // أيضاً أضف رسالة في سجل المحادثة للتوضيح
-          setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
+          //                                                   setMessages((m) => [...m, { role: "assistant", content: `${info.error}\n\n${info.message}` }]);
           return;
         }
 
-        // ── عطل فني (500/502/503 أو PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) ──
+        // ??         (500/502/503    PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) ??
         const technicalInfo = {
-          error: "عطل فني مؤقت.",
-          message: `المشكلة من عندنا مش من رصيدك${code ? ` (${code})` : ""}. حاول تاني بعد شوية، ولو اتكررت ابعتلنا على واتساب وهنحلها.`,
+          error: "             ",
+          message: `                            ${code ? ` (${code})` : ""}.                                                           `,
           actions: [supportAction],
           kind: "technical" as const,
         };
@@ -246,18 +251,16 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         return;
       }
 
-      // نجح — امسح حالة الـ rate limit السابقة
-      setRateLimitInfo(null);
+      //                     rate limit               setRateLimitInfo(null);
 
-      // ذاكرة المحادثة: السيرفر رجّع معرف الجلسة
+      //                                         
       if (typeof data?.conversationId === "string" && data.conversationId) {
         setConversationId(data.conversationId);
         loadConversations();
       }
 
-      // Show assistant response — نظيف بدون أي ذكر للوكيل
-      const assistantText = data?.answer || "تم المعالجة عبر Unified AI.";
-
+       // Show assistant response
+       const assistantText = data?.answer || "Unified AI.";
       setMessages((m) => [
         ...m,
         { role: "assistant", content: assistantText },
@@ -265,14 +268,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       removeAttachment();
     } catch {
       setLoading(false);
-      const supportHref = supportWhatsappHref("NETWORK", "تعذر الاتصال بالخادم");
+      const supportHref = supportWhatsappHref("NETWORK", "Network Error");
       setRateLimitInfo({
-        error: "تعذر الاتصال.",
-        message: "اتأكد من الإنترنت وحاول تاني، ولو المشكلة مستمرة كلمنا واتساب.",
-        actions: [{ label: "كلم الدعم الفني (واتساب)", href: supportHref, external: true }],
+        error: "Network Error.",
+        message: "Unable to connect to the server. Please check your internet connection.",
+        actions: [{ label: "Contact Support", href: supportHref, external: true }],
         kind: "technical",
       });
-      setMessages((m) => [...m, { role: "assistant", content: "تعذر الاتصال. اتأكد من الإنترنت وحاول تاني." }]);
+      setMessages((m) => [...m, { role: "assistant", content: "Network error occurred." }]);
     }
   };
 
@@ -309,29 +312,29 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button onClick={() => setSidebarOpen(true)} className="md:hidden m-2 px-2 py-1 border rounded" aria-label="فتح القائمة">☰</button>
         <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="الرجوع للوحة التحكم">
-          ← لوحة التحكم
+        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="                   ">
+          ?            
         </button>
         <button
           onClick={() => {
-            setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك. لا تحتاج لاختيار وكيل." }]);
+             setMessages([{ role: "assistant", content: "Hello! How can I help you?" }]);
             setConversationId(null);
             setRateLimitInfo(null);
           }}
           className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition"
-          aria-label="محادثة جديدة"
+          aria-label="            "
         >
-          ✦ محادثة جديدة
+          ?             
         </button>
       </div>
 
-      {/* أوضاع المذاكرة (كانت في مساعد الداشبورد — اتوحدت هنا) */}
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="وضع المذاكرة">
+      {/*                (                                    ) */}
+      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Study Modes">
         {([
-          { id: "explain", label: "اشرحلي" },
-          { id: "quiz", label: "اختبرني" },
-          { id: "summarize", label: "لخصلي" },
-          { id: "review", label: "راجعلي" },
+           { id: "explain", label: "Explain" },
+           { id: "quiz", label: "Quiz" },
+           { id: "summarize", label: "Summarize" },
+           { id: "review", label: "Review" },
         ] as const).map((m) => (
           <button
             key={m.id}
@@ -360,7 +363,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                 <MarkdownRenderer>{msg.content}</MarkdownRenderer>
               )}
               {msg.attachmentName && (
-                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
+                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>
               )}
             </div>
           </div>
@@ -368,7 +371,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         {loading && (
           <div className="flex justify-end">
             <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
-              <LoaderCircle className="w-4 h-4 animate-spin" /> جارى المعالجة...
+              <LoaderCircle className="w-4 h-4 animate-spin" />              ...
             </div>
           </div>
         )}
@@ -381,19 +384,19 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             {attachment.kind === "image" ? (
               <img src={attachment.previewUrl} alt="preview" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF / ملف</div>
+              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF /    </div>
             )}
             <button
               onClick={removeAttachment}
               className="absolute top-1 left-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80 text-[10px]"
-              aria-label="إزالة المرفق"
+               aria-label="Remove attachment"
             >
               <X size={12} />
             </button>
           </div>
-          <div className="text-xs text-ink-soft">
+          <div className="text-xs">
             <p className="font-medium">{attachment.file.name}</p>
-            <p>سيتم معالجته عبر OCR إذا كانت صورة/ملف نصي</p>
+            <p>OCR processing...</p>
           </div>
         </div>
       )}
@@ -403,7 +406,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          aria-label="رفع ملف"
+          aria-label="       "
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <Paperclip size={20} />
@@ -411,7 +414,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           type="button"
           onClick={() => imageInputRef.current?.click()}
-          aria-label="رفع صورة"
+          aria-label="        "
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <ImagePlus size={20} />
@@ -434,7 +437,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           dir="rtl"
           rows={1}
           className="flex-1 bg-transparent text-sm font-body resize-none outline-none py-2 min-h-[36px] max-h-[120px]"
-          placeholder="اكتب سؤالك... (صورة أو ملف مرفق يُعالج عبر OCR)"
+          placeholder="           .. (                            OCR)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
@@ -442,15 +445,14 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         <button
           onClick={send}
           disabled={loading || (!input.trim() && !attachment)}
-          aria-label="إرسال"
-          className="p-2.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] hover:brightness-110 disabled:opacity-40 transition"
+           aria-label="Send message"
         >
           <Send size={18} />
         </button>
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-        <p className="text-[11px] text-ink-soft">Magic — مساعدك الذكي</p>
+         <p className="text-[11px] text-ink-soft">Magic</p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
           <Sparkles size={12} /> <span>Magic</span>
         </div>
@@ -470,8 +472,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
               {rateLimitInfo.retryAfterHours && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2 flex items-center gap-1">
                   <Clock size={12} />
-                  سيتم تجديد رصيدك المجاني بعد {rateLimitInfo.retryAfterHours} ساعات
-                  {rateLimitInfo.retryAfter ? ` (حوالي ${Math.ceil(rateLimitInfo.retryAfter / 60)} دقيقة)` : ""}
+                                               {rateLimitInfo.retryAfterHours}                         {rateLimitInfo.retryAfter ? ` (       {Math.ceil(rateLimitInfo.retryAfter / 60)}      )` : ""}
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-3">
@@ -493,7 +494,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                       href={a.href}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
                     >
-                      {a.label.includes("الاشتراك") ? <Crown size={14} /> : <ShoppingBag size={14} />}
+                      {a.label.includes("        ") ? <Crown size={14} /> : <ShoppingBag size={14} />}
                       {a.label}
                     </Link>
                   )
@@ -503,7 +504,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
             <button
               onClick={() => setRateLimitInfo(null)}
               className="shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-amber-700 dark:text-amber-300"
-              aria-label="إغلاق"
+              aria-label="     "
             >
               <X size={16} />
             </button>

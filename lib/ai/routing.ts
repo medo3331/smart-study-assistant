@@ -1,4 +1,5 @@
 import type {
+  AiChatMessage,
   AiChatRequest,
   AiChatResponse,
   AiImageGenerationRequest,
@@ -222,10 +223,17 @@ function shouldTryNextCandidate(status: number): boolean {
  *
  * البوابة الموحّدة في كل الحالات: enabled + freeEndpoint + تهيئة المزوّد + صحته.
  */
-export function routeCandidates(task: AiTaskType, now: Date = new Date()): RouteCandidate[] {
-  void now; // نقطة توسّع مستقبلية (sticky sessions / budget windows) — مش مستخدمة حاليًا.
-  const required = TASK_CAPABILITIES[task];
-  const primaryProvider = AI_PROVIDER_BY_TASK[task];
+export function routeCandidates(
+  task: AiTaskType,
+  now: Date = new Date(),
+  options?: { hasImage?: boolean }
+): RouteCandidate[] {
+  void now;
+  const hasImage = Boolean(options?.hasImage);
+  const required = hasImage
+    ? [...TASK_CAPABILITIES[task], "vision" as AiCapability]
+    : TASK_CAPABILITIES[task];
+  const primaryProvider = hasImage ? "openrouter" : AI_PROVIDER_BY_TASK[task];
   const allowPaid = paidModelsAllowed();
   const candidates: RouteCandidate[] = [];
 
@@ -258,6 +266,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
   for (const modelId of TASK_MODEL_PREFERENCE[task] ?? []) {
     const preferred = MODEL_REGISTRY.find((model) => model.id === modelId);
     if (!preferred || !isUsable(preferred.provider)) continue;
+    if (hasImage && preferred.provider === "gemini") continue;
     pushIfEligible(preferred.provider, preferred.id);
   }
 
@@ -281,7 +290,7 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
 
   // مزوّدات بديلة — بس اللي حالتهم بتسمح بالاستخدام الآن.
   const otherProviders = [...new Set(MODEL_REGISTRY.map((m) => m.provider))].filter(
-    (p) => p !== primaryProvider
+    (p) => p !== primaryProvider && !(hasImage && p === "gemini")
   );
   for (const provider of otherProviders) {
     if (!isUsable(provider)) continue;
@@ -294,6 +303,15 @@ export function routeCandidates(task: AiTaskType, now: Date = new Date()): Route
   }
 
   return candidates;
+}
+
+function detectImageInMessages(messages: AiChatMessage[]): boolean {
+  for (const m of messages) {
+    if (Array.isArray(m.content)) {
+      if (m.content.some((part) => part && part.type === "image_url")) return true;
+    }
+  }
+  return false;
 }
 
 export class AiRouter {
@@ -339,8 +357,8 @@ export class AiRouter {
      *   أو ضياع الـ identity.
      */
     const ctx = usage ?? input.usage;
-    const required = TASK_CAPABILITIES[task];
-    const mediaOnly = required.some((capability) => capability === "vision" || capability === "file_analysis");
+    const hasImage = detectImageInMessages(input.messages) || Boolean((input as { imageDataUrl?: string }).imageDataUrl);
+    const mediaOnly = TASK_CAPABILITIES[task].some((capability) => capability === "vision" || capability === "file_analysis");
 
     // مهام الوسائط: بدون أي fallback عابر للقدرات.
     if (mediaOnly || task === "image_generation") {
@@ -398,7 +416,7 @@ export class AiRouter {
     }
 
     const attempts: RouterAttempt[] = [];
-    const candidates = routeCandidates(task);
+    const candidates = routeCandidates(task, new Date(), { hasImage });
 
     if (candidates.length === 0) {
       throw new AiRouteError(
@@ -580,3 +598,111 @@ export class AiRouter {
     }
   }
 }
+
+// Phase G append
+import OpenAI from "openai";
+
+export type MultiProviderConfig = {
+  name: string;
+  baseURL: string;
+  apiKeyEnv: string;
+  model: string;
+};
+
+export const AI_PROVIDERS: MultiProviderConfig[] = [
+  { name: "groq", baseURL: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "llama-3.3-70b-versatile" },
+  { name: "openrouter", baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", model: "meta-llama/llama-3-8b-instruct:free" },
+  { name: "mistral", baseURL: "https://api.mistral.ai/v1", apiKeyEnv: "MISTRAL_API_KEY", model: "mistral-small-latest" },
+  { name: "together", baseURL: "https://api.together.xyz/v1", apiKeyEnv: "TOGETHER_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free" },
+  { name: "cerebras", baseURL: "https://api.cerebras.ai/v1", apiKeyEnv: "CEREBRAS_API_KEY", model: "llama3.1-8b" },
+  { name: "sambanova", baseURL: "https://api.sambanova.ai/v1", apiKeyEnv: "SAMBANOVA_API_KEY", model: "Meta-Llama-3.3-70B-Instruct" },
+  { name: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1", apiKeyEnv: "FIREWORKS_API_KEY", model: "accounts/fireworks/models/llama-v3p3-70b-instruct" },
+  { name: "hyperbolic", baseURL: "https://api.hyperbolic.xyz/v1", apiKeyEnv: "HYPERBOLIC_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct" },
+  { name: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai", apiKeyEnv: "DEEPINFRA_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct" },
+  { name: "novita", baseURL: "https://api.novita.ai/v3/openai", apiKeyEnv: "NOVITA_API_KEY", model: "meta-llama/llama-3.3-70b-instruct" },
+];
+
+export async function completeChatWithProviderFallback(
+  input: AiChatRequest,
+  usage?: AiUsageContext
+): Promise<AiChatResponse> {
+  const ctx = usage ?? input.usage;
+  for (const cfg of AI_PROVIDERS) {
+    const apiKey = process.env[cfg.apiKeyEnv]?.trim();
+    if (!apiKey) {
+      console.warn(`[ai/fallback] skipping provider ${cfg.name}: missing ${cfg.apiKeyEnv}`);
+      continue;
+    }
+    const startedAt = Date.now();
+    try {
+      const client = new OpenAI({ apiKey, baseURL: cfg.baseURL });
+      const completion = await client.chat.completions.create({
+        model: input.model ?? cfg.model,
+        messages: input.messages as any,
+        temperature: input.temperature ?? 0.7,
+      });
+      const content = completion.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw new AiProviderError("Empty response", 200, cfg.name as AiProviderName, "EMPTY_RESPONSE");
+      }
+      const response: AiChatResponse = {
+        provider: cfg.name as AiProviderName,
+        model: typeof completion.model === "string" ? completion.model : cfg.model,
+        content,
+        payload: completion as any,
+        usage: {
+          promptTokens: completion.usage?.prompt_tokens,
+          completionTokens: completion.usage?.completion_tokens,
+        },
+      };
+      if (ctx) {
+        await scheduleUsageRecording(() =>
+          recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx.feature ?? "chat",
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: cfg.name as AiProviderName,
+            model: response.model,
+            status: "completed",
+            units: 1,
+            promptTokens: response.usage?.promptTokens,
+            completionTokens: response.usage?.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "fallback", source: ctx.source },
+          })
+        );
+      }
+      return response;
+    } catch (error) {
+      const status =
+        error instanceof AiProviderError
+          ? error.status
+          : error instanceof OpenAI.APIError
+            ? error.status ?? 500
+            : 500;
+      console.warn(`[ai/fallback] provider ${cfg.name} failed (status=${status}):`, error instanceof Error ? error.message : error);
+      if (ctx) {
+        await scheduleUsageRecording(() =>
+          recordAiUsage({
+            userId: ctx.userId ?? null,
+            feature: ctx.feature ?? "chat",
+            operationId: ctx.operationId,
+            idempotencyKey: ctx.idempotencyKey,
+            attemptNo: 0,
+            provider: cfg.name as AiProviderName,
+            model: cfg.model,
+            status: mapAttemptStatus(error),
+            units: 1,
+            latencyMs: Date.now() - startedAt,
+            metadata: { path: "fallback", source: ctx.source, httpStatus: status },
+          })
+        );
+      }
+      continue;
+    }
+  }
+  throw new AiProviderError("All AI providers failed", 503, "groq" as AiProviderName);
+}
+

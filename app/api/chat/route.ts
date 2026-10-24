@@ -13,46 +13,54 @@ import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
 
-/** أقصى عدد رسايل بنمررها للموديل (الأحدث بس). */
+/**                                          ). */
 const MAX_MESSAGES = 30;
-/** أقصى طول لأي رسالة واحدة. */
+/**                         . */
 const MAX_MESSAGE_CHARS = 8000;
 
 type IncomingMessage = { role?: unknown; content?: unknown };
 
 export async function POST(req: Request) {
+  const traceId = createTraceId();
   try {
-    // ١) لازم يكون مسجّل دخول — الراوت ده كان مفتوح للعالم كله
+    // 1) Require user
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    // ٢) حدّ استخدام لكل مستخدم عشان فاتورة Groq
+    // 2)                                    Groq
     const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
-    // ٢.٥) كوتة الاشتراك للرسايل (Phase 1.5) — messages_per_2h كانت موجودة في
-    // الداتابيز من غير أي فرض فعلي. فحص + استهلاك من السيرفر قبل أي شغل غالي.
-    // fail-open موثق لو جداول الكوتا لسه مش متنفذة.
-    // المالك (owner) يتخطى الحدود الداخلية للمنصة دون استهلاك كوتة.
+    // 2.5)                       (Phase 1.5)   messages_per_2h               
+    //                                   +                                    
+    // fail-open                                    
+    //        (owner)                                              .
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", code: "MESSAGE_QUOTA_EXCEEDED" } },
+        {
+          error: {
+            message:
+              quota.reasonAr ??
+              "                                                30       .                  (                          )                            ",
+            code: "MESSAGE_QUOTA_EXCEEDED",
+          },
+        },
         { status: 429 }
       );
     }
 
-    // ٢.٦) تحديث حالة الموديلات من الداتابيز (Phase 2) — تبديلات الأدمن
-    // (enabled/priority/daily_limit في ai_models) بقت بتأثر فعليًا في الراوتر.
-    // TTL ٣٠ ثانية + fail-open موثق، فمفيش ضربة DB مع كل رسالة.
+    // 2.6)                                   (Phase 2)                      // (enabled/priority/daily_limit    ai_models)                            .
+    // TTL 30       + fail-open                  DB             
     await refreshModelStateCache();
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { error: { message: "البيانات المبعوتة غير صالحة." } },
+        { error: { message: "                           ." } },
         { status: 400 }
       );
     }
@@ -69,14 +77,13 @@ export async function POST(req: Request) {
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
-        { error: { message: "مفيش رسايل مبعوتة." } },
+        { error: { message: "                 ." } },
         { status: 400 }
       );
     }
 
-    // ٣) تنضيف الرسايل: الأدوار المسموحة بس، ونص مقصوص
-    const safeMessages = (messages as IncomingMessage[])
-      .slice(-MAX_MESSAGES)
+    // 3) const safeMessages = (messages as IncomingMessage[])
+    const safeMessages = (messages as IncomingMessage[]).slice(-MAX_MESSAGES)
       .filter(
         (m) =>
           m &&
@@ -91,26 +98,27 @@ export async function POST(req: Request) {
 
     if (safeMessages.length === 0) {
       return NextResponse.json(
-        { error: { message: "مفيش رسايل صالحة للإرسال." } },
+        { error: { message: "                        ." } },
         { status: 400 }
       );
     }
 
-    // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
-    // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
+    //     prompt                                                       
+    // Build student context
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
-    // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
     let personaPrompt = "";
+    // Persona Builder
     try {
       personaPrompt = await buildSystemPrompt(user.id);
     } catch (e) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
-    const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
+
+    const combinedSystem = personaPrompt ? personaPrompt + "\n\n--- Magicly System ---\n" + system : system;
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
@@ -121,21 +129,19 @@ export async function POST(req: Request) {
     };
     const accessible = await filterAccessibleModels(candidates, hasEnt);
     if (accessible.length === 0 && candidates.length > 0) {
-      return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+      return NextResponse.json({ error: { message: "                                           ", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
     }
     const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? CURRENT_AI_MODEL);
     if (!guard.ok) return guard.response;
 
     let completion;
     try {
-      // 🧾 Phase 5-C3 (pilot) — توليد هوية الطلب المنطقي **مرة واحدة**
-      // هنا، عند حدّ الطلب. وبعدين بتتنقّل زي ما هي لكل محاولة مزوّد
-      // جوه `completeChatInner` — من غير ما تتغيّر (مافيش أي حد بيكتب
-      // فيها). `attemptNo` هو الوحيد اللي بيتغيّر بين المحاولات.
+      // ?? Phase 5-C3 (pilot)                            **         **
+      //                                                                    //      completeChatInner`                    (                        //      . `attemptNo`                                     .
       //
-      // ⚠️ **سلوك محفوظ 100%:** السطر ده بيقرا header وبيولّد UUID فقط.
-      //   مافيش تغيير في الـ guard ولا الـ limits ولا الـ credit ولا
-      //   ترتيب المزوّدين ولا الـ fallback ولا شكل الرد.
+      // ?? **           100%:**                header         UUID     
+      //                      guard         limits         credit    
+      //                           fallback             .
       const usage = resolveUsageRequestContext(req, user.id);
 
       completion = await aiRouter.completeChat("chat", {
@@ -144,6 +150,17 @@ export async function POST(req: Request) {
         usage,
       });
     } catch (error) {
+      void recordRuntimeError({
+        route: "/api/chat",
+        feature: "chat",
+        category: classifyError(error, "provider"),
+        errorType: error instanceof Error ? error.name : "Error",
+        traceId,
+        outcome: "failed",
+        message: error instanceof Error ? error.message : String(error),
+        userId: user?.id ?? null,
+        metadata: { status: (error as { status?: number })?.status },
+      });
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
       const isRate = error.status === 429;
@@ -152,8 +169,8 @@ export async function POST(req: Request) {
         {
           error: {
             message: isRate
-              ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية."
-              : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.",
+              ? "                                         "
+              : "                              .           ",
             code: isRate ? "PROVIDER_RATE_LIMIT" : isUnavailable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR",
           },
         },
@@ -161,12 +178,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const data = completion.payload;
+    const data = completion.payload ?? {};
     const answer = completion.content;
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
 
-    // الحفظ best-effort: لو migration المحادثات لسه ما اتشغلتش، الشات
-    // يفضل شغّال ولا نحرم الطالب من الرد بسبب ميزة تاريخ إضافية.
+    //       best-effort:    migration                                     //                                                           
     let savedConversationId = conversationId;
     try {
       if (answer) {
@@ -177,14 +193,14 @@ export async function POST(req: Request) {
             .eq("id", savedConversationId)
             .eq("user_id", user.id)
             .maybeSingle();
-          // معرف محادثة من حساب آخر لا يُستخدم أبدًا، حتى لو عرفه عميل
-          // خبيث؛ ننشئ جلسة جديدة بدل تلويث تاريخ المستخدم الآخر.
+          //                                                           
+          //                                                      
           if (!ownedConversation) savedConversationId = "";
         }
         if (!savedConversationId) {
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "محادثة جديدة" })
+            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "            " })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
@@ -207,13 +223,25 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ...data,
+      content: answer,
+      message: answer,
       conversationId: savedConversationId || undefined,
       suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
     });
   } catch (error) {
+    void recordRuntimeError({
+      route: "/api/chat",
+      feature: "chat",
+      category: classifyError(error, "internal"),
+      errorType: error instanceof Error ? error.name : "Error",
+      traceId,
+      outcome: "failed",
+      message: error instanceof Error ? error.message : String(error),
+      userId: null,
+    });
     console.error("chat route error:", error);
     return NextResponse.json(
-      { error: { message: "حصل خطأ غير متوقع أثناء الاتصال.", code: "INTERNAL_ERROR" } },
+      { error: { message: "Internal server error", code: "INTERNAL_ERROR" } },
       { status: 500 }
     );
   }
