@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
        الكوكي HttpOnly، Secure في الإنتاج، SameSite=Lax.
        المسار محدود بـ /demo فقط. */
     const isProduction = process.env.NODE_ENV === "production";
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const existingVisitorId = cookieStore.get("demo_visitor_id")?.value;
     const visitorId = sanitizeVisitorId(existingVisitorId) ?? createVisitorId();
 
@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const isProduction = process.env.NODE_ENV === "production";
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const existingVisitorId = cookieStore.get("demo_visitor_id")?.value;
     const visitorId = sanitizeVisitorId(existingVisitorId) ?? createVisitorId();
 
