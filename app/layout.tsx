@@ -8,6 +8,7 @@ import { AudioProvider } from '@/components/audio/AudioProvider';
 import { QuranAudioProvider } from '@/hooks/useQuranAudio';
 import { SupportWidget } from '@/components/SupportWidget';
 import NotificationBell from '@/components/NotificationBell';
+import AnnouncementToast from '@/components/AnnouncementToast';
 import { ReferralBootstrap } from "@/components/ReferralBootstrap";
 import { FloatingAssistant } from '@/components/FloatingAssistant';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
@@ -216,6 +217,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <QuranAudioProvider>{children}</QuranAudioProvider>
               <SupportWidget />
 <NotificationBell />
+<AnnouncementToast />
               {/* لاقط تتبع الإحالات: ?ref= → localStorage → تسجيل أول دخول. null UI. */}
               <ReferralBootstrap />
               <FloatingAssistant />
