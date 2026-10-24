@@ -320,6 +320,7 @@ export async function POST(
       userId: null,
     });
     return NextResponse.json(
+      { success: false, error: { code: safe.code, message: safe.message } },
       { status: safe.status },
     );
   }

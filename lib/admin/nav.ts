@@ -103,6 +103,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "Megaphone",
   },
   {
+    href: "/admin/announcement-emails",
+    label: "إرسال إعلان بالبريد",
+    description: "حملات بريد يدوية للإعلانات — اختيار مستلمين، مراجعة، تأكيد",
+    permission: "announcements.manage",
+    icon: "Megaphone",
+  },
+  {
     href: "/admin/support",
     label: "الدعم",
     description: "صندوق بريد الدعم والتذاكر",
