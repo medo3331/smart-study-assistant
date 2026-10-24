@@ -16,7 +16,8 @@
  */
 import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
-import { extractTextFromFile } from "../extract-text";
+import { extractTextFromFile, ExtractError } from "../extract-text";
+import { GeminiProvider } from "../ai/gemini";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
@@ -34,9 +35,19 @@ async function callGroqWithModel(
   system?: string,
   usage?: AiUsageContext
 ): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
-  void _language;
   const key = process.env.GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
+
+  // 🌐 Language handling: honour the requested language instead of discarding it.
+  const langDirective =
+    _language === "ar"
+      ? "أجب باللغة العربية (Arabic) إلا إذا طلب المستخدم غير ذلك."
+      : _language === "en"
+        ? "Respond in English unless the user explicitly asks otherwise."
+        : "";
+  const fullSystem = [langDirective, system]
+    .filter((s) => typeof s === "string" && s.trim().length > 0)
+    .join("\n\n");
 
   // 🧾 Phase 5-C5: نقطة القياس عند حدّ المزوّد الحقيقي.
   //
@@ -79,7 +90,7 @@ async function callGroqWithModel(
 
   try {
     const messages = [
-      ...(system ? [{ role: "system", content: system }] : []),
+      ...(fullSystem ? [{ role: "system", content: fullSystem }] : []),
       { role: "user", content: prompt },
     ];
     const res = await fetch(GROQ_URL, {
@@ -130,6 +141,57 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     let extractedText = "";
     let ocrMeta = { engineUsed: 1 as 1 | 3, confidence: "low" as "high" | "medium" | "low" };
 
+    // 0. True vision path (Phase 3C) — only if a configured provider supports it.
+    const hasImageInput = !!(input.imageInput || input.fileInput);
+    const fileForVision = (input.imageInput || input.fileInput) as (File & { arrayBuffer?: () => Promise<ArrayBuffer> }) | undefined;
+    let visionFallback = false;
+    if (hasImageInput && fileForVision && typeof fileForVision.arrayBuffer === 'function' && process.env.GEMINI_API_KEY?.trim()) {
+      if (!fileForVision.type?.startsWith('image/')) {
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'Unsupported image type.',
+          code: 'UNSUPPORTED_IMAGE_TYPE',
+          metadata: { imageProcessed: true },
+        };
+      }
+      if (fileForVision.size > 2 * 1024 * 1024) {
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'Image too large.',
+          code: 'IMAGE_TOO_LARGE',
+          metadata: { imageProcessed: true },
+        };
+      }
+      try {
+        const buffer = new Uint8Array(await fileForVision.arrayBuffer());
+        const base64 = Buffer.from(buffer).toString('base64');
+        const gemini = new GeminiProvider();
+        const visionResult = await gemini.analyzeMedia({
+          data: base64,
+          mimeType: fileForVision.type,
+          prompt: input.prompt,
+        });
+        return {
+          ok: true,
+          agentUsed: 'gemini-vision',
+          answer: visionResult.content,
+          metadata: {
+            imageProcessed: true,
+            visionUsed: true,
+            languageDetected: input.language === 'ar' ? 'ar' : input.language === 'en' ? 'en' : 'mixed',
+          },
+          reasoning: 'gemini analyzeMedia',
+        };
+      } catch (visionErr) {
+        console.error('Vision unavailable, falling back to OCR:', visionErr instanceof Error ? visionErr.message : String(visionErr));
+        visionFallback = true;
+      }
+    }
+
     // 1. OCR (Magic existing pipeline — lib/extract-text.ts)
     if (input.imageInput || input.fileInput) {
       const file = (input.imageInput || input.fileInput) as File;
@@ -142,10 +204,19 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         extractedText = text.trim();
         ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? "high" : "medium" };
       } catch (ocrErr: unknown) {
-        console.error("OCR error (resilient):", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
-        extractedText = "";
-        ocrMeta = { engineUsed: 3, confidence: "low" };
-        // Continue — don't throw
+        console.error("Extraction error:", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
+        const message = ocrErr instanceof Error ? ocrErr.message : String(ocrErr);
+        const code = ocrErr instanceof ExtractError ? ocrErr.code : undefined;
+        return {
+          ok: false,
+          agentUsed: "unknown",
+          answer: "",
+          error: message,
+          code,
+          extractedText: undefined,
+          metadata: undefined,
+          reasoning: undefined,
+        };
       }
     }
 
@@ -193,7 +264,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         answer: "",
         error: providerResult.error,
         extractedText: extractedText || undefined,
-        metadata: { ocrEngine: ocrMeta.engineUsed, confidence: ocrMeta.confidence, languageDetected: lang === "ar" ? "ar" : lang === "en" ? "en" : "mixed", imageProcessed: hasImage },
+        metadata: { ocrEngine: ocrMeta.engineUsed, confidence: ocrMeta.confidence, languageDetected: lang === "ar" ? "ar" : lang === "en" ? "en" : "mixed", imageProcessed: hasImage, visionFallback },
         reasoning: decision.reason,
       };
     }
@@ -209,6 +280,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         confidence: ocrMeta.confidence,
         languageDetected: lang === "ar" ? "ar" : lang === "en" ? "en" : "mixed",
         imageProcessed: hasImage,
+        visionFallback,
       },
       reasoning: decision.reason,
     };

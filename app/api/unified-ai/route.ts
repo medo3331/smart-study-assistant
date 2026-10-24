@@ -95,6 +95,8 @@ const VALID_TASKS = new Set<string>([
   "rag_embeddings",
 ]);
 
+const VALID_LANGUAGES = new Set<string>(["ar", "en", "mixed"]);
+
 function clampModel(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined;
   const s = input.trim();
@@ -112,6 +114,7 @@ export async function POST(req: Request) {
   let reserveRef: string | null = null;
   let userId: string | null = null;
   let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  let refunded = false;
 
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -134,30 +137,108 @@ export async function POST(req: Request) {
       const i = formData.get("imageInput");
       if (i instanceof File) imageInput = i;
       const lang = formData.get("language");
-      if (typeof lang === "string") language = lang;
+      if (lang === null) {
+        // keep default
+      } else if (typeof lang !== "string") {
+        return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+      } else {
+        const trimmed = lang.trim();
+        if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
+          return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        }
+        if (trimmed !== "") language = trimmed;
+      }
       const ctx = formData.get("context");
-      if (typeof ctx === "string") {
+      if (ctx === null) {
+        // keep default
+      } else if (typeof ctx !== "string") {
+        return NextResponse.json({ ok: false, error: "سياق غير صالح", code: "INVALID_CONTEXT" }, { status: 400 });
+      } else if (ctx.trim() !== "") {
         try {
-          context = JSON.parse(ctx);
+          const parsed = JSON.parse(ctx);
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("bad");
+          context = parsed as Record<string, unknown>;
         } catch {
-          /* ignore */
+          return NextResponse.json({ ok: false, error: "سياق غير صالح", code: "INVALID_CONTEXT" }, { status: 400 });
         }
       }
       const m = formData.get("model");
-      requestedModel = clampModel(m);
+      if (m === null) {
+        // absent
+      } else if (typeof m !== "string") {
+        return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+      } else {
+        const trimmed = m.trim();
+        if (trimmed === "") {
+          // absent
+        } else if (trimmed.length > 200) {
+          return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+        } else {
+          requestedModel = trimmed;
+        }
+      }
       const t = formData.get("task");
-      requestedTask = clampTask(t);
+      if (t === null) {
+        // absent
+      } else if (typeof t !== "string") {
+        return NextResponse.json({ ok: false, error: "مهمة غير صالحة", code: "INVALID_TASK" }, { status: 400 });
+      } else {
+        const trimmed = t.trim();
+        if (trimmed === "") {
+          // absent
+        } else if (!VALID_TASKS.has(trimmed)) {
+          return NextResponse.json({ ok: false, error: "نوع المهمة غير مدعوم", code: "UNSUPPORTED_TASK" }, { status: 400 });
+        } else {
+          requestedTask = trimmed as AiTaskType;
+        }
+      }
     } else {
       const body = await req.json().catch(() => null);
-      if (!body || typeof body !== "object") {
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
         return NextResponse.json({ ok: false, error: "بيانات غير صالحة", code: "INVALID_REQUEST" }, { status: 400 });
       }
-      prompt = (body as Record<string, unknown>).prompt as string || "";
-      language = ((body as Record<string, unknown>).language as string) || "ar";
-      context = ((body as Record<string, unknown>).context as Record<string, unknown>) || {};
-      requestedModel = clampModel((body as Record<string, unknown>).model);
-      requestedTask = clampTask((body as Record<string, unknown>).task);
-      // Legacy: body.model as X handled above
+      const b = body as Record<string, unknown>;
+      prompt = typeof b.prompt === "string" ? b.prompt : "";
+      if ("language" in b && b.language !== undefined && b.language !== null) {
+        if (typeof b.language !== "string") {
+          return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        }
+        const trimmed = b.language.trim();
+        if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
+          return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        }
+        if (trimmed !== "") language = trimmed;
+      }
+      if ("context" in b && b.context !== undefined && b.context !== null) {
+        if (typeof b.context !== "object" || Array.isArray(b.context)) {
+          return NextResponse.json({ ok: false, error: "سياق غير صالح", code: "INVALID_CONTEXT" }, { status: 400 });
+        }
+        context = b.context as Record<string, unknown>;
+      }
+      if ("model" in b && b.model !== undefined && b.model !== null) {
+        if (typeof b.model !== "string") {
+          return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+        }
+        const trimmed = b.model.trim();
+        if (trimmed !== "" && trimmed.length > 200) {
+          return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+        }
+        if (trimmed !== "") requestedModel = trimmed;
+      }
+      if ("task" in b && b.task !== undefined && b.task !== null) {
+        if (typeof b.task !== "string") {
+          return NextResponse.json({ ok: false, error: "مهمة غير صالحة", code: "INVALID_TASK" }, { status: 400 });
+        }
+        const trimmed = b.task.trim();
+        if (trimmed !== "" && !VALID_TASKS.has(trimmed)) {
+          return NextResponse.json({ ok: false, error: "نوع المهمة غير مدعوم", code: "UNSUPPORTED_TASK" }, { status: 400 });
+        }
+        if (trimmed !== "") requestedTask = trimmed as AiTaskType;
+      }
+    }
+
+    if (fileInput && imageInput) {
+      return NextResponse.json({ ok: false, error: "لا يمكن إرسال ملف وصورة معاً", code: "INCONSISTENT_ATTACHMENTS" }, { status: 400 });
     }
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
@@ -542,7 +623,8 @@ export async function POST(req: Request) {
 
     if (!result.ok) {
       // FAILURE → refund reservation (idempotent) — لا يستهلك credit
-      if (userId && reserveRef && supabase) {
+      if (userId && reserveRef && supabase && !refunded) {
+        refunded = true;
         try {
           await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
         } catch (e) {
@@ -551,7 +633,7 @@ export async function POST(req: Request) {
       }
       // Provider failure: spec §16 → 500 but we keep 200 for client resilience with ok:false
       // To honor §16, return 502 for provider errors; client already handles both.
-      return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: "PROVIDER_ERROR" }, { status: 502 });
+      return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: result.code || "PROVIDER_ERROR" }, { status: 502 });
     }
 
     // SUCCESS → consume is implicit (reserve = consume); no extra ledger write
@@ -602,7 +684,8 @@ export async function POST(req: Request) {
     };
     return NextResponse.json(uiResponse);
   } catch (e: unknown) {
-    if (userId && reserveRef && supabase) {
+    if (userId && reserveRef && supabase && !refunded) {
+      refunded = true;
       try {
         await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
       } catch (re) {
