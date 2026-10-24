@@ -18,7 +18,7 @@ import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
-import { extractTextFromFile, detectFileKind } from "../extract-text";
+import { detectFileKind } from "../extract-text";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
@@ -205,37 +205,27 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         extractedText = text.trim();
         ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? "high" : "medium" };
       } catch (ocrErr: unknown) {
-        console.error("Extraction error:", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
-        const message = ocrErr instanceof Error ? ocrErr.message : String(ocrErr);
-        const code = ocrErr instanceof ExtractError ? ocrErr.code : undefined;
-        return {
-          ok: false,
-          agentUsed: "unknown",
-          answer: "",
-          error: message,
-          code,
-          extractedText: undefined,
-          metadata: undefined,
-          reasoning: undefined,
-        };
-        console.error("OCR error (resilient):", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
-        extractedText = "";
-        ocrMeta = { engineUsed: 3, confidence: "low" };
-        const isPdf = detectFileKind(file.type, file.name) === "pdf";
-        if (isPdf) {
-          return {
-            ok: false,
-            agentUsed: "unknown",
-            answer: "",
-            error: "ÿ™ÿπÿ∞ÿ± ŸÇÿ±ÿßÿ°ÿ© ÿßŸÑŸÜÿµ ŸÖŸÜ Ÿáÿ∞ÿß ÿßŸÑŸÄ PDF. Ÿäÿ±ÿ¨Ÿâ ÿ±ŸÅÿπ ÿµŸàÿ±ÿ© ŸÑŸÑÿµŸÅÿ≠ÿ© ÿ®ÿØŸÑÿßŸã ŸÖŸÜ ÿ∞ŸÑŸÉ.",
-            errorCode: "PDF_READ_FAILED",
-            extractedText: undefined,
-            metadata: undefined,
-            reasoning: undefined,
-          };
-        }
-        // Continue for non-PDF ‚Äî don't throw
-      }
+         console.error("Extraction error:", ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
+         const isPdf = detectFileKind(file.type, file.name) === "pdf";
+         if (isPdf) {
+           const message = ocrErr instanceof Error ? ocrErr.message : String(ocrErr);
+           const code = ocrErr instanceof ExtractError ? ocrErr.code : undefined;
+           return {
+             ok: false,
+             agentUsed: "unknown",
+             answer: "",
+             error: " ⁄–— ﬁ—«¡… «·‰’ „‰ Â–« «·‹ PDF. Ì—ÃÏ —›⁄ ’Ê—… ··’›Õ… »œ·« „‰ –·ﬂ.",
+             code,
+             errorCode: "PDF_READ_FAILED",
+             extractedText: undefined,
+             metadata: undefined,
+             reasoning: undefined,
+           };
+         }
+         // Continue for non-PDF ó don't throw
+         extractedText = "";
+         ocrMeta = { engineUsed: 3, confidence: "low" };
+       }
     }
 
     // 2. Hidden Router (user never sees selection)
