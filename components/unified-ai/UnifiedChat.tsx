@@ -5,7 +5,7 @@
  * Unified Chat                              *         AgentRouter / OCR / 11 Agents            * Upload: ?? (PDF/text) / ??? (image) ? Preview ? OCR         ? Router         Response.
  *                  api/unified-ai       OCR + Router              
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
@@ -43,8 +43,13 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [studyMode, setStudyMode] = useState<"explain" | "quiz" | "summarize" | "review">("explain");
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -72,6 +77,50 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
     setAttachment(null);
   }, [attachment]);
 
+  const loadConversations = useCallback(async () => {
+    setLoadingConversations(true);
+    try {
+      const res = await fetch("/api/chat/conversations");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) setConversations(data.conversations ?? []);
+    } catch {}
+    finally { setLoadingConversations(false); }
+  }, []);
+
+  useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  const newChat = useCallback(() => {
+    setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف — وسأساعدك." }]);
+    setConversationId(null);
+    setInput("");
+    removeAttachment();
+  }, [removeAttachment]);
+
+  const openConversation = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/chat/conversations/${id}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        setConversationId(id);
+        const msgs = (data.messages ?? []).map((m: any) => ({ role: m.role, content: m.content }));
+        setMessages(msgs.length ? msgs : [{ role: "assistant", content: "لا توجد رسائل." }]);
+      }
+    } catch {}
+  }, []);
+
+  const renameConversation = useCallback(async (id: string) => {
+    if (!renameValue.trim()) { setRenamingId(null); return; }
+    await fetch(`/api/chat/conversations/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: renameValue }) });
+    setRenamingId(null);
+    loadConversations();
+  }, [renameValue, loadConversations]);
+
+  const deleteConversation = useCallback(async (id: string) => {
+    if (!confirm("حذف هذه المحادثة؟")) return;
+    await fetch(`/api/chat/conversations/${id}`, { method: "DELETE" });
+    if (conversationId === id) newChat();
+    loadConversations();
+  }, [conversationId, newChat, loadConversations]);
   const send = async () => {
     const text = input.trim();
     if (!text && !attachment) return;
@@ -207,6 +256,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       //                                         
       if (typeof data?.conversationId === "string" && data.conversationId) {
         setConversationId(data.conversationId);
+        loadConversations();
       }
 
        // Show assistant response
@@ -230,7 +280,37 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
+    <div className="flex h-screen max-h-screen">
+      <aside className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:static z-40 top-0 right-0 h-full w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform`}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold text-sm">المحادثات</h2>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="إغلاق">✕</button>
+        </div>
+        <button onClick={newChat} className="w-full mb-3 px-3 py-2 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-bold">+ محادثة جديدة</button>
+        <div className="overflow-y-auto h-[calc(100%-80px)] space-y-1">
+          {loadingConversations && <p className="text-xs text-ink-soft">جارٍ التحميل...</p>}
+          {conversations.map((c) => (
+            <div key={c.id} className={`group rounded-xl px-2 py-2 text-sm cursor-pointer ${conversationId === c.id ? "bg-[var(--accent)]/10" : "hover:bg-black/5"}`}>
+              {renamingId === c.id ? (
+                <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onBlur={() => renameConversation(c.id)} onKeyDown={(e) => e.key === "Enter" && renameConversation(c.id)} className="w-full text-xs border rounded px-1" autoFocus />
+              ) : (
+                <div onClick={() => openConversation(c.id)} className="flex items-center justify-between gap-1">
+                  <span className="truncate flex-1">{c.title}</span>
+                  <span className="opacity-0 group-hover:opacity-100 flex gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.title); }} className="text-[10px]" aria-label="إعادة تسمية">✎</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }} className="text-[10px]" aria-label="حذف">🗑</button>
+                  </span>
+                </div>
+              )}
+              <p className="text-[10px] text-ink-soft mt-0.5">{new Date(c.updated_at).toLocaleString("ar")}</p>
+            </div>
+          ))}
+          {!loadingConversations && conversations.length === 0 && <p className="text-xs text-ink-soft">لا توجد محادثات سابقة.</p>}
+        </div>
+      </aside>
+      <div className="flex-1 overflow-y-auto">
+        <button onClick={() => setSidebarOpen(true)} className="md:hidden m-2 px-2 py-1 border rounded" aria-label="فتح القائمة">☰</button>
+        <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
       <div className="flex items-center justify-between gap-2 mb-3">
         <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="                   ">
           ?            
@@ -431,6 +511,8 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           </div>
         </div>
       )}
+    </div>
+      </div>
     </div>
   );
 }

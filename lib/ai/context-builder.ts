@@ -81,7 +81,7 @@ export async function buildFullContext(
       profile = {};
     }
     try {
-      const histQuery = supabase.from("chat_messages").select("role,content").eq("session_id", _sessionId);
+      const histQuery = supabase.from("chat_messages").select("role,content").eq("conversation_id", _sessionId);
       if (typeof histQuery.order === "function") {
         const hist = await histQuery.order("created_at", { ascending: true }).limit(200);
         history = hist.data ?? [];

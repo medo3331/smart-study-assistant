@@ -1,4 +1,5 @@
 import mammoth from 'mammoth';
+import { extractText, getDocumentProxy, renderPageAsImage } from 'unpdf';
 // PDF parsing is intentionally loaded dynamically inside extractTextFromFile so
 // ordinary chat requests never evaluate pdfjs-dist (which requires browser
 // globals such as DOMMatrix in Node.js).
@@ -21,9 +22,11 @@ import mammoth from 'mammoth';
 /** خطأ بنعرف نصه للمستخدم — أي حاجة تانية بتتحول لرسالة عامة. */
 export class ExtractError extends Error {
   status: number;
-  constructor(message: string, status = 422) {
+  code: string;
+  constructor(message: string, status = 422, code = 'EXTRACTION_FAILED') {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = 'ExtractError';
   }
 }
@@ -32,6 +35,8 @@ export class ExtractError extends Error {
 const MIN_USEFUL_CHARS = 12;
 /** مهلة نداء الـ OCR — من غيرها الراوت يقدر يستنى للأبد. */
 const OCR_TIMEOUT_MS = 25_000;
+/** حد صفحات PDF التي تُحوّل إلى صور وتُقرأ عبر OCR. */
+const MAX_OCR_PDF_PAGES = 3;
 
 type OcrAttempt = { engine: 1 | 3 };
 
@@ -107,7 +112,8 @@ async function callOcrSpace(
       timedOut
         ? 'قراءة الصورة خدت وقت طويل. جرّب صورة أصغر أو أوضح.'
         : 'مقدرتش أوصل لخدمة قراءة الصور. جرّب تاني بعد شوية.',
-      timedOut ? 504 : 502
+      timedOut ? 504 : 502,
+      timedOut ? 'OCR_TIMEOUT' : 'OCR_UPSTREAM_FAILED'
     );
   }
 
@@ -120,13 +126,14 @@ async function callOcrSpace(
       response.status === 403
         ? 'مفتاح خدمة قراءة الصور مرفوض. لازم يتراجع.'
         : 'خدمة قراءة الصور مش متاحة دلوقتي. جرّب تاني بعد شوية.',
-      502
+      502,
+      'OCR_UPSTREAM_FAILED'
     );
   }
 
   const result = await response.json().catch(() => null);
   if (!result || typeof result !== 'object') {
-    throw new ExtractError('رد غير مفهوم من خدمة قراءة الصور.', 502);
+    throw new ExtractError('رد غير مفهوم من خدمة قراءة الصور.', 502, 'OCR_BAD_RESPONSE');
   }
 
   // ErrorMessage بييجي مرة string ومرة array على حسب نوع الفشل
@@ -141,7 +148,7 @@ async function callOcrSpace(
     console.error('OCR processing error:', errorText || result);
     // الكوتة والمفتاح بيرجعوا جوه ErrorMessage مش كـ HTTP status
     if (/E550|invalid.*api key/i.test(errorText)) {
-      throw new ExtractError('مفتاح خدمة قراءة الصور غير صالح.', 502);
+      throw new ExtractError('مفتاح خدمة قراءة الصور غير صالح.', 502, 'OCR_AUTH_FAILED');
     }
     if (/limit|quota|exceed/i.test(errorText)) {
       throw new ExtractError(
@@ -149,7 +156,7 @@ async function callOcrSpace(
         429
       );
     }
-    throw new ExtractError('مقدرتش أقرا الصورة. جرّب صورة أوضح.');
+    throw new ExtractError('مقدرتش أقرا الصورة. جرّب صورة أوضح.', 422, 'IMAGE_NO_TEXT');
   }
 
   // ParsedResults بييجي null في بعض حالات الفشل و [] في التايم أوت
@@ -232,14 +239,14 @@ export async function extractTextFromFile(
   options: ExtractOptions
 ): Promise<string> {
   if (file.size === 0) {
-    throw new ExtractError('الملف فاضي.', 400);
+    throw new ExtractError('الملف فاضي.', 400, 'FILE_EMPTY');
   }
 
   // النوع الأول، وبعدين البافر — مش العكس. قراءة ٨ ميجا في الذاكرة
   // عشان نكتشف بعدها إن النوع مش مدعوم هدر.
   const kind = detectFileKind(file.type, file.name);
   if (!kind) {
-    throw new ExtractError('نوع الملف غير مدعوم حالياً', 415);
+    throw new ExtractError('نوع الملف غير مدعوم حالياً', 415, 'UNSUPPORTED_FILE_TYPE');
   }
 
   const sizeLimit = kind === 'image' ? options.maxImageBytes : options.maxFileBytes;
@@ -259,7 +266,26 @@ export async function extractTextFromFile(
   if (kind === 'pdf') {
     // PDF مكسور أو محمي بباسورد بيرمي من جوه pdf-parse — ده خطأ متوقّع
     // مش كراش، فلازم يوصل للمستخدم كرسالة مفهومة.
+    let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
     try {
+      pdf = await getDocumentProxy(buffer);
+    } catch (err) {
+      console.error('PDF parse failed:', err);
+      throw new ExtractError(
+        'مقدرتش أفتح ملف الـ PDF ده. لو محمي بباسورد شيل الحماية وجرّب تاني.',
+        422,
+        'PDF_PARSE_FAILED'
+      );
+    }
+    try {
+      const extracted = await extractText(pdf, { mergePages: true });
+      text = typeof extracted.text === 'string' ? extracted.text : '';
+    } catch (err) {
+      console.error('PDF text extraction failed:', err);
+      throw new ExtractError(
+        'مقدرتش أفتح ملف الـ PDF ده. لو محمي بباسورد شيل الحماية وجرّب تاني.',
+        422,
+        'PDF_PARSE_FAILED'
       const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: Buffer.from(buffer) });
       const result = await parser.getText();
@@ -272,20 +298,50 @@ export async function extractTextFromFile(
         422
       );
     }
+
+    // إذا لم يُستخرج نص قابل للاستخدام، جرّب OCR على صفحات محدودة.
+    if (text.replace(/\s/g, '').length < MIN_USEFUL_CHARS) {
+      const apiKey = process.env.OCR_SPACE_API_KEY?.trim();
+      if (!apiKey) {
+        throw new ExtractError('تحليل الصور غير متاح حالياً.', 503, 'OCR_NOT_CONFIGURED');
+      }
+      const pageCount = (pdf as { numPages?: number }).numPages ?? 1;
+      const pagesToOcr = Math.min(Math.max(1, pageCount), MAX_OCR_PDF_PAGES);
+      const parts: string[] = [];
+      for (let p = 1; p <= pagesToOcr; p++) {
+        try {
+          const rendered = await renderPageAsImage(pdf, p, { scale: 1.5, toDataURL: false });
+          const pngBytes = new Uint8Array(rendered as ArrayBuffer);
+          const pageText = await extractTextFromImage(apiKey, pngBytes, `page-${p}.png`, 'image/png');
+          if (pageText.trim()) parts.push(pageText.trim());
+        } catch (err) {
+          if (err instanceof ExtractError) {
+            if (err.code === 'OCR_AUTH_FAILED' || err.code === 'OCR_QUOTA_EXCEEDED' || err.code === 'OCR_TIMEOUT') {
+              throw err;
+            }
+          }
+          console.error('PDF page OCR failed:', err);
+        }
+      }
+      text = parts.join('\n\n');
+      if (!text.trim()) {
+        throw new ExtractError('مفيش نص اتقرا من الملف ده.', 422, 'PDF_NO_TEXT');
+      }
+    }
   } else if (kind === 'docx') {
     try {
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
       text = result.value;
     } catch (err) {
       console.error('DOCX parse failed:', err);
-      throw new ExtractError('مقدرتش أقرا ملف الـ Word ده. جرّب تحفظه تاني.', 422);
+      throw new ExtractError('مقدرتش أقرا ملف الـ Word ده. جرّب تحفظه تاني.', 422, 'DOCX_PARSE_FAILED');
     }
   } else if (kind === 'image') {
     const apiKey = process.env.OCR_SPACE_API_KEY?.trim();
     // مفتاح OCR ناقص = خطأ صريح، مش طلب مجهول بيفشل بصمت
     if (!apiKey) {
       console.error('extract-text: OCR_SPACE_API_KEY غير معرف');
-      throw new ExtractError('تحليل الصور غير متاح حالياً.', 503);
+      throw new ExtractError('تحليل الصور غير متاح حالياً.', 503, 'OCR_NOT_CONFIGURED');
     }
 
     // النوع اللي بنبعته لـ ocr.space: لو المتصفح مبعتش type
@@ -302,6 +358,11 @@ export async function extractTextFromFile(
 
   if (!text.trim()) {
     throw new ExtractError(
+      kind === 'image'
+        ? 'مفيش نص واضح في الصورة. اتأكد إنها مش مقلوبة والكتابة باينة.'
+        : 'مفيش نص اتقرا من الملف ده.',
+      422,
+      kind === 'image' ? 'IMAGE_NO_TEXT' : 'PDF_NO_TEXT'
       kind === 'pdf'
         ? 'تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.'
         : kind === 'image'
