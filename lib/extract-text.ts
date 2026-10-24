@@ -286,16 +286,6 @@ export async function extractTextFromFile(
         'مقدرتش أفتح ملف الـ PDF ده. لو محمي بباسورد شيل الحماية وجرّب تاني.',
         422,
         'PDF_PARSE_FAILED'
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: Buffer.from(buffer) });
-      const result = await parser.getText();
-      await parser.destroy();
-      text = result.text || '';
-    } catch (err) {
-      console.error('PDF parse failed:', err);
-      throw new ExtractError(
-        'تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.',
-        422
       );
     }
 
@@ -363,12 +353,6 @@ export async function extractTextFromFile(
         : 'مفيش نص اتقرا من الملف ده.',
       422,
       kind === 'image' ? 'IMAGE_NO_TEXT' : 'PDF_NO_TEXT'
-      kind === 'pdf'
-        ? 'تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.'
-        : kind === 'image'
-          ? 'مفيش نص واضح في الصورة. اتأكد إنها مش مقلوبة والكتابة باينة.'
-          : 'مفيش نص اتقرا من الملف ده.',
-      422
     );
   }
 

@@ -138,11 +138,11 @@ export async function POST(req: Request) {
       if (lang === null) {
         // keep default
       } else if (typeof lang !== "string") {
-        return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
       } else {
         const trimmed = lang.trim();
         if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
-          return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
         }
         if (trimmed !== "") language = trimmed;
       }
@@ -199,11 +199,11 @@ export async function POST(req: Request) {
       prompt = typeof b.prompt === "string" ? b.prompt : "";
       if ("language" in b && b.language !== undefined && b.language !== null) {
         if (typeof b.language !== "string") {
-          return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
         }
         const trimmed = b.language.trim();
         if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
-          return NextResponse.json({ ok: false, error: "لغة غير صالحة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
         }
         if (trimmed !== "") language = trimmed;
       }
@@ -617,23 +617,18 @@ export async function POST(req: Request) {
     const result: UnifiedAIResult = await unifiedAI(input);
 
     if (!result.ok) {
-      // FAILURE → refund reservation (idempotent) — لا يستهلك credit
       if (userId && reserveRef && supabase && !refunded) {
         refunded = true;
-      // FAILURE â†’ refund reservation (idempotent) â€” ظ„ط§ ظٹط³طھظ‡ظ„ظƒ credit
-      if (userId && reserveRef && supabase) {
         try {
-          await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
+          await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef } )
         } catch (e) {
           console.error("[PhaseF] refund after provider failure failed:", e);
         }
       }
-      // Provider failure: spec §16 → 500 but we keep 200 for client resilience with ok:false
-      // To honor §16, return 502 for provider errors; client already handles both.
-      return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: result.code || "PROVIDER_ERROR" }, { status: 502 });
-      // Provider failure: spec آ§16 â†’ 500 but we keep 200 for client resilience with ok:false
-      // To honor آ§16, return 502 for provider errors; client already handles both.
-      return NextResponse.json({ ok: false, error: result.error || "ط­ط¯ط« ط®ط·ط£ ظ…ط¤ظ‚طھ. ط¬ط±ط¨ ظ…ط±ط© ط£ط®ط±ظ‰.", code: result.errorCode || "PROVIDER_ERROR" }, { status: result.errorCode === "PDF_READ_FAILED" ? 422 : 502 });
+      return NextResponse.json(
+        { ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: result.errorCode || "PROVIDER_ERROR" },
+        { status: result.errorCode === "PDF_READ_FAILED" ? 422 : 502 }
+      );
     }
 
     // SUCCESS â†’ consume is implicit (reserve = consume); no extra ledger write
