@@ -3,7 +3,9 @@ import type {
   AiChatPayload,
   AiChatRequest,
   AiChatResponse,
+  AiMediaAnalysisRequest,
   AiMediaGenerationRequest,
+  AiMediaProvider,
   AiMediaResult,
   AiTextProvider,
 } from "./types";
@@ -61,7 +63,7 @@ export function buildVisionMessage(
   };
 }
 
-export class OpenRouterProvider implements AiTextProvider {
+export class OpenRouterProvider implements AiTextProvider, AiMediaProvider {
   readonly name = "openrouter" as const;
 
   async completeChat(input: AiChatRequest & { imageDataUrl?: string }): Promise<AiChatResponse> {
@@ -145,6 +147,59 @@ export class OpenRouterProvider implements AiTextProvider {
         completionTokens: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : undefined,
       },
     };
+  }
+
+  async analyzeMedia(input: AiMediaAnalysisRequest): Promise<AiChatResponse> {
+    const apiKey = openrouterApiKey();
+    if (!apiKey) throw new AiProviderError("OpenRouter is not configured", 503, this.name);
+    const dataUrl = `data:${input.mimeType};base64,${input.data}`;
+    const model = "nvidia/nemotron-nano-12b-v2-vl:free";
+    let response: Response;
+    try {
+      response = await fetch(OPENROUTER_CHAT_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000",
+          "X-Title": "Magicly AI Core",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: input.prompt },
+                { type: "image_url", image_url: { url: dataUrl } },
+              ],
+            },
+          ],
+          temperature: 0.2,
+        }),
+        signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new AiProviderError("OpenRouter request timed out", 504, this.name, "TIMEOUT");
+      }
+      throw new AiProviderError("OpenRouter request failed", 502, this.name, "NETWORK");
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.error("ai/openrouter: API error", response.status, detail.slice(0, 500));
+      throw new AiProviderError("OpenRouter returned an error", response.status, this.name);
+    }
+    const payload = await response.json().catch(() => null);
+    if (!payload || typeof payload !== "object") {
+      throw new AiProviderError("OpenRouter returned an invalid response", 502, this.name);
+    }
+    const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new AiProviderError("OpenRouter returned an empty response", 200, this.name, "EMPTY_RESPONSE");
+    }
+    const usage = (payload as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+    return { provider: this.name, model, content, payload: payload as AiChatPayload, usage: { promptTokens: usage?.prompt_tokens, completionTokens: usage?.completion_tokens } };
   }
 
   /**

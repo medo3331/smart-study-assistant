@@ -40,15 +40,23 @@ export function createTraceId(): string {
 }
 
 export function sanitizeErrorMessage(input: unknown): string | null {
-  if (input == null) return null;
-  let text = input instanceof Error ? input.message : String(input);
-  text = text.replace(/\s+/g, " ").trim();
-  if (!text) return null;
-  text = text.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]");
-  text = text.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]");
-  text = text.replace(/\b(sk|pk|rk|ghp|gho|xox[baprs])-?[A-Za-z0-9_-]{12,}\b/gi, "[redacted-key]");
-  text = text.replace(/(authorization|cookie|api[_-]?key|secret|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]");
-  return truncate(text, 500);
+  try {
+    if (input == null) return null;
+    let text = input instanceof Error ? input.message : String(input);
+    text = text.replace(/\s+/g, " ").trim();
+    if (!text) return null;
+    // Redact file paths (unix and windows)
+    text = text.replace(/(?:[a-zA-Z]:)?[\\/][\w./\\-]+/g, "[path]");
+    text = text.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]");
+    text = text.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]");
+    text = text.replace(/\b(sk|pk|rk|ghp|gho|xox[baprs])-?[A-Za-z0-9_-]{12,}\b/gi, "[redacted-key]");
+    text = text.replace(/(authorization|cookie|api[_-]?key|secret|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]");
+    // Redact long opaque tokens
+    text = text.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]");
+    return truncate(text, 500);
+  } catch {
+    return null;
+  }
 }
 
 export function sanitizeMetadata(input: unknown): Record<string, unknown> {

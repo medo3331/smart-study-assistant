@@ -18,7 +18,10 @@ import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
+import { GroqProvider } from "../ai/groq";
+import { OpenRouterProvider } from "../ai/openrouter";
 import { detectFileKind } from "../extract-text";
+import { selectModelForTask, getModelCapability } from "../ai/capabilities";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
@@ -42,7 +45,7 @@ async function callGroqWithModel(
   // ًںŒگ Language handling: honour the requested language instead of discarding it.
   const langDirective =
     _language === "ar"
-      ? "ط£ط¬ط¨ ط¨ط§ظ„ظ„ط؛ط© ط§ظ„ط¹ط±ط¨ظٹط© (Arabic) ط¥ظ„ط§ ط¥ط°ط§ ط·ظ„ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ… ط؛ظٹط± ط°ظ„ظƒ."
+      ? "أجب باللغة العربية (Arabic) إلا إذا طلب المستخدم غير ذلك."
       : _language === "en"
         ? "Respond in English unless the user explicitly asks otherwise."
         : "";
@@ -141,12 +144,40 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
   try {
     let extractedText = "";
     let ocrMeta = { engineUsed: 1 as 1 | 3, confidence: "low" as "high" | "medium" | "low" };
+    let visionFallback = false;
 
     // 0. True vision path (Phase 3C) â€” only if a configured provider supports it.
     const hasImageInput = !!(input.imageInput || input.fileInput);
-    const fileForVision = (input.imageInput || input.fileInput) as (File & { arrayBuffer?: () => Promise<ArrayBuffer> }) | undefined;
-    let visionFallback = false;
-    if (hasImageInput && fileForVision && typeof fileForVision.arrayBuffer === 'function' && process.env.GEMINI_API_KEY?.trim()) {
+    const fileForVision = input.imageInput as (File & { arrayBuffer?: () => Promise<ArrayBuffer> }) | undefined;
+    const visionModel = selectModelForTask("image_understanding", {
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    });
+    if (hasImageInput && fileForVision && typeof fileForVision.arrayBuffer === 'function') {
+      // Image present: MUST use a vision-capable provider. Never fall back to text-only claiming image understood.
+      if (!visionModel) {
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'فهم الصور غير متاح حالياً. يرجى المحاولة لاحقاً أو أرسل نصاً فقط.',
+          code: 'VISION_NOT_CONFIGURED',
+          metadata: { imageProcessed: true, visionUsed: false },
+          reasoning: 'No vision-capable provider configured',
+        };
+      }
+      const cap = getModelCapability(visionModel);
+      if (!cap || !cap.imageInput) {
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'الموديل المحدد لا يدعم الصور.',
+          code: 'MODEL_NO_VISION',
+          metadata: { imageProcessed: true, visionUsed: false },
+          reasoning: `Selected model ${visionModel} lacks imageInput capability`,
+        };
+      }
       if (!fileForVision.type?.startsWith('image/')) {
         return {
           ok: false,
@@ -170,31 +201,84 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
       try {
         const buffer = new Uint8Array(await fileForVision.arrayBuffer());
         const base64 = Buffer.from(buffer).toString('base64');
-        const gemini = new GeminiProvider();
-        const visionResult = await gemini.analyzeMedia({
-          data: base64,
-          mimeType: fileForVision.type,
-          prompt: input.prompt,
-        });
-        return {
-          ok: true,
-          agentUsed: 'gemini-vision',
-          answer: visionResult.content,
-          metadata: {
-            imageProcessed: true,
-            visionUsed: true,
-            languageDetected: input.language === 'ar' ? 'ar' : input.language === 'en' ? 'en' : 'mixed',
-          },
-          reasoning: 'gemini analyzeMedia',
-        };
+        const candidates = [
+          { modelId: "gemini-3.6-flash", available: !!process.env.GEMINI_API_KEY?.trim(), create: () => new GeminiProvider() },
+          { modelId: "llama-3.2-11b-vision-preview", available: !!process.env.GROQ_API_KEY?.trim(), create: () => new GroqProvider() },
+          { modelId: "nvidia/nemotron-nano-12b-v2-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
+        ].filter((c) => c.available);
+        // Prefer the selected model first, then the rest as fallback chain.
+        const ordered = [
+          ...candidates.filter((c) => c.modelId === visionModel),
+          ...candidates.filter((c) => c.modelId !== visionModel),
+        ];
+        let lastError: unknown = null;
+        for (const candidate of ordered) {
+          try {
+            const provider = candidate.create();
+            const visionResult = await provider.analyzeMedia({
+              data: base64,
+              mimeType: fileForVision.type,
+              prompt: input.prompt,
+            });
+            return {
+              ok: true,
+              agentUsed: `${provider.name}-vision`,
+              answer: visionResult.content,
+              metadata: {
+                imageProcessed: true,
+                visionUsed: true,
+                languageDetected: input.language === 'ar' ? 'ar' : input.language === 'en' ? 'en' : 'mixed',
+              },
+              reasoning: `${provider.name} analyzeMedia (${candidate.modelId})`,
+            };
+          } catch (providerErr) {
+            lastError = providerErr;
+            console.error(`Vision provider ${candidate.modelId} failed:`, providerErr instanceof Error ? providerErr.message : String(providerErr));
+          }
+        }
+        throw lastError ?? new Error("no vision provider available");
       } catch (visionErr) {
-        console.error('Vision unavailable, falling back to OCR:', visionErr instanceof Error ? visionErr.message : String(visionErr));
-        visionFallback = true;
+        console.error('Vision provider failed:', visionErr instanceof Error ? visionErr.message : String(visionErr));
+        const ocrKey = process.env.OCR_SPACE_API_KEY?.trim();
+        if (ocrKey) {
+          try {
+            const text = await extractTextFromFile(fileForVision as File, {
+              maxFileBytes: 10 * 1024 * 1024,
+              maxImageBytes: 2 * 1024 * 1024,
+              maxTextChars: 8000,
+            });
+            extractedText = (text || '').trim();
+            ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? 'high' : 'medium' };
+            visionFallback = true;
+          } catch (ocrErr) {
+            console.error('OCR fallback failed:', ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
+            return {
+              ok: false,
+              agentUsed: 'unknown',
+              answer: '',
+              error: 'لم نتمكن من قراءة الصورة حاليًا. يمكنك إعادة المحاولة أو تجربة استخراج النص باستخدام OCR إذا كانت الخدمة متاحة، أو إرسال بلاغ للدعم.',
+              code: 'VISION_PROVIDER_FAILED',
+              metadata: { imageProcessed: true, visionUsed: false },
+              reasoning: 'vision provider error; OCR failed',
+            };
+          }
+        } else {
+          return {
+            ok: false,
+            agentUsed: 'unknown',
+            answer: '',
+            error: 'لم نتمكن من قراءة الصورة حاليًا. يمكنك إعادة المحاولة أو تجربة استخراج النص باستخدام OCR إذا كانت الخدمة متاحة، أو إرسال بلاغ للدعم.',
+            code: 'VISION_PROVIDER_FAILED',
+            metadata: { imageProcessed: true, visionUsed: false },
+            reasoning: 'vision provider error',
+          };
+        }
       }
     }
 
-    // 1. OCR (Magic existing pipeline â€” lib/extract-text.ts)
-    if (input.imageInput || input.fileInput) {
+    // 1. OCR (Magic existing pipeline â€” lib/extract-text.ts) â€” only for non-image files (PDF/docx/text).
+    // Images are handled by the vision path above; if we reach here with an image, something is inconsistent.
+    if (!input.imageInput && input.fileInput) {
       const file = (input.imageInput || input.fileInput) as File;
       try {
         const text = await extractTextFromFile(file, {
@@ -215,7 +299,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
              agentUsed: "unknown",
              answer: "",
               error: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.",
-             code,
+             code: code || "PDF_READ_FAILED",
              errorCode: "PDF_READ_FAILED",
              extractedText: undefined,
              metadata: undefined,
@@ -226,6 +310,23 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
          extractedText = "";
          ocrMeta = { engineUsed: 3, confidence: "low" };
        }
+    }
+
+    // TEXT MODEL ROUTING (Phase H): choose text model by capability, not hardcoded Groq.
+    const textModel = selectModelForTask("text_chat", {
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    });
+    if (!textModel) {
+      return {
+        ok: false,
+        agentUsed: 'unknown',
+        answer: '',
+        error: 'لا يوجد مزود نصي متاح حالياً.',
+        code: 'NO_TEXT_PROVIDER',
+        metadata: undefined,
+        reasoning: 'No text-capable provider configured',
+      };
     }
 
     // 2. Hidden Router (user never sees selection)
@@ -246,7 +347,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
       const t = String(lesson.title || "").slice(0, 200);
       const s = String(lesson.subject || "").slice(0, 100);
       const c = String(lesson.content || lesson.description || "").slice(0, 4000);
-      lessonPrefix = `ط£ظ†طھ ط§ظ„ظ…ط³ط§ط¹ط¯ ط§ظ„طھط¹ظ„ظٹظ…ظٹ ط§ظ„ط°ظƒظٹ ظ„ظ„ط¯ط±ط³ ط§ظ„ط­ط§ظ„ظٹ.\nط¹ظ†ظˆط§ظ† ط§ظ„ط¯ط±ط³: ${t}\nط§ظ„ظ…ط§ط¯ط©: ${s}\nظ…ط­طھظˆظ‰ ط§ظ„ط¯ط±ط³: ${c}\n\nط£ط¬ط¨ ط¹ظ„ظ‰ ط£ط³ط¦ظ„ط© ط§ظ„ط·ط§ظ„ط¨ ط¨ظ†ط§ط،ظ‹ ط¹ظ„ظ‰ ظ…ط­طھظˆظ‰ ظ‡ط°ط§ ط§ظ„ط¯ط±ط³ ظپظ‚ط· ظˆط¨ط£ط³ظ„ظˆط¨ ظ…ط¨ط³ط·طŒ ظ…ط¹ ط§ظ„ط¥ط¨ظ‚ط§ط، ط¹ظ„ظ‰ ط§ظ„ظ…طµط·ظ„ط­ط§طھ ط§ظ„طھظ‚ظ†ظٹط© ط¨ط§ظ„ط¥ظ†ط¬ظ„ظٹط²ظٹط© ظƒظ…ط§ ظ‡ظٹ.\n\n---\n\n`;
+      lessonPrefix = `أنت المساعد التعليمي الذكي للدرس الحالي.\nعنوان الدرس: ${t}\nالمادة: ${s}\nمحتوى الدرس: ${c}\n\nأجب على أسئلة الطالب بناءً على محتوى هذا الدرس فقط وبأسلوب مبسط، مع الإبقاء على المصطلحات التقنية بالإنجليزية كما هي.\n\n---\n\n`;
     }
     const ocrNote = extractedText
       ? (lang === "ar"
@@ -258,7 +359,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // 4. REAL model call â€” Phase H: respect explicit model if provided (already entitlement-checked in route)
     // If input.model is present, route already verified entitlement before reserve â€” use it.
     // Otherwise use CURRENT_AI_MODEL (free, always accessible).
-    const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : GROQ_MODEL;
+    const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : textModel;
     // ط­ظ‚ظ† ط¥ط±ط´ط§ط¯ط§طھ ط§ظ„ظ…ط®ط·ط·ط§طھ (Mermaid) â€” ط§ظ„ظ…ط³ط§ط¹ط¯ ط¨ظٹط±ط³ظ… ط®ط±ط§ط¦ط· ط°ظ‡ظ†ظٹط©/ظ…ط®ط·ط·ط§طھ
     // ط¯ط§ط®ظ„ ط§ظ„ط´ط§طھ ظ…ط¨ط§ط´ط±ط©طŒ ظˆط¨ظٹط¹ط±ط¶ظ‡ط§ MermaidViewer ظپظٹ ط§ظ„ظˆط§ط¬ظ‡ط©.
     // Unified brain: system ظ…ظ† ط§ظ„ط³ظٹط±ظپط± (ط´ط®طµظٹط© + ط³ظٹط§ظ‚ ط§ظ„ط·ط§ظ„ط¨) + ط¥ط±ط´ط§ط¯ط§طھ ط§ظ„ظ…ط®ط·ط·ط§طھ.

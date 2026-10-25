@@ -11,6 +11,7 @@ import NotificationBell from '@/components/NotificationBell';
 import AnnouncementToast from '@/components/AnnouncementToast';
 import { ReferralBootstrap } from "@/components/ReferralBootstrap";
 import { FloatingAssistant } from '@/components/FloatingAssistant';
+import { UnifiedNavbar } from '@/components/UnifiedNavbar';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { JsonLd } from '@/components/JsonLd';
 
@@ -214,7 +215,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <LanguageProvider>
             <AudioProvider>
-              <QuranAudioProvider>{children}</QuranAudioProvider>
+              <QuranAudioProvider>
+            <UnifiedNavbar />
+            {children}
+          </QuranAudioProvider>
               <SupportWidget />
 <NotificationBell />
 <AnnouncementToast />

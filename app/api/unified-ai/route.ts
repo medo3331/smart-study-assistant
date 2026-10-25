@@ -5,7 +5,7 @@
  *   POST multipart/form-data  â†’ prompt + file/image + language + [model] + [task]
  *   POST application/json     â†’ prompt + imageInput/fileInput + context + [model] + [task]
  *
- * Phase H Flow (à¤ھà¥‚à¤°à¥چà¤£ ط§ظ„طھظƒط§ظ…ظ„ ط§ظ„ظ†ظ‡ط§ط¦ظٹ):
+ * Phase H Flow (à¤ھà¥‚à¤°à¥چà¤£ التكامل النهائي):
  *   Request â†’ Authenticate â†’ Resolve model
  *     â”œâ”€ explicit model? â†’ validate exists/enabled â†’ getModelAccessPolicy â†’ has_entitlement
  *     â”‚         â†’ DENIED 403 MODEL_ACCESS_REQUIRED (NO reserve, 0 credit consumed)
@@ -24,7 +24,7 @@
  *   429 rate/concurrency (from api-guard if enabled; not invented in H)
  *   500 provider/internal
  *
- * Anonymous: ظٹط¨ظ‚ظ‰ ظ…ط¬ط§ظ†ظ‹ط§ ظ„ظ„ظ€ free models ظپظ‚ط· (ظ„ط§ Credits ظˆظ„ط§ Entitlements) â€” ظ„ط§ ظٹط³طھط®ط¯ظ… ط±طµظٹط¯ ظ…طµط§ط¯ظ‚ ط¹ظ„ظٹظ‡
+ * Anonymous: يبقى مجانًا للـ free models فقط (لا Credits ولا Entitlements) â€” لا يستخدم رصيد مصادق عليه
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -46,6 +46,8 @@ import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { generateIncidentId, getHttpStatus, sanitizeErrorMessage } from "@/lib/unified-ai/error-taxonomy";
+import { logIncident } from "@/lib/unified-ai/incident-log";
 import type { AiTaskType } from "@/lib/ai/types";
 function serverRequestId(): string {
   try {
@@ -126,11 +128,11 @@ export async function POST(req: Request) {
       if (f instanceof File) fileInput = f;
       const i = formData.get("imageInput");
       if (i instanceof File) imageInput = i;
-      // ط­ط¬ظ… ط§ظ„ظ…ظ„ظپ: ط­ط¯ ط£ظ‚طµظ‰ ~4 ظ…ظٹط¬ط§ ظ„طھط¬ظ†ط¨ 413 ظ…ظ† Vercel
+      // حجم الملف: حد أقصى ~4 ميجا لتجنب 413 من Vercel
       const attached = fileInput || imageInput;
       if (attached && attached.size > 4 * 1024 * 1024) {
         return NextResponse.json(
-          { ok: false, error: "ط­ط¬ظ… ط§ظ„ظ…ظ„ظپ ظƒط¨ظٹط± ط¬ط¯ط§ظ‹طŒ ظٹط±ط¬ظ‰ ط±ظپط¹ ظ…ظ„ظپ ط£طµط؛ط± ظ…ظ† 4 ظ…ظٹط¬ط§", code: "FILE_TOO_LARGE" },
+          { ok: false, error: "حجم الملف كبير جداً، يرجى رفع ملف أصغر من 4 ميجا", code: "FILE_TOO_LARGE" },
           { status: 413 }
         );
       }
@@ -240,10 +242,10 @@ export async function POST(req: Request) {
     }
 
     if (!prompt || typeof prompt !== "string" || (prompt.trim().length === 0 && !fileInput && !imageInput)) {
-      return NextResponse.json({ ok: false, error: "ط§ظ„ظ…ط·ظ„ظˆط¨ ظ†طµ (prompt)", code: "INVALID_REQUEST" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "المطلوب نص (prompt)", code: "INVALID_REQUEST" }, { status: 400 });
     }
     if (!prompt.trim() && (fileInput || imageInput)) {
-      prompt = "ظ„ط®ظ‘طµظ„ظٹ ط§ظ„ظ…ط­طھظˆظ‰ ط¯ظ‡ ظˆط§ط´ط±ط­ظ‡ ط¨ط£ط³ظ„ظˆط¨ ظˆط§ط¶ط­ ظˆظ…ظ†ط¸ظ….";
+      prompt = "لخّصلي المحتوى ده واشرحه بأسلوب واضح ومنظم.";
     }
 
     // ---- Auth ----
@@ -276,8 +278,8 @@ export async function POST(req: Request) {
       return Boolean(data);
     };
 
-    // Phase 2: طھط­ط¯ظٹط« ط­ط§ظ„ط© ط§ظ„ظ…ظˆط¯ظٹظ„ط§طھ ظ…ظ† ط§ظ„ط¯ط§طھط§ط¨ظٹط² ظ‚ط¨ظ„ ط£ظٹ ط­ط³ظ… â€”
-    // طھط¨ط¯ظٹظ„ط§طھ /admin/models (enabled/priority/daily_limit) ط¨طھط£ط«ط± ظ‡ظ†ط§ ظپط¹ظ„ظٹظ‹ط§.
+    // Phase 2: تحديث حالة الموديلات من الداتابيز قبل أي حسم â€”
+    // تبديلات /admin/models (enabled/priority/daily_limit) بتأثر هنا فعليًا.
     await refreshModelStateCache();
 
     let modelToUse: string = CURRENT_AI_MODEL;
@@ -288,20 +290,20 @@ export async function POST(req: Request) {
       const m = findModel(requestedModel);
       if (!m) {
         return NextResponse.json(
-          { ok: false, error: `ط§ظ„ظ…ظˆط¯ظٹظ„ ط؛ظٹط± ظ…ظˆط¬ظˆط¯: ${requestedModel}`, code: "MODEL_NOT_FOUND", model: requestedModel },
+          { ok: false, error: `الموديل غير موجود: ${requestedModel}`, code: "MODEL_NOT_FOUND", model: requestedModel },
           { status: 404 }
         );
       }
       if (!m.enabled) {
         return NextResponse.json(
-          { ok: false, error: `ط§ظ„ظ…ظˆط¯ظٹظ„ ط؛ظٹط± ظ…طھط§ط­ ط­ط§ظ„ظٹظ‹ط§: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
+          { ok: false, error: `الموديل غير متاح حاليًا: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
           { status: 404 }
         );
       }
-      // Phase 2: ط­ط§ظ„ط© ط§ظ„ط¯ط§طھط§ط¨ظٹط² ظپظˆظ‚ ظ‚ظٹظ…ط© ط§ظ„ط³ط¬ظ„ â€” ظ…ظˆظ‚ظˆظپ ط¥ط¯ط§ط±ظٹظ‹ط§ ط£ظˆ طھط¬ط§ظˆط² ط­ط¯ظ‡ ط§ظ„ظٹظˆظ…ظٹ
+      // Phase 2: حالة الداتابيز فوق قيمة السجل â€” موقوف إداريًا أو تجاوز حده اليومي
       if (!isModelRuntimeEnabled(m.id, m.enabled)) {
         return NextResponse.json(
-          { ok: false, error: `ط§ظ„ظ…ظˆط¯ظٹظ„ ظ…ظˆظ‚ظˆظپ ط¥ط¯ط§ط±ظٹظ‹ط§ ط£ظˆ طھط¬ط§ظˆط² ط­ط¯ظ‡ ط§ظ„ظٹظˆظ…ظٹ: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
+          { ok: false, error: `الموديل موقوف إداريًا أو تجاوز حده اليومي: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
           { status: 404 }
         );
       }
@@ -311,7 +313,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               ok: false,
-              error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ طھط³ط¬ظٹظ„ ط¯ط®ظˆظ„ ظˆطµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.",
+              error: "هذا النموذج يتطلب تسجيل دخول وصلاحية. اشترِها من المتجر.",
               code: "MODEL_ACCESS_REQUIRED",
               model: m.id,
               required: policy.entitlement,
@@ -321,11 +323,11 @@ export async function POST(req: Request) {
         }
         const ok = await hasEntitlement(policy.entitlement.kind, policy.entitlement.value);
         if (!ok) {
-          // آ§4: 403 ظ‚ط¨ظ„ ط§ظ„ط­ط¬ط² â€” ظ„ط§ ظٹط³طھظ‡ظ„ظƒ credit
+          // آ§4: 403 قبل الحجز â€” لا يستهلك credit
           return NextResponse.json(
             {
               ok: false,
-              error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ طµظ„ط§ط­ظٹط© ط؛ظٹط± ظ…طھظˆظپط±ط© ظ„ط¯ظٹظƒ. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.",
+              error: "هذا النموذج يتطلب صلاحية غير متوفرة لديك. اشترِها من المتجر.",
               code: "MODEL_ACCESS_REQUIRED",
               model: m.id,
               required: policy.entitlement,
@@ -341,7 +343,7 @@ export async function POST(req: Request) {
       const candidates = routeCandidates(requestedTask);
       if (candidates.length === 0) {
         return NextResponse.json(
-          { ok: false, error: `ظ„ط§ ظٹظˆط¬ط¯ ظ…ظˆط¯ظٹظ„ ظ…طھط§ط­ ظ„ظ„ظ…ظ‡ظ…ط©: ${requestedTask}`, code: "TASK_UNAVAILABLE", task: requestedTask },
+          { ok: false, error: `لا يوجد موديل متاح للمهمة: ${requestedTask}`, code: "TASK_UNAVAILABLE", task: requestedTask },
           { status: 404 }
         );
       }
@@ -353,13 +355,13 @@ export async function POST(req: Request) {
         accessible = candidates;
       }
       if (accessible.length === 0) {
-        // ظƒظ„ ط§ظ„ظ…ط±ط´ط­ظٹظ† ظ…ظ‚ظپظ„ظٹظ† â€” ظ„ط§ fallback ظٹظƒط³ط± ط§ظ„ط³ظٹط§ط³ط©
+        // كل المرشحين مقفلين â€” لا fallback يكسر السياسة
         const required =
           candidates[0]?.model ? getModelAccessPolicy(candidates[0].model).entitlement : undefined;
         return NextResponse.json(
           {
             ok: false,
-            error: "ظƒظ„ ط§ظ„ظ†ظ…ط§ط°ط¬ ط§ظ„ظ…طھط§ط­ط© ظ„ظ‡ط°ظ‡ ط§ظ„ظ…ظ‡ظ…ط© طھطھط·ظ„ط¨ طµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط± ط£ظˆ ط¬ط±ظ‘ط¨ ظ…ظ‡ظ…ط© ط£ط®ط±ظ‰.",
+            error: "كل النماذج المتاحة لهذه المهمة تتطلب صلاحية. اشترِها من المتجر أو جرّب مهمة أخرى.",
             code: "MODEL_ACCESS_REQUIRED",
             task: requestedTask,
             required,
@@ -367,20 +369,20 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       }
-      // ط£ظˆظ„ ظ…ط±ط´ط­ ظ…ط³ظ…ظˆط­ ظ‡ظˆ ط§ظ„ظپط§ط¦ط² (ظٹط­طھط±ظ… ط§ظ„طھط±طھظٹط¨ ظˆط§ظ„ظ€ health ط¯ط§ط®ظ„ routeCandidates)
+      // أول مرشح مسموح هو الفائز (يحترم الترتيب والـ health داخل routeCandidates)
       const winner = accessible[0];
       modelToUse = winner.model ?? CURRENT_AI_MODEL;
       resolvedVia = "auto";
     } else {
-      // ---- Default (legacy): CURRENT_AI_MODEL free â†’ ط¯ط§ط¦ظ…ظ‹ط§ ظ…ط³ظ…ظˆط­ ----
+      // ---- Default (legacy): CURRENT_AI_MODEL free â†’ دائمًا مسموح ----
       const policy = getModelAccessPolicy(CURRENT_AI_MODEL);
       if (policy.access === "entitlement" && policy.entitlement) {
-        // Defensive: ظ„ظˆ ظپظٹ ط§ظ„ظ…ط³طھظ‚ط¨ظ„ ط£طµط¨ط­ default gatedطŒ ظ†ط­طھط§ط¬ ظپط­طµ
+        // Defensive: لو في المستقبل أصبح default gated، نحتاج فحص
         if (!userId || !supabase) {
           return NextResponse.json(
             {
               ok: false,
-              error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ طھط³ط¬ظٹظ„ ط¯ط®ظˆظ„ ظˆطµظ„ط§ط­ظٹط©.",
+              error: "هذا النموذج يتطلب تسجيل دخول وصلاحية.",
               code: "MODEL_ACCESS_REQUIRED",
               model: CURRENT_AI_MODEL,
               required: policy.entitlement,
@@ -393,7 +395,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               ok: false,
-              error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ طµظ„ط§ط­ظٹط© ط؛ظٹط± ظ…طھظˆظپط±ط© ظ„ط¯ظٹظƒ.",
+              error: "هذا النموذج يتطلب صلاحية غير متوفرة لديك.",
               code: "MODEL_ACCESS_REQUIRED",
               model: CURRENT_AI_MODEL,
               required: policy.entitlement,
@@ -439,13 +441,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // ---- Phase B: Per-Agent Rate Limit (abstraction ط¢ظ…ظ†ط©) â€” 429, 0 credit ----
-    // ظپظ‚ط· ط¥ط°ط§ ظƒط§ظ† ظ‡ظ†ط§ظƒ agent identity ط­ظ‚ظٹظ‚ظٹ ظپظٹ ط§ظ„ط·ظ„ط¨ (context.agentId) ظˆظ…ط¹ط±ظˆظپ ظپظٹ AGENT_LIMITS
-    // ظ„ط§ ظ†ط®طھط±ط¹ agent ظ…ظ† task ط¹ط§ط¯ظٹ â€” Stub = ظ„ط§ ظپط­طµ
+    // ---- Phase B: Per-Agent Rate Limit (abstraction آمنة) â€” 429, 0 credit ----
+    // فقط إذا كان هناك agent identity حقيقي في الطلب (context.agentId) ومعروف في AGENT_LIMITS
+    // لا نخترع agent من task عادي â€” Stub = لا فحص
     const requestedAgentId = (() => {
       const raw = (context as Record<string, unknown>)?.agentId;
       if (typeof raw === "string" && raw.trim().length > 0 && isKnownAgentLimit(raw.trim())) return raw.trim();
-      // ط£ظٹط¶ط§ظ‹ ظ„ظˆ task === agent ظˆ context.agentId ظ…ظˆط¬ظˆط¯ â€” ظ„ط§ ظ†ط³طھظ†طھط¬ ظ…ظ† prompt
+      // أيضاً لو task === agent و context.agentId موجود â€” لا نستنتج من prompt
       return null;
     })();
     if (requestedAgentId && userId && supabase && !isAnonymous) {
@@ -551,7 +553,7 @@ export async function POST(req: Request) {
             return NextResponse.json(
               {
                 ok: false,
-                error: `ظˆطµظ„طھ ظ„ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰ ظ„ظ„طھط¬ط±ط¨ط© ط§ظ„ظ…ط¬ط§ظ†ظٹط© ظƒط²ط§ط¦ط± (5 ط·ظ„ط¨ط§طھ ظƒظ„ 24 ط³ط§ط¹ط©). ط³ط¬ظ‘ظ„ ط­ط³ط§ط¨ ظ…ط¬ط§ظ†ظٹ ظ„ظ„ط­طµظˆظ„ ط¹ظ„ظ‰ ط­ط¯ ط£ظƒط¨ط±!`,
+                error: `وصلت للحد الأقصى للتجربة المجانية كزائر (5 طلبات كل 24 ساعة). سجّل حساب مجاني للحصول على حد أكبر!`,
                 code: "GUEST_RATE_LIMIT",
                 retryAfterHours: 24,
                 retryAfter: 24 * 3600,
@@ -561,12 +563,12 @@ export async function POST(req: Request) {
             );
           }
           return NextResponse.json(
-            { ok: false, error: "ط±طµظٹط¯ AI Credits ظ„ط§ ظٹظƒظپظٹ. ط§ط´طھط±ظگ ط­ط²ظ…ط© ظ…ظ† ط§ظ„ظ…طھط¬ط±.", code: "INSUFFICIENT_CREDITS" },
+            { ok: false, error: "رصيد AI Credits لا يكفي. اشترِ حزمة من المتجر.", code: "INSUFFICIENT_CREDITS" },
             { status: 402 }
           );
         }
         console.error("[PhaseF] reserve failed:", msg);
-        return NextResponse.json({ ok: false, error: "طھط¹ط°ط± ط­ط¬ط² AI Credit. ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰.", code: "RESERVE_FAILED" }, { status: 400 });
+        return NextResponse.json({ ok: false, error: "تعذر حجز AI Credit. حاول مرة أخرى.", code: "RESERVE_FAILED" }, { status: 400 });
       }
     }
 
@@ -580,23 +582,23 @@ export async function POST(req: Request) {
     if (imageInput) input.imageInput = imageInput;
     if (fileInput) input.fileInput = fileInput;
 
-    // ًں§¾ Phase 5-C5: ظ‡ظˆظٹط© ط§ظ„ط·ظ„ط¨ ط¨طھطھظˆظ„ظ‘ط¯ ظ‡ظ†ط§ **ظ…ط±ط© ظˆط§ط­ط¯ط©** ظˆط¨طھظ†ط²ظ„ ط¬ظˆظ‡
-    // `unifiedAI` ظ„ظƒظ„ ظ…ط­ط§ظˆظ„ط© ظ…ط²ظˆظ‘ط¯. ط§ظ„ظ…ط³ط§ط± ط¯ظ‡ ظƒط§ظ† ط¨ظٹظ„ظپظ‘ ط¹ظ„ظ‰
-    // `callGroqWithModel` ظ…ط¨ط§ط´ط±ط©ظ‹ ظپظ…ط§ط¨ظٹط´ظˆظپ `routing.ts` ط®ط§ظ„طµ â€” ظˆط¯ظ‡ ط³ط¨ط¨
-    // ط¥ظ† Chat ظƒط§ظ† ط¨ظٹط±ط¯ ط¹ط§ط¯ظٹ ظˆEvent = 0.
+    // ًں§¾ Phase 5-C5: هوية الطلب بتتولّد هنا **مرة واحدة** وبتنزل جوه
+    // `unifiedAI` لكل محاولة مزوّد. المسار ده كان بيلفّ على
+    // `callGroqWithModel` مباشرةً فمابيشوف `routing.ts` خالص â€” وده سبب
+    // إن Chat كان بيرد عادي وEvent = 0.
     //
-    // âڑ ï¸ڈ `feature = "chat"`: ط§ظ„ظ…ط³ط§ط± ط¯ظ‡ **ظ‡ظˆ** ط§ظ„ظ…ط­ط§ط¯ط«ط© ط§ظ„ط£ط³ط§ط³ظٹط© (ظ†ظپط³
-    //    ط§ظ„ظˆط¸ظٹظپط© ط¨طھط§ط¹ط© `/api/chat`)طŒ ظپط§ظ„طھطµظ†ظٹظپ ط§ظ„ط¯ظ„ط§ظ„ظٹ ظˆط§ط­ط¯ ظ…ظ‚طµظˆط¯.
-    //    ط§ظ„طھظ…ظٹظٹط² ط¨ظٹظ† ط§ظ„ظ…ط³ط§ط±ظٹظ† ط¨ظٹط­طµظ„ ظپظٹ `metadata.path` ("unified_ai"
-    //    ظ…ظ‚ط§ط¨ظ„ "media"/"chat") â€” ظˆط¯ظ‡ ط§ظ„ظ„ظٹ ط¨ظٹط®ظ„ظ‘ظٹ C5 ظٹظپط±ظ‘ظ‚ ظ…ظ† ط؛ظٹط± ظ…ط§
-    //    ظ†ظƒط¨ظ‘ط± ط§ظ„ظ€ taxonomy.
+    // âڑ ï¸ڈ `feature = "chat"`: المسار ده **هو** المحادثة الأساسية (نفس
+    //    الوظيفة بتاعة `/api/chat`)، فالتصنيف الدلالي واحد مقصود.
+    //    التمييز بين المسارين بيحصل في `metadata.path` ("unified_ai"
+    //    مقابل "media"/"chat") â€” وده اللي بيخلّي C5 يفرّق من غير ما
+    //    نكبّر الـ taxonomy.
     input.usage = resolveUsageRequestContext(req, userId, {
       feature: "chat",
       diagnostics: { route: "unified_ai" },
     });
 
-    // ---- Unified brain (ظ…ظ† /api/chat): ط´ط®طµظٹط© ط§ظ„ط·ط§ظ„ط¨ + ط³ظٹط§ظ‚ظ‡ ط§ظ„ط¯ط±ط§ط³ظٹ â€” best-effort ----
-    // ظ„ظ„ظ…ط³ط¬ظ„ظٹظ† ظپظ‚ط·ط› ط§ظ„ط²ظˆط§ط± ظˆط§ظ„ظ…ط¬ظ‡ظˆظ„ظˆظ† ظٹظƒظ…ظ„ظˆظ† ط¨ط¯ظˆظ†ظ‡ط§ ظˆظ„ط§ ظٹطھط¹ط·ظ„ظˆظ†.
+    // ---- Unified brain (من /api/chat): شخصية الطالب + سياقه الدراسي â€” best-effort ----
+    // للمسجلين فقط؛ الزوار والمجهولون يكملون بدونها ولا يتعطلون.
     const rawMode = (context as Record<string, unknown>)?.mode;
     const rawConversationId = (context as Record<string, unknown>)?.conversationId;
     let incomingConversationId = "";
@@ -607,7 +609,9 @@ export async function POST(req: Request) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "الطالب";
-        input.system = "أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
+        input.system = language === "en"
+          ? "You are «Magicly», a study assistant. User: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". Answer in clear English. Do not assume database data."
+          : "أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
       } catch (e) {
         console.warn("[unified-ai] user context build failed, continuing without it:", e);
       }
@@ -625,14 +629,34 @@ export async function POST(req: Request) {
           console.error("[PhaseF] refund after provider failure failed:", e);
         }
       }
+      const code = result.code || result.errorCode || "AI_PROVIDER_FAILED";
+      const incidentId = generateIncidentId();
+      console.error("[unified-ai] incident", incidentId, "code", code, "stage", sanitizeErrorMessage(result.error || ""));
+      // Best-effort persistent logging (never throws, never blocks on failure).
+      try {
+        await logIncident({
+          incidentId,
+          errorCode: code,
+          stage: result.error,
+          httpStatus: getHttpStatus(code),
+        });
+      } catch {
+        /* best-effort */
+      }
       return NextResponse.json(
-        { ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: result.errorCode || "PROVIDER_ERROR" },
-        { status: result.errorCode === "PDF_READ_FAILED" ? 422 : 502 }
+        {
+          ok: false,
+          error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.",
+          code,
+          incidentId,
+          retryable: true,
+        },
+        { status: getHttpStatus(code) }
       );
     }
 
     // SUCCESS â†’ consume is implicit (reserve = consume); no extra ledger write
-    // ط­ظپط¸ ط§ظ„ظ…ط­ط§ط¯ط«ط© best-effort (ظ†ظپط³ ظ†ظ…ط· /api/chat) â€” ط§ظ„ظپط´ظ„ ظ‡ظ†ط§ ظ„ط§ ظٹط­ط±ظ… ط§ظ„ط·ط§ظ„ط¨ ظ…ظ† ط§ظ„ط±ط¯.
+    // حفظ المحادثة best-effort (نفس نمط /api/chat) â€” الفشل هنا لا يحرم الطالب من الرد.
     let savedConversationId = incomingConversationId;
     if (userId && supabase && !isAnonymous && result.answer) {
       try {
@@ -648,7 +672,7 @@ export async function POST(req: Request) {
         if (!savedConversationId) {
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: userId, title: prompt.slice(0, 80) || "ظ…ط­ط§ط¯ط«ط© ط¬ط¯ظٹط¯ط©" })
+            .insert({ user_id: userId, title: prompt.slice(0, 80) || "محادثة جديدة" })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
@@ -687,8 +711,19 @@ export async function POST(req: Request) {
         console.error("[PhaseF] refund after exception failed:", re);
       }
     }
-    console.error("unified-ai route error:", (e as Error)?.message || String(e));
-    return NextResponse.json({ ok: false, error: "ط­ط¯ط« ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹. ط¬ط±ط¨ ظ…ط±ط© ط£ط®ط±ظ‰.", code: "INTERNAL_ERROR" }, { status: 400 });
+    console.error("unified-ai route error:", sanitizeErrorMessage((e as Error)?.message || String(e)));
+    const incidentId = generateIncidentId();
+    try {
+      await logIncident({
+        incidentId,
+        errorCode: "UNKNOWN_INTERNAL_ERROR",
+        stage: (e as Error)?.message || String(e),
+        httpStatus: 500,
+      });
+    } catch {
+      /* best-effort */
+    }
+    return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى.", code: "UNKNOWN_INTERNAL_ERROR", incidentId, retryable: true }, { status: 500 });
   }
 }
 // export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };

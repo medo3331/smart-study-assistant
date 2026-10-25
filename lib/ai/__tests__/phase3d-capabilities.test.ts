@@ -11,7 +11,8 @@ describe("Phase 3D capabilities", () => {
   });
   it("selects gemini for image only when key exists", () => {
     expect(selectModelForTask("image_understanding", { GEMINI_API_KEY: "k", GROQ_API_KEY: "g" })).toBe("gemini-3.6-flash");
-    expect(selectModelForTask("image_understanding", { GROQ_API_KEY: "g" })).toBeNull();
+    expect(selectModelForTask("image_understanding", { GROQ_API_KEY: "g" })).toBe("llama-3.2-11b-vision-preview");
+    expect(selectModelForTask("image_understanding", {})).toBeNull();
   });
   it("text tasks use groq", () => {
     expect(selectModelForTask("text_chat", { GROQ_API_KEY: "g" })).toBe("openai/gpt-oss-20b");
