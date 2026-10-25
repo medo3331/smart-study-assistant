@@ -24,5 +24,26 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ tier, credits, services: usage });
+  let messagesUsed = 0;
+  let messagesLimit = 0;
+  try {
+    const { data: quotaRow } = await supabase
+      .from("subscription_quotas")
+      .select("messages_24h")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    messagesUsed = (quotaRow as any)?.messages_24h ?? 0;
+
+    const { data: planRow } = await supabase
+      .from("subscription_plans")
+      .select("messages_per_2h")
+      .eq("plan_key", tier === "pro" ? "pro" : tier === "ultra" ? "ultra" : "free")
+      .maybeSingle();
+    const per2h = (planRow as any)?.messages_per_2h ?? 0;
+    messagesLimit = per2h * 12;
+  } catch {
+    // fail-open
+  }
+
+  return NextResponse.json({ tier, credits, messages: { used: messagesUsed, limit: messagesLimit }, services: usage });
 }
