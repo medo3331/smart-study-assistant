@@ -111,8 +111,8 @@ export default async function PlansPageServer() {
                   {p.plan_key === "free" ? (
                     <a href="/dashboard" className="inline-block w-full text-center rounded-xl bg-slate-500/10 hover:bg-slate-500/20 text-slate-300 font-bold py-3.5 transition">متاح مجانًا</a>
                   ) : (
-                    <a href={s.paymentsEnabled ? "/contact" : "/dashboard"} className={`inline-block w-full text-center rounded-xl font-bold py-3.5 transition ${s.paymentsEnabled ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white" : "bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"}`}>
-                      {s.paymentsEnabled ? "اشترك الآن" : "قريبًا"}
+                    <a href="/contact" className={`inline-block w-full text-center rounded-xl font-bold py-3.5 transition ${s.paymentsEnabled ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white" : "bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"}`}>
+                      {s.paymentsEnabled ? "اشترك الآن" : "تواصل للاشتراك"}
                     </a>
                   )}
                   <p className="text-[11px] text-[#7A8298] mt-2 text-center">
