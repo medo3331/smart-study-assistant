@@ -91,7 +91,14 @@ export async function POST(req: Request) {
     // نفس حد توليد الخطة — الطلب ده بيطلع توكنز كتير في نداء واحد
     const limited = checkRateLimit(`slides:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    const quota = await checkSubscriptionQuota(user.id, "message");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
+        { status: 429 }
+      );
+    }
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 5 });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);

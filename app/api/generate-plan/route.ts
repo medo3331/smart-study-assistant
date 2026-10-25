@@ -34,8 +34,15 @@ export async function POST(req: Request) {
     // ٢) حدّ استخدام: توليد الخطة أغلى طلب عندنا
     const limited = checkRateLimit(`plan:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
+    const quota = await checkSubscriptionQuota(user.id, "message");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
+        { status: 429 }
+      );
+    }
     // Phase H: 1 credit gate (free model, but still costs 1 credit)
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 5 });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);

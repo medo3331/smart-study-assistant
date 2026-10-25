@@ -799,9 +799,6 @@ export default function DashboardPage() {
      «شغّل الطوارئ» ماتتحولش لـ «اقفله» بسبب تنقّل بينهم. */
   const handleNavSignal = (signal: NavSignal, opts?: { force?: boolean }) => {
     switch (signal) {
-      case "ai":
-        handleOpenAiAssistant();
-        break;
       case "settings":
         setIsMenuOpen(true);
         break;
@@ -1451,7 +1448,6 @@ export default function DashboardPage() {
         // 🗓️ ٨ أغسطس: الشريط العلوي اتشال، فكل أدواته بتوصل من هنا.
         // أي إشارة جديدة تتزوّد في nav-config.ts والـ switch ده يتوسّع.
         onSignal={handleNavSignal}
-        aiReady={days.length > 0}
         motivation={{ level, streak }}
         account={railAccountFromUser(authUser)}
         emergencyOn={isEmergencyMode}

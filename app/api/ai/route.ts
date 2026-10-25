@@ -107,6 +107,14 @@ export async function POST(req: Request) {
     const limited = checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
+    const quota = await checkSubscriptionQuota(user.id, "message");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", retryable: false } },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json(
