@@ -264,6 +264,14 @@ export default async function AdminUserDetailsPage({
             )}
           </AdminCard>
         </>
+        <AdminCard title="ملخص استخدام AI (Phase 2)" tone="default">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div><span className="text-slate-400">رسائل AI:</span> <strong>{consumption?.messagesCount ?? "N/A"}</strong></div>
+            <div><span className="text-slate-400">رصيد AI:</span> <strong>{consumption?.creditsBalance ?? "N/A"}</strong></div>
+            <div><span className="text-slate-400">ملفات:</span> <strong>{consumption?.filesCount ?? "N/A"}</strong></div>
+            <div><span className="text-slate-400">حجم الملفات:</span> <strong>{consumption?.filesBytes ?? "N/A"} B</strong></div>
+          </div>
+        </AdminCard>
       )}
     </div>
   );
