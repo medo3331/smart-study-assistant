@@ -4,7 +4,7 @@ import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { recordAiOperation } from "@/lib/ai/operations";
 
 /* ==========================================================================
    توليد عرض تقديمي
@@ -199,6 +199,7 @@ export async function POST(req: Request) {
       );
     }
 
+    void recordAiOperation(__hSupabase, { userId: __hUser?.id, provider: "groq", model: GROQ_MODELS.advanced, taskType: "generate_slides", status: "completed", contentLength: rawContent.length });
     return NextResponse.json({ success: true, data: { topic, slides } });
   } catch (error: unknown) {
     try { if (guard && (guard as any)?.refId) await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ''), (guard as any).refId); } catch {}

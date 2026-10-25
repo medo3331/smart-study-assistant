@@ -232,6 +232,8 @@ export default async function AdminUsersPage({
 
       <AdminCard title="شحن AI Credits يدويًا" description="إضافة رصيد لأي مستخدم عبر /api/admin/add-credits (سيرفر-سايد، Admin فقط، مسجّل في ai_credit_ledger بسبب reason=admin_grant)." tone="emerald">
         <form action="/api/admin/add-credits" method="POST" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input type="hidden" name="idempotencyKey" value={crypto.randomUUID()} />
+
           <input
             type="text"
             name="targetUserId"

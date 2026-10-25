@@ -4,7 +4,7 @@ import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { recordAiOperation } from "@/lib/ai/operations";
 
 /** أقصى طول لأي حقل نصي جاي من الكلاينت. */
 const MAX_FIELD_CHARS = 200;
@@ -182,6 +182,7 @@ export async function POST(req: Request) {
       );
     }
 
+    void recordAiOperation(__hSupabase, { userId: __hUser?.id, provider: "groq", model: GROQ_MODELS.fast, taskType: "generate_plan", status: "completed", contentLength: rawContent.length });
     return NextResponse.json({
       success: true,
       data: parsedData,
@@ -189,6 +190,7 @@ export async function POST(req: Request) {
 
   } catch (error) {
     try { if (guard && (guard as any)?.refId) await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ''), (guard as any).refId); } catch {}
+    void recordAiOperation(__hSupabase, { userId: __hUser?.id, provider: "groq", model: GROQ_MODELS.fast, taskType: "generate_plan", status: "failed" });
     console.error("Groq API Error:", error);
 
     // ٥) رسايل عامة للكلاينت — تفاصيل الخطأ بتفضل في اللوج بس
