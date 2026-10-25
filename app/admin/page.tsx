@@ -85,6 +85,8 @@ export default async function AdminHomePage({
           <div><span className="text-slate-400">مستخدمون جدد:</span> <strong>{ov?.newUsers ?? "N/A"}</strong></div>
         </div>
       </AdminCard>
+      <AdminCard
+        title="التنقل السريع"
         description="روابط حقيقية لصفحات الأدمن الفعلية. أي عنصر مش ظاهر هنا ممنوع عليك بالرابط المباشر كمان (فحص على السيرفر)."
         tone="amber"
       >
