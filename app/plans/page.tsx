@@ -1,3 +1,4 @@
+import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
 import { getPlanSettings } from "@/lib/plans/settings";
 import { createClient } from "@/lib/supabase/server";
 import PremiumTrialCard from "@/components/plans/PremiumTrialCard";
@@ -123,6 +124,17 @@ export default async function PlansPageServer() {
           })}
         </div>
 
+        <div className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-5 mb-8">
+          <h2 className="font-bold mb-3">تكلفة عمليات AI (credits)</h2>
+          <ul className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+            {Object.entries(CREDIT_COSTS).map(([k, v]) => (
+              <li key={k} className="flex justify-between border-b border-[#2A3050] py-1">
+                <span>{k}</span>
+                <span className="font-bold">{v}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
         <PremiumTrialCard />
         <PlansPaymentInfo />
 
