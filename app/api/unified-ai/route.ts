@@ -609,7 +609,9 @@ export async function POST(req: Request) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "الطالب";
-        input.system = "أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
+        input.system = language === "en"
+          ? "You are «Magicly», a study assistant. User: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". Answer in clear English. Do not assume database data."
+          : "أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
       } catch (e) {
         console.warn("[unified-ai] user context build failed, continuing without it:", e);
       }

@@ -43,7 +43,7 @@ async function callGroqWithModel(
   // ًںŒگ Language handling: honour the requested language instead of discarding it.
   const langDirective =
     _language === "ar"
-      ? "ط£ط¬ط¨ ط¨ط§ظ„ظ„ط؛ط© ط§ظ„ط¹ط±ط¨ظٹط© (Arabic) ط¥ظ„ط§ ط¥ط°ط§ ط·ظ„ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ… ط؛ظٹط± ط°ظ„ظƒ."
+      ? "أجب باللغة العربية (Arabic) إلا إذا طلب المستخدم غير ذلك."
       : _language === "en"
         ? "Respond in English unless the user explicitly asks otherwise."
         : "";
@@ -302,7 +302,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
       const t = String(lesson.title || "").slice(0, 200);
       const s = String(lesson.subject || "").slice(0, 100);
       const c = String(lesson.content || lesson.description || "").slice(0, 4000);
-      lessonPrefix = `ط£ظ†طھ ط§ظ„ظ…ط³ط§ط¹ط¯ ط§ظ„طھط¹ظ„ظٹظ…ظٹ ط§ظ„ط°ظƒظٹ ظ„ظ„ط¯ط±ط³ ط§ظ„ط­ط§ظ„ظٹ.\nط¹ظ†ظˆط§ظ† ط§ظ„ط¯ط±ط³: ${t}\nط§ظ„ظ…ط§ط¯ط©: ${s}\nظ…ط­طھظˆظ‰ ط§ظ„ط¯ط±ط³: ${c}\n\nط£ط¬ط¨ ط¹ظ„ظ‰ ط£ط³ط¦ظ„ط© ط§ظ„ط·ط§ظ„ط¨ ط¨ظ†ط§ط،ظ‹ ط¹ظ„ظ‰ ظ…ط­طھظˆظ‰ ظ‡ط°ط§ ط§ظ„ط¯ط±ط³ ظپظ‚ط· ظˆط¨ط£ط³ظ„ظˆط¨ ظ…ط¨ط³ط·طŒ ظ…ط¹ ط§ظ„ط¥ط¨ظ‚ط§ط، ط¹ظ„ظ‰ ط§ظ„ظ…طµط·ظ„ط­ط§طھ ط§ظ„طھظ‚ظ†ظٹط© ط¨ط§ظ„ط¥ظ†ط¬ظ„ظٹط²ظٹط© ظƒظ…ط§ ظ‡ظٹ.\n\n---\n\n`;
+      lessonPrefix = `أنت المساعد التعليمي الذكي للدرس الحالي.\nعنوان الدرس: ${t}\nالمادة: ${s}\nمحتوى الدرس: ${c}\n\nأجب على أسئلة الطالب بناءً على محتوى هذا الدرس فقط وبأسلوب مبسط، مع الإبقاء على المصطلحات التقنية بالإنجليزية كما هي.\n\n---\n\n`;
     }
     const ocrNote = extractedText
       ? (lang === "ar"
