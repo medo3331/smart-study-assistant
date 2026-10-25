@@ -77,8 +77,14 @@ export default async function AdminHomePage({
         />
       </div>
 
-      <AdminCard
-        title="التنقل السريع"
+      <AdminCard title="ملخص تحليلات AI (Phase 2)" tone="default">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div><span className="text-slate-400">رسائل اليوم:</span> <strong>{ov?.messagesToday ?? "N/A"}</strong></div>
+          <div><span className="text-slate-400">رسائل 7 أيام:</span> <strong>{ov?.messagesWeek ?? "N/A"}</strong></div>
+          <div><span className="text-slate-400">ملفات 7 أيام:</span> <strong>{ov?.filesWeek ?? "N/A"}</strong></div>
+          <div><span className="text-slate-400">مستخدمون جدد:</span> <strong>{ov?.newUsers ?? "N/A"}</strong></div>
+        </div>
+      </AdminCard>
         description="روابط حقيقية لصفحات الأدمن الفعلية. أي عنصر مش ظاهر هنا ممنوع عليك بالرابط المباشر كمان (فحص على السيرفر)."
         tone="amber"
       >
