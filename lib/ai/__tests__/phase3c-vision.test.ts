@@ -74,14 +74,29 @@ describe("Phase 3C vision", () => {
     expect(res.code).toBe("IMAGE_TOO_LARGE");
   });
 
-  it("vision provider failure falls back to OCR path", async () => {
+  it("vision provider failure returns error (no silent fallback)", async () => {
     mockAnalyzeMedia.mockRejectedValueOnce(new Error("vision down"));
     const file = makeFile();
     const res = await unifiedAI({ prompt: "describe", imageInput: file, language: "en" });
-    expect(res.ok).toBe(true);
-    expect(res.answer).toBe("groq answer");
-    expect(extractTextFromFile).toHaveBeenCalled();
-    expect(res.metadata?.visionFallback).toBe(true);
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("VISION_PROVIDER_FAILED");
+    expect(extractTextFromFile).not.toHaveBeenCalled();
+  });
+
+  it("missing vision config returns error when image present", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const file = makeFile();
+    const res = await unifiedAI({ prompt: "describe", imageInput: file, language: "en" });
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("VISION_NOT_CONFIGURED");
+  });
+
+  it("missing text provider returns error for text-only", async () => {
+    delete process.env.GROQ_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    const res = await unifiedAI({ prompt: "hello", language: "en" });
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("NO_TEXT_PROVIDER");
   });
 
   it("Arabic prompt preserved to vision provider", async () => {

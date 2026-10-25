@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { SITE_LINKS } from "@/lib/site-links";
+import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 
 function supportWhatsappHref(code?: string, detail?: string) {
   const base = SITE_LINKS.whatsapp || "https://wa.me/201204556797";
@@ -135,10 +136,10 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       const formData = new FormData();
       formData.append("prompt", text);
       if (attachment) {
-        formData.append("file", attachment.file, attachment.file.name);
-        // Also mark imageInput for OCR path
         if (attachment.kind === "image") {
           formData.append("imageInput", attachment.file, attachment.file.name);
+        } else {
+          formData.append("file", attachment.file, attachment.file.name);
         }
       }
       // Pass context language + lesson context (                )
@@ -240,18 +241,25 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         }
 
         // ??         (500/502/503    PROVIDER_ERROR/RESERVE_FAILED/INTERNAL_ERROR) ??
+        const incidentId = (data?.incidentId as string | undefined) || "";
+        const supportPhone = getSupportPhone();
+        const waMessage = buildWhatsAppReport({
+          incidentId,
+          errorCode: code || "UNKNOWN_INTERNAL_ERROR",
+          httpStatus: res.status,
+          timestamp: new Date().toISOString(),
+        });
         const technicalInfo = {
-          error: "             ",
-          message: `                            ${code ? ` (${code})` : ""}.                                                           `,
-          actions: [supportAction],
+          error: "حصل عطل فني",
+          message: `حدثت مشكلة أثناء معالجة طلبك. كود العطل: ${code}${incidentId ? ` | معرّف البلاغ: ${incidentId}` : ""}`,
+          actions: supportPhone
+            ? [{ label: "الإبلاغ عبر واتساب", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
+            : [],
           kind: "technical" as const,
         };
         setRateLimitInfo(technicalInfo);
-        setMessages((m) => [...m, { role: "assistant", content: `${technicalInfo.error}\n\n${technicalInfo.message}` }]);
         return;
       }
-
-      //                     rate limit               setRateLimitInfo(null);
 
       //                                         
       if (typeof data?.conversationId === "string" && data.conversationId) {
@@ -268,14 +276,22 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       removeAttachment();
     } catch {
       setLoading(false);
-      const supportHref = supportWhatsappHref("NETWORK", "Network Error");
+      const supportPhone = getSupportPhone();
+      const waMessage = buildWhatsAppReport({
+        errorCode: "NETWORK_ERROR",
+        timestamp: new Date().toISOString(),
+      });
       setRateLimitInfo({
         error: "Network Error.",
         message: "Unable to connect to the server. Please check your internet connection.",
-        actions: [{ label: "Contact Support", href: supportHref, external: true }],
+        actions: supportPhone
+          ? [{ label: "Contact Support", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
+          : [],
         kind: "technical",
       });
-      setMessages((m) => [...m, { role: "assistant", content: "Network error occurred." }]);
+      // Restore draft for retry; keep attachment intact.
+      setInput(text);
+
     }
   };
 

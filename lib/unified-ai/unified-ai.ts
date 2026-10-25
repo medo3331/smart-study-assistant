@@ -19,6 +19,7 @@ import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
 import { detectFileKind } from "../extract-text";
+import { selectModelForTask, getModelCapability } from "../ai/capabilities";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
 import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
@@ -141,12 +142,40 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
   try {
     let extractedText = "";
     let ocrMeta = { engineUsed: 1 as 1 | 3, confidence: "low" as "high" | "medium" | "low" };
+    let visionFallback = false;
 
     // 0. True vision path (Phase 3C) â€” only if a configured provider supports it.
     const hasImageInput = !!(input.imageInput || input.fileInput);
-    const fileForVision = (input.imageInput || input.fileInput) as (File & { arrayBuffer?: () => Promise<ArrayBuffer> }) | undefined;
-    let visionFallback = false;
-    if (hasImageInput && fileForVision && typeof fileForVision.arrayBuffer === 'function' && process.env.GEMINI_API_KEY?.trim()) {
+    const fileForVision = input.imageInput as (File & { arrayBuffer?: () => Promise<ArrayBuffer> }) | undefined;
+    const visionModel = selectModelForTask("image_understanding", {
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    });
+    if (hasImageInput && fileForVision && typeof fileForVision.arrayBuffer === 'function') {
+      // Image present: MUST use a vision-capable provider. Never fall back to text-only claiming image understood.
+      if (!visionModel) {
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'فهم الصور غير متاح حالياً. يرجى المحاولة لاحقاً أو أرسل نصاً فقط.',
+          code: 'VISION_NOT_CONFIGURED',
+          metadata: { imageProcessed: true, visionUsed: false },
+          reasoning: 'No vision-capable provider configured',
+        };
+      }
+      const cap = getModelCapability(visionModel);
+      if (!cap || !cap.imageInput) {
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'الموديل المحدد لا يدعم الصور.',
+          code: 'MODEL_NO_VISION',
+          metadata: { imageProcessed: true, visionUsed: false },
+          reasoning: `Selected model ${visionModel} lacks imageInput capability`,
+        };
+      }
       if (!fileForVision.type?.startsWith('image/')) {
         return {
           ok: false,
@@ -188,13 +217,23 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
           reasoning: 'gemini analyzeMedia',
         };
       } catch (visionErr) {
-        console.error('Vision unavailable, falling back to OCR:', visionErr instanceof Error ? visionErr.message : String(visionErr));
-        visionFallback = true;
+        console.error('Vision provider failed:', visionErr instanceof Error ? visionErr.message : String(visionErr));
+        // Do NOT silently fall back to text-only for images
+        return {
+          ok: false,
+          agentUsed: 'unknown',
+          answer: '',
+          error: 'فشل معالج الصور. يرجى المحاولة مرة أخرى.',
+          code: 'VISION_PROVIDER_FAILED',
+          metadata: { imageProcessed: true, visionUsed: false },
+          reasoning: 'vision provider error',
+        };
       }
     }
 
-    // 1. OCR (Magic existing pipeline â€” lib/extract-text.ts)
-    if (input.imageInput || input.fileInput) {
+    // 1. OCR (Magic existing pipeline â€” lib/extract-text.ts) â€” only for non-image files (PDF/docx/text).
+    // Images are handled by the vision path above; if we reach here with an image, something is inconsistent.
+    if (!input.imageInput && input.fileInput) {
       const file = (input.imageInput || input.fileInput) as File;
       try {
         const text = await extractTextFromFile(file, {
@@ -215,7 +254,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
              agentUsed: "unknown",
              answer: "",
               error: "تعذر قراءة النص من هذا الـ PDF. يرجى رفع صورة للصفحة بدلاً من ذلك.",
-             code,
+             code: code || "PDF_READ_FAILED",
              errorCode: "PDF_READ_FAILED",
              extractedText: undefined,
              metadata: undefined,
@@ -226,6 +265,23 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
          extractedText = "";
          ocrMeta = { engineUsed: 3, confidence: "low" };
        }
+    }
+
+    // TEXT MODEL ROUTING (Phase H): choose text model by capability, not hardcoded Groq.
+    const textModel = selectModelForTask("text_chat", {
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    });
+    if (!textModel) {
+      return {
+        ok: false,
+        agentUsed: 'unknown',
+        answer: '',
+        error: 'لا يوجد مزود نصي متاح حالياً.',
+        code: 'NO_TEXT_PROVIDER',
+        metadata: undefined,
+        reasoning: 'No text-capable provider configured',
+      };
     }
 
     // 2. Hidden Router (user never sees selection)
@@ -258,7 +314,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // 4. REAL model call â€” Phase H: respect explicit model if provided (already entitlement-checked in route)
     // If input.model is present, route already verified entitlement before reserve â€” use it.
     // Otherwise use CURRENT_AI_MODEL (free, always accessible).
-    const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : GROQ_MODEL;
+    const modelToUse = typeof input.model === "string" && input.model.trim().length > 0 ? input.model.trim() : textModel;
     // ط­ظ‚ظ† ط¥ط±ط´ط§ط¯ط§طھ ط§ظ„ظ…ط®ط·ط·ط§طھ (Mermaid) â€” ط§ظ„ظ…ط³ط§ط¹ط¯ ط¨ظٹط±ط³ظ… ط®ط±ط§ط¦ط· ط°ظ‡ظ†ظٹط©/ظ…ط®ط·ط·ط§طھ
     // ط¯ط§ط®ظ„ ط§ظ„ط´ط§طھ ظ…ط¨ط§ط´ط±ط©طŒ ظˆط¨ظٹط¹ط±ط¶ظ‡ط§ MermaidViewer ظپظٹ ط§ظ„ظˆط§ط¬ظ‡ط©.
     // Unified brain: system ظ…ظ† ط§ظ„ط³ظٹط±ظپط± (ط´ط®طµظٹط© + ط³ظٹط§ظ‚ ط§ظ„ط·ط§ظ„ط¨) + ط¥ط±ط´ط§ط¯ط§طھ ط§ظ„ظ…ط®ط·ط·ط§طھ.

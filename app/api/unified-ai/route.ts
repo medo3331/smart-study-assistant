@@ -46,6 +46,8 @@ import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { generateIncidentId, getHttpStatus, sanitizeErrorMessage } from "@/lib/unified-ai/error-taxonomy";
+import { logIncident } from "@/lib/unified-ai/incident-log";
 import type { AiTaskType } from "@/lib/ai/types";
 function serverRequestId(): string {
   try {
@@ -625,9 +627,29 @@ export async function POST(req: Request) {
           console.error("[PhaseF] refund after provider failure failed:", e);
         }
       }
+      const code = result.code || result.errorCode || "AI_PROVIDER_FAILED";
+      const incidentId = generateIncidentId();
+      console.error("[unified-ai] incident", incidentId, "code", code, "stage", sanitizeErrorMessage(result.error || ""));
+      // Best-effort persistent logging (never throws, never blocks on failure).
+      try {
+        await logIncident({
+          incidentId,
+          errorCode: code,
+          stage: result.error,
+          httpStatus: getHttpStatus(code),
+        });
+      } catch {
+        /* best-effort */
+      }
       return NextResponse.json(
-        { ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: result.errorCode || "PROVIDER_ERROR" },
-        { status: result.errorCode === "PDF_READ_FAILED" ? 422 : 502 }
+        {
+          ok: false,
+          error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.",
+          code,
+          incidentId,
+          retryable: true,
+        },
+        { status: getHttpStatus(code) }
       );
     }
 
@@ -687,8 +709,19 @@ export async function POST(req: Request) {
         console.error("[PhaseF] refund after exception failed:", re);
       }
     }
-    console.error("unified-ai route error:", (e as Error)?.message || String(e));
-    return NextResponse.json({ ok: false, error: "ط­ط¯ط« ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹. ط¬ط±ط¨ ظ…ط±ط© ط£ط®ط±ظ‰.", code: "INTERNAL_ERROR" }, { status: 400 });
+    console.error("unified-ai route error:", sanitizeErrorMessage((e as Error)?.message || String(e)));
+    const incidentId = generateIncidentId();
+    try {
+      await logIncident({
+        incidentId,
+        errorCode: "UNKNOWN_INTERNAL_ERROR",
+        stage: (e as Error)?.message || String(e),
+        httpStatus: 500,
+      });
+    } catch {
+      /* best-effort */
+    }
+    return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى.", code: "UNKNOWN_INTERNAL_ERROR", incidentId, retryable: true }, { status: 500 });
   }
 }
 // export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
