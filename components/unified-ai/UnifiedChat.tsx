@@ -12,9 +12,9 @@ import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingB
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
+import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
-
 function supportWhatsappHref(code?: string, detail?: string) {
   const phone = getSupportPhone();
   if (!phone) return "";
@@ -43,6 +43,8 @@ type LessonContext = {
 
 export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
   const router = useRouter();
+  const { locale } = useLanguage();
+  const isAr = locale === "ar";
   const [messages, setMessages] = useState<ChatMsg[]>([
     { role: "assistant", content: "Hello! I am your AI study assistant. How can I help you today?", },
   ]);
@@ -154,7 +156,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       if (initialContext && typeof initialContext === "object") {
         Object.assign(ctx, initialContext);
       }
-      if (!ctx.language) ctx.language = "ar";
+      if (!ctx.language) ctx.language = locale || "ar";
       //                +              (         /api/chat              )
       if (conversationId) ctx.conversationId = conversationId;
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
@@ -197,10 +199,12 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
         // ??      AI Credits     (402)              ??
         if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
           const info = {
-            error: "Insufficient AI Credits.",
-            message: "You do not have enough credits for this request. Please visit the store to purchase more credits.",
+            error: isAr ? "رصيدك من الكريدت غير كافٍ" : "Insufficient AI Credits.",
+            message: isAr
+              ? "رصيدك الحالي لا يكفي لتنفيذ هذا الطلب. يمكنك زيارة المتجر لشراء كريدت إضافي"
+              : "You do not have enough credits for this request. Please visit the store to purchase more credits.",
             actions: [
-              { label: "Buy Credits", href: "/store" },
+              { label: isAr ? "شراء كريدت" : "Buy Credits", href: "/store" },
               supportAction,
             ],
             kind: "credits" as const,
@@ -482,7 +486,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       </div>
 
       {rateLimitInfo && (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 p-4 shadow-sm" role="alert" dir="rtl">
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 p-4 shadow-sm" role="alert" dir={isAr ? "rtl" : "ltr"}>
           <div className="flex items-start gap-3">
             <div className="shrink-0 mt-0.5 rounded-full bg-amber-100 dark:bg-amber-900 p-2">
               <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />

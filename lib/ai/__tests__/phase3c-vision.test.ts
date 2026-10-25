@@ -75,6 +75,8 @@ describe("Phase 3C vision", () => {
   });
 
   it("vision provider failure returns error (no silent fallback)", async () => {
+    delete process.env.GROQ_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     mockAnalyzeMedia.mockRejectedValueOnce(new Error("vision down"));
     const file = makeFile();
     const res = await unifiedAI({ prompt: "describe", imageInput: file, language: "en" });
@@ -84,6 +86,8 @@ describe("Phase 3C vision", () => {
   });
 
   it("missing vision config returns error when image present", async () => {
+    delete process.env.GROQ_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     delete process.env.GEMINI_API_KEY;
     const file = makeFile();
     const res = await unifiedAI({ prompt: "describe", imageInput: file, language: "en" });

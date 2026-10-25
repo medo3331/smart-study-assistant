@@ -18,6 +18,8 @@ import type { UnifiedAIInput, UnifiedAIResult } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
+import { GroqProvider } from "../ai/groq";
+import { OpenRouterProvider } from "../ai/openrouter";
 import { detectFileKind } from "../extract-text";
 import { selectModelForTask, getModelCapability } from "../ai/capabilities";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
@@ -199,23 +201,42 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
       try {
         const buffer = new Uint8Array(await fileForVision.arrayBuffer());
         const base64 = Buffer.from(buffer).toString('base64');
-        const gemini = new GeminiProvider();
-        const visionResult = await gemini.analyzeMedia({
-          data: base64,
-          mimeType: fileForVision.type,
-          prompt: input.prompt,
-        });
-        return {
-          ok: true,
-          agentUsed: 'gemini-vision',
-          answer: visionResult.content,
-          metadata: {
-            imageProcessed: true,
-            visionUsed: true,
-            languageDetected: input.language === 'ar' ? 'ar' : input.language === 'en' ? 'en' : 'mixed',
-          },
-          reasoning: 'gemini analyzeMedia',
-        };
+        const candidates = [
+          { modelId: "gemini-3.6-flash", available: !!process.env.GEMINI_API_KEY?.trim(), create: () => new GeminiProvider() },
+          { modelId: "llama-3.2-11b-vision-preview", available: !!process.env.GROQ_API_KEY?.trim(), create: () => new GroqProvider() },
+          { modelId: "nvidia/nemotron-nano-12b-v2-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
+        ].filter((c) => c.available);
+        // Prefer the selected model first, then the rest as fallback chain.
+        const ordered = [
+          ...candidates.filter((c) => c.modelId === visionModel),
+          ...candidates.filter((c) => c.modelId !== visionModel),
+        ];
+        let lastError: unknown = null;
+        for (const candidate of ordered) {
+          try {
+            const provider = candidate.create();
+            const visionResult = await provider.analyzeMedia({
+              data: base64,
+              mimeType: fileForVision.type,
+              prompt: input.prompt,
+            });
+            return {
+              ok: true,
+              agentUsed: `${provider.name}-vision`,
+              answer: visionResult.content,
+              metadata: {
+                imageProcessed: true,
+                visionUsed: true,
+                languageDetected: input.language === 'ar' ? 'ar' : input.language === 'en' ? 'en' : 'mixed',
+              },
+              reasoning: `${provider.name} analyzeMedia (${candidate.modelId})`,
+            };
+          } catch (providerErr) {
+            lastError = providerErr;
+            console.error(`Vision provider ${candidate.modelId} failed:`, providerErr instanceof Error ? providerErr.message : String(providerErr));
+          }
+        }
+        throw lastError ?? new Error("no vision provider available");
       } catch (visionErr) {
         console.error('Vision provider failed:', visionErr instanceof Error ? visionErr.message : String(visionErr));
         const ocrKey = process.env.OCR_SPACE_API_KEY?.trim();
