@@ -13,7 +13,6 @@
 /* ⚠️ الليستة دي هي المرجع لـ `isNavSignal` تحت. أي إشارة جديدة تتزوّد هنا
    وبس — التحقق من النية المحفوظة بيتولّد منها، فمافيش مكان تاني تنساه. */
 export const NAV_SIGNALS = [
-  "ai",
   "settings",
   "emergency",
   "parentReport",
@@ -66,7 +65,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   {
     title: "الأدوات",
     items: [
-      { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
+      { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", href: "/chat" },
       { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
       { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
@@ -94,8 +93,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "achievements", icon: "🏆", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
       { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
       { id: "rewards", icon: "🪙", label: "سجل المكافآت", latin: "Rewards", href: "/rewards" },
-      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
-      { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
+      { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", href: "/dashboard/progress" },
       { id: "leaderboard", icon: "🥇", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
       // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب
       // بالمذاكرة، فالمكان الطبيعي ليهم جنب الإنجازات والتحليلات.

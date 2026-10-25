@@ -109,12 +109,10 @@ export async function POST(req: Request) {
     const limited = checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
-    // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
-    const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuota(user.id, "message");
     if (!quota.allowed) {
       return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "تم تجاوز حد الخدمة.", code: "QUOTA_EXCEEDED" } },
+        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", retryable: false } },
         { status: 429 }
       );
     }

@@ -27,6 +27,7 @@ import {
   clearPendingChoice,
   getStepPrefix,
   getTracks,
+  isPersona,
   readPendingChoice,
 } from "@/lib/user-persona";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
@@ -155,7 +156,7 @@ export default function AssessmentPage() {
         if (!user) return;
         const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, education_track_id, subject").eq("id", user.id).maybeSingle();
         if (p) {
-          if (p.persona && ["student","grad","freelancer"].includes(p.persona)) setPersona(p.persona as Persona);
+          if (p.persona && isPersona(p.persona)) setPersona(p.persona);
           if (p.student_level) setStudentLevel(p.student_level as StudentLevel);
           if (p.education_stage_id) { setEduStageId(p.education_stage_id); }
           if (p.education_grade_id) { setEduGradeId(p.education_grade_id); }

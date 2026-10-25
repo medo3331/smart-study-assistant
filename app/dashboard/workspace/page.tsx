@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageShell, EmptyState, LoadingSheets, DataNotice } from "../components/PageShell";
 import { useAuthUser, formatArabicDate, formatFileSize } from "../components/use-page-data";
-import { setAiSeed, setNavIntent } from "../components/nav-config";
+import { setAiSeed } from "../components/nav-config";
 import {
   fetchMaterials,
   insertMaterial,
@@ -283,8 +283,10 @@ export default function WorkspacePage() {
   /* ---- افتح المحادثة والمادة مرفوعة معاها ---- */
   const handleAskAssistant = (material: Material) => {
     setAiSeed(material.title, material.content);
-    setNavIntent({ kind: "modal", target: "ai" });
-    router.push("/dashboard");
+    const params = new URLSearchParams();
+    params.set("subject", material.title);
+    params.set("content", material.content.slice(0, 4000));
+    router.push(`/chat?${params.toString()}`);
   };
 
   /* ---------------------------------------------------------------------- */

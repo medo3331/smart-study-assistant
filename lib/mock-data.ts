@@ -6,7 +6,6 @@ import type {
   LessonSection,
   LessonState,
   LessonSummary,
-  NavItem,
   QuickAction,
   StatCardData,
   User,
@@ -16,16 +15,10 @@ import {
   GraduationCap,
   Sparkles,
   Clock,
-  Home,
-  BookOpen,
-  Trophy,
-  Settings,
-  Compass,
   Layers,
   Route,
   Coffee,
   Plus,
-  Landmark,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -129,15 +122,6 @@ export function buildStatCards(stats: DashboardStats): StatCardData[] {
     },
   ];
 }
-
-export const mockNavItems: NavItem[] = [
-  { label: "لوحة التحكم", href: "/dashboard", icon: Home, active: true },
-  { label: "استكشف", href: "/dashboard", icon: Compass },
-  { label: "دروسي", href: "/dashboard", icon: BookOpen },
-  { label: "الإنجازات", href: "/dashboard", icon: Trophy },
-  { label: "عباداتي", href: "/worship", icon: Landmark },
-  { label: "الإعدادات", href: "/dashboard", icon: Settings },
-];
 
 /** Quick-action pills in the dashboard hero (أكاديمي/مرئي/عملي replaced by real actions). */
 export const mockQuickActions: QuickAction[] = [

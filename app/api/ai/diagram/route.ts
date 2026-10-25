@@ -137,7 +137,7 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-      refundServiceQuota(user.id, "diagram");
+      refundServiceQuota(supabase, user.id, "diagram");
       throw e;
     }
   } catch (error) {

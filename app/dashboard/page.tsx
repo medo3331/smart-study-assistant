@@ -33,7 +33,7 @@ import { HeroSection } from "./components/HeroSection";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
 import { useAudio } from "@/components/audio/AudioProvider";
-import { Sidebar, type SettingsSectionId } from "./components/Sidebar";
+import { SettingsDrawer, type SettingsSectionId } from "./components/SettingsDrawer";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
 import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components/nav-config";
@@ -47,6 +47,7 @@ import { StatCards } from "./components/StatCards";
 import { UserQrCard } from "./components/UserQrCard";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
+import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
@@ -800,9 +801,6 @@ export default function DashboardPage() {
      «شغّل الطوارئ» ماتتحولش لـ «اقفله» بسبب تنقّل بينهم. */
   const handleNavSignal = (signal: NavSignal, opts?: { force?: boolean }) => {
     switch (signal) {
-      case "ai":
-        handleOpenAiAssistant();
-        break;
       case "settings":
         setIsMenuOpen(true);
         break;
@@ -1452,7 +1450,6 @@ export default function DashboardPage() {
         // 🗓️ ٨ أغسطس: الشريط العلوي اتشال، فكل أدواته بتوصل من هنا.
         // أي إشارة جديدة تتزوّد في nav-config.ts والـ switch ده يتوسّع.
         onSignal={handleNavSignal}
-        aiReady={days.length > 0}
         motivation={{ level, streak }}
         account={railAccountFromUser(authUser)}
         emergencyOn={isEmergencyMode}
@@ -1634,6 +1631,7 @@ export default function DashboardPage() {
           />
           {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
           <EconomyStrip />
+          <PlanQuotaCard />
           {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
                   (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
           <CurrentStepCard
@@ -1959,7 +1957,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <Sidebar
+      <SettingsDrawer
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
         showSubjectModal={showSubjectModal}

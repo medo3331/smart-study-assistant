@@ -11,6 +11,8 @@ import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
 import { resolveActor } from "@/lib/policy";
 import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
+import { acquireAiSlot } from "@/lib/ai/concurrency";
+import { withProviderRetry } from "@/lib/ai/provider-retry";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
@@ -135,20 +137,12 @@ export async function POST(req: Request) {
     if (!guard.ok) return guard.response;
 
     let completion;
+    const releaseSlot = await acquireAiSlot();
     try {
-      // ?? Phase 5-C3 (pilot)                            **         **
-      //                                                                    //      completeChatInner`                    (                        //      . `attemptNo`                                     .
-      //
-      // ?? **           100%:**                header         UUID     
-      //                      guard         limits         credit    
-      //                           fallback             .
-      const usage = resolveUsageRequestContext(req, user.id);
-
-      completion = await aiRouter.completeChat("chat", {
+      completion = await withProviderRetry(() => aiRouter.completeChat("chat", {
         messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
         temperature: 0.7,
-        usage,
-      });
+      }));
     } catch (error) {
       void recordRuntimeError({
         route: "/api/chat",
@@ -176,6 +170,8 @@ export async function POST(req: Request) {
         },
         { status: isUnavailable ? 503 : isRate ? 429 : 502 }
       );
+    } finally {
+      releaseSlot();
     }
 
     const data = completion.payload ?? {};
