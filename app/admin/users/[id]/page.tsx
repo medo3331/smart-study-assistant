@@ -263,7 +263,6 @@ export default async function AdminUserDetailsPage({
               </AdminNotice>
             )}
           </AdminCard>
-        </AdminCard>
         </>
       )}
     </div>
