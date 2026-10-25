@@ -218,16 +218,40 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         };
       } catch (visionErr) {
         console.error('Vision provider failed:', visionErr instanceof Error ? visionErr.message : String(visionErr));
-        // Do NOT silently fall back to text-only for images
-        return {
-          ok: false,
-          agentUsed: 'unknown',
-          answer: '',
-          error: 'فشل معالج الصور. يرجى المحاولة مرة أخرى.',
-          code: 'VISION_PROVIDER_FAILED',
-          metadata: { imageProcessed: true, visionUsed: false },
-          reasoning: 'vision provider error',
-        };
+        const ocrKey = process.env.OCR_SPACE_API_KEY?.trim();
+        if (ocrKey) {
+          try {
+            const text = await extractTextFromFile(fileForVision as File, {
+              maxFileBytes: 10 * 1024 * 1024,
+              maxImageBytes: 2 * 1024 * 1024,
+              maxTextChars: 8000,
+            });
+            extractedText = (text || '').trim();
+            ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? 'high' : 'medium' };
+            visionFallback = true;
+          } catch (ocrErr) {
+            console.error('OCR fallback failed:', ocrErr instanceof Error ? ocrErr.message : String(ocrErr));
+            return {
+              ok: false,
+              agentUsed: 'unknown',
+              answer: '',
+              error: 'لم نتمكن من قراءة الصورة حاليًا. يمكنك إعادة المحاولة أو تجربة استخراج النص باستخدام OCR إذا كانت الخدمة متاحة، أو إرسال بلاغ للدعم.',
+              code: 'VISION_PROVIDER_FAILED',
+              metadata: { imageProcessed: true, visionUsed: false },
+              reasoning: 'vision provider error; OCR failed',
+            };
+          }
+        } else {
+          return {
+            ok: false,
+            agentUsed: 'unknown',
+            answer: '',
+            error: 'لم نتمكن من قراءة الصورة حاليًا. يمكنك إعادة المحاولة أو تجربة استخراج النص باستخدام OCR إذا كانت الخدمة متاحة، أو إرسال بلاغ للدعم.',
+            code: 'VISION_PROVIDER_FAILED',
+            metadata: { imageProcessed: true, visionUsed: false },
+            reasoning: 'vision provider error',
+          };
+        }
       }
     }
 

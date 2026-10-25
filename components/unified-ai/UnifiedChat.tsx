@@ -98,7 +98,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
   const newChat = useCallback(() => {
-    setMessages([{ role: "assistant", content: "ط£ظ‡ظ„ط§ظ‹! ط£ظ†ط§ ظ…ط³ط§ط¹ط¯ Magic. ط§ظƒطھط¨ ط³ط¤ط§ظ„ظƒطŒ ط£ظˆ ط§ط±ظپط¹ طµظˆط±ط©/ظ…ظ„ظپ â€” ظˆط³ط£ط³ط§ط¹ط¯ظƒ." }]);
+    setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف â€” وسأساعدك." }]);
     setConversationId(null);
     setInput("");
     removeAttachment();
@@ -111,7 +111,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       if (res.ok && data?.ok) {
         setConversationId(id);
         const msgs = (data.messages ?? []).map((m: any) => ({ role: m.role, content: m.content }));
-        setMessages(msgs.length ? msgs : [{ role: "assistant", content: "ظ„ط§ طھظˆط¬ط¯ ط±ط³ط§ط¦ظ„." }]);
+        setMessages(msgs.length ? msgs : [{ role: "assistant", content: "لا توجد رسائل." }]);
       }
     } catch {}
   }, []);
@@ -124,7 +124,7 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
   }, [renameValue, loadConversations]);
 
   const deleteConversation = useCallback(async (id: string) => {
-    if (!confirm("ط­ط°ظپ ظ‡ط°ظ‡ ط§ظ„ظ…ط­ط§ط¯ط«ط©طں")) return;
+    if (!confirm("حذف هذه المحادثة؟")) return;
     await fetch(`/api/chat/conversations/${id}`, { method: "DELETE" });
     if (conversationId === id) newChat();
     loadConversations();
@@ -257,10 +257,10 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
           timestamp: new Date().toISOString(),
         });
         const technicalInfo = {
-          error: "ط­طµظ„ ط¹ط·ظ„ ظپظ†ظٹ",
-          message: `ط­ط¯ط«طھ ظ…ط´ظƒظ„ط© ط£ط«ظ†ط§ط، ظ…ط¹ط§ظ„ط¬ط© ط·ظ„ط¨ظƒ. ظƒظˆط¯ ط§ظ„ط¹ط·ظ„: ${code}${incidentId ? ` | ظ…ط¹ط±ظ‘ظپ ط§ظ„ط¨ظ„ط§ط؛: ${incidentId}` : ""}`,
+          error: "حصل عطل فني",
+          message: `حدثت مشكلة أثناء معالجة طلبك. كود العطل: ${code}${incidentId ? ` | معرّف البلاغ: ${incidentId}` : ""}`,
           actions: supportPhone
-            ? [{ label: "ط§ظ„ط¥ط¨ظ„ط§ط؛ ط¹ط¨ط± ظˆط§طھط³ط§ط¨", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
+            ? [{ label: "الإبلاغ عبر واتساب", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
             : [],
           kind: "technical" as const,
         };
@@ -306,12 +306,12 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
     <div className="flex h-screen max-h-screen">
       <aside className={`${sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-0 right-0 h-full w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform`}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-sm">ط§ظ„ظ…ط­ط§ط¯ط«ط§طھ</h2>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="ط¥ط؛ظ„ط§ظ‚">âœ•</button>
+          <h2 className="font-bold text-sm">المحادثات</h2>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="إغلاق">âœ•</button>
         </div>
-        <button onClick={newChat} className="w-full mb-3 px-3 py-2 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-bold">+ ظ…ط­ط§ط¯ط«ط© ط¬ط¯ظٹط¯ط©</button>
+        <button onClick={newChat} className="w-full mb-3 px-3 py-2 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-bold">+ محادثة جديدة</button>
         <div className="overflow-y-auto h-[calc(100%-80px)] space-y-1">
-          {loadingConversations && <p className="text-xs text-ink-soft">ط¬ط§ط±ظچ ط§ظ„طھط­ظ…ظٹظ„...</p>}
+          {loadingConversations && <p className="text-xs text-ink-soft">جارٍ التحميل...</p>}
           {conversations.map((c) => (
             <div key={c.id} className={`group rounded-xl px-2 py-2 text-sm cursor-pointer ${conversationId === c.id ? "bg-[var(--accent)]/10" : "hover:bg-black/5"}`}>
               {renamingId === c.id ? (
@@ -320,15 +320,15 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
                 <div onClick={() => openConversation(c.id)} className="flex items-center justify-between gap-1">
                   <span className="truncate flex-1">{c.title}</span>
                   <span className="opacity-0 group-hover:opacity-100 flex gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.title); }} className="text-[10px]" aria-label="ط¥ط¹ط§ط¯ط© طھط³ظ…ظٹط©">âœژ</button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }} className="text-[10px]" aria-label="ط­ط°ظپ">ًں—‘</button>
+                    <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.title); }} className="text-[10px]" aria-label="إعادة تسمية">âœژ</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }} className="text-[10px]" aria-label="حذف">ًں—‘</button>
                   </span>
                 </div>
               )}
               <p className="text-[10px] text-ink-soft mt-0.5">{new Date(c.updated_at).toLocaleString("ar")}</p>
             </div>
           ))}
-          {!loadingConversations && conversations.length === 0 && <p className="text-xs text-ink-soft">ظ„ط§ طھظˆط¬ط¯ ظ…ط­ط§ط¯ط«ط§طھ ط³ط§ط¨ظ‚ط©.</p>}
+          {!loadingConversations && conversations.length === 0 && <p className="text-xs text-ink-soft">لا توجد محادثات سابقة.</p>}
         </div>
       </aside>
       <div className="flex-1 overflow-y-auto">

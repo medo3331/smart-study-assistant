@@ -40,9 +40,11 @@ export function buildWhatsAppUrl(phone: string, message: string): string {
 }
 
 export function getSupportPhone(): string | null {
-  const raw = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_WHATSAPP_SUPPORT_NUMBER : undefined;
-  if (!raw) return null;
+  const raw =
+    (typeof process !== "undefined"
+      ? process.env.NEXT_PUBLIC_WHATSAPP_SUPPORT_NUMBER
+      : undefined) || "01204556797";
   const digits = String(raw).replace(/\D/g, "");
   if (digits.length < 8) return null;
-  return raw.trim();
+  return String(raw).trim();
 }
