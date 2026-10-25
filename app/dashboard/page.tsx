@@ -46,6 +46,7 @@ import { HeroCard } from "./components/HeroCard";
 import { StatCards } from "./components/StatCards";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
+import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
@@ -1629,6 +1630,7 @@ export default function DashboardPage() {
           />
           {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
           <EconomyStrip />
+          <PlanQuotaCard />
           {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
                   (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
           <CurrentStepCard
