@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { href: '/lesson', labelAr: 'الدروس', labelEn: 'Lessons' },
   { href: '/lectures', labelAr: 'المحاضرات', labelEn: 'Lectures' },
   { href: '/chat', labelAr: 'المساعد', labelEn: 'Assistant' },
-  { href: '/store', labelAr: 'المتجر', labelEn: 'Store' },
+  { href: '/shop', labelAr: 'المتجر', labelEn: 'Store' },
 ];
 
 export function UnifiedNavbar() {
