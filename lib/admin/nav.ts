@@ -116,7 +116,27 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "support.manage",
     icon: "LifeBuoy",
   },
-
+  {
+    href: "/admin/ai-overview",
+    label: "نظرة عامة AI",
+    description: "ملخص طلبات AI و entitlements (قراءة فقط)",
+    permission: "audit.read",
+    icon: "Cpu",
+  },
+  {
+    href: "/admin/ai-costs",
+    label: "تكاليف AI",
+    description: "CREDIT_COSTS per operation (قراءة فقط)",
+    permission: "plans.manage",
+    icon: "Cpu",
+  },
+  {
+    href: "/admin/users/analytics",
+    label: "تحليلات المستخدمين",
+    description: "اسم، إيميل، باقة، وعمليات AI لكل مستخدم",
+    permission: "users.read",
+    icon: "Users",
+  },
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */
