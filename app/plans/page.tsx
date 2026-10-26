@@ -60,6 +60,11 @@ export default async function PlansPageServer() {
     .order("plan_key", { ascending: true });
 
   const plans = (plansData ?? []) as PlanRow[];
+  const displayPlans = plans.length ? plans : [
+    { plan_key: "free", name: "Free", display_name_ar: "مجاني", profile_limit: 5, messages_per_2h: 20, uploads_daily: 5, max_file_size_mb: 20, file_types: ["pdf", "text", "image"], video_audio_exclusive: false, trial_days: 0, price_monthly: 0, currency: "USD", is_active: true },
+    { plan_key: "pro", name: "Pro", display_name_ar: "Pro", profile_limit: 30, messages_per_2h: 60, uploads_daily: 30, max_file_size_mb: 150, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 7, price_monthly: 9.99, currency: "USD", is_active: true },
+    { plan_key: "ultra", name: "Ultra", display_name_ar: "Ultra", profile_limit: 100, messages_per_2h: 200, uploads_daily: 60, max_file_size_mb: 1024, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 14, price_monthly: 29.99, currency: "USD", is_active: true },
+  ];
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#0D1029] text-[#E7E9F5] px-4 sm:px-6 md:px-10 py-10 md:py-16">
@@ -79,7 +84,7 @@ export default async function PlansPageServer() {
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mb-12">
-          {plans.map((p) => {
+          {displayPlans.map((p) => {
             const meta = PLAN_META[p.plan_key] || PLAN_META.free;
             const isCurrent = (p.plan_key === "free" && userPlan === "free") || (p.plan_key !== "free" && userPlan === "premium");
             return (
