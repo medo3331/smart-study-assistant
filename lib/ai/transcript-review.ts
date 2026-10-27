@@ -228,7 +228,7 @@ export function buildReviewedText(
   }
 
   // enrichment: accept بدون finalValue → خذ suggested_correction من suspectedTerms.
-  const enriched: ReviewDecision[] = decisions.map((d) => {
+  const enriched: (ReviewDecision | null)[] = decisions.map((d) => {
     if (d.action === "accept" && (!d.finalValue || d.finalValue.trim() === "")) {
       const suggested = correctionMap.get(d.termId);
       if (suggested) {

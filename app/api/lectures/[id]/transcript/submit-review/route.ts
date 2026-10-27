@@ -183,7 +183,7 @@ const transcriptForBuild = transcriptData
     const decidedTermIds = new Set(decisions.map((d) => d.termId));
     const allDecided =
       totalSuspects > 0 &&
-      suspectedTerms.every((t) => decidedTermIds.has(termIdFromSuspected(t)));
+      suspectedTerms.every((t: any) => decidedTermIds.has(termIdFromSuspected(t)));
 
     const reviewStatus: "completed" | "needs_attention" = allDecided
       ? "completed"
