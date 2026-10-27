@@ -25,6 +25,7 @@ import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/Pa
 import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
 import { LectureNote } from "@/components/lectures/LectureNote";
 import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
+import LectureChat from "@/components/lectures/LectureChat";
 import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
 import { McqQuiz } from "@/components/lectures/McqQuiz";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
@@ -142,9 +143,9 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
           body="ارفع تسجيل محاضرة من صفحة تفريغ المحاضرات، وسجّل دخول الأول — وهي تتحفظ هنا."
         />
       ) : (
-        <section className="sheet-card divide-y divide-rule">
+        <section className="grid gap-4">
           {lectures.map((lecture) => (
-            <article key={lecture.id} className="p-4">
+            <article key={lecture.id} className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm transition hover:shadow-md">
               <details>
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -264,6 +265,15 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                       ) : (
                         <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
                       )}
+                     <LectureChat
+                       lectureId={lecture.id}
+                       contextText={
+                         lecture.review_status === "completed" && lecture.transcript_reviewed_text
+                           ? lecture.transcript_reviewed_text
+                           : (lecture.transcript_text ?? "")
+                       }
+                     />
+
                     </LectureSection>
                   </div>
                 </LectureWorkspace>
