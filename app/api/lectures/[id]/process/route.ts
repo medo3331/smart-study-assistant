@@ -149,7 +149,7 @@ export async function POST(
     // والفلتر بيخلّي الاستعلام نفسه مابيلغيش لحد غير المالك.
     const { data: lecture, error: fetchError } = await supabase
       .from("lectures")
-      .select("id, transcript_text")
+      .select("id, transcript_text, transcript_reviewed_text, review_status")
       .eq("id", id)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -180,7 +180,13 @@ export async function POST(
     }
 
     // ── ٤) التفريغ ──
-    const transcript = lecture.transcript_text;
+    // إذا وُجد نص مُراجع معتمد، استخدمه بدل الأصلي.
+    const transcript =
+      lecture.review_status === "completed" &&
+      typeof lecture.transcript_reviewed_text === "string" &&
+      lecture.transcript_reviewed_text.trim() !== ""
+        ? lecture.transcript_reviewed_text
+        : lecture.transcript_text;
     if (typeof transcript !== "string" || transcript.trim() === "") {
       return NextResponse.json(
         {

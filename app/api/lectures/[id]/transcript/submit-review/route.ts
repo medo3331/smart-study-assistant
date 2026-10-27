@@ -6,6 +6,7 @@ import type {
   SubmitReviewResponse,
 } from "@/lib/ai/transcript-review";
 import { buildReviewedText, termIdFromSuspected } from "@/lib/ai/transcript-review";
+import { runAiTask } from "@/lib/ai/tasks/runner";
 
 /* ============================================================================
    📝 /api/lectures/[id]/transcript/submit-review — إرسال قرارات المراجعة (Phase 3)
@@ -153,29 +154,67 @@ export async function POST(
     const transcriptData = lecture.transcript_data as
       | { text?: string; segments?: Array<{ text?: string; words?: Array<{ text?: string; start?: number; end?: number }> }> }
       | undefined;
+    const transcriptText = transcriptData?.text ?? "";
     const suspectedTerms = Array.isArray(lecture.suspected_terms)
       ? lecture.suspected_terms
       : [];
+    // (enrichment removed; buildReviewedText now tolerates invalid start)
 
 const transcriptForBuild = transcriptData
       ? { text: transcriptData.text ?? "", segments: transcriptData.segments }
       : { text: "", segments: [] };
-    const reviewedText = buildReviewedText(
+    let reviewedText = buildReviewedText(
       transcriptForBuild,
       suspectedTerms,
       decisions
     );
 
     if (reviewedText === null) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "CANNOT_BUILD_REVIEWED_TEXT",
-            message: "لا يمكن بناء النص المصحح تلقائيًا — يوجد تعارض في المواضع أو بيانات ناقصة. يرجى المراجعة يدوية.",
-          },
-        },
-        { status: 422 }
-      );
+      // Fallback: اطلب من AI إنتاج نص مراجع بديل (بدون تعديل الأصلي).
+      try {
+        const correctionList = decisions
+          .map((d) => {
+            const parts = d.termId.split(":");
+            // find term
+            return d;
+          })
+          .map((d) => `- ${d.termId}: ${d.action}${d.finalValue ? ` → ${d.finalValue}` : ""}`)
+          .join("\\n");
+        const fallbackSystem = `أنت مساعد أكاديمي. لديك نص محاضرة أصلي وقائمة قرارات مراجعة. أنتج نصًا مراجعًا (بديلًا عن الأصلي) بتطبيق القرارات (accept/manual_edit) والاحتفاظ بالأصلي (reject). أرجع JSON فقط: {\"reviewed_text\": \"...\"}. لا تشرح.`;
+        const fallbackUser = `النص الأصلي:\\n\"\"\"\\n${transcriptText ?? ""}\\n\"\"\"\\n\\nالقرارات:\\n${correctionList}\\n\\nأنتج النص المراجع.`;
+        let fbResp = null;
+        for (let a = 0; a < 3; a++) {
+          try {
+            fbResp = await runAiTask("chat", {
+              messages: [
+                { role: "system", content: fallbackSystem },
+                { role: "user", content: fallbackUser },
+              ],
+              options: { temperature: 0.2 },
+            });
+            break;
+          } catch (e) {
+            console.error("submit-review fallback AI failed", e);
+            if (a < 2) await new Promise((r) => setTimeout(r, 1000 * (a + 1)));
+          }
+        }
+        if (fbResp) {
+          try {
+            const parsed = JSON.parse(fbResp.content);
+            if (parsed && typeof parsed.reviewed_text === "string" && parsed.reviewed_text.trim()) {
+              reviewedText = parsed.reviewed_text.trim();
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch (e) {
+        console.error("submit-review fallback error", e);
+      }
+      if (reviewedText === null) {
+        // last resort: keep original
+        reviewedText = transcriptText ?? "";
+      }
     }
 
     // ٥) تحديد حالة المراجعة النهائية.
@@ -195,7 +234,7 @@ const transcriptForBuild = transcriptData
       .from("lectures")
       .update({
         review_decisions: decisions,
-        transcript_reviewed_text: reviewedText,
+        transcript_reviewed_text: reviewedText ?? "",
         review_status: reviewStatus,
         reviewed_at: reviewedAt,
       })

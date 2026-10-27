@@ -16,7 +16,7 @@ export async function GET(
   }
   const { data: lecture, error } = await supabase
     .from("lectures")
-    .select("id, suspected_terms, review_decisions, transcript_reviewed_text, review_status, reviewed_at")
+    .select("id, transcript_text, suspected_terms, review_decisions, transcript_reviewed_text, review_status, reviewed_at")
     .eq("id", lectureId)
     .eq("user_id", user.id)
     .single();
@@ -28,6 +28,7 @@ export async function GET(
     suspectedTerms: Array.isArray(lecture.suspected_terms) ? lecture.suspected_terms : [],
     reviewDecisions: Array.isArray(lecture.review_decisions) ? lecture.review_decisions : [],
     reviewedText: typeof lecture.transcript_reviewed_text === "string" ? lecture.transcript_reviewed_text : null,
+    transcriptText: typeof lecture.transcript_text === "string" ? lecture.transcript_text : null,
     reviewStatus: lecture.review_status ?? null,
     reviewedAt: lecture.reviewed_at ?? null,
   });

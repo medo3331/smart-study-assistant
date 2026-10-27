@@ -196,7 +196,10 @@ export function buildReviewedText(
     }
 
     const word = words[wordIdx];
-    if (typeof word.start !== "number" || Math.abs(word.start - start) > 0.5 || typeof word.text !== "string") {
+    if (typeof word.start !== "number" || typeof word.text !== "string") {
+      return null;
+    }
+    if (start >= 0 && Math.abs(word.start - start) > 0.5) {
       return null;
     }
 

@@ -83,47 +83,114 @@ dictionaryTerms = dict.terms.filter(
       );
     }
 
-    // ⑤) نداء الموديل.
-    const system = buildSuspectsPrompt({
-      transcriptText,
-      subject: lecture.subject || undefined,
-      dictionaryTerms: dictionaryTerms.length > 0 ? dictionaryTerms : undefined,
-    });
-
-    const response = await runAiTask("chat", {
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: transcriptText },
-      ],
-      options: { temperature: 0.3 },
-    });
-
-    // ⑥) تحليل رد الموديل.
-    let suspectedTerms: SuspectedTerm[] = [];
-    try {
-      const parsed = JSON.parse(response.content);
-      if (parsed && Array.isArray(parsed.suspected_terms)) {
-        suspectedTerms = parsed.suspected_terms
-          .filter(
-            (t: unknown): t is SuspectedTerm =>
-              typeof t === "object" &&
-              t !== null &&
-              typeof (t as SuspectedTerm).term === "string" &&
-              typeof (t as SuspectedTerm).suggested_correction === "string"
-          )
-          .map((t: SuspectedTerm) => ({
-            term: t.term.trim(),
-            suggested_correction: t.suggested_correction.trim(),
-            reason: typeof t.reason === "string" ? t.reason.trim() : "مشكوك في صحته",
-            start: typeof t.start === "number" ? t.start : 0,
-            end: typeof t.end === "number" ? t.end : 0,
-            segment_index: typeof t.segment_index === "number" ? t.segment_index : 0,
-            word_index: typeof t.word_index === "number" ? t.word_index : 0,
-          }));
+    // ⑤) نداء الموديل — تقسيم النص لأجزاء لتجنب HTTP 413 (Request too large).
+    const td = transcriptData;
+    const segments = Array.isArray(td?.segments) ? (td.segments as typeof td.segments) : [];
+    const CHUNK_WORDS = 1200;
+    // تقسيم segments إلى batches حسب عدد الكلمات.
+    const batches: Array<{ globalStart: number; segs: typeof segments }> = [];
+    let current: typeof segments = [];
+    let wordCount = 0;
+    let globalStart = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const segWords = (seg?.text || "").split(/\s+/).filter(Boolean).length;
+      if (current.length > 0 && wordCount + segWords > CHUNK_WORDS) {
+        batches.push({ globalStart, segs: current });
+        globalStart = i;
+        current = [seg];
+        wordCount = segWords;
+      } else {
+        current.push(seg);
+        wordCount += segWords;
       }
-    } catch {
-      // لو رد الموديل مش JSON صالح — نرجع مصفوفة فاضية ومانكملش الحفظ.
-      console.error("detect-suspects: رد الموديل ليس JSON صالح", response.content);
+    }
+    if (current.length > 0) {
+      batches.push({ globalStart, segs: current });
+    }
+    // إذا لم توجد segments، استخدم نصاً واحداً.
+    if (batches.length === 0) {
+      batches.push({ globalStart: 0, segs: [] });
+    }
+
+    let suspectedTerms: SuspectedTerm[] = [];
+    for (const batch of batches) {
+      const batchText =
+        batch.segs.length > 0
+          ? batch.segs.map((s) => s?.text || "").join(" ")
+          : transcriptText;
+      if (!batchText.trim()) continue;
+
+      const system = buildSuspectsPrompt({
+        transcriptText: batchText,
+        subject: lecture.subject || undefined,
+        dictionaryTerms: dictionaryTerms.length > 0 ? dictionaryTerms : undefined,
+      });
+
+      let response;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await runAiTask("chat", {
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: batchText },
+            ],
+            options: { temperature: 0.3 },
+          });
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          console.error(`detect-suspects: فشل نداء AI (attempt ${attempt + 1})`, e);
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        }
+      }
+      if (lastErr || !response) {
+        console.error("detect-suspects: فشل نداء AI لجزء بعد إعادة المحاولة", lastErr);
+        continue;
+      }
+
+      // ⑥) تحليل رد الموديل.
+      try {
+        const parsed = JSON.parse(response.content);
+        if (parsed && Array.isArray(parsed.suspected_terms)) {
+          const batchTerms = parsed.suspected_terms
+            .filter(
+              (t: unknown): t is SuspectedTerm =>
+                typeof t === "object" &&
+                t !== null &&
+                typeof (t as SuspectedTerm).term === "string" &&
+                typeof (t as SuspectedTerm).suggested_correction === "string"
+            )
+            .map((t: SuspectedTerm) => {
+              const localSeg = typeof t.segment_index === "number" ? t.segment_index : 0;
+              const globalSeg = batch.globalStart + localSeg;
+              const wordIdx = typeof t.word_index === "number" ? t.word_index : 0;
+              // إثراء start/end من transcript_data إذا كانت غير صالحة.
+              let start = typeof t.start === "number" ? t.start : -1;
+              let end = typeof t.end === "number" ? t.end : -1;
+              if (start < 0 || end < 0) {
+                const seg = segments[globalSeg];
+                const word = seg?.words?.[wordIdx];
+                if (typeof word?.start === "number") start = word.start;
+                if (typeof word?.end === "number") end = word.end;
+              }
+              return {
+                term: t.term.trim(),
+                suggested_correction: t.suggested_correction.trim(),
+                reason: typeof t.reason === "string" ? t.reason.trim() : "مشكوك في صحته",
+                start: start >= 0 ? start : 0,
+                end: end >= 0 ? end : 0,
+                segment_index: globalSeg,
+                word_index: wordIdx,
+              };
+            });
+          suspectedTerms = suspectedTerms.concat(batchTerms);
+        }
+      } catch {
+        console.error("detect-suspects: رد الموديل ليس JSON صالح", response.content);
+      }
     }
 
     // ⑦) حفظ النتائج في المحاضرة.
