@@ -30,7 +30,7 @@
  *
  *  لملفات أكبر من ده: الحل الصح presigned multipart upload لـ S3/R2
  *  مباشرة، مش رفع حد الذاكرة. مش جزء من المرحلة دي. */
-export const MAX_LECTURE_FILE_BYTES = 1024 * 1024 * 1024;
+export const MAX_LECTURE_FILE_BYTES = 50 * 1024 * 1024;
 
 /**
  * أقصى حجم يمرّ في جسم طلب الفانكشن.
