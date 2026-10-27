@@ -1,6 +1,6 @@
-﻿/* ==========================================================================
-   🎙️ تفريغ المحاضرات — استراتيجية احتياط متتالي (Groq → Deepgram → AssemblyAI → ElevenLabs)
-   ═══════════════════════════════════════════════════════════════════════ */
+/* ==========================================================================
+   ??? ����� ��������� � ���������� ������ ������ (Groq ? Deepgram ? AssemblyAI ? ElevenLabs)
+   ??????????????????????????????????????????????????????????????????????? */
 
 import {
   assertLectureFile,
@@ -75,13 +75,14 @@ function normalizeGeneric(params: {
   return { text, language: params.language, languageProbability: null, duration, segments, words, model: params.model, provider: params.provider };
 }
 
-/* ─────────────── Groq ─────────────── */
+/* ??????????????? Groq ??????????????? */
 async function transcribeWithGroq(blob: Blob, fileName: string): Promise<LectureTranscript> {
   const key = process.env.GROQ_API_KEY?.trim();
   if (!key) throw new TranscriptionError("SERVICE_NOT_CONFIGURED", "no key", 503);
   const form = new FormData();
   form.append("file", blob, fileName);
   form.append("model", GROQ_STT_MODEL);
+  form.append("language", "ar");
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
   form.append("timestamp_granularities[]", "segment");
@@ -96,7 +97,7 @@ async function transcribeWithGroq(blob: Blob, fileName: string): Promise<Lecture
   return normalizeGeneric({ text: str(p.text), language: str(p.language), duration: num(p.duration), words, segments: segs, model: GROQ_STT_MODEL, provider: "groq" });
 }
 
-/* ─────────────── Deepgram ─────────────── */
+/* ??????????????? Deepgram ??????????????? */
 async function transcribeWithDeepgram(blob: Blob, mimeType: string): Promise<LectureTranscript> {
   const key = process.env.DEEPGRAM_API_KEY?.trim();
   if (!key) throw new TranscriptionError("SERVICE_NOT_CONFIGURED", "no key", 503);
@@ -114,7 +115,7 @@ async function transcribeWithDeepgram(blob: Blob, mimeType: string): Promise<Lec
   return normalizeGeneric({ text: transcriptText, language: "ar", duration, words, model: "nova-2", provider: "deepgram" });
 }
 
-/* ─────────────── AssemblyAI ─────────────── */
+/* ??????????????? AssemblyAI ??????????????? */
 async function transcribeWithAssemblyAI(blob: Blob): Promise<LectureTranscript> {
   const key = process.env.ASSEMBLYAI_API_KEY?.trim();
   if (!key) throw new TranscriptionError("SERVICE_NOT_CONFIGURED", "no key", 503);
@@ -152,10 +153,10 @@ async function transcribeWithAssemblyAI(blob: Blob): Promise<LectureTranscript> 
     }
     await new Promise((r) => setTimeout(r, 3000));
   }
-  throw new TranscriptionError("PROVIDER_TIMEOUT", "العملية خدت وقت طويل، جرب ترفع ملف أصغر.", 502);
+  throw new TranscriptionError("PROVIDER_TIMEOUT", "������� ��� ��� ���� ��� ���� ��� ����.", 502);
 }
 
-/* ─────────────── ElevenLabs ─────────────── */
+/* ??????????????? ElevenLabs ??????????????? */
 async function transcribeWithElevenLabs(blob: Blob, fileName: string): Promise<LectureTranscript> {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
   if (!key) throw new TranscriptionError("SERVICE_NOT_CONFIGURED", "no key", 503);
@@ -175,7 +176,7 @@ async function transcribeWithElevenLabs(blob: Blob, fileName: string): Promise<L
   return normalizeGeneric({ text: str(p.text), language: str(p.language_code), duration: null, words, segments: segs.length ? segs : undefined, model: "scribe_v2", provider: "elevenlabs" });
 }
 
-/* ─────────────── Orchestration ─────────────── */
+/* ??????????????? Orchestration ??????????????? */
 async function transcribeBlob(blob: Blob, fileName: string, mimeType: string): Promise<LectureTranscript> {
   const providers: Array<{ name: string; run: () => Promise<LectureTranscript> }> = [];
   if (blob.size <= GROQ_MAX_BYTES && process.env.GROQ_API_KEY) {
@@ -191,7 +192,7 @@ async function transcribeBlob(blob: Blob, fileName: string, mimeType: string): P
     providers.push({ name: "elevenlabs", run: () => transcribeWithElevenLabs(blob, fileName) });
   }
   if (providers.length === 0) {
-    throw new TranscriptionError("SERVICE_NOT_CONFIGURED", "خدمة تحويل المحاضرات غير متاحة حالياً. حاول مرة أخرى لاحقاً.", 503);
+    throw new TranscriptionError("SERVICE_NOT_CONFIGURED", "���� ����� ��������� ��� ����� ������. ���� ��� ���� ������.", 503);
   }
   let lastError: unknown = null;
   for (const p of providers) {
@@ -205,7 +206,7 @@ async function transcribeBlob(blob: Blob, fileName: string, mimeType: string): P
     }
   }
   if (lastError instanceof TranscriptionError) throw lastError;
-  throw new TranscriptionError("PROVIDER_ERROR", "حصلت مشكلة أثناء تحويل المحاضرة. حاول مرة أخرى.", 502);
+  throw new TranscriptionError("PROVIDER_ERROR", "���� ����� ����� ����� ��������. ���� ��� ����.", 502);
 }
 
 export async function transcribeLecture(file: File): Promise<LectureTranscript> {
@@ -215,7 +216,7 @@ export async function transcribeLecture(file: File): Promise<LectureTranscript> 
 
 export async function transcribeLectureFromUrl(signedUrl: string): Promise<LectureTranscript> {
   if (typeof signedUrl !== "string" || !signedUrl.startsWith("https://")) {
-    throw new TranscriptionError("INVALID_URL", "رابط الملف المرفوع غير صالح. حاول ترفع المحاضرة من جديد.", 400);
+    throw new TranscriptionError("INVALID_URL", "���� ����� ������� ��� ����. ���� ���� �������� �� ����.", 400);
   }
   let blob: Blob;
   try {
@@ -223,9 +224,11 @@ export async function transcribeLectureFromUrl(signedUrl: string): Promise<Lectu
     if (!res.ok) throw new Error(`upstream ${res.status}`);
     blob = await res.blob();
   } catch (error) {
-    console.error("lecture-transcription: فشل تنزيل الملف من التخزين", error);
-    throw new TranscriptionError("NETWORK_ERROR", "فيها مشكلة في الاتصال بخدمة التحويل. اتأكد من النت وحاول تاني.", 502);
+    console.error("lecture-transcription: ��� ����� ����� �� �������", error);
+    throw new TranscriptionError("NETWORK_ERROR", "���� ����� �� ������� ����� �������. ����� �� ���� ����� ����.", 502);
   }
   const name = signedUrl.split("/").pop()?.split("?")[0] || "lecture.mp3";
   return transcribeBlob(blob, name, blob.type || "audio/mpeg");
 }
+
+
