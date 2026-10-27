@@ -260,6 +260,13 @@ function LoginForm() {
           </div>
         </div>
 
+        <Link href="/register" className="btn btn-marker btn-block">
+          إنشاء حساب جديد — مجانًا
+        </Link>
+        <Link href="/login/mag" className="btn btn-quiet btn-block">
+          الدخول باستخدام MAG ID
+        </Link>
+
         {message && (
           <div
             className={`notice ${message.type === "error" ? "notice-error" : "notice-ok"}`}
