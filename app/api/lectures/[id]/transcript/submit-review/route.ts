@@ -118,9 +118,16 @@ export async function POST(
       ? lecture.suspected_terms
       : [];
     const validTermIds = new Set(
-      (lectureSuspected as Array<{ segment_index: number; word_index: number; start: number }>).map(
-        (t) => termIdFromSuspected(t)
-      )
+      lectureSuspected.map((t: any) => {
+        let start = typeof t?.start === "number" ? t.start : -1;
+        const segIdx = typeof t?.segment_index === "number" ? t.segment_index : 0;
+        const wordIdx = typeof t?.word_index === "number" ? t.word_index : 0;
+        if (start < 0) {
+          const word = transcriptData?.segments?.[segIdx]?.words?.[wordIdx];
+          if (typeof word?.start === "number") start = word.start;
+        }
+        return termIdFromSuspected({ ...t, start: start >= 0 ? start : 0 });
+      })
     );
     const seenInRequest = new Set<string>();
     for (const d of decisions) {
@@ -156,13 +163,27 @@ export async function POST(
     const suspectedTerms = Array.isArray(lecture.suspected_terms)
       ? lecture.suspected_terms
       : [];
+    // إثراء start/end من transcript_data إذا كانت غير صالحة (بيانات قديمة).
+    const enrichedSuspected = suspectedTerms.map((t: any) => {
+      let start = typeof t?.start === "number" ? t.start : -1;
+      let end = typeof t?.end === "number" ? t.end : -1;
+      const segIdx = typeof t?.segment_index === "number" ? t.segment_index : 0;
+      const wordIdx = typeof t?.word_index === "number" ? t.word_index : 0;
+      if (start < 0 || end < 0) {
+        const seg = transcriptData?.segments?.[segIdx];
+        const word = seg?.words?.[wordIdx];
+        if (typeof word?.start === "number") start = word.start;
+        if (typeof word?.end === "number") end = word.end;
+      }
+      return { ...t, start: start >= 0 ? start : 0, end: end >= 0 ? end : 0 };
+    });
 
 const transcriptForBuild = transcriptData
       ? { text: transcriptData.text ?? "", segments: transcriptData.segments }
       : { text: "", segments: [] };
     const reviewedText = buildReviewedText(
       transcriptForBuild,
-      suspectedTerms,
+      enrichedSuspected,
       decisions
     );
 

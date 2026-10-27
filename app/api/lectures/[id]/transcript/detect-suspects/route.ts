@@ -156,14 +156,24 @@ dictionaryTerms = dict.terms.filter(
             .map((t: SuspectedTerm) => {
               const localSeg = typeof t.segment_index === "number" ? t.segment_index : 0;
               const globalSeg = batch.globalStart + localSeg;
+              const wordIdx = typeof t.word_index === "number" ? t.word_index : 0;
+              // إثراء start/end من transcript_data إذا كانت غير صالحة.
+              let start = typeof t.start === "number" ? t.start : -1;
+              let end = typeof t.end === "number" ? t.end : -1;
+              if (start < 0 || end < 0) {
+                const seg = segments[globalSeg];
+                const word = seg?.words?.[wordIdx];
+                if (typeof word?.start === "number") start = word.start;
+                if (typeof word?.end === "number") end = word.end;
+              }
               return {
                 term: t.term.trim(),
                 suggested_correction: t.suggested_correction.trim(),
                 reason: typeof t.reason === "string" ? t.reason.trim() : "مشكوك في صحته",
-                start: typeof t.start === "number" ? t.start : 0,
-                end: typeof t.end === "number" ? t.end : 0,
+                start: start >= 0 ? start : 0,
+                end: end >= 0 ? end : 0,
                 segment_index: globalSeg,
-                word_index: typeof t.word_index === "number" ? t.word_index : 0,
+                word_index: wordIdx,
               };
             });
           suspectedTerms = suspectedTerms.concat(batchTerms);
