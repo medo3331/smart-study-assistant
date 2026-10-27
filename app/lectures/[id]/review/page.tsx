@@ -22,7 +22,7 @@ type Decision = {
 };
 
 function termId(t: SuspectedTerm) {
-  return `${t.segment_index}:${t.word_index}:${t.start}`;
+  return `${t.segment_index}:${t.word_index}:${t.start.toFixed(3)}`;
 }
 
 export default function ReviewPage() {
