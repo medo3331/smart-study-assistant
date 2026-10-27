@@ -113,7 +113,7 @@ export type LectureTranscript = {
   /** الموديل اللي تولّد بيه النص — للتشخيص. */
   model: string;
   /** المزوّد — ثابت دلوقتي، بس بيوضّح العقد لو اتضاف مزوّد تاني. */
-  provider: "elevenlabs";
+  provider: string;
 };
 
 /** خطأ مفهوم ومصنّف — الراوت بيترجمه لـ HTTP + رسالة عربية آمنة.
