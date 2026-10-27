@@ -65,8 +65,8 @@ export async function POST(
         .eq("subject_name", lecture.subject)
         .maybeSingle();
       if (dict?.terms && Array.isArray(dict.terms)) {
-        dictionaryTerms = dict.terms.filter(
-          (t): t is string => typeof t === "string"
+dictionaryTerms = dict.terms.filter(
+          (t: unknown): t is string => typeof t === "string"
         );
       }
     }
