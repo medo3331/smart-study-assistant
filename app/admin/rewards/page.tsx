@@ -129,7 +129,8 @@ export default async function AdminRewardsPage({
               const durationRaw = (formData.get("durationDays") as string) || "";
               const result = await issueReward(
                 {
-                  recipientUserId: (formData.get("recipientUserId") as string) || "",
+                  recipientEmail: ((formData.get("recipientEmail") as string) || "").trim() || undefined,
+                  recipientUserId: ((formData.get("recipientUserId") as string) || "").trim() || undefined,
                   rewardType: rewardTypeRaw,
                   rewardValue: parseInt((formData.get("rewardValue") as string) || "0", 10) || 0,
                   durationDays: durationRaw ? parseInt(durationRaw, 10) : undefined,
@@ -144,7 +145,8 @@ export default async function AdminRewardsPage({
             className="space-y-3"
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <input name="recipientUserId" type="text" placeholder="User UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
+              <input name="recipientEmail" type="email" placeholder="user@example.com" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs" required />
+              <input name="recipientUserId" type="text" placeholder="User UUID (اختياري)" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" />
               <select name="rewardType" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs">
                 <option value="limit_boost">زيادة Limit مؤقت (+50)</option>
                 <option value="trial_week">تجربة مجانية أسبوع</option>

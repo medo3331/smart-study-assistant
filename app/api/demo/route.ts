@@ -1,8 +1,21 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import Groq from 'groq-sdk';
 import { checkDailyBudget, checkRateLimit } from '@/lib/api-guard';
 import { ExtractError, extractTextFromFile } from '@/lib/extract-text';
 import { GROQ_MODELS } from '@/lib/ai-config';
+import {
+  createVisitorId,
+  sanitizeVisitorId,
+  reserveDemoTrial,
+  refundDemoTrial,
+  recordDemoTrialCompleted,
+  getDemoTrialsRemaining,
+  buildVisitorCookieOptions,
+  DEMO_TRIAL_LIMIT,
+} from '@/lib/demo-trials';
 
 /* ==========================================================================
    🎁 الديمو المفتوح — الراوت الوحيد اللي بيستهلك توكنز من غير تسجيل
@@ -206,6 +219,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    /* ═══ ثلاث تجارب مجانية للزائر ═══
+       نقرأ visitor_id من الكوكي، أو ننشئ واحدًا جديدًا إذا لم يوجد.
+       يُفرض الحد على السيربر قبل أي استدعاء لمزود AI.
+       الكوكي HttpOnly، Secure في الإنتاج، SameSite=Lax.
+       المسار محدود بـ /demo فقط. */
+    const isProduction = process.env.NODE_ENV === "production";
+    const cookieStore = await cookies();
+    const existingVisitorId = cookieStore.get("demo_visitor_id")?.value;
+    const visitorId = sanitizeVisitorId(existingVisitorId) ?? createVisitorId();
+
+    // حجز تجربة قبل استخراج النص أو استدعاء المزوّد
+    const reserve = await reserveDemoTrial(visitorId, "/register");
+    if (!reserve.ok) {
+      if (reserve.code === "TRIALS_EXHAUSTED") {
+        return NextResponse.json(
+          {
+            error: "انتهت تجاربك المجانية الثلاث.",
+            message:
+              "سجّل حساب مجاني لاستخدام Magicly دون حدود، وحفظ محادثاتك، والوصول لجميع الميزات.",
+            code: "TRIALS_EXHAUSTED",
+            registerUrl: reserve.registerUrl,
+            trialsRemaining: 0,
+            trialsLimit: DEMO_TRIAL_LIMIT,
+          },
+          { status: 403 }
+        );
+      }
+      // STORAGE_ERROR: لا نوقف الخدمة، نسمح بالتجربة ولكن نRecord tentativa
+      // cautiously. يُسجل التحذير في السيربر فقط.
+      console.warn("[demo] storage error, allowing trial without reserve");
+    }
+
+    // إذا كان visitor_id جديدًا (لم يكن في الكوكي)، نُعد الكوكي للاستجابة
+    const isNewVisitor = !existingVisitorId || !sanitizeVisitorId(existingVisitorId);
+
     const formData = await request.formData();
     const file = formData.get('file');
     /* `instanceof` مش `as File`: لو الحقل اتبعت كنص عادي، الـ cast كان
@@ -259,8 +307,13 @@ export async function POST(request: NextRequest) {
     let raw = '';
     let lastError: unknown = null;
 
+    // Phase 5-C4 (shadow): anonymous demo. userId stays null, units = 0.
+    // ⚠️ no IP / cookie / session is read for accounting — the limiter above is untouched.
+    const usage = resolveUsageRequestContext(request, null, { feature: "demo" });
+    let attemptNo = 0;
     for (const apiKey of apiKeys) {
       try {
+      const doneMs = startProviderAttempt();
         const groq = new Groq({ apiKey, maxRetries: 0, timeout: GROQ_TIMEOUT_MS });
         const completion = await groq.chat.completions.create({
           model: GROQ_MODELS.fast,
@@ -270,6 +323,9 @@ export async function POST(request: NextRequest) {
           response_format: { type: 'json_object' },
         });
         raw = completion.choices[0]?.message?.content || '';
+        // 🧡 C4: سطر shadow للديمو. userId = null, units = 0, no billing, no guard.
+        await recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: raw ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs(), units: 0 });
+        await recordDirectProviderAttempt({ usage, feature: "demo", attemptNo: attemptNo++, provider: "groq", model: GROQ_MODELS.fast, status: "failed_no_response", latencyMs: doneMs(), units: 0 });
         if (raw) break;
       } catch (err) {
         console.warn('demo: فشل مفتاح، بجرّب اللي بعده', err);
@@ -279,6 +335,8 @@ export async function POST(request: NextRequest) {
 
     if (!raw) {
       console.error('demo: كل المفاتيح فشلت', lastError);
+      // إعادة المبلغ لأن التجربة لم تنجح
+      await refundDemoTrial(visitorId);
       return NextResponse.json(
         { error: 'الخدمة مشغولة دلوقتي. جرّب تاني بعد شوية.' },
         { status: 503 }
@@ -310,18 +368,67 @@ export async function POST(request: NextRequest) {
     const result = validate(parsed);
     if (!result) {
       console.error('demo: رد الموديل مش مطابق للشكل المتوقّع');
+      await refundDemoTrial(visitorId);
       return NextResponse.json(
         { error: 'النتيجة جت ناقصة. جرّب تاني.' },
         { status: 502 }
       );
     }
 
-    return NextResponse.json({ result });
+    // تسجيل اكتمال التجربة الناجحة (للتتبع فقط، العداد زاد في reserve)
+    await recordDemoTrialCompleted(visitorId);
+
+    // بناء الاستجابة مع تعيين الكوكي إذا كان زائرًا جديدًا
+    const response = NextResponse.json({
+      result,
+      trialsRemaining: reserve.remaining,
+      trialsLimit: DEMO_TRIAL_LIMIT,
+    });
+    if (isNewVisitor) {
+      const cookieOpts = buildVisitorCookieOptions(isProduction);
+      response.cookies.set("demo_visitor_id", visitorId, cookieOpts);
+    }
+    return response;
   } catch (error) {
     if (error instanceof ExtractError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error('demo route error:', error);
     return NextResponse.json({ error: 'حصل خطأ غير متوقع. حاول تاني.' }, { status: 500 });
+  }
+}
+
+/**
+ * GET /api/demo — إرجاع عدد التجارب المتبقية للزائر الحالي.
+ * تُستخدم من الواجهة الأمامية لعرض العداد قبل أي رفع ملف.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const isProduction = process.env.NODE_ENV === "production";
+    const cookieStore = await cookies();
+    const existingVisitorId = cookieStore.get("demo_visitor_id")?.value;
+    const visitorId = sanitizeVisitorId(existingVisitorId) ?? createVisitorId();
+
+    const remaining = await getDemoTrialsRemaining(visitorId);
+
+    const response = NextResponse.json({
+      trialsRemaining: Math.max(0, remaining),
+      trialsLimit: DEMO_TRIAL_LIMIT,
+      hasVisitorId: Boolean(existingVisitorId && sanitizeVisitorId(existingVisitorId)),
+    });
+
+    // إذا لم يكن هناك visitor_id صالح، نعين واحدًا جديدًا للاستخدام المستقبلي
+    if (!existingVisitorId || !sanitizeVisitorId(existingVisitorId)) {
+      const cookieOpts = buildVisitorCookieOptions(isProduction);
+      response.cookies.set("demo_visitor_id", visitorId, cookieOpts);
+    }
+
+    return response;
+  } catch (error) {
+    console.error("demo GET error:", error);
+    return NextResponse.json(
+      { error: "تعذر جلب عدد التجارب. جرّب تاني." },
+      { status: 500 }
+    );
   }
 }

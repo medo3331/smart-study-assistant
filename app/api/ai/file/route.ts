@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       // التحويل فشل — نرجّع الحد اليومي للمستخدم
-      refundServiceQuota(user.id, `file_${type}` as AiServiceId);
+      refundServiceQuota(supabase, user.id, `file_${type}` as AiServiceId);
       throw e;
     }
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { resolveActor } from "@/lib/policy";
 import {
   isImplementedAiTask,
   runAiTask,
@@ -106,6 +108,14 @@ export async function POST(req: Request) {
 
     const limited = checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
+
+    const quota = await checkSubscriptionQuota(user.id, "message");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", retryable: false } },
+        { status: 429 }
+      );
+    }
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
@@ -238,17 +248,30 @@ export async function POST(req: Request) {
       // Phase H: credit/entitlement gate even for streaming (same cost)
       const candidates = routeCandidates(task);
       const hasEnt = async (k: string, v: string) => {
-        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-        return Boolean(data);
+        try {
+          const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+          return Boolean(data);
+        } catch (e) {
+          console.error("[api/ai] has_entitlement failed:", e);
+          return false;
+        }
       };
-      const accessible = await filterAccessibleModels(candidates, hasEnt);
+      let accessible = candidates;
+      try {
+        accessible = await filterAccessibleModels(candidates, hasEnt);
+      } catch (e) {
+        console.error("[api/ai] filterAccessibleModels failed:", e);
+        accessible = candidates;
+      }
       if (accessible.length === 0 && candidates.length > 0) {
         return NextResponse.json(
           { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
           { status: 403 }
         );
       }
-      const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
+      // \ud83e\udde1 C4-FINAL: \u0647\u0648\u064a\u0629 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0646\u0637\u0642\u064a \u2014 \u062a\u062a\u0643\u0631\u0631 \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629 \u0648\u0628\u062a\u0646\u0642\u0644 \u0644\u0643\u0644 \u0627\u0644\u0641\u0631\u0639\u064a\u0646.
+    const usageContext = resolveUsageRequestContext(req, user.id, { feature: task });
+    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
       if (!guard.ok) return guard.response;
       const encoder = new TextEncoder();
       const sseStream = new ReadableStream<Uint8Array>({
@@ -259,7 +282,7 @@ export async function POST(req: Request) {
             const streamTask = (["chat", "explain", "tutor"].includes(task as string)
               ? (task as "chat" | "explain" | "tutor")
               : "chat");
-            for await (const chunk of streamWithFallback(streamTask, input)) {
+            for await (const chunk of streamWithFallback(streamTask, input, usageContext)) {
               send(chunk);
             }
           } catch (error) {
@@ -288,22 +311,35 @@ export async function POST(req: Request) {
     // Phase H: entitlement filter + credit reserve before execution
     const candidates = routeCandidates(task);
     const hasEnt = async (k: string, v: string) => {
-      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-      return Boolean(data);
+      try {
+        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+        return Boolean(data);
+      } catch (e) {
+        console.error("[api/ai] has_entitlement failed:", e);
+        return false;
+      }
     };
-    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    let accessible = candidates;
+    try {
+      accessible = await filterAccessibleModels(candidates, hasEnt);
+    } catch (e) {
+      console.error("[api/ai] filterAccessibleModels failed:", e);
+      accessible = candidates;
+    }
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json(
         { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
         { status: 403 }
       );
     }
+    // \ud83e\udde1 C4-FINAL: \u0647\u0648\u064a\u0629 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0646\u0637\u0642\u064a \u2014 \u062a\u062a\u0643\u0631\u0631 \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629 \u0648\u0628\u062a\u0646\u0642\u0644 \u0644\u0643\u0644 \u0627\u0644\u0641\u0631\u0639\u064a\u0646.
+    const usageContext = resolveUsageRequestContext(req, user.id, { feature: task });
     const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;
 
     const startedAt = Date.now();
     try {
-      const result: AiTaskResult = await runAiTask(task, input);
+      const result: AiTaskResult = await runAiTask(task, { ...input, usage: usageContext });
       void recordAiOperation(supabase, {
         userId: user.id,
         provider: result.provider,
@@ -363,8 +399,10 @@ export async function POST(req: Request) {
         { status: httpStatusForCode(publicError.code) }
       );
     }
-  } catch (error) {
-    console.error("api/ai route error:", error);
+  } catch (error: any) {
+    console.error("=== FATAL API ERROR ===");
+    console.error(error);
+    console.error("Message:", error?.message);
     return NextResponse.json(
       {
         success: false,

@@ -1,7 +1,10 @@
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
+import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { recordAiOperation } from "@/lib/ai/operations";
@@ -91,7 +94,14 @@ export async function POST(req: Request) {
     // نفس حد توليد الخطة — الطلب ده بيطلع توكنز كتير في نداء واحد
     const limited = checkRateLimit(`slides:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    const quota = await checkSubscriptionQuota(user.id, "message");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
+        { status: 429 }
+      );
+    }
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 5 });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
@@ -147,6 +157,9 @@ export async function POST(req: Request) {
       ? `اعمل عرض من ${slideCount} شرايح عن "${topic}"، مبني على المحتوى ده:\n\n${source}`
       : `اعمل عرض من ${slideCount} شرايح عن "${topic}".`;
 
+    const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "slides" });
+    // C4 (shadow): one event per ACTUAL provider request (this route has no loop -> attemptNo 0).
+    const doneMs = startProviderAttempt();
     const completion = await groq.chat.completions.create({
       model: GROQ_MODELS.advanced,
       messages: [
@@ -156,9 +169,20 @@ export async function POST(req: Request) {
       temperature: 0.5,
       max_tokens: 4000,
       response_format: { type: "json_object" },
-    });
+    })
+      .catch(async (err) => {
+        // C4.1: the provider request itself failed -> no response at all.
+        // Rethrow so the route keeps its EXACT existing error behaviour.
+        // ⚠️ `async` + `await`: land the write BEFORE the rethrow.
+        await recordDirectProviderAttempt({
+          usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced,
+          status: "failed_no_response", latencyMs: doneMs(),
+        });
+        throw err;
+      });
 
     const rawContent = completion.choices[0]?.message?.content ?? "";
+    await recordDirectProviderAttempt({ usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       return NextResponse.json(

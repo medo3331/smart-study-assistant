@@ -13,7 +13,6 @@
 /* ⚠️ الليستة دي هي المرجع لـ `isNavSignal` تحت. أي إشارة جديدة تتزوّد هنا
    وبس — التحقق من النية المحفوظة بيتولّد منها، فمافيش مكان تاني تنساه. */
 export const NAV_SIGNALS = [
-  "ai",
   "settings",
   "emergency",
   "parentReport",
@@ -66,7 +65,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   {
     title: "الأدوات",
     items: [
-      { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
+      { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", href: "/chat" },
       { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
       { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
@@ -78,6 +77,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
       // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
       { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
       { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
+      // 📚 محاضراتي — محاضرات المستخدم المحفوظة وتفريغها (المرحلة ٣).
+      // جنب بنك الامتحانات: الاتنين «محتوى الطالب الخاص» — محاضراته هو.
+      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
       { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },

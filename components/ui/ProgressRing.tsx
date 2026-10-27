@@ -34,7 +34,7 @@ export function ProgressRing({
 
   // Animate once after first paint.
   useEffect(() => {
-    const id = requestAnimationFrame(() => setTarget(Math.max(0, Math.min(100, pct))));
+    const id = requestAnimationFrame(() => setTarget(Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0))));
     return () => cancelAnimationFrame(id);
   }, [pct]);
 

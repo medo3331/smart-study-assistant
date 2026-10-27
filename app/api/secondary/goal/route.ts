@@ -1,3 +1,4 @@
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runAiTask } from "@/lib/ai/tasks/runner";
@@ -121,7 +122,8 @@ export async function POST(req: Request) {
       const res = await runAiTask("chat", {
         messages: [{role:"system", content: systemPrompt},{role:"user", content: goal}],
         user: { role: ctx.persona ?? "student", language:"ar", educationLevel: stageCode ? `secondary:${stageCode}:${trackCode||""}` : "secondary", preferences:{ stage: stageCode||"unknown", grade: ctx.gradeId||"unknown", track: trackCode||"unknown"} },
-        options:{ temperature:0.5 }
+        options:{ temperature:0.5 },
+        usage: resolveUsageRequestContext(req, user?.id ?? null, { feature: "goal", diagnostics: { goalLevel: "secondary" } }),
       });
       const raw=(res.content||"").trim();
       const start=raw.indexOf("{");

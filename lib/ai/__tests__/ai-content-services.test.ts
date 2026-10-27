@@ -296,7 +296,7 @@ describe("Service Registry", () => {
     await consumeServiceQuota(sb, "user-refund", "diagram");
     const during = await peekServiceQuota(sb, "user-refund", "diagram");
     expect(during.used).toBe(before.used + 1);
-    refundServiceQuota("user-refund", "diagram");
+    refundServiceQuota(sb, "user-refund", "diagram");
     const after = await peekServiceQuota(sb, "user-refund", "diagram");
     expect(after.used).toBe(before.used);
   });

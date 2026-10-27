@@ -1,0 +1,256 @@
+/* ======================================================================
+   📚 محاضراتي — قائمة محاضرات المستخدم + عرض التفريغ (المرحلة ٣)
+   ======================================================================
+   الصفحة دي **قراءة فقط**: بتعرض اللي اتخزّن فعلاً في `public.lectures`.
+   مفيش أي AI هنا (ملخص/شرح/فلاش/أسئلة) — دي مرحلة تانية، والأعمدة
+   (`summary` / `explanation`) موجودة في الجدول ومستنية.
+
+   ⚠️ ليه Server Component: الاستعلام بيحصل على السيرفر بعميل الجلسة
+   (`createClient`) — فـ RLS شغّال والصفحة **مش** بتملك أي صلاحية
+   استثنائية. وكمان بيخلينا نعمل redirect للزائر على السيرفر بدل ما
+   نلمّع شاشة فاضية لثانية.
+
+   ⚠️ التصفية بمعرّف المستخدم **مكتوبة صريح** في الاستعلام:
+   `.eq("user_id", user.id)`. ده مش تكرار لـ RLS — ده طبقتين:
+   RLS بتضمن إن الصف ما يظهرش أصلاً لو الفلتر اتنسى؛ الفلتر الصريح
+   بيضمن الفلتر موجود. لو اتشال واحد، التانية لسه واقفة.
+   ====================================================================== */
+
+import { type Metadata } from "next";
+import Link from "next/link";
+import { Mic } from "lucide-react";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
+import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
+import { LectureNote } from "@/components/lectures/LectureNote";
+import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
+import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
+import { McqQuiz } from "@/components/lectures/McqQuiz";
+import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
+
+export const metadata: Metadata = {
+  title: "محاضراتي — Magicly",
+  description: "كل محاضراتك المحفوظة وتفريغها النصي في مكان واحد.",
+};
+
+/** المدة بالثواني → "12:34" أو "1:05:20" (نفس دالة الواجهة). */
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/** التاريخ بصيغة عربية مقروءة. */
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("ar-EG", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  upload: "ملف مرفوع",
+  live_recording: "تسجيل مباشر",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  processing: "جاري",
+  completed: "جاهزة",
+  failed: "فشلت",
+};
+
+/** صف المحاضرة كما بتقراه الصفحة. */
+type LectureListItem = {
+  id: string;
+  title: string | null;
+  original_filename: string | null;
+  source_type: string;
+  status: string;
+  created_at: string;
+  duration_seconds: number | null;
+  transcript_text: string | null;
+  summary: string | null;
+  explanation: string | null;
+  flashcards: Flashcard[] | null;
+  mcqs: Mcq[] | null;
+};
+
+export default async function MyLecturesPage({ searchParams }: { searchParams: Promise<{ subject?: string }> }) {
+  const resolved = await searchParams;
+  const subjectFilter = resolved?.subject?.trim() || null;
+  const supabase = await createClient();
+
+  // ١) المصادقة — الزائر يروح لصفحة الدخول (بعده = /lectures عشان يرجع).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login?next=/lectures");
+
+  // ٢) محاضرات المستخدم بس + النص (عشان نفتحها من نفس الاستعلام).
+  //    ⚠️ `summary` و`explanation` اتضافوا للاختيار عشان نعرف نعرض زرار
+  //    المعالجة بس لو المحاضرة **لسه** مالهاش. الاختيار ده مش بيكسر
+  //    حاجة: الأعمدة موجودة فعلاً في الجدول من migration #14.
+  const lecturesQuery = supabase
+    .from("lectures")
+    .select(
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation, flashcards, mcqs",
+    )
+    .eq("user_id", user.id);
+  if (subjectFilter) lecturesQuery.eq("subject_id", subjectFilter);
+  const { data, error } = await lecturesQuery.order("created_at", { ascending: false });
+
+  const lectures = (data ?? []) as LectureListItem[];
+
+  return (
+    <PageShell
+      eyebrow="محاضراتي"
+      title="محاضراتي 📚"
+      lede="كل محاضرة حفظتها في حسابك. افتح أي قسم للقراءة، وصدّر الشرح PDF أو Word."
+    >
+      {/* 🎙️ زر «ابدأ محاضرة جديدة» — نظير الـ CTA اللي في الداشبورد.
+       *
+       * ⚠️ ليه موجود أصلاً: الصفحة دي للقائمة، الطالب يوصلها من الرابط
+       * أو من الـ Navbar من غير ما يمر على الداشبورد. من غير الزر ده هو
+       * محبوس هنا — مافيش طريق يبدأ تفريغ جديد غير الرجوع للداشبورد.
+       * يبدأ تفريغ جديد غير الرجوع للداشبورد.
+       */}
+      <div className="mb-4 flex justify-end">
+        <Link
+          href="/lecture-transcription"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          <Mic size={16} aria-hidden />
+          <span>ابدأ محاضرة جديدة</span>
+        </Link>
+      </div>
+
+      {/* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح، ومش بنعرض
+          قائمة فاضية تخلّي الطالب يفتكر إن مفيش محاضرات. */}
+      {error ? (
+        <DataNotice message="مقدرناش نحمّل محاضراتك دلوقتي. حاول تاني كمان شوية." />
+      ) : lectures.length === 0 ? (
+        <EmptyState
+          icon="🎙️"
+          title="لسه مفيش محاضرات"
+          body="ارفع تسجيل محاضرة من صفحة تفريغ المحاضرات، وسجّل دخول الأول — وهي تتحفظ هنا."
+        />
+      ) : (
+        <section className="sheet-card divide-y divide-rule">
+          {lectures.map((lecture) => (
+            <article key={lecture.id} className="p-4">
+              <details>
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-sm font-bold text-ink">
+                      {lecture.title ?? lecture.original_filename ?? "محاضرة"}
+                    </h2>
+                    <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-ink-soft dark:bg-white/10">
+                      {STATUS_LABEL[lecture.status] ?? lecture.status}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {/* ⬇️ لاحظ: كل الحقول دي نصوص من قاعدة البيانات بتترسم
+                        كنص عادي (JSX بيهرّبها تلقائياً) — مافيش أي
+                        dangerouslySetInnerHTML في الملف، فالنص اللي رجع
+                        من ElevenLabs مش يقدر ينفّذ HTML. */}
+                    {formatDate(lecture.created_at)}
+                    {" · "}
+                    {SOURCE_LABEL[lecture.source_type] ?? lecture.source_type}
+                    {lecture.duration_seconds !== null && (
+                      <>
+                        {" · "}
+                        {formatDuration(lecture.duration_seconds)}
+                      </>
+                    )}
+                  </p>
+                </summary>
+
+                {/* 🎓 مساحة المذاكرة: كل قسم في بلوك قابل للطي.
+                    الافتراضي: الملخص مفتوح لو موجود، والباقي مقفول. */}
+                <LectureWorkspace defaultOpen={lecture.summary ? ["summary"] : []}>
+                  <div className="mt-3">
+                    {/* ✨ أدوات التوليد بره الأقسام عشان الطالب يلاقيها الأول. */}
+                    <LectureProcessActions
+                      lectureId={lecture.id}
+                      hasSummary={Boolean(lecture.summary?.trim())}
+                      hasExplanation={Boolean(lecture.explanation?.trim())}
+                    />
+                  </div>
+
+                  <div className="mt-3 space-y-3">
+                    {lecture.summary && (
+                      <LectureSection
+                        id="summary"
+                        icon="📝"
+                        title="ملخص المحاضرة"
+                        lede="مراجعة سريعة لأهم ما ورد في المحاضرة."
+                      >
+                        <LectureNote kind="summary" content={lecture.summary} />
+                      </LectureSection>
+                    )}
+
+                    {lecture.explanation && (
+                      <LectureSection
+                        id="explanation"
+                        icon="🧠"
+                        title="شرح المحاضرة"
+                        lede="شرح مبسّط ومنظّم يساعدك تفهم محتوى المحاضرة."
+                        toolbar={<LectureToolbar lectureId={lecture.id} />}
+                      >
+                        <LectureNote kind="explanation" content={lecture.explanation} />
+                      </LectureSection>
+                    )}
+
+                    {lecture.flashcards && (
+                      <LectureSection
+                        id="flashcards"
+                        icon="🃏"
+                        title="بطاقات المذاكرة"
+                        lede="اقلب البطاقة عشان تشوف الإجابة."
+                      >
+                        <FlashcardsPanel cards={lecture.flashcards} />
+                      </LectureSection>
+                    )}
+
+                    {lecture.mcqs && (
+                      <LectureSection
+                        id="mcq"
+                        icon="❓"
+                        title="اختبار المحاضرة"
+                        lede="جاوب على الأسئلة وشوف شرح كل إجابة."
+                      >
+                        <McqQuiz mcqs={lecture.mcqs} />
+                      </LectureSection>
+                    )}
+
+                    <LectureSection
+                      id="transcript"
+                      icon="📜"
+                      title="التفريغ النصي"
+                      lede="نص كلام الدكتور كامل — لمّا تحتاج تراجع الأصل."
+                    >
+                      {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
+                      {lecture.transcript_text ? (
+                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                          {lecture.transcript_text}
+                        </pre>
+                      ) : (
+                        <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
+                      )}
+                    </LectureSection>
+                  </div>
+                </LectureWorkspace>
+              </details>
+            </article>
+          ))}
+        </section>
+      )}
+    </PageShell>
+  );
+}

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import Link from "next/link";
+import { LectureTranscriber } from "@/components/lecture-transcription/LectureTranscriber";
 
 export default function UniversitySubjectPage({ params }: { params: Promise<{ subjectId: string }> }) {
   // Next 15+: params بقى Promise — في Client Component بنفكّه بـ React.use
@@ -16,6 +17,9 @@ export default function UniversitySubjectPage({ params }: { params: Promise<{ su
   const [resources, setResources] = useState<any[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [resourcesError, setResourcesError] = useState<string | null>(null);
+  const [lectures, setLectures] = useState<any[]>([]);
+  const [lecturesLoading, setLecturesLoading] = useState(false);
+  const [lecturesError, setLecturesError] = useState<string | null>(null);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
@@ -57,6 +61,24 @@ export default function UniversitySubjectPage({ params }: { params: Promise<{ su
             if (!cancelled) setResourcesError(locale === "ar" ? "تعذر تحميل المصادر." : "Failed to load resources.");
           }
           if (!cancelled) setResourcesLoading(false);
+        }
+        if (subjData) {
+        // Load user lectures linked to this subject
+        setLecturesLoading(true);
+        try {
+          const { data: lecData, error: lecErr } = await supabase
+            .from("lectures")
+            .select("id, title, original_filename, status, created_at, duration_seconds, subject_id")
+            .eq("subject_id", subjectId)
+            .order("created_at", { ascending: false });
+          if (!cancelled) {
+            if (lecErr) setLecturesError(locale === "ar" ? "تعذر تحميل المحاضرات." : "Failed to load lectures.");
+            else { setLectures(lecData || []); setLecturesError(null); }
+          }
+        } catch {
+          if (!cancelled) setLecturesError(locale === "ar" ? "تعذر تحميل المحاضرات." : "Failed to load lectures.");
+        }
+        if (!cancelled) setLecturesLoading(false);
         }
       } catch {
         if (!cancelled) setError(locale === "ar" ? "حدث خطأ." : "Error.");
@@ -151,6 +173,39 @@ export default function UniversitySubjectPage({ params }: { params: Promise<{ su
                       ))}
                     </div>
                   )}
+                </div>
+              </section>
+
+              {/* Course workspace — lectures linked to this subject */}
+              <section aria-label={t("محاضراتي", "My Lectures")}>
+                <div className="border-t border-rule pt-5 mt-2 space-y-3">
+                  <h2 className="h3 mb-2">{t("محاضراتي لهذه المادة", "My Lectures for this Subject")}</h2>
+                  <Link href={`/lectures?subject=${subjectId}`} className="btn btn-marker text-sm">
+                    {t("فتح في صفحة المحاضرات", "Open in Lectures page")}
+                  </Link>
+                  {lecturesLoading ? (
+                    <div className="mono muted text-xs">{t("جارٍ تحميل المحاضرات…", "Loading lectures…")}</div>
+                  ) : lecturesError ? (
+                    <div className="text-sm text-red-600">{lecturesError}</div>
+                  ) : lectures.length === 0 ? (
+                    <div className="rounded-lg border border-rule bg-paper-2 p-4 text-xs text-ink-soft text-center">
+                      {t("لا توجد محاضرات محفوظة لهذه المادة بعد.", "No saved lectures for this subject yet.")}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {lectures.map((l: any) => (
+                        <div key={l.id} className="rounded-xl border border-rule bg-paper-2 p-3 text-sm">
+                          <div className="font-semibold truncate">{l.title || l.original_filename || t("محاضرة", "Lecture")}</div>
+                          <div className="text-xs text-ink-soft mono mt-1">
+                            {l.status} • {new Date(l.created_at).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="pt-2">
+                    <LectureTranscriber subjectId={subjectId} />
+                  </div>
                 </div>
               </section>
             </>

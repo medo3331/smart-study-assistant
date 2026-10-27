@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import { redirect } from "next/navigation";
 import { UserSearch, Users } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { hasPermission } from "@/lib/auth-roles";
@@ -32,7 +33,10 @@ export default async function AdminUsersPage({
   }>;
 }) {
   const sp = await searchParams;
-  const { user, supabase } = await requireAdminPermission("users.read");
+  const { user, supabase, isOwner } = await requireAdminPermission("users.read");
+  if (!isOwner) {
+    redirect("/dashboard?admin=owner-only");
+  }
 
   const [canBan, canUnban] = await Promise.all([
     hasPermission(supabase, user.id, user.email ?? null, "users.ban"),
@@ -253,6 +257,11 @@ export default async function AdminUsersPage({
             إرسال الرصيد
           </button>
         </form>
+           <li className="flex items-center gap-2">
+             <Users size={14} className="text-amber-400" />
+             <Link className="underline hover:text-amber-300" href="/admin/users/analytics">تحليلات المستخدمين (استخدام AI + الاشتراك)</Link>
+           </li>
+
       </AdminCard>
 
       <AdminCard title="الأقسام المرتبطة" tone="default">

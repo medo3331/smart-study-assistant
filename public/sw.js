@@ -13,7 +13,7 @@
 
 /* ⚠️ زوّد الرقم ده مع أي تعديل في السيرفس وركر عشان الكاش القديم يتمسح
    ويتفعّل الجديد للمستخدمين. */
-const VERSION = "v2";
+const VERSION = "v3";
 const PRECACHE = `magicly-precache-${VERSION}`;
 const STATIC = `magicly-static-${VERSION}`;
 const PAGES = `magicly-pages-${VERSION}`;
@@ -88,38 +88,48 @@ function isStaticAsset(url) {
 
 /* كاش-أول: لو موجود في الكاش رجّعه فوراً، وإلا هاته من الشبكة وخزّنه. */
 async function cacheFirst(request, cacheName) {
-  const cached = await caches.match(request);
+  let cached = null;
+  try { cached = await caches.match(request); } catch {}
   if (cached) return cached;
   try {
     const res = await fetch(request);
     if (res && res.ok && res.type === "basic") {
-      const cache = await caches.open(cacheName);
-      cache.put(request, res.clone());
+      try {
+        const cache = await caches.open(cacheName);
+        cache.put(request, res.clone());
+      } catch {}
     }
     return res;
   } catch {
-    return cached || Response.error();
+    return cached || new Response("", { status: 503, statusText: "Service Unavailable" });
   }
 }
 
 /* شبكة-أول للصفحات: هات أحدث نسخة من الشبكة وخزّنها، ولو مفيش نت
    رجّع النسخة المخزّنة، ولو مفيش رجّع صفحة الأوفلاين. */
 async function networkFirstPage(request) {
-  const cache = await caches.open(PAGES);
+  let cache = null;
+  try { cache = await caches.open(PAGES); } catch { cache = null; }
   try {
     const res = await fetch(request);
     /* `res.redirected` معناها إن السيرفر حوّلنا لمكان تاني — أغلب الوقت
        صفحة محمية حوّلت لـ /login. لو خزّنّا ده تحت مفتاح الصفحة الأصلية،
        المستخدم أوفلاين هيلاقي صفحة دخول مكان صفحته. سيبها من غير كاش. */
-    if (res && res.ok && res.type === "basic" && !res.redirected) {
-      cache.put(request, res.clone());
-      trimCache(PAGES, MAX_PAGES);
+    if (res && res.ok && res.type === "basic" && !res.redirected && cache) {
+      try {
+        cache.put(request, res.clone());
+        trimCache(PAGES, MAX_PAGES);
+      } catch {}
     }
     return res;
   } catch {
-    const cached = await cache.match(request);
+    let cached = null;
+    if (cache) {
+      try { cached = await cache.match(request); } catch {}
+    }
     if (cached) return cached;
-    const offline = await caches.match(OFFLINE_URL);
+    let offline = null;
+    try { offline = await caches.match(OFFLINE_URL); } catch {}
     return (
       offline ||
       new Response("أنت غير متصل بالإنترنت.", {
@@ -162,6 +172,15 @@ self.addEventListener("fetch", (event) => {
   // طلبات RSC (تنقّل ناعم داخل التطبيق) وبيانات Next الديناميكية — شبكة.
   if (request.headers.get("RSC") === "1" || url.searchParams.has("_rsc")) return;
 
+  // Bypass SW interception for large WASM/ffmpeg assets.
+  // Reason: respondWith+cache.put on ~32MB ffmpeg-core.wasm returns a network error (see FFmpeg loading report). Let browser fetch directly.
+  const isLargeWasmAsset =
+    url.pathname.startsWith("/ffmpeg/") ||
+    url.pathname.includes("/wasm/") ||
+    url.pathname.endsWith(".wasm");
+
+  if (isLargeWasmAsset) return;
+
   // أصول ثابتة → كاش-أول.
   if (isStaticAsset(url)) {
     event.respondWith(cacheFirst(request, STATIC));
@@ -181,7 +200,7 @@ self.addEventListener("fetch", (event) => {
         return await fetch(request);
       } catch {
         const cached = await caches.match(request);
-        return cached || Response.error();
+        return cached || new Response("", { status: 503, statusText: "Service Unavailable" });
       }
     })()
   );

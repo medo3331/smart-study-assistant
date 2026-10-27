@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getAdminRole } from "@/lib/auth-roles";
+import { resolveActor } from "@/lib/policy";
 
 /**
  * GET /api/admin/is-owner
@@ -35,6 +35,6 @@ export async function GET() {
     return NextResponse.json({ isOwner: false, canAccessAdmin: false });
   }
 
-  const role = await getAdminRole(supabase, user.id, user.email ?? null);
-  return NextResponse.json({ isOwner: role === "owner", canAccessAdmin: role !== null });
+  const actor = await resolveActor(supabase, user.id, user.email ?? null);
+  return NextResponse.json({ isOwner: actor.isOwner, canAccessAdmin: actor.role !== null });
 }

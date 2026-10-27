@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { FolderOpen, Search, Tags, Trash2, Undo2 } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { isPgConfigured, pgQuery } from "@/lib/admin/pg";
-import { createServiceClient } from "@/lib/supabase/admin";
+import { createServiceClient, isServiceKeyConfigured } from "@/lib/supabase/admin";
 import { updateFileClassification, softDeleteFile, restoreFile } from "@/app/admin/actions/files-manage";
 import { filesFormAction } from "@/app/admin/actions/files-forms";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard, AdminTableWrap } from "@/components/admin/ui";
@@ -66,7 +66,12 @@ export default async function AdminFilesPage({
   const hasAnyFilter = Boolean(fUser || fType || fFrom || fTo || fShow !== "active" || pageNum > 1);
 
   const dbReady = isPgConfigured();
-  const serviceRoleReady = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  /* ⚠️ بنستخدم نفس الـ helper اللي بيستخدمه `createServiceClient()` بدل
+   * `process.env.SUPABASE_SERVICE_ROLE_KEY` مباشرة: بعد دعم `sb_secret_`
+   * صار في مفتاحين مدعومين، والاختيار هنا لازم يطابق اختيار
+   * `createServiceClient()` بالظبط — وإلا الصفحة تقول "غير متاح" والمفتاح
+   * موجود فعلاً (أو العكس: تفتكر إنه متاح ويفشل الطلب). */
+  const serviceRoleReady = isServiceKeyConfigured();
 
   // ── فلتر المستخدم: UUID مباشر أو كود MAG → user_id (كود غير موجود = تنبيه)
   let resolvedUserId: string | null = null;

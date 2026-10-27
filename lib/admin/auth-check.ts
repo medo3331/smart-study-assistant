@@ -1,6 +1,8 @@
 "use server";
 import { redirect } from "next/navigation";
-import { getAdminRole, getAdminPermissions, hasPermission, isOwnerEmail } from "@/lib/auth-roles";
+import { resolveActor } from "@/lib/policy";
+import type { ActorContext } from "@/lib/policy";
+import { hasPermission } from "@/lib/auth-roles";
 import type { AdminPermissionKey } from "@/lib/auth-roles";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -32,10 +34,9 @@ export async function getAdminContext() {
   const supabase = buildSupabase(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || user.is_anonymous) redirect("/login");
-  const role = await getAdminRole(supabase, user.id, user.email ?? null);
-  if (role === null) redirect("/dashboard");
-  const permissions = await getAdminPermissions(supabase, user.id, role);
-  return { user, role, isOwner: role === "owner", permissions, supabase };
+  const actor = await resolveActor(supabase, user.id, user.email ?? null);
+  if (actor.role === null) redirect("/dashboard");
+  return { user, role: actor.role, isOwner: actor.isOwner, permissions: actor.permissions, supabase };
 }
 
 /**
@@ -54,5 +55,4 @@ export async function requireAdminPermission(permission: AdminPermissionKey) {
  * استخدم getAdminContext أو requireAdminPermission.
  */
 
-/** هل الـOwner حسب env فقط (بدون داتابيز) — للفحوص السريعة في السيرفر. */
-export { isOwnerEmail };
+
