@@ -180,7 +180,7 @@ export default function UniversitySubjectPage({ params }: { params: Promise<{ su
               <section aria-label={t("محاضراتي", "My Lectures")}>
                 <div className="border-t border-rule pt-5 mt-2 space-y-3">
                   <h2 className="h3 mb-2">{t("محاضراتي لهذه المادة", "My Lectures for this Subject")}</h2>
-                  <Link href={`/lectures?subject=${subjectId}`} className="text-xs underline text-ink-soft hover:text-ink">
+                  <Link href={`/lectures?subject=${subjectId}`} className="btn btn-marker text-sm">
                     {t("فتح في صفحة المحاضرات", "Open in Lectures page")}
                   </Link>
                   {lecturesLoading ? (
