@@ -129,7 +129,7 @@ export function buildTermId(
 }
 
 /** يستخرج معرّف المصطلح من كائن SuspectedTerm. */
-export function termIdFromSuspected(term: SuspectedTerm): TermId {
+export function termIdFromSuspected(term: { segment_index: number; word_index: number; start: number }): TermId {
   return buildTermId(term.segment_index, term.word_index, term.start);
 }
 
