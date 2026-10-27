@@ -111,7 +111,7 @@ dictionaryTerms = dict.terms.filter(
               typeof (t as SuspectedTerm).term === "string" &&
               typeof (t as SuspectedTerm).suggested_correction === "string"
           )
-          .map((t) => ({
+          .map((t: SuspectedTerm) => ({
             term: t.term.trim(),
             suggested_correction: t.suggested_correction.trim(),
             reason: typeof t.reason === "string" ? t.reason.trim() : "مشكوك في صحته",
