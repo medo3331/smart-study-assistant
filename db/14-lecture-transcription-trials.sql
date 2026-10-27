@@ -25,11 +25,13 @@ create index if not exists idx_ltt_ops_user_status_created
 alter table public.lecture_transcription_trial_operations enable row level security;
 
 -- Users can read their own usage; writes only via RPC (security definer).
-create policy if not exists "ltt_select_own"
+drop policy if exists "ltt_select_own" on public.lecture_transcription_trials;
+create policy "ltt_select_own"
   on public.lecture_transcription_trials
   for select using (auth.uid() = user_id);
 
-create policy if not exists "ltto_select_own"
+drop policy if exists "ltto_select_own" on public.lecture_transcription_trial_operations;
+create policy "ltto_select_own"
   on public.lecture_transcription_trial_operations
   for select using (auth.uid() = user_id);
 
