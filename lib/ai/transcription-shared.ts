@@ -30,7 +30,7 @@
  *
  *  لملفات أكبر من ده: الحل الصح presigned multipart upload لـ S3/R2
  *  مباشرة، مش رفع حد الذاكرة. مش جزء من المرحلة دي. */
-export const MAX_LECTURE_FILE_BYTES = 1024 * 1024 * 1024;
+export const MAX_LECTURE_FILE_BYTES = 50 * 1024 * 1024;
 
 /**
  * أقصى حجم يمرّ في جسم طلب الفانكشن.
@@ -113,7 +113,7 @@ export type LectureTranscript = {
   /** الموديل اللي تولّد بيه النص — للتشخيص. */
   model: string;
   /** المزوّد — ثابت دلوقتي، بس بيوضّح العقد لو اتضاف مزوّد تاني. */
-  provider: "elevenlabs";
+  provider: string;
 };
 
 /** خطأ مفهوم ومصنّف — الراوت بيترجمه لـ HTTP + رسالة عربية آمنة.

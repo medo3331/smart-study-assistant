@@ -825,7 +825,7 @@ export function LectureTranscriber() {
   }, [transcript, file]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl" lang="ar">
       {/* ───────── منطقة الرفع ───────── */}
       <div
         onDragOver={(event) => {
@@ -998,6 +998,12 @@ export function LectureTranscriber() {
         </div>
       )}
 
+      {/* ���� ���� ����� ������� */}
+      {working && (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
+        </div>
+      )}
       {/* ───────── الخطأ ───────── */}
       {error && (
         <div
@@ -1005,7 +1011,10 @@ export function LectureTranscriber() {
           className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4"
         >
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden />
-          <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+           <div className="flex-1">
+             <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+             <a href="https://wa.me/201204556797" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">تواصل مع الدعم (واتساب)</a>
+           </div>
         </div>
       )}
 
@@ -1021,6 +1030,11 @@ export function LectureTranscriber() {
             {transcript.duration !== null && (
               <p className="text-xs text-[var(--muted)]">
                 مدة التسجيل: {formatDuration(transcript.duration)}
+              </p>
+            )}
+            {transcript.provider && (
+              <p className="text-xs text-[var(--muted)]">
+                �������: {transcript.provider} � {transcript.model}
               </p>
             )}
           </div>
