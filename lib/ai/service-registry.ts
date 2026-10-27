@@ -188,9 +188,45 @@ export async function consumeServiceQuota(
   }
 
   const key = `${userId ?? "anon"}:${service}:${dayKeyUtc()}`;
-  const used = usage.get(key) ?? 0;
 
-  if (used >= limit) {
+  if (!userId) {
+    const used = usage.get(key) ?? 0;
+    if (used >= limit) {
+      return {
+        allowed: false,
+        remaining: 0,
+        limit,
+        tier,
+        resetAtUtc,
+        reasonAr: `وصلت للحد اليومي من ${def.labelAr} (${limit}). بيتجدد الحد يوميًا بتوقيت UTC.`,
+      };
+    }
+    usage.set(key, used + 1);
+    trimUsageMap();
+    return { allowed: true, remaining: limit - used - 1, limit, tier, resetAtUtc };
+  }
+
+  const { data, error } = await supabase.rpc("consume_service_quota", {
+    p_user_id: userId,
+    p_service: service,
+    p_limit: limit,
+  });
+  if (error) {
+    console.error("[service-registry] consume_service_quota failed", error);
+    // Fail closed on DB error to avoid unlimited abuse
+    return {
+      allowed: false,
+      remaining: 0,
+      limit,
+      tier,
+      resetAtUtc,
+      reasonAr: "تعذر التحقق من حصة الخدمة. حاول لاحقًا.",
+    };
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  const allowed = Boolean(row?.allowed);
+  const used = Number(row?.used ?? 0);
+  if (!allowed) {
     return {
       allowed: false,
       remaining: 0,
@@ -200,11 +236,7 @@ export async function consumeServiceQuota(
       reasonAr: `وصلت للحد اليومي من ${def.labelAr} (${limit}). بيتجدد الحد يوميًا بتوقيت UTC.`,
     };
   }
-
-  usage.set(key, used + 1);
-  trimUsageMap();
-
-  return { allowed: true, remaining: limit - used - 1, limit, tier, resetAtUtc };
+  return { allowed: true, remaining: Math.max(0, limit - used), limit, tier, resetAtUtc };
 }
 
 /**
@@ -212,13 +244,25 @@ export async function consumeServiceQuota(
  * (مثلًا: حجز الكريدت اتقبل لكن الموديل وقع). الخدمات الغالية
  * (الصور) ما بنعملهاش استرجاع عن قصد — راجع تعليق الاستهلاك.
  */
-export function refundServiceQuota(
+export async function refundServiceQuota(
+  supabase: SupabaseClient,
   userId: string | null,
   service: AiServiceId
-): void {
-  const key = `${userId ?? "anon"}:${service}:${dayKeyUtc()}`;
-  const used = usage.get(key) ?? 0;
-  if (used > 0) usage.set(key, used - 1);
+): Promise<void> {
+  if (!userId) {
+    const key = `${userId ?? "anon"}:${service}:${dayKeyUtc()}`;
+    const used = usage.get(key) ?? 0;
+    if (used > 0) usage.set(key, used - 1);
+    return;
+  }
+  try {
+    await supabase.rpc("refund_service_quota", {
+      p_user_id: userId,
+      p_service: service,
+    });
+  } catch (e) {
+    console.error("[service-registry] refund_service_quota failed", e);
+  }
 }
 
 /** استعلام بدون خصم — للواجهات اللي عايزة تعرض الرصيد المتبقي. */
@@ -229,6 +273,14 @@ export async function peekServiceQuota(
 ): Promise<{ used: number; limit: number; tier: ServiceTier }> {
   const tier = await resolveServiceTier(supabase, userId);
   const limit = SERVICE_REGISTRY[service].dailyLimits[tier];
-  const used = usage.get(`${userId ?? "anon"}:${service}:${dayKeyUtc()}`) ?? 0;
+  if (!userId) {
+    const used = usage.get(`${userId ?? "anon"}:${service}:${dayKeyUtc()}`) ?? 0;
+    return { used: Math.min(used, limit), limit, tier };
+  }
+  const { data, error } = await supabase.rpc("peek_service_quota", {
+    p_user_id: userId,
+    p_service: service,
+  });
+  const used = error ? 0 : Number(data ?? 0);
   return { used: Math.min(used, limit), limit, tier };
 }

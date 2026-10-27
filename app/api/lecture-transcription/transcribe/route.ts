@@ -85,7 +85,7 @@ const DAILY_BUDGET = 40;
  * (الـ lease بتاع التذكرة 12 دقيقة بيسمح لطلب جديد يستحوذ لو الفانكشن
  * ماتت في النص — شوف lib/ai/tickets.ts.)
  */
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 /** هوية صاحب الطلب من الجلسة — null لو زائر بلا جلسة. */
 async function resolveSessionUserId(): Promise<string | null> {
@@ -280,6 +280,12 @@ export async function POST(request: NextRequest) {
       originalFilename: clampText(body.filename, 200).trim() || "محاضرة",
       storagePath: path,
       fileSize: realSize,
+      subjectId:
+        body.subjectId === null
+          ? null
+          : typeof body.subjectId === "string"
+            ? body.subjectId
+            : undefined,
     }).catch((error: unknown) => {
       console.error("lecture-transcription: استثناء أثناء حفظ المحاضرة", error);
       return {

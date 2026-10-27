@@ -1,5 +1,4 @@
 import { cn } from "@/lib/cn";
-import type { LucideIcon } from "lucide-react";
 
 interface IconBadgeProps {
   icon: LucideIcon | React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;

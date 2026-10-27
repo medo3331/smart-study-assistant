@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     //    (توكنز أقل بكتير) وبيتعمل في لحظة قلق فالمستخدم بيعيد المحاولة.
     const limited = checkRateLimit(`exam-plan:${user.id}`, 10, 60_000, "success");
     if (limited) return limited;
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 3 });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);

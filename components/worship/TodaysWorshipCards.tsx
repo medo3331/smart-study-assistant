@@ -6,7 +6,6 @@ import { ProgressRing } from "@/components/ui/ProgressRing";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/ui/Reveal";
 import { Sun, BookOpen, CheckCircle, Sparkles } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 interface WorshipCardProps {
   title: string;

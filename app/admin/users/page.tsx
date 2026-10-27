@@ -255,6 +255,11 @@ export default async function AdminUsersPage({
             إرسال الرصيد
           </button>
         </form>
+           <li className="flex items-center gap-2">
+             <Users size={14} className="text-amber-400" />
+             <Link className="underline hover:text-amber-300" href="/admin/users/analytics">تحليلات المستخدمين (استخدام AI + الاشتراك)</Link>
+           </li>
+
       </AdminCard>
 
       <AdminCard title="الأقسام المرتبطة" tone="default">
