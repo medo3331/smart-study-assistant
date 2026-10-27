@@ -37,6 +37,8 @@ export default function ReviewPage() {
   const [detecting, setDetecting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [transcriptText, setTranscriptText] = useState<string | null>(null);
+  const [editedReviewedText, setEditedReviewedText] = useState<string>("");
+  const [savingReviewed, setSavingReviewed] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -59,6 +61,10 @@ export default function ReviewPage() {
       }
     })();
   }, [id]);
+
+  useEffect(() => {
+    if (reviewedText) setEditedReviewedText(reviewedText);
+  }, [reviewedText]);
 
   async function runDetect() {
     setDetecting(true);
@@ -116,6 +122,29 @@ export default function ReviewPage() {
       setError(e instanceof Error ? e.message : "فشل حفظ المراجعة.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function saveReviewedText() {
+    setSavingReviewed(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/lectures/${id}/transcript/reviewed-text`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: editedReviewedText }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d?.error?.message ?? "failed");
+      }
+      const data = await res.json();
+      setReviewedText(data.reviewedText ?? editedReviewedText);
+      setReviewStatus("completed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "فشل حفظ النص المراجع.");
+    } finally {
+      setSavingReviewed(false);
     }
   }
 
@@ -202,11 +231,20 @@ export default function ReviewPage() {
       )}
 
       {reviewedText && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-          <h2 className="mb-2 text-sm font-bold text-emerald-700">النص المُراجع</h2>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-emerald-900">
-            {reviewedText}
-          </pre>
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
+          <h2 className="text-sm font-bold text-emerald-700">النص المُراجع (قابل للتصحيح)</h2>
+          <textarea
+            value={editedReviewedText}
+            onChange={(e) => setEditedReviewedText(e.target.value)}
+            className="w-full min-h-[12rem] rounded-xl border border-[var(--rule)] bg-[var(--app-bg)] p-3 text-sm leading-relaxed text-ink"
+          />
+          <button
+            onClick={saveReviewedText}
+            disabled={savingReviewed}
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {savingReviewed ? "جاري الحفظ…" : "حفظ النص المراجع"}
+          </button>
         </div>
       )}
     </div>
