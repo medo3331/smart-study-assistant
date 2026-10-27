@@ -151,7 +151,7 @@ export default function WelcomePage() {
               onClick={handleSameDevice}
               disabled={accountLoading}
             >
-              {accountLoading ? t.login_guest_loading : t.welcome_cta_login}
+              {accountLoading ? t.login_guest_loading : "دخول إلى حسابي"}
             </button>
 
             <Link href="/login/mag" className="btn btn-quiet btn-block" onClick={markWelcomeSeen}>

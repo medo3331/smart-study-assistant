@@ -30,6 +30,7 @@ import type {
 
 import { useProfileState, ProfilePersona, defaultProfileForUser } from "@/lib/user-profiles";
 import { HeroSection } from "./components/HeroSection";
+import MagIdCard from "@/components/MagIdCard";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
 import { useAudio } from "@/components/audio/AudioProvider";
@@ -1724,6 +1725,7 @@ export default function DashboardPage() {
           <PersonalAssistant context={personalAssistantContext} />
 
           <HeroSection displayName={displayName} coachTasks={coachTasks} />
+          <MagIdCard />
         </div>
 
         {/* ═══════════════════════════════════════════════════════

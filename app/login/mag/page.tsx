@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
+import { openSupport } from "@/components/SupportWidget";
 
 function safeNext(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/dashboard";
@@ -117,8 +118,19 @@ export default function MagLoginPage() {
                   placeholder="MAG-XXX-XXXX"
                 />
               </div>
-              <button type="submit" className="btn btn-marker btn-block" disabled={loading}>
+<button type="submit" className="btn btn-marker btn-block" disabled={loading}>
                 {loading ? "جارٍ الإرسال..." : "إرسال كود OTP"}
+              </button>
+              <p className="muted small" style={{ marginTop: "8px", lineHeight: 1.6 }}>
+                إذا كان البريد الإلكتروني المرتبط بحسابك غير متاح، لا يمكن إرسال OTP إليه. تواصل مع الدعم الفني للتحقق من هويتك.
+              </p>
+              <button
+                type="button"
+                className="btn btn-quiet btn-block"
+                onClick={() => openSupport()}
+                style={{ marginTop: "6px" }}
+              >
+                طلب استرداد عبر الدعم
               </button>
             </form>
           ) : (
