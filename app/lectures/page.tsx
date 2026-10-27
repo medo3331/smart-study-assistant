@@ -74,6 +74,8 @@ type LectureListItem = {
   created_at: string;
   duration_seconds: number | null;
   transcript_text: string | null;
+  review_status: string | null;
+  transcript_reviewed_text: string | null;
   summary: string | null;
   explanation: string | null;
   flashcards: Flashcard[] | null;
@@ -98,7 +100,7 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
   const lecturesQuery = supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation, flashcards, mcqs",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, review_status, transcript_reviewed_text, summary, explanation, flashcards, mcqs",
     )
     .eq("user_id", user.id);
   if (subjectFilter) lecturesQuery.eq("subject_id", subjectFilter);
@@ -235,8 +237,27 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                       title="التفريغ النصي"
                       lede="نص كلام الدكتور كامل — لمّا تحتاج تراجع الأصل."
                     >
-                      {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
-                      {lecture.transcript_text ? (
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-semibold text-ink-soft dark:bg-white/10">
+                            {lecture.review_status === "completed"
+                              ? "تمت المراجعة"
+                              : lecture.review_status === "pending" || lecture.review_status === "in_review"
+                                ? "قيد المراجعة"
+                                : lecture.review_status === "needs_attention"
+                                  ? "تحتاج مراجعة إضافية"
+                                  : "لم تُراجع"}
+                          </span>
+                          {lecture.transcript_text && (
+                            <Link
+                              href={`/lectures/${lecture.id}/review`}
+                              className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-500/20 dark:text-indigo-300"
+                            >
+                              مراجعة النص
+                            </Link>
+                          )}
+                        </div>
+                        {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
+                        {lecture.transcript_text ? (
                         <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
                           {lecture.transcript_text}
                         </pre>
