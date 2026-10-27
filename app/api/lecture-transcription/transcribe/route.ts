@@ -207,6 +207,12 @@ export async function POST(request: NextRequest) {
       originalFilename: clampText(body.filename, 200).trim() || "محاضرة",
       storagePath: path,
       fileSize: realSize,
+      subjectId:
+        body.subjectId === null
+          ? null
+          : typeof body.subjectId === "string"
+            ? body.subjectId
+            : undefined,
     }).catch((error: unknown) => {
       console.error("lecture-transcription: استثناء أثناء حفظ المحاضرة", error);
       return {

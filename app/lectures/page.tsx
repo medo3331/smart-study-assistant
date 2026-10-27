@@ -80,7 +80,9 @@ type LectureListItem = {
   mcqs: Mcq[] | null;
 };
 
-export default async function MyLecturesPage() {
+export default async function MyLecturesPage({ searchParams }: { searchParams: Promise<{ subject?: string }> }) {
+  const resolved = await searchParams;
+  const subjectFilter = resolved?.subject?.trim() || null;
   const supabase = await createClient();
 
   // ١) المصادقة — الزائر يروح لصفحة الدخول (بعده = /lectures عشان يرجع).
@@ -93,13 +95,14 @@ export default async function MyLecturesPage() {
   //    ⚠️ `summary` و`explanation` اتضافوا للاختيار عشان نعرف نعرض زرار
   //    المعالجة بس لو المحاضرة **لسه** مالهاش. الاختيار ده مش بيكسر
   //    حاجة: الأعمدة موجودة فعلاً في الجدول من migration #14.
-  const { data, error } = await supabase
+  const lecturesQuery = supabase
     .from("lectures")
     .select(
       "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation, flashcards, mcqs",
     )
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .eq("user_id", user.id);
+  if (subjectFilter) lecturesQuery.eq("subject_id", subjectFilter);
+  const { data, error } = await lecturesQuery.order("created_at", { ascending: false });
 
   const lectures = (data ?? []) as LectureListItem[];
 

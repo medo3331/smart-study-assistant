@@ -245,6 +245,8 @@ export type StartTranscriptionRequest = {
   ticketId: string;
   /** 🎫 سر التذكرة — للزائر بلا جلسة فقط (بيتبعت بدل الجلسة). */
   secret?: string;
+  /** رابط اختياري للمادة الجامعية. */
+  subjectId?: string | null;
 };
 
 /** شكل خطأ الراوت الموحّد (نفس بتاعة المرحلة 1). */

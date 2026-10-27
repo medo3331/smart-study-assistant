@@ -317,7 +317,7 @@ function readSaveInfo(payload: unknown): SaveInfo {
 }
 
 /** المكوّن الرئيسي — كل حالة الشاشة في متغيرات واحدة واضحة. */
-export function LectureTranscriber() {
+export function LectureTranscriber({ subjectId }: { subjectId?: string | null } = {}) {
   const [file, setFile] = useState<File | null>(null);
 
 // 🧡 اسم الملف الأصلي قبل الضغط (للعرض واحد)
@@ -619,6 +619,7 @@ export function LectureTranscriber() {
           size: file?.size ?? 0,
           ticketId: ticket?.ticketId ?? "",
           ...(ticket?.secret ? { secret: ticket.secret } : {}),
+          ...(subjectId ? { subjectId } : {}),
         }),
       });
       const payload: unknown = await response.json().catch(() => null);
@@ -680,7 +681,7 @@ export function LectureTranscriber() {
       setPhase("done");
       return true;
     },
-    [file],
+    [file, subjectId],
   );
 
   /**
