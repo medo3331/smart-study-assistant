@@ -410,11 +410,12 @@ export function LectureTranscriber() {
       const sourceSize = next.size;
 
       // ⚠️ تحذير للملفات الكبيرة غير MP3 — لو الرفع فشل، المستخدم لازم يضغط الملف من تليفونه.
-      const MAX_WARN_BYTES = 45 * 1024 * 1024;
+      // ⚠️ الحد هنا مش 45MB — هو الحد الفعلي حسب الجهاز (120MB للكمبيوتر، أقل للموبايل).
+      const MAX_WARN_BYTES = getDeviceLimit();
       const isLossyAudio = /^audio\/(mpeg|mp3)$/i.test(next.type);
       if (next.size > MAX_WARN_BYTES && !isLossyAudio) {
         setLargeFileWarning(
-          "الملف أكبر من 45 ميجا. لو الرفع فشل، فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
+          "الملف كبير مقارنة بحد الجهاز. لو الرفع فشل، فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
         );
       } else {
         setLargeFileWarning(null);

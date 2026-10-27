@@ -33,7 +33,7 @@ import type { ThemeColor, ThemeStyles } from "./types";
     (كارت القرآن بيفتحه على «الصوت»). */
 export type SettingsSectionId = "plan" | "look" | "sound" | "notif";
 
-interface SidebarProps {
+interface SettingsDrawerProps {
   // فتح/قفل الدرج الجانبي
   isMenuOpen: boolean;
   setIsMenuOpen: (open: boolean) => void;
@@ -118,7 +118,7 @@ const SECTIONS: {
   { id: "notif", label: "التنبيهات", icon: "🔔", hint: "تذكير يومي قبل السلسلة تنكسر" },
 ];
 
-export function Sidebar({
+export function SettingsDrawer({
   isMenuOpen,
   setIsMenuOpen,
   showSubjectModal,
@@ -138,7 +138,7 @@ export function Sidebar({
   handleEnableWebPush,
   onNavigateHome,
   focusSection = null,
-}: SidebarProps) {
+}: SettingsDrawerProps) {
   void _theme;
   void _legacySetTheme;
   const { theme: activeTheme, setTheme: setAppTheme } = useTheme();

@@ -67,6 +67,18 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     freeEndpoint: true,
     enabled: true,
   },
+  {
+    id: "llama-3.2-11b-vision-preview",
+    provider: "groq",
+    displayName: "Llama 3.2 11B Vision (Groq)",
+    capabilities: ["text", "vision", "streaming"],
+    contextWindow: 8_192,
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 3,
+    freeEndpoint: true,
+    enabled: true,
+  },
 
   /* ------------------------------------------------------------------ */
   /* NVIDIA Free Endpoint — مُتحقَّق منها حيًا (2026-08-26)               */
@@ -172,6 +184,17 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     enabled: true,
   },
   {
+    id: "qwen/qwen-2.5-vl-7b-instruct:free",
+    provider: "openrouter",
+    displayName: "Qwen 2.5 VL 7B (OpenRouter Free)",
+    capabilities: ["text", "vision", "streaming"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: true,
+  },
+  {
     // مجاني مؤكد من التسعير لكن البروب الحي رجّع 403 على هذا الحساب
     // (مش مصرّح له بالموديل) — ممنوع تفعيله وإلا سمّم حالة صحة المزوّد.
     id: "thinkingmachines/inkling-small:free",
@@ -209,6 +232,19 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     priority: 1,
     tier: "unknown",
     fallbackPriority: -1,
+    freeEndpoint: true,
+    enabled: true,
+  },
+  /* ---------------- OpenRouter (مجاني — Nemotron Vision) ---------------- */
+  {
+    id: "nvidia/nemotron-nano-12b-v2-vl:free",
+    provider: "openrouter",
+    displayName: "Nemotron Nano 12B v2 VL (OpenRouter, Free)",
+    capabilities: ["text", "vision", "streaming"],
+    contextWindow: 128_000,
+    priority: 1,
+    tier: "free",
+    fallbackPriority: 1,
     freeEndpoint: true,
     enabled: true,
   },

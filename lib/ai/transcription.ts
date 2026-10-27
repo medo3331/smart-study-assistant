@@ -20,6 +20,12 @@ export const GROQ_STT_MODEL = "whisper-large-v3-turbo";
 export const SCRIBE_MODEL_ID = "scribe_v2";
 
 const STT_TIMEOUT_MS = 5 * 60 * 1000;
+/** مهلة الطلب: 5 دقايق. ملف محاضرة ساعة بياخد وقت، والحد الأقصى على
+ *  Vercel Hobby 300 ثانية فمفيش فايدة من طلب أطول منه. */
+const STT_TIMEOUT_MS = 55_000;
+
+/** فاصل المقطع بالثواني: أي سكتة أطول من ده (أو تغيّر متحدث) معناها مقطع
+ *  جديد. 1.6 ثانية تقريباً متوسط الفاصل بين جمل الكلام الطبيعية. */
 const SEGMENT_GAP_SECONDS = 1.6;
 const MAX_SEGMENTS = 600;
 const MAX_WORDS = 20_000;

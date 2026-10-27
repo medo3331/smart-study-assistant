@@ -1,21 +1,21 @@
-/**
- * /api/unified-ai — REAL INFERENCE + Phase H Final Economy+AI Integration
+﻿/**
+ * /api/unified-ai â€” REAL INFERENCE + Phase H Final Economy+AI Integration
  *
  * Contract:
- *   POST multipart/form-data  → prompt + file/image + language + [model] + [task]
- *   POST application/json     → prompt + imageInput/fileInput + context + [model] + [task]
+ *   POST multipart/form-data  â†’ prompt + file/image + language + [model] + [task]
+ *   POST application/json     â†’ prompt + imageInput/fileInput + context + [model] + [task]
  *
- * Phase H Flow (पूर्ण التكامل النهائي):
- *   Request → Authenticate → Resolve model
- *     ├─ explicit model? → validate exists/enabled → getModelAccessPolicy → has_entitlement
- *     │         → DENIED 403 MODEL_ACCESS_REQUIRED (NO reserve, 0 credit consumed)
- *     └─ auto routing? → TASK_MODEL_PREFERENCE → routeCandidates → Health → filterAccessibleModels
- *                         → first allowed candidate → use it (health+entitlement respected)
- *   → ALLOWED → Phase F reserve (server requestId, NO client bypass) → unifiedAI → confirm/refund
- *   requestId is server-generated (crypto.randomUUID) — client cannot forge
+ * Phase H Flow (à¤ھà¥‚à¤°à¥چà¤£ التكامل النهائي):
+ *   Request â†’ Authenticate â†’ Resolve model
+ *     â”œâ”€ explicit model? â†’ validate exists/enabled â†’ getModelAccessPolicy â†’ has_entitlement
+ *     â”‚         â†’ DENIED 403 MODEL_ACCESS_REQUIRED (NO reserve, 0 credit consumed)
+ *     â””â”€ auto routing? â†’ TASK_MODEL_PREFERENCE â†’ routeCandidates â†’ Health â†’ filterAccessibleModels
+ *                         â†’ first allowed candidate â†’ use it (health+entitlement respected)
+ *   â†’ ALLOWED â†’ Phase F reserve (server requestId, NO client bypass) â†’ unifiedAI â†’ confirm/refund
+ *   requestId is server-generated (crypto.randomUUID) â€” client cannot forge
  *   1 request = 1 credit, no pricing table, no new currency
  *
- * Error contract (§16):
+ * Error contract (آ§16):
  *   400 invalid request (bad prompt / bad model / bad task)
  *   401 not authenticated (reserved for future strict auth; currently anonymous free for free models)
  *   402 insufficient credits (balance < 1, reserve fails)
@@ -24,7 +24,7 @@
  *   429 rate/concurrency (from api-guard if enabled; not invented in H)
  *   500 provider/internal
  *
- * Anonymous: يبقى مجانًا للـ free models فقط (لا Credits ولا Entitlements) — لا يستخدم رصيد مصادق عليه
+ * Anonymous: يبقى مجانًا للـ free models فقط (لا Credits ولا Entitlements) â€” لا يستخدم رصيد مصادق عليه
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -46,21 +46,13 @@ import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { generateIncidentId, getHttpStatus, sanitizeErrorMessage } from "@/lib/unified-ai/error-taxonomy";
+import { logIncident } from "@/lib/unified-ai/incident-log";
 import type { AiTaskType } from "@/lib/ai/types";
-import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
-import {
-  buildMagiclySystemPrompt,
-  getStudentContext,
-  getStudyToolFacts,
-  parseMode,
-  rememberSessionContext,
-  type MagiclyContextInput,
-} from "@/lib/magicly-ai";
-
 function serverRequestId(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore — global crypto in Next runtime
+  // @ts-ignore â€” global crypto in Next runtime
     if (typeof crypto !== "undefined" && typeof (crypto as unknown as { randomUUID?: () => string }).randomUUID === "function") {
       return (crypto as unknown as { randomUUID: () => string }).randomUUID!();
     }
@@ -95,6 +87,8 @@ const VALID_TASKS = new Set<string>([
   "rag_embeddings",
 ]);
 
+const VALID_LANGUAGES = new Set<string>(["ar", "en", "mixed"]);
+
 function clampModel(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined;
   const s = input.trim();
@@ -112,6 +106,7 @@ export async function POST(req: Request) {
   let reserveRef: string | null = null;
   let userId: string | null = null;
   let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  let refunded = false;
 
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -133,35 +128,124 @@ export async function POST(req: Request) {
       if (f instanceof File) fileInput = f;
       const i = formData.get("imageInput");
       if (i instanceof File) imageInput = i;
+      // حجم الملف: حد أقصى ~4 ميجا لتجنب 413 من Vercel
+      const attached = fileInput || imageInput;
+      if (attached && attached.size > 4 * 1024 * 1024) {
+        return NextResponse.json(
+          { ok: false, error: "حجم الملف كبير جداً، يرجى رفع ملف أصغر من 4 ميجا", code: "FILE_TOO_LARGE" },
+          { status: 413 }
+        );
+      }
       const lang = formData.get("language");
-      if (typeof lang === "string") language = lang;
+      if (lang === null) {
+        // keep default
+      } else if (typeof lang !== "string") {
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
+      } else {
+        const trimmed = lang.trim();
+        if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        }
+        if (trimmed !== "") language = trimmed;
+      }
       const ctx = formData.get("context");
-      if (typeof ctx === "string") {
+      if (ctx === null) {
+        // keep default
+      } else if (typeof ctx !== "string") {
+        return NextResponse.json({ ok: false, error: "سياق غير صالح", code: "INVALID_CONTEXT" }, { status: 400 });
+      } else if (ctx.trim() !== "") {
         try {
-          context = JSON.parse(ctx);
+          const parsed = JSON.parse(ctx);
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("bad");
+          context = parsed as Record<string, unknown>;
         } catch {
-          /* ignore */
+          return NextResponse.json({ ok: false, error: "سياق غير صالح", code: "INVALID_CONTEXT" }, { status: 400 });
         }
       }
       const m = formData.get("model");
-      requestedModel = clampModel(m);
+      if (m === null) {
+        // absent
+      } else if (typeof m !== "string") {
+        return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+      } else {
+        const trimmed = m.trim();
+        if (trimmed === "") {
+          // absent
+        } else if (trimmed.length > 200) {
+          return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+        } else {
+          requestedModel = trimmed;
+        }
+      }
       const t = formData.get("task");
-      requestedTask = clampTask(t);
+      if (t === null) {
+        // absent
+      } else if (typeof t !== "string") {
+        return NextResponse.json({ ok: false, error: "مهمة غير صالحة", code: "INVALID_TASK" }, { status: 400 });
+      } else {
+        const trimmed = t.trim();
+        if (trimmed === "") {
+          // absent
+        } else if (!VALID_TASKS.has(trimmed)) {
+          return NextResponse.json({ ok: false, error: "نوع المهمة غير مدعوم", code: "UNSUPPORTED_TASK" }, { status: 400 });
+        } else {
+          requestedTask = trimmed as AiTaskType;
+        }
+      }
     } else {
       const body = await req.json().catch(() => null);
-      if (!body || typeof body !== "object") {
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
         return NextResponse.json({ ok: false, error: "بيانات غير صالحة", code: "INVALID_REQUEST" }, { status: 400 });
       }
-      prompt = (body as Record<string, unknown>).prompt as string || "";
-      language = ((body as Record<string, unknown>).language as string) || "ar";
-      context = ((body as Record<string, unknown>).context as Record<string, unknown>) || {};
-      requestedModel = clampModel((body as Record<string, unknown>).model);
-      requestedTask = clampTask((body as Record<string, unknown>).task);
-      // Legacy: body.model as X handled above
+      const b = body as Record<string, unknown>;
+      prompt = typeof b.prompt === "string" ? b.prompt : "";
+      if ("language" in b && b.language !== undefined && b.language !== null) {
+        if (typeof b.language !== "string") {
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        }
+        const trimmed = b.language.trim();
+        if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
+        return NextResponse.json({ ok: false, error: "لغة غير مدعومة", code: "INVALID_LANGUAGE" }, { status: 400 });
+        }
+        if (trimmed !== "") language = trimmed;
+      }
+      if ("context" in b && b.context !== undefined && b.context !== null) {
+        if (typeof b.context !== "object" || Array.isArray(b.context)) {
+          return NextResponse.json({ ok: false, error: "سياق غير صالح", code: "INVALID_CONTEXT" }, { status: 400 });
+        }
+        context = b.context as Record<string, unknown>;
+      }
+      if ("model" in b && b.model !== undefined && b.model !== null) {
+        if (typeof b.model !== "string") {
+          return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+        }
+        const trimmed = b.model.trim();
+        if (trimmed !== "" && trimmed.length > 200) {
+          return NextResponse.json({ ok: false, error: "موديل غير صالح", code: "INVALID_MODEL" }, { status: 400 });
+        }
+        if (trimmed !== "") requestedModel = trimmed;
+      }
+      if ("task" in b && b.task !== undefined && b.task !== null) {
+        if (typeof b.task !== "string") {
+          return NextResponse.json({ ok: false, error: "مهمة غير صالحة", code: "INVALID_TASK" }, { status: 400 });
+        }
+        const trimmed = b.task.trim();
+        if (trimmed !== "" && !VALID_TASKS.has(trimmed)) {
+          return NextResponse.json({ ok: false, error: "نوع المهمة غير مدعوم", code: "UNSUPPORTED_TASK" }, { status: 400 });
+        }
+        if (trimmed !== "") requestedTask = trimmed as AiTaskType;
+      }
     }
 
-    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+    if (fileInput && imageInput) {
+      return NextResponse.json({ ok: false, error: "لا يمكن إرسال ملف وصورة معاً", code: "INCONSISTENT_ATTACHMENTS" }, { status: 400 });
+    }
+
+    if (!prompt || typeof prompt !== "string" || (prompt.trim().length === 0 && !fileInput && !imageInput)) {
       return NextResponse.json({ ok: false, error: "المطلوب نص (prompt)", code: "INVALID_REQUEST" }, { status: 400 });
+    }
+    if (!prompt.trim() && (fileInput || imageInput)) {
+      prompt = "لخّصلي المحتوى ده واشرحه بأسلوب واضح ومنظم.";
     }
 
     // ---- Auth ----
@@ -194,7 +278,7 @@ export async function POST(req: Request) {
       return Boolean(data);
     };
 
-    // Phase 2: تحديث حالة الموديلات من الداتابيز قبل أي حسم —
+    // Phase 2: تحديث حالة الموديلات من الداتابيز قبل أي حسم â€”
     // تبديلات /admin/models (enabled/priority/daily_limit) بتأثر هنا فعليًا.
     await refreshModelStateCache();
 
@@ -202,7 +286,7 @@ export async function POST(req: Request) {
     let resolvedVia: "explicit" | "auto" | "default" = "default";
 
     if (requestedModel) {
-      // ---- Explicit model request (§4) ----
+      // ---- Explicit model request (آ§4) ----
       const m = findModel(requestedModel);
       if (!m) {
         return NextResponse.json(
@@ -216,7 +300,7 @@ export async function POST(req: Request) {
           { status: 404 }
         );
       }
-      // Phase 2: حالة الداتابيز فوق قيمة السجل — موقوف إداريًا أو تجاوز حده اليومي
+      // Phase 2: حالة الداتابيز فوق قيمة السجل â€” موقوف إداريًا أو تجاوز حده اليومي
       if (!isModelRuntimeEnabled(m.id, m.enabled)) {
         return NextResponse.json(
           { ok: false, error: `الموديل موقوف إداريًا أو تجاوز حده اليومي: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
@@ -239,7 +323,7 @@ export async function POST(req: Request) {
         }
         const ok = await hasEntitlement(policy.entitlement.kind, policy.entitlement.value);
         if (!ok) {
-          // §4: 403 قبل الحجز — لا يستهلك credit
+          // آ§4: 403 قبل الحجز â€” لا يستهلك credit
           return NextResponse.json(
             {
               ok: false,
@@ -255,7 +339,7 @@ export async function POST(req: Request) {
       modelToUse = m.id;
       resolvedVia = "explicit";
     } else if (requestedTask) {
-      // ---- Automatic routing (§5): task → candidates → health → access → first allowed ----
+      // ---- Automatic routing (آ§5): task â†’ candidates â†’ health â†’ access â†’ first allowed ----
       const candidates = routeCandidates(requestedTask);
       if (candidates.length === 0) {
         return NextResponse.json(
@@ -263,9 +347,15 @@ export async function POST(req: Request) {
           { status: 404 }
         );
       }
-      const accessible = await filterAccessibleModels(candidates, hasEntitlement);
+      let accessible: typeof candidates = [];
+      try {
+        accessible = await filterAccessibleModels(candidates, hasEntitlement);
+      } catch (e) {
+        console.error("[unified-ai] filterAccessibleModels failed, falling back to candidates:", e);
+        accessible = candidates;
+      }
       if (accessible.length === 0) {
-        // كل المرشحين مقفلين — لا fallback يكسر السياسة
+        // كل المرشحين مقفلين â€” لا fallback يكسر السياسة
         const required =
           candidates[0]?.model ? getModelAccessPolicy(candidates[0].model).entitlement : undefined;
         return NextResponse.json(
@@ -284,7 +374,7 @@ export async function POST(req: Request) {
       modelToUse = winner.model ?? CURRENT_AI_MODEL;
       resolvedVia = "auto";
     } else {
-      // ---- Default (legacy): CURRENT_AI_MODEL free → دائمًا مسموح ----
+      // ---- Default (legacy): CURRENT_AI_MODEL free â†’ دائمًا مسموح ----
       const policy = getModelAccessPolicy(CURRENT_AI_MODEL);
       if (policy.access === "entitlement" && policy.entitlement) {
         // Defensive: لو في المستقبل أصبح default gated، نحتاج فحص
@@ -321,10 +411,10 @@ export async function POST(req: Request) {
     // Log routing decision server-side only (never expose to UI)
     console.log(`[PhaseH unified-ai] resolved=${resolvedVia} model=${modelToUse} task=${requestedTask ?? "chat"} user=${userId ? "auth" : "anon"}`);
 
-    // Determine bucket: vision/file → 6/5h, text → 10/3h
+    // Determine bucket: vision/file â†’ 6/5h, text â†’ 10/3h
     const isVisionOrFile = Boolean(imageInput || fileInput);
 
-    // ---- Phase C: Guest Rate Limit (Anonymous 5/24h) — BEFORE Phase A, 0 credit ----
+    // ---- Phase C: Guest Rate Limit (Anonymous 5/24h) â€” BEFORE Phase A, 0 credit ----
     if (isAnonymous && userId && supabase) {
       const guestRate = await checkGuestRateLimit(supabase, userId);
       if (!guestRate.allowed) {
@@ -333,7 +423,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // ---- Phase H.2: Rate Limit gate (BEFORE reserve) — 429, 0 credit consumed ----
+    // ---- Phase H.2: Rate Limit gate (BEFORE reserve) â€” 429, 0 credit consumed ----
     if (userId && supabase && !isAnonymous) {
       const rate = await checkAiRateLimit(supabase, userId, { isVisionOrFile });
       if (!rate.allowed) {
@@ -342,7 +432,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // ---- Phase B: Per-Model Rate Limit (BEFORE reserve) — 429, 0 credit ----
+    // ---- Phase B: Per-Model Rate Limit (BEFORE reserve) â€” 429, 0 credit ----
     if (userId && supabase && !isAnonymous) {
       const modelRate = await checkModelRateLimit(supabase, userId, modelToUse);
       if (!modelRate.allowed) {
@@ -351,13 +441,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // ---- Phase B: Per-Agent Rate Limit (abstraction آمنة) — 429, 0 credit ----
+    // ---- Phase B: Per-Agent Rate Limit (abstraction آمنة) â€” 429, 0 credit ----
     // فقط إذا كان هناك agent identity حقيقي في الطلب (context.agentId) ومعروف في AGENT_LIMITS
-    // لا نخترع agent من task عادي — Stub = لا فحص
+    // لا نخترع agent من task عادي â€” Stub = لا فحص
     const requestedAgentId = (() => {
       const raw = (context as Record<string, unknown>)?.agentId;
       if (typeof raw === "string" && raw.trim().length > 0 && isKnownAgentLimit(raw.trim())) return raw.trim();
-      // أيضاً لو task === agent و context.agentId موجود — لا نستنتج من prompt
+      // أيضاً لو task === agent و context.agentId موجود â€” لا نستنتج من prompt
       return null;
     })();
     if (requestedAgentId && userId && supabase && !isAnonymous) {
@@ -372,7 +462,7 @@ export async function POST(req: Request) {
     // Free models: allowed via overdraft even if balance 0 (windowed)
     // Gated models: same, but additionally require entitlement (checked above)
     // Logged-in users: full reserve with model/agent metadata
-    // Anonymous guests: also reserve for tracking (Guest 5/24h) — same ledger, same window logic
+    // Anonymous guests: also reserve for tracking (Guest 5/24h) â€” same ledger, same window logic
     let guestReserveDone = false;
     if (userId && supabase) {
       // For anon: we already checked Guest limit above, now track usage via same ledger
@@ -389,7 +479,7 @@ export async function POST(req: Request) {
       })();
       try {
         if (!isTrackingGuest) {
-          // Logged-in: Attempt Phase B extended RPC (p_model, p_agent) — requires migration db/economy-phase-bc-rate-limits.sql
+          // Logged-in: Attempt Phase B extended RPC (p_model, p_agent) â€” requires migration db/economy-phase-bc-rate-limits.sql
           const resExt = await supabase.rpc("reserve_ai_credit", {
             p_user_id: userId,
             p_ref_id: refId,
@@ -427,12 +517,12 @@ export async function POST(req: Request) {
                 } as unknown as Record<string, unknown>);
               }
             } catch {
-              // ignore — metadata enrichment is best-effort
+              // ignore â€” metadata enrichment is best-effort
             }
           }
         } else {
           // Anonymous guest: simple reserve for tracking (no model/agent needed, just kind)
-          // Reuse same reserve — it will overdraft within Guest window (5/24h already checked above)
+          // Reuse same reserve â€” it will overdraft within Guest window (5/24h already checked above)
           // and also within text/vision window (10/3h or 6/5h). If it fails, map to GUEST limit.
           const res = await supabase.rpc("reserve_ai_credit", {
             p_user_id: userId,
@@ -478,7 +568,7 @@ export async function POST(req: Request) {
           );
         }
         console.error("[PhaseF] reserve failed:", msg);
-        return NextResponse.json({ ok: false, error: "تعذر حجز AI Credit. حاول مرة أخرى.", code: "RESERVE_FAILED" }, { status: 500 });
+        return NextResponse.json({ ok: false, error: "تعذر حجز AI Credit. حاول مرة أخرى.", code: "RESERVE_FAILED" }, { status: 400 });
       }
     }
 
@@ -492,24 +582,23 @@ export async function POST(req: Request) {
     if (imageInput) input.imageInput = imageInput;
     if (fileInput) input.fileInput = fileInput;
 
-    // 🧾 Phase 5-C5: هوية الطلب بتتولّد هنا **مرة واحدة** وبتنزل جوه
+    // ًں§¾ Phase 5-C5: هوية الطلب بتتولّد هنا **مرة واحدة** وبتنزل جوه
     // `unifiedAI` لكل محاولة مزوّد. المسار ده كان بيلفّ على
-    // `callGroqWithModel` مباشرةً فمابيشوف `routing.ts` خالص — وده سبب
+    // `callGroqWithModel` مباشرةً فمابيشوف `routing.ts` خالص â€” وده سبب
     // إن Chat كان بيرد عادي وEvent = 0.
     //
-    // ⚠️ `feature = "chat"`: المسار ده **هو** المحادثة الأساسية (نفس
+    // âڑ ï¸ڈ `feature = "chat"`: المسار ده **هو** المحادثة الأساسية (نفس
     //    الوظيفة بتاعة `/api/chat`)، فالتصنيف الدلالي واحد مقصود.
     //    التمييز بين المسارين بيحصل في `metadata.path` ("unified_ai"
-    //    مقابل "media"/"chat") — وده اللي بيخلّي C5 يفرّق من غير ما
+    //    مقابل "media"/"chat") â€” وده اللي بيخلّي C5 يفرّق من غير ما
     //    نكبّر الـ taxonomy.
     input.usage = resolveUsageRequestContext(req, userId, {
       feature: "chat",
       diagnostics: { route: "unified_ai" },
     });
 
-    // ---- Unified brain (من /api/chat): شخصية الطالب + سياقه الدراسي — best-effort ----
+    // ---- Unified brain (من /api/chat): شخصية الطالب + سياقه الدراسي â€” best-effort ----
     // للمسجلين فقط؛ الزوار والمجهولون يكملون بدونها ولا يتعطلون.
-    const ctxInput = context as unknown as MagiclyContextInput;
     const rawMode = (context as Record<string, unknown>)?.mode;
     const rawConversationId = (context as Record<string, unknown>)?.conversationId;
     let incomingConversationId = "";
@@ -518,22 +607,13 @@ export async function POST(req: Request) {
     }
     if (userId && supabase && !isAnonymous) {
       try {
-        const studentContext = await getStudentContext(supabase, userId, ctxInput);
-        const selectedMode = parseMode(rawMode, prompt);
-        const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt);
-        const magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
-        let personaPrompt = "";
-        try {
-          personaPrompt = await buildSystemPrompt(userId);
-        } catch (e) {
-          console.warn("[unified-ai] persona prompt build failed, using base system prompt:", e);
-        }
-        input.system = personaPrompt
-          ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${magiclySystem}`
-          : magiclySystem;
-        void rememberSessionContext(supabase, userId, studentContext, prompt);
+        const { data: { user } } = await supabase.auth.getUser();
+        const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "الطالب";
+        input.system = language === "en"
+          ? "You are «Magicly», a study assistant. User: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". Answer in clear English. Do not assume database data."
+          : "أنت «ماجيكلي»، مساعد مذاكرة. المستخدم: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". أجب بالعربية المفهومة والواضحة. لا تفترض بيانات من قاعدة البيانات.";
       } catch (e) {
-        console.warn("[unified-ai] student context build failed, continuing without it:", e);
+        console.warn("[unified-ai] user context build failed, continuing without it:", e);
       }
     }
 
@@ -541,21 +621,42 @@ export async function POST(req: Request) {
     const result: UnifiedAIResult = await unifiedAI(input);
 
     if (!result.ok) {
-      // FAILURE → refund reservation (idempotent) — لا يستهلك credit
-      if (userId && reserveRef && supabase) {
+      if (userId && reserveRef && supabase && !refunded) {
+        refunded = true;
         try {
-          await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
+          await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef } )
         } catch (e) {
           console.error("[PhaseF] refund after provider failure failed:", e);
         }
       }
-      // Provider failure: spec §16 → 500 but we keep 200 for client resilience with ok:false
-      // To honor §16, return 502 for provider errors; client already handles both.
-      return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: "PROVIDER_ERROR" }, { status: 502 });
+      const code = result.code || result.errorCode || "AI_PROVIDER_FAILED";
+      const incidentId = generateIncidentId();
+      console.error("[unified-ai] incident", incidentId, "code", code, "stage", sanitizeErrorMessage(result.error || ""));
+      // Best-effort persistent logging (never throws, never blocks on failure).
+      try {
+        await logIncident({
+          incidentId,
+          errorCode: code,
+          stage: result.error,
+          httpStatus: getHttpStatus(code),
+        });
+      } catch {
+        /* best-effort */
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.",
+          code,
+          incidentId,
+          retryable: true,
+        },
+        { status: getHttpStatus(code) }
+      );
     }
 
-    // SUCCESS → consume is implicit (reserve = consume); no extra ledger write
-    // حفظ المحادثة best-effort (نفس نمط /api/chat) — الفشل هنا لا يحرم الطالب من الرد.
+    // SUCCESS â†’ consume is implicit (reserve = consume); no extra ledger write
+    // حفظ المحادثة best-effort (نفس نمط /api/chat) â€” الفشل هنا لا يحرم الطالب من الرد.
     let savedConversationId = incomingConversationId;
     if (userId && supabase && !isAnonymous && result.answer) {
       try {
@@ -602,14 +703,29 @@ export async function POST(req: Request) {
     };
     return NextResponse.json(uiResponse);
   } catch (e: unknown) {
-    if (userId && reserveRef && supabase) {
+    if (userId && reserveRef && supabase && !refunded) {
+      refunded = true;
       try {
         await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
       } catch (re) {
         console.error("[PhaseF] refund after exception failed:", re);
       }
     }
-    console.error("unified-ai route error:", (e as Error)?.message || String(e));
-    return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى.", code: "INTERNAL_ERROR" }, { status: 500 });
+    console.error("unified-ai route error:", sanitizeErrorMessage((e as Error)?.message || String(e)));
+    const incidentId = generateIncidentId();
+    try {
+      await logIncident({
+        incidentId,
+        errorCode: "UNKNOWN_INTERNAL_ERROR",
+        stage: (e as Error)?.message || String(e),
+        httpStatus: 500,
+      });
+    } catch {
+      /* best-effort */
+    }
+    return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى.", code: "UNKNOWN_INTERNAL_ERROR", incidentId, retryable: true }, { status: 500 });
   }
 }
+// export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
+
+

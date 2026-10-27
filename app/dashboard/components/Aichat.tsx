@@ -276,8 +276,17 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || "خطأ في الاتصال");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
+          (data?.error?.message as string | undefined) ||
+          (response.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "خطأ في الاتصال");
+        throw new Error(msg);
+      }
 
       const aiReply = data?.choices?.[0]?.message?.content || "لم يتم استقبال رد.";
       setChatMessages([...updatedMessages, { sender: "ai", text: aiReply, timestamp: Date.now() }]);

@@ -112,7 +112,7 @@ describe("generateEducationalImage fallback chain", () => {
     // keys are present. With the keys emptied the chain should have hit
     // Pollinations at least once before giving up.
     expect(fetchMock).toHaveBeenCalled();
-    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
     expect(urls.some((u) => u.includes("pollinations"))).toBe(true);
   }, 30000);
 
@@ -296,7 +296,7 @@ describe("Service Registry", () => {
     await consumeServiceQuota(sb, "user-refund", "diagram");
     const during = await peekServiceQuota(sb, "user-refund", "diagram");
     expect(during.used).toBe(before.used + 1);
-    refundServiceQuota("user-refund", "diagram");
+    refundServiceQuota(sb, "user-refund", "diagram");
     const after = await peekServiceQuota(sb, "user-refund", "diagram");
     expect(after.used).toBe(before.used);
   });
