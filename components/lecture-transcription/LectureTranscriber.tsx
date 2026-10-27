@@ -47,7 +47,7 @@
    anywhere` عشان كلمة طويلة ما تكسّرش التخطيط.
    ═══════════════════════════════════════════════════════════════════════ */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   compressLectureMedia,
   needsCompression,
@@ -366,6 +366,37 @@ export function LectureTranscriber() {
    */
   const [saveInfo, setSaveInfo] = useState<SaveInfo | null>(null);
 
+  // 🎟️ حالة التجربة المجانية — تُقرأ من السيرفر (مصدر الحقيقة).
+  const [trialRemaining, setTrialRemaining] = useState<number | null>(null);
+  const [trialLimit, setTrialLimit] = useState<number>(3);
+  const [trialPaid, setTrialPaid] = useState<boolean>(false);
+  const [trialLoading, setTrialLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/lecture-transcription/trial-status");
+        const data = (await res.json().catch(() => null)) as
+          | { paid?: boolean; trial?: { remaining?: number; limit?: number } }
+          | null;
+        if (cancelled) return;
+        if (res.ok && data) {
+          setTrialPaid(Boolean(data.paid));
+          if (typeof data.trial?.remaining === "number") setTrialRemaining(data.trial.remaining);
+          if (typeof data.trial?.limit === "number") setTrialLimit(data.trial.limit);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setTrialLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -627,6 +658,9 @@ export function LectureTranscriber() {
         /* 🎫 404 = الرد الموحد: التذكرة غلط/مش بتاعتك/منتهية/مستهلكة.
            إعادة المحاولة بنفس التذكرة مستحيلة — بنمسح المسار والتذكرة
            عشان الزر يرجع «تحويل إلى نص» والرفع يبدأ من جديد. */
+        if (response.status === 402) {
+          setTrialRemaining(0);
+        }
         if (response.status === 404) {
           setUploadedPath(null);
           setUploadTicket(null);
@@ -674,6 +708,9 @@ export function LectureTranscriber() {
        */
       const info = readSaveInfo(payload);
       setSaveInfo(info);
+
+      const tr = (payload as { trialRemaining?: unknown } | null)?.trialRemaining;
+      if (typeof tr === "number") setTrialRemaining(tr);
       setUploadedPath(null);
       setUploadTicket(null);
       setTranscript(result);
@@ -997,8 +1034,40 @@ export function LectureTranscriber() {
         </div>
       )}
 
-      {/* ───────── الخطأ ───────── */}
+      {/* ───────── حالة التجربة المجانية ───────── */}
+      {!trialLoading && (
+        <div className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-4">
+          {trialPaid ? (
+            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              اشتراك نشط — تفريغ غير محدود ✓
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-[var(--text)]">
+                محاولاتك المجانية:{" "}
+                <span className="font-bold ltr-num">
+                  {trialRemaining ?? 0} / {trialLimit}
+                </span>
+              </p>
+              {(trialRemaining ?? 0) <= 0 && (
+                <Link
+                  href="/pricing"
+                  className="inline-flex h-9 items-center rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white"
+                >
+                  اشترك لتفعيل التفريغ
+                </Link>
+              )}
+            </div>
+          )}
+          {(trialRemaining ?? 0) <= 0 && !trialPaid && (
+            <p className="mt-2 text-sm text-red-500">
+              استنفدت محاولاتك المجانية. اشترك لتفعيل التفريغ.
+            </p>
+          )}
+        </div>
+      )}
       {error && (
+
         <div
           role="alert"
           className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4"

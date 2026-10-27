@@ -21,6 +21,7 @@ import {
   type TicketClaimant,
 } from "@/lib/ai/tickets";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { reserveTrialAttempt, completeTrialAttempt, refundTrialAttempt, hasPaidTranscriptionAccess, getTrialStatus } from "@/lib/ai/lecture-transcription-access";
 import { createClient } from "@/lib/supabase/server";
 
 /* ==========================================================================
@@ -146,6 +147,58 @@ export async function POST(request: NextRequest) {
         ? { userId: sessionUserId, secret: null }
         : { userId: null, secret: clampText(body.secret ?? "", 200).trim() };
 
+    // === Paid/Trial gate ===
+    let paidAccess = false;
+    let trialRefId: string | null = null;
+    let trialRemaining: number | null = null;
+    if (sessionUserId) {
+      const sessionClient = await createClient();
+      const {
+        data: { user: authUser },
+      } = await sessionClient.auth.getUser();
+      if (authUser?.is_anonymous) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "AUTH_REQUIRED",
+              message: "تفريغ المحاضرات ميزة مدفوعة. سجّل دخولك أو اشترك للاستمرار.",
+            },
+          },
+          { status: 401 },
+        );
+      }
+      const paid = await hasPaidTranscriptionAccess(
+        await createClient(),
+        sessionUserId,
+      );
+      paidAccess = paid.allowed;
+      if (!paidAccess) {
+        const status = await getTrialStatus(await createClient(), sessionUserId);
+        if (status.exhausted) {
+          return NextResponse.json(
+            {
+              error: {
+                code: "TRIAL_EXHAUSTED",
+                message: "استنفدت محاولاتك المجانية (3 من 3). اشترك لتفعيل تفريغ المحاضرات.",
+              },
+            },
+            { status: 402 },
+          );
+        }
+      }
+    } else {
+      // Pure guests (no session) cannot use paid feature.
+      return NextResponse.json(
+        {
+          error: {
+            code: "AUTH_REQUIRED",
+            message: "تفريغ المحاضرات ميزة مدفوعة. سجّل دخولك أو اشترك للاستمرار.",
+          },
+        },
+        { status: 401 },
+      );
+    }
+
     let claim;
     try {
       claim = await claimTicket(createServiceClient(), {
@@ -179,12 +232,32 @@ export async function POST(request: NextRequest) {
     const signedUrl = await createSignedReadUrl(path);
 
     // ٣) التفريغ. أي فشل هنا = فك الاستحواذ (بشرط claim_id بتاعنا).
+    if (!paidAccess && sessionUserId) {
+      const r = await reserveTrialAttempt(await createClient(), sessionUserId);
+      if (!r.ok) {
+        await releaseTicket(createServiceClient(), { claimId }).catch(() => {});
+        claimId = null;
+        return NextResponse.json(
+          { error: { code: "TRIAL_EXHAUSTED", message: r.message } },
+          { status: 402 },
+        );
+      }
+      trialRefId = r.refId;
+      trialRemaining = r.remaining;
+    }
     let transcript;
     try {
       transcript = await transcribeLectureFromUrl(signedUrl);
     } catch (error) {
+      if (trialRefId && sessionUserId) {
+        await refundTrialAttempt(await createClient(), sessionUserId, trialRefId);
+      }
       await releaseTicket(createServiceClient(), { claimId }).catch(() => {});
       throw error;
+    }
+
+    if (trialRefId && sessionUserId) {
+      await completeTrialAttempt(await createClient(), sessionUserId, trialRefId);
     }
 
     /* ٤) التذكرة اتعملت — **قبل** الحفظ وبنجاح التفريغ نفسه.
@@ -232,6 +305,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       transcript,
       saved: saveResult.ok,
+      ...(trialRemaining !== null ? { trialRemaining } : {}),
       ...(saveResult.ok
         ? { lectureId: saveResult.lecture.id, lecture: saveResult.lecture }
         : { persistCode: saveResult.code, persistMessage: saveResult.message }),

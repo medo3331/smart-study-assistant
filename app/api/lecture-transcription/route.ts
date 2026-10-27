@@ -1,11 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { checkDailyBudget, checkRateLimit } from "@/lib/api-guard";
+import { checkDailyBudget, checkRateLimit, requireUser } from "@/lib/api-guard";
 import {
   MAX_LECTURE_FILE_BYTES,
   TranscriptionError,
   transcribeLecture,
 } from "@/lib/ai/transcription";
+import {
+  reserveTrialAttempt,
+  completeTrialAttempt,
+  refundTrialAttempt,
+  hasPaidTranscriptionAccess,
+  getTrialStatus,
+} from "@/lib/ai/lecture-transcription-access";
+import { createClient } from "@/lib/supabase/server";
 
 /* ==========================================================================
    🎙️ /api/lecture-transcription — تحويل تسجيل محاضرة إلى نص
@@ -88,9 +96,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transcript = await transcribeLecture(file);
+    const { user, response: authError } = await requireUser("flat");
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: { code: "AUTH_REQUIRED", message: "تفريغ المحاضرات ميزة مدفوعة. سجّل دخولك أو اشترك." } },
+        { status: 401 },
+      );
+    }
+    if (user.is_anonymous) {
+      return NextResponse.json(
+        { error: { code: "AUTH_REQUIRED", message: "تفريغ المحاضرات ميزة مدفوعة. سجّل دخولك أو اشترك." } },
+        { status: 401 },
+      );
+    }
 
-    return NextResponse.json({ transcript });
+    const supabase = await createClient();
+    const paid = await hasPaidTranscriptionAccess(supabase, user.id);
+    if (!paid.allowed) {
+      const st = await getTrialStatus(supabase, user.id);
+      if (st.exhausted) {
+        return NextResponse.json(
+          { error: { code: "TRIAL_EXHAUSTED", message: "استنفدت محاولاتك المجانية (3 من 3). اشترك لتفعيل التفريغ." } },
+          { status: 402 },
+        );
+      }
+    }
+
+    let trialRefId: string | null = null;
+    if (!paid.allowed) {
+      const r = await reserveTrialAttempt(supabase, user.id);
+      if (!r.ok) {
+        return NextResponse.json(
+          { error: { code: "TRIAL_EXHAUSTED", message: r.message } },
+          { status: 402 },
+        );
+      }
+      trialRefId = r.refId;
+    }
+
+    let transcript;
+    try {
+      transcript = await transcribeLecture(file);
+    } catch (error) {
+      if (trialRefId) await refundTrialAttempt(supabase, user.id, trialRefId);
+      throw error;
+    }
+    if (trialRefId) await completeTrialAttempt(supabase, user.id, trialRefId);
+
+    return NextResponse.json({ transcript, ...(trialRefId ? {} : {}) });
   } catch (error) {
     /* كل أخطاء الخدمة متغلّفة في TranscriptionError برسالة عربية جاهزة
        للعرض ورمز HTTP دقيق. أي حاجة تانية (bug) بتترجم لرسالة عامة. */
