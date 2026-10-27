@@ -997,7 +997,7 @@ export function LectureTranscriber() {
         </div>
       )}
 
-      {/* ÔÑíØ ÊÞÏã ÃËäÇÁ ÇáÊÝÑíÛ */}
+      {/* ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */}
       {working && (
         <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
           <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
@@ -1033,7 +1033,7 @@ export function LectureTranscriber() {
             )}
             {transcript.provider && (
               <p className="text-xs text-[var(--muted)]">
-                ÇáãÒæøÏ: {transcript.provider} — {transcript.model}
+                ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: {transcript.provider} ï¿½ {transcript.model}
               </p>
             )}
           </div>
