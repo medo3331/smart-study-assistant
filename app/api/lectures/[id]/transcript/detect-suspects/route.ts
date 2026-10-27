@@ -128,16 +128,26 @@ dictionaryTerms = dict.terms.filter(
       });
 
       let response;
-      try {
-        response = await runAiTask("chat", {
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: batchText },
-          ],
-          options: { temperature: 0.3 },
-        });
-      } catch (e) {
-        console.error("detect-suspects: فشل نداء AI لجزء", e);
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await runAiTask("chat", {
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: batchText },
+            ],
+            options: { temperature: 0.3 },
+          });
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          console.error(`detect-suspects: فشل نداء AI (attempt ${attempt + 1})`, e);
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        }
+      }
+      if (lastErr || !response) {
+        console.error("detect-suspects: فشل نداء AI لجزء بعد إعادة المحاولة", lastErr);
         continue;
       }
 
