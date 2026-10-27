@@ -1012,7 +1012,7 @@ export function LectureTranscriber() {
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden />
            <div className="flex-1">
              <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
-             <a href="https://wa.me/964201204556797" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">طھظˆط§طµظ„ ظ…ط¹ ط§ظ„ط¯ط¹ظ… (ظˆط§طھط³ط§ط¨)</a>
+             <a href="https://wa.me/201204556797" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">طھظˆط§طµظ„ ظ…ط¹ ط§ظ„ط¯ط¹ظ… (ظˆط§طھط³ط§ط¨)</a>
            </div>
         </div>
       )}
