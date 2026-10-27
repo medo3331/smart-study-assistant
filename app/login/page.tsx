@@ -478,6 +478,17 @@ function LoginForm() {
 
         {!isForgot && !isReset && !pendingVerify && <ProviderRow />}
 
+{!isForgot && !isReset && !pendingVerify && (
+  <div className="stack" style={{ gap: "6px" }}>
+    <Link href="/login/mag" className="btn btn-quiet btn-block">
+      الدخول باستخدام MAG ID
+    </Link>
+    <p className="muted small" style={{ margin: 0 }}>
+      MAG ID يعرّف حسابك؛ وليس كلمة مرور أو إثبات ملكية.
+    </p>
+  </div>
+)}
+
         {!isForgot && !isReset && !pendingVerify && <div className="stack" style={{ gap: "8px" }}>
           <button
             type="button"
