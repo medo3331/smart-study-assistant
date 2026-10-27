@@ -157,8 +157,11 @@ export async function POST(
       ? lecture.suspected_terms
       : [];
 
+const transcriptForBuild = transcriptData
+      ? { text: transcriptData.text ?? "", segments: transcriptData.segments }
+      : { text: "", segments: [] };
     const reviewedText = buildReviewedText(
-      transcriptData ?? { text: "", segments: [] },
+      transcriptForBuild,
       suspectedTerms,
       decisions
     );
