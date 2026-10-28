@@ -1,4 +1,4 @@
-/**
+Ôªø/**
  * Subscription quota helper: daily + monthly UTC message quotas.
  */
 
@@ -55,7 +55,7 @@ export async function checkSubscriptionQuotas(
       used: 0,
       limit: -1,
       resetAt: null,
-      reasonAr: "«·„«·ﬂ ó  Ã«Ê“ «·ÕœÊœ «·œ«Œ·Ì… (·« ÌÊÃœ «” Â·«ﬂ ﬂÊ …)",
+      reasonAr: "Owner bypass",
       ownerBypass: true,
       dailyUsed: 0,
       dailyLimit: -1,
@@ -121,8 +121,8 @@ export async function checkSubscriptionQuotas(
 
     if (!result.allowed) {
       const reasonAr = exceeded === "monthly"
-        ? `Ê’·  ·Õœ —”«Ì· »«ﬁ ﬂ «·‘Â—Ì (${result.monthly_limit} —”«·…/‘Â—).`
-        : `Ê’·  ·Õœ —”«Ì· »«ﬁ ﬂ «·ÌÊ„Ì (${result.daily_limit} —”«·…/ÌÊ„).`;
+        ? `Monthly quota exceeded (${result.monthly_limit}/month).`
+        : `Daily quota exceeded (${result.daily_limit}/day).`;
       return {
         allowed: false,
         kind,
@@ -155,9 +155,6 @@ export async function checkSubscriptionQuotas(
       monthlyLimit: result.monthly_limit,
       monthlyResetAt: result.reset_at_monthly,
       exceededPeriod: null,
-      ...(result.already_consumed_daily || result.already_consumed_monthly
-        ? { reasonAr: " „ «” Â·«ﬂ Â–Â «·ﬂÊ « ”«»ﬁ« (ÿ·» „ﬂ——)" }
-        : undefined),
     };
   } catch (e) {
     if (isFailOpenEnabled()) {
@@ -187,7 +184,7 @@ export async function checkSubscriptionQuotas(
       used: 0,
       limit: -1,
       resetAt: null,
-      reasonAr: "‰Ÿ«„ «·ﬂÊ … €Ì— „ «Õ Õ«·Ì«. Õ«Ê· „—… √Œ—Ï ·«Õﬁ«.",
+      reasonAr: "Quota service unavailable. Try again later.",
       dailyUsed: 0,
       dailyLimit: -1,
       dailyResetAt: null,
@@ -199,7 +196,6 @@ export async function checkSubscriptionQuotas(
   }
 }
 
-// Backward-compatible wrapper
 export async function checkSubscriptionQuota(
   userId: string,
   kind: QuotaKind,
