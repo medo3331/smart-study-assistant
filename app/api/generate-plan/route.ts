@@ -41,15 +41,15 @@ export async function POST(req: Request) {
     // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuota(user.id, "message");
     if (!quota.allowed) {
       return NextResponse.json(
-        { success: false, error: quota.reasonAr ?? "تم تجاوز حد الخدمة.", retryable: false },
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
         { status: 429 }
       );
     }
-
     // Phase H: 1 credit gate (free model, but still costs 1 credit)
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 5 });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);

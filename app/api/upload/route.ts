@@ -5,8 +5,11 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { resolveActor } from "@/lib/policy";
 import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
 
 export async function uploadFile(formData: FormData) {
+  const traceId = createTraceId();
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -58,13 +61,23 @@ export async function uploadFile(formData: FormData) {
       .maybeSingle();
     const planKey = ent?.value || "free";
 
-    // 3) Plan limits
-    const limits: Record<string, { uploadDaily: number; fileSizeMB: number; allowed: string[] }> = {
+    // 3) Plan limits (source of truth: subscription_plans, with code fallback)
+    const fallbackLimits: Record<string, { uploadDaily: number; fileSizeMB: number; allowed: string[] }> = {
       free: { uploadDaily: 5, fileSizeMB: 20, allowed: ["pdf", "text", "image"] },
       pro: { uploadDaily: 30, fileSizeMB: 150, allowed: ["pdf", "text", "image", "video", "audio"] },
       ultra: { uploadDaily: 60, fileSizeMB: 1024, allowed: ["pdf", "text", "image", "video", "audio"] },
     };
-    const cfg = limits[planKey] || limits.free;
+    const { data: planRow } = await privileged
+      .from("subscription_plans")
+      .select("uploads_daily, max_file_size_mb, file_types")
+      .eq("plan_key", planKey)
+      .maybeSingle();
+    const fb = fallbackLimits[planKey] || fallbackLimits.free;
+    const cfg = {
+      uploadDaily: typeof planRow?.uploads_daily === "number" ? planRow.uploads_daily : fb.uploadDaily,
+      fileSizeMB: typeof planRow?.max_file_size_mb === "number" ? planRow.max_file_size_mb : fb.fileSizeMB,
+      allowed: Array.isArray(planRow?.file_types) && planRow.file_types.length ? planRow.file_types : fb.allowed,
+    };
 
     // 4) File from form
     const file = formData.get("file") as File;
@@ -110,6 +123,16 @@ export async function uploadFile(formData: FormData) {
 
     return { ok: true, message: "تم رفع الملف بنجاح" };
   } catch (e: any) {
+    void recordRuntimeError({
+      route: "/api/upload",
+      feature: "upload",
+      category: classifyError(e, "upload"),
+      errorType: e?.name || "Error",
+      traceId,
+      outcome: "failed",
+      message: e instanceof Error ? e.message : String(e),
+      userId: null,
+    });
     return { ok: false, message: "خطأ في رفع الملف: " + (e?.message || String(e)), error: String(e) };
   }
 }

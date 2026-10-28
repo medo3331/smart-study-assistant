@@ -112,9 +112,10 @@ export async function POST(req: Request) {
     // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuota(user.id, "message");
     if (!quota.allowed) {
       return NextResponse.json(
-        { error: { message: quota.reasonAr ?? "تم تجاوز حد الخدمة.", code: "QUOTA_EXCEEDED" } },
+        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", retryable: false } },
         { status: 429 }
       );
     }
@@ -250,10 +251,21 @@ export async function POST(req: Request) {
       // Phase H: credit/entitlement gate even for streaming (same cost)
       const candidates = routeCandidates(task);
       const hasEnt = async (k: string, v: string) => {
-        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-        return Boolean(data);
+        try {
+          const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+          return Boolean(data);
+        } catch (e) {
+          console.error("[api/ai] has_entitlement failed:", e);
+          return false;
+        }
       };
-      const accessible = await filterAccessibleModels(candidates, hasEnt);
+      let accessible = candidates;
+      try {
+        accessible = await filterAccessibleModels(candidates, hasEnt);
+      } catch (e) {
+        console.error("[api/ai] filterAccessibleModels failed:", e);
+        accessible = candidates;
+      }
       if (accessible.length === 0 && candidates.length > 0) {
         return NextResponse.json(
           { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
@@ -302,10 +314,21 @@ export async function POST(req: Request) {
     // Phase H: entitlement filter + credit reserve before execution
     const candidates = routeCandidates(task);
     const hasEnt = async (k: string, v: string) => {
-      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-      return Boolean(data);
+      try {
+        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+        return Boolean(data);
+      } catch (e) {
+        console.error("[api/ai] has_entitlement failed:", e);
+        return false;
+      }
     };
-    const accessible = await filterAccessibleModels(candidates, hasEnt);
+    let accessible = candidates;
+    try {
+      accessible = await filterAccessibleModels(candidates, hasEnt);
+    } catch (e) {
+      console.error("[api/ai] filterAccessibleModels failed:", e);
+      accessible = candidates;
+    }
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json(
         { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
@@ -379,8 +402,10 @@ export async function POST(req: Request) {
         { status: httpStatusForCode(publicError.code) }
       );
     }
-  } catch (error) {
-    console.error("api/ai route error:", error);
+  } catch (error: any) {
+    console.error("=== FATAL API ERROR ===");
+    console.error(error);
+    console.error("Message:", error?.message);
     return NextResponse.json(
       {
         success: false,

@@ -13,7 +13,7 @@ export default function Hero() {
 
   /* نقطة الدخول الحقيقية: الزائر يسجّل الأول، وبعد التسجيل يروح للـwizard
      في /assessment اللي بيجمّع بياناته وهدفه ومذكرته ويبنيله الخطة. */
-  const startHref = '/login?next=/assessment';
+  const startHref = '/welcome?next=/assessment';
 
   /* روابط النافبار: مراسي جوّه اللاندينج نفسها (تنقّل في صفحة واحدة).
      بنفس ترتيب الموكاب: الرئيسية/المميزات/كيف تعمل؟/مساعدة. */

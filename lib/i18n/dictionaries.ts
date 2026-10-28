@@ -384,6 +384,13 @@ export type Dictionary = {
   demo_err_size: string;
   demo_err_type: string;
   demo_err_network: string;
+  /* === التجارب المجانية للديمو === */
+  demo_trials_label: string;
+  demo_trials_of: string;
+  demo_trials_exhausted: string;
+  demo_register_title: string;
+  demo_register_text: string;
+  demo_register_button: string;
   /* ---- المرحلة ١: Auth & Onboarding Foundation ---- */
   welcome_title_a: string;
   welcome_title_mark: string;
@@ -795,6 +802,14 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     demo_err_size: 'الملف كبير. الحد ٤ ميجا (والصور ١ ميجا).',
     demo_err_type: 'نوع الملف ده مش مدعوم. جرّب PDF أو Word أو صورة أو نص.',
     demo_err_network: 'الاتصال اتقطع. اتأكد من النت وجرّب تاني.',
+    /* === التجارب المجانية للديمو === */
+    demo_trials_label: 'تجاربك المتبقية',
+    demo_trials_of: 'من',
+    demo_trials_exhausted: 'انتهت تجاربك المجانية.',
+    demo_register_title: 'سجّل حساب — أكمل من غير حدود',
+    demo_register_text:
+      'سجّل حساب واحصل على محادثات غير محدودة، حفظ تقدمك، والوصول لجميع الميزات.',
+    demo_register_button: 'سجّل حساب',
     /* ---- المرحلة ١: Auth & Onboarding Foundation ---- */
     welcome_title_a: 'خطة تتعلم على',
     welcome_title_mark: 'مقاسك',
@@ -1202,6 +1217,14 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     demo_err_size: 'That file is too big. Limit is 4 MB (1 MB for images).',
     demo_err_type: 'That file type is not supported. Try PDF, Word, an image, or text.',
     demo_err_network: 'Connection dropped. Check your network and try again.',
+    /* === Free demo trials === */
+    demo_trials_label: 'Trials remaining',
+    demo_trials_of: 'of',
+    demo_trials_exhausted: 'You have used all your free trials.',
+    demo_register_title: 'Create an account — continue without limits',
+    demo_register_text:
+      'Create a free account to get unlimited conversations, save your progress, and access all features.',
+    demo_register_button: 'Create an account',
     /* ---- Phase 1: Auth & Onboarding Foundation ---- */
     welcome_title_a: 'A learning plan built',
     welcome_title_mark: 'around you',

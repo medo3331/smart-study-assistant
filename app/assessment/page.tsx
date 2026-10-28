@@ -27,6 +27,7 @@ import {
   clearPendingChoice,
   getStepPrefix,
   getTracks,
+  isPersona,
   readPendingChoice,
 } from "@/lib/user-persona";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
@@ -155,7 +156,7 @@ export default function AssessmentPage() {
         if (!user) return;
         const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, education_track_id, subject").eq("id", user.id).maybeSingle();
         if (p) {
-          if (p.persona && ["student","grad","freelancer"].includes(p.persona)) setPersona(p.persona as Persona);
+          if (p.persona && isPersona(p.persona)) setPersona(p.persona);
           if (p.student_level) setStudentLevel(p.student_level as StudentLevel);
           if (p.education_stage_id) { setEduStageId(p.education_stage_id); }
           if (p.education_grade_id) { setEduGradeId(p.education_grade_id); }
@@ -326,7 +327,7 @@ export default function AssessmentPage() {
       // سطور بتتحقن من طبقة المحورين (شخصية + مستوى + مجال) — مش مسار كود منفصل
       const systemInstruction = `أنت مصمم خطط دراسية خبير. ${buildPersonaContext(persona, studentLevel, field)} هتصمم خطة من ${profile.days} خطوات بالظبط لموضوع "${subject}" في مجال "${category}"، لشخص مستواه "${LEVEL_LABEL[profile.level]}" وأسلوب تعلمه المفضل "${STYLE_LABEL[profile.style]}". رتب الخطوات من الأساسيات للأصعب تدريجيًا. رد بصيغة JSON فقط بدون أي نص إضافي أو Markdown، على شكل array بالظبط كده: [{"title":"...", "topic":"...", "description":"..."}]. الحقل title يكون قصير زي "الدرس 1"، topic عنوان الموضوع نفسه، description جملة أو اتنين شرح مختصر للمحتوى.`;
 
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -335,8 +336,17 @@ export default function AssessmentPage() {
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || "فشل الاتصال بالـ AI");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
+          (data?.error?.message as string | undefined) ||
+          (response.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "فشل الاتصال بالـ AI");
+        throw new Error(msg);
+      }
 
       const raw = data?.choices?.[0]?.message?.content || "";
       const cleaned = raw.replace(/```json|```/g, "").trim();
