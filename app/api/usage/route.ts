@@ -39,9 +39,9 @@ export async function GET(req: Request) {
     .limit(1)
     .maybeSingle();
 
-  const fallback = plan?.messages_per_2h ?? 20;
-  const dailyLimit = plan?.messages_daily ?? fallback;
-  const monthlyLimit = plan?.messages_monthly ?? (fallback * 30);
+  const fallback = (plan && plan.messages_per_2h && plan.messages_per_2h > 0) ? plan.messages_per_2h : 20;
+  const dailyLimit = (plan && plan.messages_daily && plan.messages_daily > 0) ? plan.messages_daily : fallback;
+  const monthlyLimit = (plan && plan.messages_monthly && plan.messages_monthly > 0) ? plan.messages_monthly : (fallback * 30);
 
   const dailyUsed = q?.messages_24h ?? 0;
   const monthlyUsed = q?.messages_monthly ?? 0;
