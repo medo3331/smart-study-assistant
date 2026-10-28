@@ -1,5 +1,38 @@
 @import "tailwindcss";
 
+/* ---- Cairo Arabic font (local, git-tracked in public/fonts/) ---- */
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-arabic-400-normal.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-arabic-700-normal.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-latin-400-normal.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-latin-700-normal.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ==========================================================================
    ماجيكلي — نظام التصميم
    الاتجاه: "الملزمة" — ورق دفتر بخطوط، هامش أحمر، وقلم فسفوري.
@@ -9,8 +42,8 @@
 
 :root {
   /* ---- الخطوط (بتتحمّل من next/font في layout.tsx) ---- */
-  --font-display: var(--font-display-src), "Segoe UI", sans-serif;
-  --font-body: var(--font-body-src), system-ui, sans-serif;
+  --font-display: var(--font-display-src), "Tahoma", "Segoe UI", sans-serif;
+  --font-body: var(--font-body-src), "Tahoma", system-ui, sans-serif;
   --font-mono: var(--font-mono-src), ui-monospace, monospace;
 
   /* ---- سلم الخطوط ---- */
