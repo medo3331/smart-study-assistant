@@ -7,7 +7,7 @@ import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
 import { resolveActor } from "@/lib/policy";
 import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     // fail-open                                    
     //        (owner)                                              .
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
         {
@@ -242,3 +242,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

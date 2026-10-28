@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { resolveActor } from "@/lib/policy";
+import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
 import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
 import { recordRuntimeError, createTraceId, classifyError } from "@/lib/runtime-errors";
 
@@ -21,7 +22,7 @@ export async function uploadFile(formData: FormData) {
     if (!user || user.is_anonymous) return { ok: false, message: "غير مسجل", error: "unauthenticated" };
 
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuota(user.id, "upload", actor.isOwner);
+    const quota = await checkSubscriptionQuotas(user.id, "upload", actor.isOwner);
     if (!quota.allowed) {
       return { ok: false, message: quota.reasonAr ?? "تم تجاوز حد الخدمة", error: "QUOTA_EXCEEDED" };
     }
@@ -135,3 +136,4 @@ export async function uploadFile(formData: FormData) {
     return { ok: false, message: "خطأ في رفع الملف: " + (e?.message || String(e)), error: String(e) };
   }
 }
+
