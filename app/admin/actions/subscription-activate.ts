@@ -66,7 +66,6 @@ export async function activateSubscription(
     let usedEmail = false;
 
     if (recipientEmail) {
-      // 1) profiles.email أولاً
       const { data: profileRow } = await privileged
         .from("profiles")
         .select("id")
@@ -74,8 +73,38 @@ export async function activateSubscription(
         .maybeSingle();
       recipientUserId = (profileRow as { id?: string } | null)?.id ?? null;
       usedEmail = true;
-      // 2) fallback: auth.users عبر service_role
       if (!recipientUserId) {
+        try {
+          let page = 1;
+          const perPage = 200;
+          while (!recipientUserId) {
+            const { data } = await privileged.auth.admin.listUsers({ page, perPage });
+            const users = data?.users ?? [];
+            recipientUserId = users.find((u) => (u.email ?? "").toLowerCase() === recipientEmail)?.id ?? null;
+            if (!users.length || users.length < perPage) break;
+            page++;
+            if (page > 50) break;
+          }
+        } catch { }
+      }
+    }
+    if (!recipientUserId && input.userCode) {
+      const { data: codeRow } = await privileged
+        .from("user_codes")
+        .select("user_id")
+        .eq("code", input.userCode.trim())
+        .maybeSingle();
+      recipientUserId = (codeRow as { user_id?: string } | null)?.user_id ?? null;
+      if (!recipientUserId) {
+        const { data: byPublic } = await privileged
+          .from("profiles")
+          .select("id")
+          .eq("public_user_code", input.userCode.trim())
+          .maybeSingle();
+        recipientUserId = (byPublic as { id?: string } | null)?.id ?? null;
+      }
+    }
+    if (!recipientUserId) {
         try {
           const { data } = await privileged.auth.admin.listUsers();
           recipientUserId = data.users.find((u) => (u.email ?? "").toLowerCase() === recipientEmail)?.id ?? null;
