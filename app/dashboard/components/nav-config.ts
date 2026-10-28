@@ -115,7 +115,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { id: "career", icon: "ًں’¼", label: "ط§ظ„ظ…ط³ط§ط± ط§ظ„ظ…ظ‡ظ†ظٹ", latin: "Career", href: "/dashboard/career" },
       { id: "parentReport", icon: "ًں“„", label: "طھظ‚ط±ظٹط± ط§ظ„ظ…طھط§ط¨ط¹ط©", latin: "Report", signal: "parentReport" },
-      { id: "settings", icon: "âڑ™ï¸ڈ", label: "ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ", latin: "Settings", signal: "settings" },`n      { id: "profile", icon: "P", label: "ط§ظ„ظ…ظ„ظپ ط§ظ„ط´ط®طµظٹ", latin: "Profile", href: "/dashboard/profile" },
+      { id: "settings", icon: "âڑ™ï¸ڈ", label: "ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ", latin: "Settings", signal: "settings" },
+      { id: "profile", icon: "P", label: "ط§ظ„ظ…ظ„ظپ ط§ظ„ط´ط®طµظٹ", latin: "Profile", href: "/dashboard/profile" },
     ],
   },
 ];
