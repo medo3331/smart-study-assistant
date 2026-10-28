@@ -46,6 +46,8 @@ import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
+import { resolveActor } from "@/lib/policy";
 import type { AiTaskType } from "@/lib/ai/types";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import {
@@ -166,15 +168,18 @@ export async function POST(req: Request) {
 
     // ---- Auth ----
     let isAnonymous = false;
+    let userEmail: string | null = null;
     try {
       supabase = await createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       userId = user?.id ?? null;
+      userEmail = user?.email ?? null;
       isAnonymous = Boolean(user?.is_anonymous);
     } catch {
       userId = null;
+      userEmail = null;
       isAnonymous = false;
     }
 
@@ -365,6 +370,20 @@ export async function POST(req: Request) {
       if (!agentRate.allowed) {
         const body = buildAgentRateLimitBody(agentRate);
         return NextResponse.json(body, { status: 429, headers: { "Retry-After": String(agentRate.retryAfter) } });
+      }
+    }
+
+    // ---- Phase 1: Subscription message quota (same canonical helper as /api/chat) ----
+    // Enforce before reserve so rejected quota does not consume AI credits.
+    // Anonymous guests are exempt (no authenticated UUID / plan); owners bypass via resolveActor.
+    if (userId && supabase && !isAnonymous) {
+      const actor = await resolveActor(supabase, userId, userEmail);
+      const quota = await checkSubscriptionQuotas(userId, "message", actor.isOwner);
+      if (!quota.allowed) {
+        return NextResponse.json(
+          { ok: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", code: "MESSAGE_QUOTA_EXCEEDED" },
+          { status: 429 }
+        );
       }
     }
 
@@ -613,3 +632,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "حدث خطأ غير متوقع. جرب مرة أخرى.", code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
+

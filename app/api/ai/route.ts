@@ -16,7 +16,7 @@ import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-cre
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
 import { streamWithFallback } from "@/lib/ai/streaming-fallback";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
 
 /**
  * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
 
     // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
         { error: { message: quota.reasonAr ?? "تم تجاوز حد الخدمة.", code: "QUOTA_EXCEEDED" } },
