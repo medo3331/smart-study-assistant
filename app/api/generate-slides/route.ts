@@ -1,4 +1,4 @@
-import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
+﻿import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
@@ -10,24 +10,24 @@ import { GROQ_MODELS } from "@/lib/ai-config";
 import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
 
 /* ==========================================================================
-   توليد عرض تقديمي
+   طھظˆظ„ظٹط¯ ط¹ط±ط¶ طھظ‚ط¯ظٹظ…ظٹ
 
-   بياخد موضوع (أو نص مادة كامل) وبيرجّع شرائح كـ JSON. الرندر والتصدير
-   كلهم على الكلاينت — السيرفر بيرجّع داتا بس، مفيش HTML ولا PDF بيتبنى هنا.
+   ط¨ظٹط§ط®ط¯ ظ…ظˆط¶ظˆط¹ (ط£ظˆ ظ†طµ ظ…ط§ط¯ط© ظƒط§ظ…ظ„) ظˆط¨ظٹط±ط¬ظ‘ط¹ ط´ط±ط§ط¦ط­ ظƒظ€ JSON. ط§ظ„ط±ظ†ط¯ط± ظˆط§ظ„طھطµط¯ظٹط±
+   ظƒظ„ظ‡ظ… ط¹ظ„ظ‰ ط§ظ„ظƒظ„ط§ظٹظ†طھ â€” ط§ظ„ط³ظٹط±ظپط± ط¨ظٹط±ط¬ظ‘ط¹ ط¯ط§طھط§ ط¨ط³طŒ ظ…ظپظٹط´ HTML ظˆظ„ط§ PDF ط¨ظٹطھط¨ظ†ظ‰ ظ‡ظ†ط§.
 
-   ليه JSON مش HTML؟ لأن الشرائح لازم تلبس تصميم الملزمة وتتبع لون القلم
-   اللي المستخدم مختاره. لو الموديل رجّع HTML كان هيرجّع ستايلات من دمّه
-   وهتبقى متنافرة، وكمان HTML جاي من موديل = ثغرة XSS لازم تتنضّف.
+   ظ„ظٹظ‡ JSON ظ…ط´ HTMLطں ظ„ط£ظ† ط§ظ„ط´ط±ط§ط¦ط­ ظ„ط§ط²ظ… طھظ„ط¨ط³ طھطµظ…ظٹظ… ط§ظ„ظ…ظ„ط²ظ…ط© ظˆطھطھط¨ط¹ ظ„ظˆظ† ط§ظ„ظ‚ظ„ظ…
+   ط§ظ„ظ„ظٹ ط§ظ„ظ…ط³طھط®ط¯ظ… ظ…ط®طھط§ط±ظ‡. ظ„ظˆ ط§ظ„ظ…ظˆط¯ظٹظ„ ط±ط¬ظ‘ط¹ HTML ظƒط§ظ† ظ‡ظٹط±ط¬ظ‘ط¹ ط³طھط§ظٹظ„ط§طھ ظ…ظ† ط¯ظ…ظ‘ظ‡
+   ظˆظ‡طھط¨ظ‚ظ‰ ظ…طھظ†ط§ظپط±ط©طŒ ظˆظƒظ…ط§ظ† HTML ط¬ط§ظٹ ظ…ظ† ظ…ظˆط¯ظٹظ„ = ط«ط؛ط±ط© XSS ظ„ط§ط²ظ… طھطھظ†ط¶ظ‘ظپ.
    ========================================================================== */
 
-/** حد الإدخال: الموضوع سطر، والمحتوى الملزوق ممكن يكون مادة كاملة. */
+/** ط­ط¯ ط§ظ„ط¥ط¯ط®ط§ظ„: ط§ظ„ظ…ظˆط¶ظˆط¹ ط³ط·ط±طŒ ظˆط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ظ…ظ„ط²ظˆظ‚ ظ…ظ…ظƒظ† ظٹظƒظˆظ† ظ…ط§ط¯ط© ظƒط§ظ…ظ„ط©. */
 const MAX_TOPIC_CHARS = 200;
 const MAX_SOURCE_CHARS = 6000;
 
 const MIN_SLIDES = 4;
 const MAX_SLIDES = 14;
 
-/** شكل الشريحة اللي بنضمنه للكلاينت. */
+/** ط´ظƒظ„ ط§ظ„ط´ط±ظٹط­ط© ط§ظ„ظ„ظٹ ط¨ظ†ط¶ظ…ظ†ظ‡ ظ„ظ„ظƒظ„ط§ظٹظ†طھ. */
 interface Slide {
   title: string;
   bullets: string[];
@@ -36,9 +36,9 @@ interface Slide {
 }
 
 /**
- * تنضيف شريحة واحدة جايّة من الموديل.
- * الموديل بيهلوس في الشكل كتير: bullets تيجي string واحدة، أو
- * code ييجي object، أو حقول ناقصة. الكلاينت مش المفروض يشوف ده.
+ * طھظ†ط¶ظٹظپ ط´ط±ظٹط­ط© ظˆط§ط­ط¯ط© ط¬ط§ظٹظ‘ط© ظ…ظ† ط§ظ„ظ…ظˆط¯ظٹظ„.
+ * ط§ظ„ظ…ظˆط¯ظٹظ„ ط¨ظٹظ‡ظ„ظˆط³ ظپظٹ ط§ظ„ط´ظƒظ„ ظƒطھظٹط±: bullets طھظٹط¬ظٹ string ظˆط§ط­ط¯ط©طŒ ط£ظˆ
+ * code ظٹظٹط¬ظٹ objectطŒ ط£ظˆ ط­ظ‚ظˆظ„ ظ†ط§ظ‚طµط©. ط§ظ„ظƒظ„ط§ظٹظ†طھ ظ…ط´ ط§ظ„ظ…ظپط±ظˆط¶ ظٹط´ظˆظپ ط¯ظ‡.
  */
 function coerceSlide(raw: unknown): Slide | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -47,26 +47,26 @@ function coerceSlide(raw: unknown): Slide | null {
   const title = typeof o.title === "string" ? o.title.trim().slice(0, 120) : "";
   if (!title) return null;
 
-  // bullets: ممكن تيجي array أو نص فيه أسطر
+  // bullets: ظ…ظ…ظƒظ† طھظٹط¬ظٹ array ط£ظˆ ظ†طµ ظپظٹظ‡ ط£ط³ط·ط±
   let bullets: string[] = [];
   if (Array.isArray(o.bullets)) {
     bullets = o.bullets
       .filter((b): b is string => typeof b === "string")
-      .map((b) => b.trim().replace(/^[-*•]\s*/, ""))
+      .map((b) => b.trim().replace(/^[-*â€¢]\s*/, ""))
       .filter(Boolean)
       .slice(0, 5)
       .map((b) => b.slice(0, 220));
   } else if (typeof o.bullets === "string") {
     bullets = o.bullets
       .split("\n")
-      .map((b) => b.trim().replace(/^[-*•]\s*/, ""))
+      .map((b) => b.trim().replace(/^[-*â€¢]\s*/, ""))
       .filter(Boolean)
       .slice(0, 5);
   }
 
   const note = typeof o.note === "string" ? o.note.trim().slice(0, 400) : "";
 
-  // الكود: بنشيل سياج الماركداون لو الموديل حطّه جوه القيمة
+  // ط§ظ„ظƒظˆط¯: ط¨ظ†ط´ظٹظ„ ط³ظٹط§ط¬ ط§ظ„ظ…ط§ط±ظƒط¯ط§ظˆظ† ظ„ظˆ ط§ظ„ظ…ظˆط¯ظٹظ„ ط­ط·ظ‘ظ‡ ط¬ظˆظ‡ ط§ظ„ظ‚ظٹظ…ط©
   let code: string | null = null;
   if (typeof o.code === "string" && o.code.trim()) {
     code = o.code
@@ -76,7 +76,7 @@ function coerceSlide(raw: unknown): Slide | null {
       .slice(0, 900);
   }
 
-  // شريحة بعنوان بس من غير أي محتوى مالهاش لازمة
+  // ط´ط±ظٹط­ط© ط¨ط¹ظ†ظˆط§ظ† ط¨ط³ ظ…ظ† ط؛ظٹط± ط£ظٹ ظ…ط­طھظˆظ‰ ظ…ط§ظ„ظ‡ط§ط´ ظ„ط§ط²ظ…ط©
   if (bullets.length === 0 && !code && !note) return null;
 
   return { title, bullets, note, code };
@@ -91,17 +91,16 @@ export async function POST(req: Request) {
     __hUser = user; __hSupabase = supabase;
     if (authError) return authError;
 
-    // نفس حد توليد الخطة — الطلب ده بيطلع توكنز كتير في نداء واحد
+    // ظ†ظپط³ ط­ط¯ طھظˆظ„ظٹط¯ ط§ظ„ط®ط·ط© â€” ط§ظ„ط·ظ„ط¨ ط¯ظ‡ ط¨ظٹط·ظ„ط¹ طھظˆظƒظ†ط² ظƒطھظٹط± ظپظٹ ظ†ط¯ط§ط، ظˆط§ط­ط¯
     const limited = checkRateLimit(`slides:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
 
-    // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
+    // ط§ظ„ظƒظˆطھط© ط§ظ„ظ…ط±ظƒط²ظٹط© + ط§ظ„ظ…ظپطھط§ط­ ط§ظ„ط°ظƒظٹ ط§ظ„ظپط±ظٹط¯ (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
-    const quota = await checkSubscriptionQuota(user.id, "message");
     if (!quota.allowed) {
       return NextResponse.json(
-        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
+        { success: false, error: quota.reasonAr ?? "طھظ… طھط¬ط§ظˆط² ط­ط¯ ط±ط³ط§ظٹظ„ ط§ظ„ط¨ط§ظ‚ط©." },
         { status: 429 }
       );
     }
@@ -111,7 +110,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { success: false, error: "البيانات المبعوتة غير صالحة." },
+        { success: false, error: "ط§ظ„ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط¨ط¹ظˆطھط© ط؛ظٹط± طµط§ظ„ط­ط©." },
         { status: 400 }
       );
     }
@@ -122,7 +121,7 @@ export async function POST(req: Request) {
 
     if (!topic) {
       return NextResponse.json(
-        { success: false, error: "اكتب موضوع العرض الأول." },
+        { success: false, error: "ط§ظƒطھط¨ ظ…ظˆط¶ظˆط¹ ط§ظ„ط¹ط±ط¶ ط§ظ„ط£ظˆظ„." },
         { status: 400 }
       );
     }
@@ -134,32 +133,32 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.GROQ_API_KEY?.trim();
     if (!apiKey) {
-      console.error("generate-slides: GROQ_API_KEY غير معرف");
+      console.error("generate-slides: GROQ_API_KEY ط؛ظٹط± ظ…ط¹ط±ظپ");
       await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? "");
       return NextResponse.json(
-        { success: false, error: "الخدمة غير متاحة حالياً." },
+        { success: false, error: "ط§ظ„ط®ط¯ظ…ط© ط؛ظٹط± ظ…طھط§ط­ط© ط­ط§ظ„ظٹط§ظ‹." },
         { status: 503 }
       );
     }
 
     const groq = new Groq({ apiKey });
 
-    const system = `أنت بتجهّز عرض تقديمي تعليمي. أخرج JSON فقط.
+    const system = `ط£ظ†طھ ط¨طھط¬ظ‡ظ‘ط² ط¹ط±ط¶ طھظ‚ط¯ظٹظ…ظٹ طھط¹ظ„ظٹظ…ظٹ. ط£ط®ط±ط¬ JSON ظپظ‚ط·.
 
-الشكل المطلوب بالحرف:
-{"slides":[{"title":"عنوان قصير","bullets":["نقطة","نقطة"],"note":"كلام المتحدث","code":"كود أو null"}]}
+ط§ظ„ط´ظƒظ„ ط§ظ„ظ…ط·ظ„ظˆط¨ ط¨ط§ظ„ط­ط±ظپ:
+{"slides":[{"title":"ط¹ظ†ظˆط§ظ† ظ‚طµظٹط±","bullets":["ظ†ظ‚ط·ط©","ظ†ظ‚ط·ط©"],"note":"ظƒظ„ط§ظ… ط§ظ„ظ…طھط­ط¯ط«","code":"ظƒظˆط¯ ط£ظˆ null"}]}
 
-قواعد لازم تتبعها:
-- اكتب بالعربية المصرية البسيطة، والمصطلحات التقنية سيبها بالإنجليزية زي ما هي.
-- كل شريحة: من نقطتين لأربع نقط بالكتير. كل نقطة سطر واحد قصير — دي شريحة عرض مش صفحة كتاب.
-- "note" = اللي المتحدث بيقوله شرحاً للشريحة، سطرين على الأكثر.
-- "code" = مقتطف حرفي صغير لو الشريحة محتاجاه (كود، معادلة، تعريف، جملة بلغة أجنبية)، وإلا null. من غير سياج \`\`\`. أقصى ١٢ سطر. للمواد اللي مالهاش مقتطفات حرفية سيبه null دايماً.
-- أول شريحة مقدمة للموضوع، وآخر شريحة خلاصة أو الخطوة اللي بعدها.
-- ممنوع تكرار نفس النقطة في أكتر من شريحة.`;
+ظ‚ظˆط§ط¹ط¯ ظ„ط§ط²ظ… طھطھط¨ط¹ظ‡ط§:
+- ط§ظƒطھط¨ ط¨ط§ظ„ط¹ط±ط¨ظٹط© ط§ظ„ظ…طµط±ظٹط© ط§ظ„ط¨ط³ظٹط·ط©طŒ ظˆط§ظ„ظ…طµط·ظ„ط­ط§طھ ط§ظ„طھظ‚ظ†ظٹط© ط³ظٹط¨ظ‡ط§ ط¨ط§ظ„ط¥ظ†ط¬ظ„ظٹط²ظٹط© ط²ظٹ ظ…ط§ ظ‡ظٹ.
+- ظƒظ„ ط´ط±ظٹط­ط©: ظ…ظ† ظ†ظ‚ط·طھظٹظ† ظ„ط£ط±ط¨ط¹ ظ†ظ‚ط· ط¨ط§ظ„ظƒطھظٹط±. ظƒظ„ ظ†ظ‚ط·ط© ط³ط·ط± ظˆط§ط­ط¯ ظ‚طµظٹط± â€” ط¯ظٹ ط´ط±ظٹط­ط© ط¹ط±ط¶ ظ…ط´ طµظپط­ط© ظƒطھط§ط¨.
+- "note" = ط§ظ„ظ„ظٹ ط§ظ„ظ…طھط­ط¯ط« ط¨ظٹظ‚ظˆظ„ظ‡ ط´ط±ط­ط§ظ‹ ظ„ظ„ط´ط±ظٹط­ط©طŒ ط³ط·ط±ظٹظ† ط¹ظ„ظ‰ ط§ظ„ط£ظƒط«ط±.
+- "code" = ظ…ظ‚طھط·ظپ ط­ط±ظپظٹ طµط؛ظٹط± ظ„ظˆ ط§ظ„ط´ط±ظٹط­ط© ظ…ط­طھط§ط¬ط§ظ‡ (ظƒظˆط¯طŒ ظ…ط¹ط§ط¯ظ„ط©طŒ طھط¹ط±ظٹظپطŒ ط¬ظ…ظ„ط© ط¨ظ„ط؛ط© ط£ط¬ظ†ط¨ظٹط©)طŒ ظˆط¥ظ„ط§ null. ظ…ظ† ط؛ظٹط± ط³ظٹط§ط¬ \`\`\`. ط£ظ‚طµظ‰ ظ،ظ¢ ط³ط·ط±. ظ„ظ„ظ…ظˆط§ط¯ ط§ظ„ظ„ظٹ ظ…ط§ظ„ظ‡ط§ط´ ظ…ظ‚طھط·ظپط§طھ ط­ط±ظپظٹط© ط³ظٹط¨ظ‡ null ط¯ط§ظٹظ…ط§ظ‹.
+- ط£ظˆظ„ ط´ط±ظٹط­ط© ظ…ظ‚ط¯ظ…ط© ظ„ظ„ظ…ظˆط¶ظˆط¹طŒ ظˆط¢ط®ط± ط´ط±ظٹط­ط© ط®ظ„ط§طµط© ط£ظˆ ط§ظ„ط®ط·ظˆط© ط§ظ„ظ„ظٹ ط¨ط¹ط¯ظ‡ط§.
+- ظ…ظ…ظ†ظˆط¹ طھظƒط±ط§ط± ظ†ظپط³ ط§ظ„ظ†ظ‚ط·ط© ظپظٹ ط£ظƒطھط± ظ…ظ† ط´ط±ظٹط­ط©.`;
 
     const userPrompt = source
-      ? `اعمل عرض من ${slideCount} شرايح عن "${topic}"، مبني على المحتوى ده:\n\n${source}`
-      : `اعمل عرض من ${slideCount} شرايح عن "${topic}".`;
+      ? `ط§ط¹ظ…ظ„ ط¹ط±ط¶ ظ…ظ† ${slideCount} ط´ط±ط§ظٹط­ ط¹ظ† "${topic}"طŒ ظ…ط¨ظ†ظٹ ط¹ظ„ظ‰ ط§ظ„ظ…ط­طھظˆظ‰ ط¯ظ‡:\n\n${source}`
+      : `ط§ط¹ظ…ظ„ ط¹ط±ط¶ ظ…ظ† ${slideCount} ط´ط±ط§ظٹط­ ط¹ظ† "${topic}".`;
 
     const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "slides" });
     // C4 (shadow): one event per ACTUAL provider request (this route has no loop -> attemptNo 0).
@@ -177,7 +176,7 @@ export async function POST(req: Request) {
       .catch(async (err) => {
         // C4.1: the provider request itself failed -> no response at all.
         // Rethrow so the route keeps its EXACT existing error behaviour.
-        // ⚠️ `async` + `await`: land the write BEFORE the rethrow.
+        // âڑ ï¸ڈ `async` + `await`: land the write BEFORE the rethrow.
         await recordDirectProviderAttempt({
           usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced,
           status: "failed_no_response", latencyMs: doneMs(),
@@ -190,7 +189,7 @@ export async function POST(req: Request) {
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       return NextResponse.json(
-        { success: false, error: "مرجعش أي محتوى. حاول تاني." },
+        { success: false, error: "ظ…ط±ط¬ط¹ط´ ط£ظٹ ظ…ط­طھظˆظ‰. ط­ط§ظˆظ„ طھط§ظ†ظٹ." },
         { status: 502 }
       );
     }
@@ -199,18 +198,18 @@ export async function POST(req: Request) {
     try {
       parsed = JSON.parse(rawContent);
     } catch {
-      console.error("generate-slides: JSON مكسور من الموديل");
+      console.error("generate-slides: JSON ظ…ظƒط³ظˆط± ظ…ظ† ط§ظ„ظ…ظˆط¯ظٹظ„");
       return NextResponse.json(
-        { success: false, error: "الرد جه بشكل غير مفهوم. حاول تاني." },
+        { success: false, error: "ط§ظ„ط±ط¯ ط¬ظ‡ ط¨ط´ظƒظ„ ط؛ظٹط± ظ…ظپظ‡ظˆظ…. ط­ط§ظˆظ„ طھط§ظ†ظٹ." },
         { status: 502 }
       );
     }
 
     const rawSlides = (parsed as Record<string, unknown>)?.slides;
     if (!Array.isArray(rawSlides)) {
-      console.error("generate-slides: رد بدون مصفوفة slides");
+      console.error("generate-slides: ط±ط¯ ط¨ط¯ظˆظ† ظ…طµظپظˆظپط© slides");
       return NextResponse.json(
-        { success: false, error: "مقدرتش أبني العرض. حاول تاني." },
+        { success: false, error: "ظ…ظ‚ط¯ط±طھط´ ط£ط¨ظ†ظٹ ط§ظ„ط¹ط±ط¶. ط­ط§ظˆظ„ طھط§ظ†ظٹ." },
         { status: 502 }
       );
     }
@@ -222,7 +221,7 @@ export async function POST(req: Request) {
 
     if (slides.length === 0) {
       return NextResponse.json(
-        { success: false, error: "الشرايح رجعت فاضية. جرّب توضّح الموضوع أكتر." },
+        { success: false, error: "ط§ظ„ط´ط±ط§ظٹط­ ط±ط¬ط¹طھ ظپط§ط¶ظٹط©. ط¬ط±ظ‘ط¨ طھظˆط¶ظ‘ط­ ط§ظ„ظ…ظˆط¶ظˆط¹ ط£ظƒطھط±." },
         { status: 502 }
       );
     }
@@ -237,11 +236,12 @@ export async function POST(req: Request) {
       {
         success: false,
         error: isRate
-          ? "الخدمة مشغولة دلوقتي. حاول تاني بعد دقيقة."
-          : "حصل خطأ أثناء توليد العرض. حاول تاني.",
+          ? "ط§ظ„ط®ط¯ظ…ط© ظ…ط´ط؛ظˆظ„ط© ط¯ظ„ظˆظ‚طھظٹ. ط­ط§ظˆظ„ طھط§ظ†ظٹ ط¨ط¹ط¯ ط¯ظ‚ظٹظ‚ط©."
+          : "ط­طµظ„ ط®ط·ط£ ط£ط«ظ†ط§ط، طھظˆظ„ظٹط¯ ط§ظ„ط¹ط±ط¶. ط­ط§ظˆظ„ طھط§ظ†ظٹ.",
       },
       { status: isRate ? 429 : 500 }
     );
   }
 }
+
 
