@@ -8,7 +8,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
 import { resolveActor } from "@/lib/policy";
 
-export interface SubscriptionStatus {
+interface SubscriptionStatus {
   user_id: string;
   user_email: string | null;
   user_display_name: string | null;
@@ -114,7 +114,7 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
 };
 }
 
-export interface ResetQuotaResult { ok: boolean; message: string; }
+interface ResetQuotaResult { ok: boolean; message: string; }
 
 
 export async function resetSubscriptionQuota(
@@ -156,7 +156,7 @@ export async function resetSubscriptionQuota(
   }
 }
 
-export interface RevokeSubscriptionResult { ok: boolean; message: string; }
+interface RevokeSubscriptionResult { ok: boolean; message: string; }
 
 export async function revokeSubscription(
   userIdOrCode: string,
@@ -232,7 +232,7 @@ export async function revokeSubscription(
 // + تمديد entitlements.expires_at + تسجيل audit_log إلزامي)
 // ============================================================
 
-export interface ExtendSubscriptionResult {
+interface ExtendSubscriptionResult {
   ok: boolean;
   message: string;
   previousExpiry: string | null;
