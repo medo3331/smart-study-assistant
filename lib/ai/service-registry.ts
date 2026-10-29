@@ -41,11 +41,11 @@ export const SERVICE_REGISTRY: Record<AiServiceId, ServiceDefinition> = {
   image: {
     id: "image",
     labelAr: "توليد الصور التعليمية",
-    // الصور بقت متاحة مجانًا عبر مزوّد Pollinations المجاني؛ الباقات
-    // المدفوعة بتزوّد الحد وتفتح الموديلات الأعلى جودة.
-    dailyLimits: { free: 3, pro: 5, ultra: UNLIMITED },
+    // الصور متاحة فقط لمشتركي Premium (Pro/Ultra/plan:premium).
+    // الخطة المجانية لا تملك صلاحية توليد صور.
+    dailyLimits: { free: 0, pro: 5, ultra: UNLIMITED },
     upgradeHintAr:
-      "باقة Pro بتديك 5 صور يوميًا بموديلات أعلى، وباقة Ultra بلا حدود.",
+      "توليد الصور متاح فقط لمشتركي Premium. قم بالترقية لباقة Pro أو Ultra للوصول.",
   },
   diagram: {
     id: "diagram",
@@ -84,7 +84,7 @@ export const SERVICE_REGISTRY: Record<AiServiceId, ServiceDefinition> = {
  * بيتفتحوا حسب الباقة.
  */
 export const IMAGE_MODELS_BY_TIER: Record<ServiceTier, ImageModel[]> = {
-  free: ["pollinations"],
+  free: [],
   pro: ["pollinations", "stable-diffusion-xl"],
   ultra: ["dall-e-3", "flux-pro", "pollinations", "stable-diffusion-xl"],
 };

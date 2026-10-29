@@ -251,7 +251,7 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                           {lecture.transcript_text && (
                             <Link
                               href={`/lectures/${lecture.id}/review`}
-                              className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-500/20 dark:text-indigo-300"
+                              className="rounded-xl border border-[var(--rule)] bg-[color-mix(in_srgb,var(--color-interactive)_10%,transparent)] px-3 py-1.5 text-xs font-semibold text-[var(--color-interactive)] hover:bg-[color-mix(in_srgb,var(--color-interactive)_18%,transparent)]"
                             >
                               مراجعة النص
                             </Link>

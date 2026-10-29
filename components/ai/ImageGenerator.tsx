@@ -6,7 +6,7 @@
  * فورم بسيط: وصف الصورة + الأسلوب + الحجم + الموديل + المرحلة،
  * ويضرب /api/ai/image ويعرض النتيجة مع زر تحميل.
  */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Download, ImageIcon, LoaderCircle, Sparkles, AlertTriangle } from "lucide-react";
 
 const STYLES = [
@@ -51,6 +51,23 @@ export function ImageGenerator({ defaultSubject }: ImageGeneratorProps) {
     model: string;
     revisedPrompt?: string;
   } | null>(null);
+  const [premium, setPremium] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me/plan-quota")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        setPremium((d?.tier ?? "free") !== "free");
+      })
+      .catch(() => {
+        if (!cancelled) setPremium(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const generate = async () => {
     if (prompt.trim().length < 3 || loading) return;
@@ -110,6 +127,28 @@ export function ImageGenerator({ defaultSubject }: ImageGeneratorProps) {
       window.open(result.url, "_blank");
     }
   };
+
+  if (premium === null) {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-400" dir="rtl">
+        جاري التحقق من صلاحية الباقة...
+      </div>
+    );
+  }
+
+  if (!premium) {
+    return (
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-5 space-y-2" dir="rtl">
+        <div className="flex items-center gap-2 text-sm font-bold text-amber-300">
+          <AlertTriangle className="h-4 w-4" />
+          توليد الصور متاح فقط لمشتركي Premium
+        </div>
+        <p className="text-xs text-slate-300">
+          قم بالترقية إلى باقة Pro أو Ultra للوصول إلى ميزة توليد الصور التعليمية.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 space-y-4" dir="rtl">

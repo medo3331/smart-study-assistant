@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageShell, EmptyState, LoadingSheets, DataNotice, usePenTheme } from "../components/PageShell";
+import { Button } from "@/components/ui/Button";
 import { useAuthUser, formatArabicDate } from "../components/use-page-data";
 import { THEME_STYLES } from "../components/theme-helpers";
 import {
@@ -133,9 +134,9 @@ export default function CoursesPage() {
   const effectiveActiveId = activeId && courses.some((c) => c.id === activeId) ? activeId : courses[0]?.id ?? null;
 
   const newCourseButton = (
-    <button onClick={() => router.push("/assessment")} className="btn btn-marker text-sm">
+    <Button variant="primary" onClick={() => router.push("/assessment")}>
       تراك جديد
-    </button>
+    </Button>
   );
 
   return (
@@ -190,17 +191,18 @@ export default function CoursesPage() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     {!isActive && (
-                      <button onClick={() => handleOpen(course)} className="btn btn-marker text-sm">
+                      <Button variant="primary" onClick={() => handleOpen(course)}>
                         افتحه
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      onClick={() => handleDelete(course)}
+                    <Button
+                      variant="danger"
                       disabled={busyId === course.id}
-                      className="mono text-ink-soft hover:text-redpen px-2 py-1.5 rounded-[6px] transition disabled:opacity-50"
+                      loading={busyId === course.id}
+                      onClick={() => handleDelete(course)}
                     >
                       {busyId === course.id ? "بيشيل…" : "شيله"}
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
