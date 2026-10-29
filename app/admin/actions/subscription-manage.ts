@@ -192,19 +192,6 @@ export async function revokeSubscription(
     return { ok: false, message: "خطأ غير متوقع: " + (e?.message || String(e)) };
   }
 }
-      entitlement_kind: (entitlementRow as any)?.kind || null,
-      entitlement_value: (entitlementRow as any)?.value || null,
-      messages_24h: (quotaRow as any)?.messages_24h || 0,
-      uploads_today: (quotaRow as any)?.uploads_today || 0,
-      message_limit: messageLimit,
-      upload_limit: uploadLimit,
-      quota_updated_at: (quotaRow as any)?.updated_at || null,
-    };
-  } catch (e: any) {
-    console.error("[subscription-manage] Error:", e?.message || e);
-    return null;
-  }
-}
 
 // ============================================================
 // Phase 4.5 — تمديد اشتراك فعلي (كتب في subscription_activations
