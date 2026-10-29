@@ -122,6 +122,9 @@ export default function Hero() {
             <Link href={startHref} className={styles.btnPrimary}>
               {t.hero_cta}
             </Link>
+            <Link href="/demo" className={styles.btnGhost}>
+              جرّب Magicly
+            </Link>
             <Link href="/features" className={styles.btnGhost}>
               {t.hero_cta_secondary}
             </Link>

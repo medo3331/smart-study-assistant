@@ -62,7 +62,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     title: "التعلم",
     items: [
       { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
-      { id: "subjects", icon: "📖", label: "المواد", latin: "Subjects", href: "/subjects" },
+      { id: "subjects", icon: "📖", label: "المواد", latin: "Subjects", href: "/dashboard/courses" },
       { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
       { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
       { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
