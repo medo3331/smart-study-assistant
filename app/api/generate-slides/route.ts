@@ -1,4 +1,4 @@
-﻿import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
+import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
@@ -7,7 +7,7 @@ import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
-import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /* ==========================================================================
    توليد عرض تقديمي
@@ -52,14 +52,14 @@ function coerceSlide(raw: unknown): Slide | null {
   if (Array.isArray(o.bullets)) {
     bullets = o.bullets
       .filter((b): b is string => typeof b === "string")
-      .map((b) => b.trim().replace(/^[-*�¢]\s*/, ""))
+      .map((b) => b.trim().replace(/^[-*•]\s*/, ""))
       .filter(Boolean)
       .slice(0, 5)
       .map((b) => b.slice(0, 220));
   } else if (typeof o.bullets === "string") {
     bullets = o.bullets
       .split("\n")
-      .map((b) => b.trim().replace(/^[-*�¢]\s*/, ""))
+      .map((b) => b.trim().replace(/^[-*•]\s*/, ""))
       .filter(Boolean)
       .slice(0, 5);
   }
@@ -97,14 +97,15 @@ export async function POST(req: Request) {
 
     // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد الخدمة.", retryable: false },
         { status: 429 }
       );
     }
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 5 });
+
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
@@ -176,7 +177,7 @@ export async function POST(req: Request) {
       .catch(async (err) => {
         // C4.1: the provider request itself failed -> no response at all.
         // Rethrow so the route keeps its EXACT existing error behaviour.
-        // âڑ ï¸ڈ `async` + `await`: land the write BEFORE the rethrow.
+        // ⚠️ `async` + `await`: land the write BEFORE the rethrow.
         await recordDirectProviderAttempt({
           usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced,
           status: "failed_no_response", latencyMs: doneMs(),
@@ -188,6 +189,7 @@ export async function POST(req: Request) {
     await recordDirectProviderAttempt({ usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       return NextResponse.json(
         { success: false, error: "مرجعش أي محتوى. حاول تاني." },
         { status: 502 }
@@ -243,5 +245,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
-

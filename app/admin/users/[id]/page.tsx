@@ -160,6 +160,21 @@ export default async function AdminUserDetailsPage({
                 </div>
               </div>
               <div className="flex items-start gap-2">
+                <MessageSquare size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <dt className="text-slate-500">الحصص الحالية (24h/يوم)</dt>
+                  <dd className="text-slate-200">
+                    {consumption?.quota ? (
+                      <>
+                        رسائل: {consumption.quota.messages_24h}
+                        {consumption.quota.message_limit != null ? ` / ${consumption.quota.message_limit}` : ""} · رفعات: {consumption.quota.uploads_today}
+                        {consumption.quota.upload_limit != null ? ` / ${consumption.quota.upload_limit}` : ""}
+                      </>
+                    ) : "N/A — غير قابل للتحقق من هنا"}
+                  </dd>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
                 <Crown size={15} className="text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <dt className="text-slate-500">الخطة الحالية (entitlements)</dt>

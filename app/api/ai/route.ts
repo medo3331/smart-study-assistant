@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { resolveActor } from "@/lib/policy";
@@ -16,7 +16,7 @@ import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-cre
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
 import { streamWithFallback } from "@/lib/ai/streaming-fallback";
-import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /**
  * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
@@ -111,10 +111,10 @@ export async function POST(req: Request) {
 
     // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", retryable: false } },
+        { error: { message: quota.reasonAr ?? "تم تجاوز حد الخدمة.", code: "QUOTA_EXCEEDED" } },
         { status: 429 }
       );
     }
@@ -250,21 +250,10 @@ export async function POST(req: Request) {
       // Phase H: credit/entitlement gate even for streaming (same cost)
       const candidates = routeCandidates(task);
       const hasEnt = async (k: string, v: string) => {
-        try {
-          const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-          return Boolean(data);
-        } catch (e) {
-          console.error("[api/ai] has_entitlement failed:", e);
-          return false;
-        }
+        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+        return Boolean(data);
       };
-      let accessible = candidates;
-      try {
-        accessible = await filterAccessibleModels(candidates, hasEnt);
-      } catch (e) {
-        console.error("[api/ai] filterAccessibleModels failed:", e);
-        accessible = candidates;
-      }
+      const accessible = await filterAccessibleModels(candidates, hasEnt);
       if (accessible.length === 0 && candidates.length > 0) {
         return NextResponse.json(
           { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
@@ -294,6 +283,7 @@ export async function POST(req: Request) {
             send({ type: "error", error: publicError });
           } finally {
             if (streamFailed) await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+            if (streamFailed) await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           }
@@ -313,21 +303,10 @@ export async function POST(req: Request) {
     // Phase H: entitlement filter + credit reserve before execution
     const candidates = routeCandidates(task);
     const hasEnt = async (k: string, v: string) => {
-      try {
-        const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-        return Boolean(data);
-      } catch (e) {
-        console.error("[api/ai] has_entitlement failed:", e);
-        return false;
-      }
+      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
+      return Boolean(data);
     };
-    let accessible = candidates;
-    try {
-      accessible = await filterAccessibleModels(candidates, hasEnt);
-    } catch (e) {
-      console.error("[api/ai] filterAccessibleModels failed:", e);
-      accessible = candidates;
-    }
+    const accessible = await filterAccessibleModels(candidates, hasEnt);
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json(
         { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
@@ -386,6 +365,7 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       const publicError = toAiPublicError(error);
       void recordAiOperation(supabase, {
         userId: user.id,
@@ -401,10 +381,8 @@ export async function POST(req: Request) {
         { status: httpStatusForCode(publicError.code) }
       );
     }
-  } catch (error: any) {
-    console.error("=== FATAL API ERROR ===");
-    console.error(error);
-    console.error("Message:", error?.message);
+  } catch (error) {
+    console.error("api/ai route error:", error);
     return NextResponse.json(
       {
         success: false,
@@ -414,4 +392,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-﻿import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
@@ -7,7 +7,7 @@ import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
-import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /** أقصى طول لأي حقل نصي جاي من الكلاينت. */
 const MAX_FIELD_CHARS = 200;
@@ -40,15 +40,16 @@ export async function POST(req: Request) {
 
     // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
-    const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
+    const quota = await checkSubscriptionQuota(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { success: false, error: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة." },
+        { success: false, error: quota.reasonAr ?? "تم تجاوز حد الخدمة.", retryable: false },
         { status: 429 }
       );
     }
+
     // Phase H: 1 credit gate (free model, but still costs 1 credit)
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", { cost: 5 });
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
@@ -162,6 +163,7 @@ export async function POST(req: Request) {
 
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       throw lastError || new Error("فشلت جميع المفاتيح المتاحة في الاتصال بالخدمة.");
     }
 
@@ -223,5 +225,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
-
