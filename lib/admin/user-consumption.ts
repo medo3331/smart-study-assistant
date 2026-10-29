@@ -28,6 +28,14 @@ export interface UserPlanRow {
   expires_at: string | null;
 }
 
+export interface UserQuotaRow {
+  messages_24h: number;
+  uploads_today: number;
+  updated_at: string | null;
+  message_limit: number | null;
+  upload_limit: number | null;
+}
+
 export interface UserConsumption {
   /** عدد ملفات المستخدم */
   filesCount: number | null;
@@ -41,6 +49,8 @@ export interface UserConsumption {
   activeSubscription: UserSubscriptionRow | null;
   /** الخطة النشطة حاليًا من entitlements (premium/trial) أو null = free */
   currentPlan: UserPlanRow | null;
+  /** حصة الرسائل/الرفع (subscription_quotas + plan limits) أو null = غير متاح */
+  quota: UserQuotaRow | null;
   /** أسباب أي رقم N/A — بتتعرض في الواجهة بدل الصمت */
   errors: string[];
 }
@@ -54,6 +64,7 @@ export async function getUserConsumption(userId: string): Promise<UserConsumptio
     creditsBalance: null,
     activeSubscription: null,
     currentPlan: null,
+    quota: null,
     errors,
   };
 
@@ -142,6 +153,39 @@ export async function getUserConsumption(userId: string): Promise<UserConsumptio
     }
   } catch {
     errors.push("الخطة الحالية: جدول entitlements غير متاح.");
+  }
+
+  // 5) حصة المستخدم (subscription_quotas + limits من subscription_plans)
+  try {
+    const [q] = await pgQuery<{ messages_24h: string; uploads_today: string; updated_at: string | null }>(
+      `SELECT messages_24h::text, uploads_today::text, updated_at::text
+         FROM public.subscription_quotas WHERE user_id = $1`,
+      [userId]
+    );
+    if (q) {
+      const planKey = out.currentPlan?.value || out.activeSubscription?.plan_key || "free";
+      let messageLimit: number | null = null;
+      let uploadLimit: number | null = null;
+      try {
+        const [p] = await pgQuery<{ messages_per_day: number | null; uploads_per_day: number | null }>(
+          `SELECT messages_per_day, uploads_per_day FROM public.subscription_plans WHERE plan_key = $1`,
+          [planKey]
+        );
+        if (p) {
+          messageLimit = p.messages_per_day ?? null;
+          uploadLimit = p.uploads_per_day ?? null;
+        }
+      } catch { /* limits optional */ }
+      out.quota = {
+        messages_24h: parseInt(q.messages_24h || "0", 10),
+        uploads_today: parseInt(q.uploads_today || "0", 10),
+        updated_at: q.updated_at,
+        message_limit: messageLimit,
+        upload_limit: uploadLimit,
+      };
+    }
+  } catch {
+    errors.push("الحصص: جدول subscription_quotas غير متاح.");
   }
 
   return out;

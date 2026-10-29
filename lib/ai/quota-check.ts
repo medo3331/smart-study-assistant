@@ -28,6 +28,9 @@ export interface QuotaCheckResult {
   resetAt: string | null;
   reasonAr?: string;
   /** true إذا تم تجاوز الفحص لأن المستخدم مالك (بypass للحدود الداخلية) */
+  /** مفتاح العنفة (idempotency key) للطلب — يُستخدم لاسترداد كوتة الاشتراك عند الفشل. */
+  idempotencyKey?: string;
+
   ownerBypass?: boolean;
 }
 
@@ -161,6 +164,7 @@ export async function checkSubscriptionQuota(
       used,
       limit,
       resetAt,
+      idempotencyKey,
       ...(result.already_consumed ? { reasonAr: "تم استهلاك هذه الكوتا سابقًا (عنفة مكررة)" } : undefined),
     };
   } catch (e) {
@@ -192,5 +196,29 @@ export async function checkSubscriptionQuota(
       resetAt: null,
       reasonAr: "نظام الكوتة غير متاح حاليًا. حاول مرة أخرى لاحقًا.",
     };
+  }
+}
+/**
+ * استرداد كوتة الاشتراك (transactional) — no-op if already refunded or never consumed.
+ * يعتمد على RPC public.refund_subscription_quota (migration NOT EXECUTED yet).
+ */
+export async function refundSubscriptionQuota(
+  userId: string,
+  kind: QuotaKind,
+  idempotencyKey?: string | null
+): Promise<void> {
+  if (!idempotencyKey) return;
+  try {
+    const privileged = createServiceClient();
+    const { error } = await privileged.rpc("refund_subscription_quota", {
+      p_user_id: userId,
+      p_kind: kind,
+      p_idempotency_key: idempotencyKey,
+    } as unknown as { p_user_id: string; p_kind: string; p_idempotency_key: string });
+    if (error) {
+      console.warn("refundSubscriptionQuota failed:", error.message);
+    }
+  } catch (e) {
+    console.warn("refundSubscriptionQuota exception:", (e as { message?: string })?.message || String(e));
   }
 }

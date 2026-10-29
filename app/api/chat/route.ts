@@ -7,7 +7,7 @@ import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 import { resolveActor } from "@/lib/policy";
 import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
@@ -145,6 +145,7 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       if (!(error instanceof AiProviderError)) throw error;
       const isRate = error.status === 429;
       const isUnavailable = error.status === 503;
