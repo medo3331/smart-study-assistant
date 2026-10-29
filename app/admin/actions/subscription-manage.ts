@@ -7,10 +7,10 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
 import { resolveActor } from "@/lib/policy";
-import type { SubscriptionStatus, ResetQuotaResult, RevokeSubscriptionResult, ExtendSubscriptionResult } from "@/lib/admin/subscription-types";
 
 
-export async function getSubscriptionStatus(userIdOrCode: string): Promise<SubscriptionStatus | null> {
+
+export async function getSubscriptionStatus(userIdOrCode: string): Promise<any> {
   const supabase = createServiceClient();
   try {
     // Try by UUID first
@@ -99,7 +99,7 @@ export async function resetSubscriptionQuota(
   userIdOrCode: string,
   adminUserId: string,
   adminEmail: string | null = null
-): Promise<ResetQuotaResult> {
+): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const db = createServiceClient();
   const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription_quota", resource_id: lookup || null };
@@ -140,7 +140,7 @@ export async function revokeSubscription(
   adminUserId: string,
   adminEmail: string | null = null,
   note: string | null = null
-): Promise<RevokeSubscriptionResult> {
+): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const db = createServiceClient();
   const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription", resource_id: lookup || null };
@@ -232,7 +232,7 @@ export async function extendSubscription(
   note: string | null,
   adminUserId: string,
   adminEmail: string | null = null
-): Promise<ExtendSubscriptionResult> {
+): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const extraDays = Math.floor(durationDays);
   const auditBase = {
