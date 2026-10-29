@@ -112,7 +112,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   {
     title: "المجتمع",
     items: [
-      { id: "community", icon: ", label: "المجتمع", latin: "Community", href: "/community" },
+      { id: "community", icon: "C", label: "المجتمع", latin: "Community", href: "/community" },
     ],
   },
   {
