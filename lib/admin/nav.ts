@@ -137,6 +137,20 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "users.read",
     icon: "Users",
   },
+  {
+    href: "/admin/payments",
+    label: "الدفعات (يدوي)",
+    description: "تسجيل دفعات يدوية وتاريخها",
+    permission: "subscriptions.manage",
+    icon: "CreditCard",
+  },
+  {
+    href: "/admin/db-backup",
+    label: "نسخة قاعدة البيانات",
+    description: "تصدير جداول قاعدة البيانات (JSON) — للمالك فقط",
+    permission: "admins.manage",
+    icon: "Settings",
+  },
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */
