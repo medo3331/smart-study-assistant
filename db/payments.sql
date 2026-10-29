@@ -6,6 +6,8 @@ create table if not exists public.payments (
   currency text not null default 'USD',
   method text,
   note text,
+  payer_name text,
+  paid_at timestamptz not null default now(),
   recorded_by uuid,
   created_at timestamptz not null default now()
 );
