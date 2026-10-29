@@ -104,8 +104,16 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
       activation_note: (activationRow as any)?.note || null,
       activation_activated_by: (activationRow as any)?.activated_by || null,
       entitlement_expires_at: (entitlementRow as any)?.expires_at || null,
+  entitlement_kind: (entitlementRow as any)?.kind || null,
+  entitlement_value: (entitlementRow as any)?.value || null,
+  messages_24h: (quotaRow as any)?.messages_24h || 0,
+  uploads_today: (quotaRow as any)?.uploads_today || 0,
+  message_limit: messageLimit,
+  upload_limit: uploadLimit,
+  quota_updated_at: (quotaRow as any)?.updated_at || null,
+};
+}
 
-export interface ResetQuotaResult { ok: boolean; message: string; }
 
 export async function resetSubscriptionQuota(
   userIdOrCode: string,

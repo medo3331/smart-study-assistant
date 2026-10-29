@@ -1,8 +1,8 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
-import { resolveActor } from "@/lib/admin/auth-check";
-import { recordAuditLog } from "@/lib/admin/audit-log-record";
+import { requireAdminPermission } from "@/lib/admin/auth-check";
+import { recordAuditLog } from "./audit-log-record";
 
 export async function sendAdminMessage(input: {
   subject: string;
@@ -10,7 +10,9 @@ export async function sendAdminMessage(input: {
   targetUserId?: string | null;
   sendEmail?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { user, supabase } = await resolveActor();
+  const ctx = await requireAdminPermission("users.read");
+  const user = ctx.user;
+  const supabase = ctx.supabase;
   // permission check
   const { hasPermission } = await import("@/lib/auth-roles");
   const allowed = await hasPermission(supabase, user.id, user.email ?? null, "users.read");
