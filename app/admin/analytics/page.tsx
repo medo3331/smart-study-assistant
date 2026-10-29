@@ -3,6 +3,7 @@ import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { getPlatformOverview } from "@/lib/admin/overview";
 import { isPgConfigured, pgQuery } from "@/lib/admin/pg";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard, AdminTableWrap } from "@/components/admin/ui";
+import AnalyticsCharts from "./AnalyticsCharts";
 
 export default async function AdminAnalyticsPage() {
   await requireAdminPermission("users.read");
@@ -18,6 +19,8 @@ export default async function AdminAnalyticsPage() {
   let ai24h = 0;
   type UserRow = { id: string; email: string | null; display_name: string | null; created_at: string | null; files_count: string; ai_count: string; last_ai: string | null; is_premium: boolean };
   let users: UserRow[] = [];
+  let daily: { day: string; count: number }[] = [];
+  let plans: { name: string; value: number }[] = [];
   if (pgReady) {
     try {
       const [a, r, i, e, t, h] = await Promise.all([
@@ -50,6 +53,23 @@ export default async function AdminAnalyticsPage() {
         LIMIT 200
       `);
     } catch {}
+    try {
+      const d = await pgQuery<{ day: string; count: string }>(`
+        SELECT date_trunc('day', created_at)::date::text AS day, count(*)::text AS count
+        FROM public.ai_credit_ledger
+        WHERE reason='ai_reserve' AND created_at >= now() - interval '7 days'
+        GROUP BY 1 ORDER BY 1
+      `);
+      daily = d.map((r) => ({ day: r.day, count: parseInt(r.count, 10) }));
+    } catch {}
+    try {
+      const p = await pgQuery<{ plan_key: string; users: string }>(`
+        SELECT plan_key, count(distinct user_id)::text AS users
+        FROM public.subscription_activations
+        WHERE revoked_at IS NULL GROUP BY plan_key
+      `);
+      plans = p.map((r) => ({ name: r.plan_key, value: parseInt(r.users, 10) }));
+    } catch {}
   }
 
   return (
@@ -80,6 +100,7 @@ export default async function AdminAnalyticsPage() {
           <Link href="/inbox" className="underline">صندوق المستخدم</Link>
         </div>
       </AdminCard>
+      <AnalyticsCharts daily={daily} plans={plans} />
       <AdminCard title="مستخدمون وحركتهم (آخر 200)" tone="default">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
