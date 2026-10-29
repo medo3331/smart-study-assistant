@@ -29,6 +29,14 @@ export function ContextualNotification() {
   const [prayerCtx, setPrayerCtx] = useState<PrayerContext | null>(null);
   const [streakRisk, setStreakRisk] = useState(false);
   const [visible, setVisible] = useState(true);
+const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+useEffect(() => {
+  try {
+    const raw = window.localStorage.getItem("dismissed_notifications");
+    if (raw) setDismissed(new Set(JSON.parse(raw)));
+  } catch {}
+}, []);
 
   // Prayer context: load via existing prayer-time utilities only
   useEffect(() => {
@@ -107,7 +115,13 @@ export function ContextualNotification() {
   // Only show if at least ONE contextual reason is genuinely supported by real data.
   const hasPrayerContext = !!(prayerCtx?.remainingMinutes && prayerCtx.remainingMinutes <= 60);
   const hasStreakContext = streakRisk;
-  const shouldShow = visible && (hasPrayerContext || hasStreakContext);
+  const notifKey = hasPrayerContext && prayerCtx
+  ? `prayer:${prayerCtx.arabicName}:${prayerCtx.remainingMinutes}`
+  : hasStreakContext
+  ? `streak:${new Date().toISOString().slice(0, 10)}`
+  : null;
+const isDismissed = notifKey ? dismissed.has(notifKey) : false;
+const shouldShow = visible && !isDismissed && (hasPrayerContext || hasStreakContext);
 
   if (!shouldShow) return null;
 
@@ -165,14 +179,21 @@ export function ContextualNotification() {
           </p>
         </div>
 
-        <button
+<button
           type="button"
-          onClick={() => setVisible(false)}
-          className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors hover:brightness-110"
-          style={{ backgroundColor: "var(--card-primary)", color: "var(--muted)", border: "1px solid var(--rule)" }}
-          aria-label="إخفاء الإشعار"
+          onClick={() => {
+            if (notifKey) {
+              const next = new Set(dismissed);
+              next.add(notifKey);
+              setDismissed(next);
+              try { window.localStorage.setItem("dismissed_notifications", JSON.stringify([...next])); } catch {}
+            }
+            setVisible(false);
+          }}
+          className="shrink-0 rounded-full p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-2)] transition"
+          aria-label="إغلاق الإشعار"
         >
-          إخفاء
+          <span aria-hidden>✕</span>
         </button>
       </div>
     </motion.section>

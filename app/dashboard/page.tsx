@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import MagicWheelDashboard from "@/components/MagicWheelDashboard";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TodayPlanCard, DailyMissionsCard, WeeklyProgressCard, CompanionStatusCard } from "@/components/DashboardExtraCards";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -1483,6 +1484,22 @@ export default function DashboardPage() {
         />
         </div>
       </div>
+
+        {/* ── V2: greeting + profile summary ── */}
+        <div className="flex items-center gap-3 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4">
+          <ProfileAvatar
+            initial={railAccountFromUser(authUser)?.avatarInitial ?? "؟"}
+            name={railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
+            size={48}
+          />
+          <div className="min-w-0">
+            <p className="text-sm text-[var(--color-text-muted)]">أهلاً بعودتك 👋</p>
+            <p className="text-base font-semibold text-[var(--color-text-primary)] truncate">
+              {railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
+            </p>
+          </div>
+        </div>
+
 
       <div className="max-w-6xl mx-auto space-y-10">
         {isPrimary && primaryDashboardSafe ? (

@@ -53,56 +53,59 @@ export interface NavGroupDef {
 // المتابعة في «الحساب». البنود القديمة كلها فضلت بنفس ترتيبها النسبي.
 export const NAV_GROUPS: NavGroupDef[] = [
   {
-    title: "المذاكرة",
+    title: "الرئيسية",
     items: [
       { id: "home", icon: "🏠", label: "الرئيسية", latin: "Home", href: "/dashboard" },
+      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
+    ],
+  },
+  {
+    title: "التعلم",
+    items: [
       { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
+      { id: "subjects", icon: "📖", label: "المواد", latin: "Subjects", href: "/subjects" },
       { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
-      // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
-      // مكانه هنا لأنه بيغيّر المذاكرة نفسها، مش إعداد في الحساب.
+      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
+      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
+      { id: "programming", icon: "💻", label: "البرمجة", latin: "Programming", href: "/programming" },
+      { id: "university", icon: "🎓", label: "الجامعة", latin: "University", href: "/university" },
+      { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
+      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
+      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
+      { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
+      { id: "escape", icon: "🧩", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
       { id: "emergency", icon: "🚨", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
     ],
   },
   {
-    title: "الأدوات",
+    title: "مساحة AI",
     items: [
       { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
-      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — مين هيعرف إنه
-      // موجود؟ البند ده بينزّل على كارت القرآن في الداشبورد، والكارت نفسه
-      // فيه زرار للمكتبة الكاملة. جنب الملاحظات لأن الاتنين `scrollTo`.
-      { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
-      // 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
-      // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
-      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
-      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
-      // 📚 محاضراتي — محاضرات المستخدم المحفوظة وتفريغها (المرحلة ٣).
-      // جنب بنك الامتحانات: الاتنين «محتوى الطالب الخاص» — محاضراته هو.
-      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
-      { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
-      { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
-      { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
-      { id: "escape", icon: "🧩", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
       { id: "slides", icon: "🖥️", label: "العروض", latin: "Slides", href: "/dashboard/slides" },
+      { id: "chat", icon: "💬", label: "المحادثة", latin: "Chat", href: "/chat" },
+      { id: "studyTools", icon: "🛠️", label: "أدوات الدراسة", latin: "Study Tools", href: "/study-tools" },
+      { id: "aiStudio", icon: "🎨", label: "استوديو AI", latin: "AI Studio", href: "/ai-studio" },
     ],
   },
   {
-    title: "التقدّم",
+    title: "التخطيط",
+    items: [
+      { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
+      { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
+      { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
+    ],
+  },
+  {
+    title: "التقدم",
     items: [
       { id: "achievements", icon: "🏆", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
-      { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
       { id: "rewards", icon: "🪙", label: "سجل المكافآت", latin: "Rewards", href: "/rewards" },
-      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
       { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
       { id: "leaderboard", icon: "🥇", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
-      // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب
-      // بالمذاكرة، فالمكان الطبيعي ليهم جنب الإنجازات والتحليلات.
       { id: "shop", icon: "🛍️", label: "المتجر", latin: "Shop", href: "/shop" },
       { id: "plans", icon: "📋", label: "الخطط", latin: "Plans", href: "/plans" },
-      // ⚠️ ده مش المتجر. المتجر بيصرف كوينز، وده بيصرف XP على تجميد
-      // السلسلة وفتح اليوم اللي بعده بدري. عملتين مختلفتين خالص.
       { id: "xpShop", icon: "✨", label: "اصرف نقاطك", latin: "XP Rewards", signal: "xpShop" },
       { id: "inventory", icon: "🎒", label: "المخزن", latin: "Inventory", href: "/inventory" },
     ],
