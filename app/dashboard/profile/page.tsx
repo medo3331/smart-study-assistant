@@ -27,11 +27,10 @@ export default function ProfilePage() {
           setEmail(user.email ?? null);
           setName((user.user_metadata?.full_name as string) ?? null);
         }
-        const { data: prof } = await supabase.from("profiles").select("public_user_code, avatar_url, full_name").eq("id", user.id).maybeSingle();
+        const { data: prof } = await supabase.from("profiles").select("public_user_code, avatar_url").eq("id", user.id).maybeSingle();
         if (!cancelled && prof) {
           setCode((prof as any).public_user_code ?? null);
           setAvatarUrl((prof as any).avatar_url ?? null);
-          if ((prof as any).full_name) setName((prof as any).full_name);
         }
         const res = await fetch("/api/usage", { credentials: "include" });
         if (res.ok) {
