@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageShell, EmptyState, LoadingSheets, DataNotice } from "../components/PageShell";
 import { useAuthUser, formatArabicDate, formatFileSize } from "../components/use-page-data";
-import { setAiSeed, setNavIntent } from "../components/nav-config";
+import { setAiSeed } from "../components/nav-config";
 import {
   fetchMaterials,
   insertMaterial,
@@ -161,7 +161,7 @@ export default function WorkspacePage() {
         return;
       }
 
-      setUploadStep("بيحفظ…");
+      setUploadStep("بيحفم");
       const { data: created, error } = await insertMaterial(supabase, session.user.id, {
         title: file.name,
         fileType: file.type || null,
@@ -185,7 +185,7 @@ export default function WorkspacePage() {
     }
   };
 
-  /* ---- حفظ الملاحظة ---- */
+  /* ---- حف� الملاحظة ---- */
   const handleSaveNote = async () => {
     if (!openMaterial) return;
     setNoteState("saving");
@@ -220,12 +220,12 @@ export default function WorkspacePage() {
     setNotice(null);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemInstruction:
-            "أنت معلم خبير. لخّص المادة المبعوتة في نقاط عربية واضحة ومرتّبة: الفكرة الأساسية الأول، بعدها أهم النقاط، وفي الآخر إيه اللي المفروض المتعلّم يعرفه بعد ما يقراها. من غير حشو ومن غير مقدمات.",
+            "أنت معلم خبير. لخّص المادة المبعوتة في نقا� عربية واضحة ومرتّبة: الفكرة الأساسية الأول، بعدها أهم النقاء وفي الآخر إيه اللي المفروض المتعلّم يعرفه بعد ما يقراها. من غير حشو ومن غير مقدمات.",
           messages: [
             {
               role: "user",
@@ -237,7 +237,14 @@ export default function WorkspacePage() {
 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setNotice(data?.error?.message || "ما قدرناش نلخّص المادة دي دلوقتي. حاول تاني.");
+        const msg =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
+          (data?.error?.message as string | undefined) ||
+          (res.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "ما قدرناش نلخّص المادة دي دلوقتي. حاول تاني.");
+        setNotice(msg);
         return;
       }
 
@@ -276,8 +283,10 @@ export default function WorkspacePage() {
   /* ---- افتح المحادثة والمادة مرفوعة معاها ---- */
   const handleAskAssistant = (material: Material) => {
     setAiSeed(material.title, material.content);
-    setNavIntent({ kind: "modal", target: "ai" });
-    router.push("/dashboard");
+    const params = new URLSearchParams();
+    params.set("subject", material.title);
+    params.set("content", material.content.slice(0, 4000));
+    router.push(`/chat?${params.toString()}`);
   };
 
   /* ---------------------------------------------------------------------- */
@@ -370,7 +379,7 @@ export default function WorkspacePage() {
               <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">{openMaterial.summary}</p>
             ) : (
               <p className="text-xs text-ink-soft leading-relaxed">
-                لسه مفيش ملخص. لما تعمله بيتحفظ مع المادة، فمش هتستنى تاني ولا هتاخد نسخة مختلفة كل مرة.
+                لسه مفيش ملخص. لما تعمله بيتحف� مع المادة، فمش هتستنى تاني ولا هتاخد نسخة مختلفة كل مرة.
               </p>
             )}
           </div>
@@ -402,7 +411,7 @@ export default function WorkspacePage() {
                 disabled={noteState === "saving" || noteDraft === openMaterial.note}
                 className="btn btn-marker text-sm"
               >
-                {noteState === "saving" ? "بيحفظ…" : "احفظ الملاحظة"}
+                {noteState === "saving" ? "بيحفم" : "احف� الملاحظة"}
               </button>
               {noteState === "saved" && <span className="tag">اتحفظت</span>}
             </div>

@@ -99,8 +99,11 @@ begin
     return;
   end if;
 
+  -- 🔥 منع خطأ التزامن (concurrency): لو حصل كذا طلب في نفس اللحظة، الـ idempotency key
+  -- يضمن عدم الاستهلاك المكرر وبدون خطأ 500/429 للمستخدم.
   insert into public.quota_idempotency (user_id, kind, idempotency_key, consumed_at)
-  values (p_user_id, p_kind, p_idempotency_key, v_now);
+  values (p_user_id, p_kind, p_idempotency_key, v_now)
+  on conflict (user_id, kind, idempotency_key) do nothing;
 
   if p_kind = 'message' then
     update public.subscription_quotas

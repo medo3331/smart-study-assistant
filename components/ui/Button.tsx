@@ -1,5 +1,4 @@
 import { cn } from "@/lib/cn";
-import type { LucideIcon } from "lucide-react";
 
 type Variant = "primary" | "ghost" | "success" | "danger";
 

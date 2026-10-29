@@ -41,7 +41,9 @@ export function CurrentStepCard({
   const reduceMotion = useReducedMotion();
   if (!currentDay || totalSteps === 0) return null;
 
-  const planPct = Math.round((completedSteps / totalSteps) * 100);
+  const planPct = totalSteps > 0 && Number.isFinite(completedSteps)
+    ? Math.round((completedSteps / totalSteps) * 100)
+    : 0;
   const done = currentDay.isCompleted;
   const state: "start" | "continue" | "review" = done ? "review" : isCurrent ? "continue" : "start";
   const ctaLabel =

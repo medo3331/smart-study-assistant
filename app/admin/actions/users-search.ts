@@ -67,6 +67,14 @@ export async function searchUsers(
     baseQuery = baseQuery.order("created_at", { ascending: false, nullsFirst: false });
 
     const { data, error } = await baseQuery.limit(50);
+    // Enrich emails from auth.users (profiles.email is often NULL)
+    let emailMap: Record<string, string> = {};
+    try {
+      const { data: listData } = await privileged.auth.admin.listUsers();
+      for (const u of listData?.users ?? []) {
+        if (u.email) emailMap[u.id] = u.email;
+      }
+    } catch {}
     if (error || !data) {
       // fallback: سكيمة قديمة بدون created_at — أعد المحاولة بدون الأعمدة الزمنية
       if (error?.message?.includes("created_at")) {
@@ -75,16 +83,15 @@ export async function searchUsers(
           .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, user_codes(code, is_active), entitlements(kind, value, metadata)")
           .limit(50);
         if (retry.error || !retry.data) return [];
-        return mapRows(retry.data as any[], planFilter);
+        return mapRows(retry.data as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
       }
       return [];
     }
 
     const mapped = mapRows(data as any[], planFilter);
-
-    // fallback: profiles.email غالباً NULL (الإيميل في auth.users فقط).
-    // لو البحث أعطى صفر نتائج، ابحث في auth.users عبر service_role ثم اجلب profiles بالـ IDs.
-    if (q && mapped.length === 0) {
+    const enriched = mapped.map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
+    // fallback: profiles.email غالباً NULL...
+    if (q && enriched.length === 0) {
       try {
         const { data: listData } = await privileged.auth.admin.listUsers();
         const needle = q.toLowerCase();
@@ -98,14 +105,14 @@ export async function searchUsers(
             .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at, user_codes(code, is_active), entitlements(kind, value, metadata)")
             .in("id", matchedIds)
             .limit(50);
-          if (fallbackRows) return mapRows(fallbackRows as any[], planFilter);
+          if (fallbackRows) return mapRows(fallbackRows as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
         }
       } catch {
         // fallback الأفضل جهد — لو فشل، أرجع النتائج الأصلية (فارغة)
       }
     }
 
-    return mapped;
+    return enriched;
   } catch {
     return [];
   }

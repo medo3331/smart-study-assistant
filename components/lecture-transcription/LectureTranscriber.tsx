@@ -317,7 +317,7 @@ function readSaveInfo(payload: unknown): SaveInfo {
 }
 
 /** المكوّن الرئيسي — كل حالة الشاشة في متغيرات واحدة واضحة. */
-export function LectureTranscriber() {
+export function LectureTranscriber({ subjectId }: { subjectId?: string | null } = {}) {
   const [file, setFile] = useState<File | null>(null);
 
 // 🧡 اسم الملف الأصلي قبل الضغط (للعرض واحد)
@@ -410,11 +410,12 @@ export function LectureTranscriber() {
       const sourceSize = next.size;
 
       // ⚠️ تحذير للملفات الكبيرة غير MP3 — لو الرفع فشل، المستخدم لازم يضغط الملف من تليفونه.
-      const MAX_WARN_BYTES = 45 * 1024 * 1024;
+      // ⚠️ الحد هنا مش 45MB — هو الحد الفعلي حسب الجهاز (120MB للكمبيوتر، أقل للموبايل).
+      const MAX_WARN_BYTES = getDeviceLimit();
       const isLossyAudio = /^audio\/(mpeg|mp3)$/i.test(next.type);
       if (next.size > MAX_WARN_BYTES && !isLossyAudio) {
         setLargeFileWarning(
-          "الملف أكبر من 45 ميجا. لو الرفع فشل، فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
+          "الملف كبير مقارنة بحد الجهاز. لو الرفع فشل، فضلًا اضغط الملف من هاتفك باستخدام أي تطبيق ضغط صوت وحاول تاني."
         );
       } else {
         setLargeFileWarning(null);
@@ -619,6 +620,7 @@ export function LectureTranscriber() {
           size: file?.size ?? 0,
           ticketId: ticket?.ticketId ?? "",
           ...(ticket?.secret ? { secret: ticket.secret } : {}),
+          ...(subjectId ? { subjectId } : {}),
         }),
       });
       const payload: unknown = await response.json().catch(() => null);
@@ -680,7 +682,7 @@ export function LectureTranscriber() {
       setPhase("done");
       return true;
     },
-    [file],
+    [file, subjectId],
   );
 
   /**
@@ -824,7 +826,7 @@ export function LectureTranscriber() {
   }, [transcript, file]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl" lang="ar">
       {/* ───────── منطقة الرفع ───────── */}
       <div
         onDragOver={(event) => {
@@ -997,6 +999,12 @@ export function LectureTranscriber() {
         </div>
       )}
 
+      {/* ���� ���� ����� ������� */}
+      {working && (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
+        </div>
+      )}
       {/* ───────── الخطأ ───────── */}
       {error && (
         <div
@@ -1004,7 +1012,10 @@ export function LectureTranscriber() {
           className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4"
         >
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden />
-          <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+           <div className="flex-1">
+             <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
+             <a href="https://wa.me/201204556797" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">تواصل مع الدعم (واتساب)</a>
+           </div>
         </div>
       )}
 
@@ -1020,6 +1031,11 @@ export function LectureTranscriber() {
             {transcript.duration !== null && (
               <p className="text-xs text-[var(--muted)]">
                 مدة التسجيل: {formatDuration(transcript.duration)}
+              </p>
+            )}
+            {transcript.provider && (
+              <p className="text-xs text-[var(--muted)]">
+                �������: {transcript.provider} � {transcript.model}
               </p>
             )}
           </div>

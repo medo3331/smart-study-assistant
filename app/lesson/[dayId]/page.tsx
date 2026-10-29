@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -167,11 +167,11 @@ function SmartContentViewer({ topic, subject, edu }: { topic: string; subject: s
     }[mode as "simple" | "academic" | "visual" | "practical"];
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // NOTE: /api/chat does NOT read `systemInstruction` from the request body —
+          // NOTE: /api/ai/generate does NOT read `systemInstruction` from the request body —
           // it builds the system prompt server-side (lib/ai/prompt-builder.ts +
           // lib/magicly-ai.ts). This string is currently dead weight. It is kept in
           // sync with the server tone so the two do not drift apart, but changing it
@@ -519,30 +519,24 @@ export default function LessonDetailPage() {
     setQuizScore(0);
     setSelectedAnswers([]);
 
-    const prompt = `اكتب 4 أسئلة اختيار من متعدد (كل سؤال له 4 اختيارات وإجابة صحيحة واحدة) لاختبار فهم الطالب لموضوع "${dayRow.topic}" (جزء من مادة/مشروع "${config.subject}"، الوصف: "${dayRow.description}"). رجّع الإجابة بصيغة JSON فقط بدون أي نص إضافي أو علامات markdown، بالشكل ده بالظبط:
-[{"question": "نص السؤال", "options": ["اختيار1", "اختيار2", "اختيار3", "اختيار4"], "correctIndex": 0}]
-لازم تكون الأسئلة بالعربي، وcorrectIndex هو رقم الاختيار الصحيح (يبدأ من 0).`;
-
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/lesson-quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: "أنت مولّد اختبارات تعليمية. رجّع JSON صحيح فقط بدون أي شرح أو نص خارج الـ JSON.",
-          messages: [{ role: "user", content: prompt }],
+          topic: dayRow.topic,
+          subject: config.subject,
+          description: dayRow.description,
+          count: 4,
         }),
       });
       const data = await response.json();
-      const raw = data?.choices?.[0]?.message?.content || "[]";
-      const cleaned = raw.replace(/```json|```/g, "").trim();
-      const parsed: QuizQuestion[] = JSON.parse(cleaned);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (!response.ok) throw new Error(data?.error?.message || "فشل توليد الاختبار");
+      const parsed: QuizQuestion[] = data?.questions || [];
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("empty");
         setQuizQuestions(parsed);
         setSelectedAnswers(new Array(parsed.length).fill(-1));
         setQuizStarted(true);
-      } else {
-        throw new Error("empty");
-      }
     } catch {
       setQuizQuestions([]);
       setQuizStarted(false);

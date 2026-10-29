@@ -43,32 +43,8 @@ useEffect(() => {
     let cancelled = false;
     async function loadPrayer() {
       try {
-        // Dynamic import of existing prayer-time utilities (verified in repo)
-        const prayerMod = await import("@/lib/islamic/prayer-times/next-prayer");
-        // Use same service mechanism existing in repo (service uses AlAdhan with env/default config)
-        // We only call the calculation helpers (getNextPrayer / getTimeUntilNextPrayer / formatTimeRemaining)
-        // NOT the external fetch directly — reuse the data the hook/service provides.
-        // Since the hook requires React state and may not be available synchronously, we attempt
-        // to read from window/local prayer data or fall back to a safe no-message mode.
-        // For minimal safe in-app notification: we rely ONLY on the verified calculation functions.
-        // We load the service response pattern via the existing mechanism (same as usePrayerTimes hook).
-        const res = await fetch("/api/prayer-times").catch(() => null); // if endpoint exists; else skip
-        // If no endpoint, we do NOT invent data. We skip prayer-based message.
-        if (!res || cancelled) return;
-        const data = await res.json().catch(() => null);
-        if (!data || !data.timestamps) return;
-        const next = prayerMod.getNextPrayer(data);
-        const remainingMs = prayerMod.getTimeUntilNextPrayer(data);
-        if (next && remainingMs > 0 && remainingMs < 60 * 60 * 1000) {
-          // Prayer approaching within 1 hour — contextual reason exists
-          if (!cancelled) {
-            setPrayerCtx({
-              arabicName: next.arabicName || next.name,
-              time: next.time,
-              remainingMinutes: Math.round(remainingMs / (1000 * 60)),
-            });
-          }
-        }
+        // Prayer context disabled: no /api/prayer-times endpoint; avoid console errors.
+        return;
       } catch {
         // If prayer data unavailable: do not crash; do not invent message.
         // This keeps the notification safe — only shows when real context exists.
@@ -93,7 +69,7 @@ useEffect(() => {
         const { data: profile, error } = await supabase
           .from("profiles")
           .select("streak, last_study_day")
-          .single();
+          .maybeSingle();
         if (cancelled) return;
         if (error || !profile) return;
         // Existing convention: daily_missions uses UTC; streak risk only shown if today

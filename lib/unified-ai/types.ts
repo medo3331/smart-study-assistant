@@ -48,9 +48,14 @@ export interface UnifiedAIResult {
     confidence?: "high" | "medium" | "low";
     languageDetected?: "ar" | "en" | "mixed";
     imageProcessed?: boolean;
+    visionUsed?: boolean;
+    visionFallback?: boolean;
   };
   reasoning?: string;             // why router chose this agent (for debug / coach context)
   error?: string;
+  code?: string;
+  errorCode?: string;
+  /** When PDF extraction fails, frontend shows specific message. */
 }
 
 export interface AgentRouterDecision {
