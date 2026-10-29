@@ -11,4 +11,4 @@ create table if not exists public.payments (
 );
 alter table public.payments enable row level security;
 create policy payments_admin_read on public.payments for select using (true);
-create policy payments_admin_write on public.payments for insert using (true);
+create policy payments_admin_write on public.payments for insert with check (true);
