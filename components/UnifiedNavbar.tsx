@@ -9,7 +9,7 @@ import { Menu, X } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/dashboard', labelAr: 'لوحة التحكم', labelEn: 'Dashboard' },
-  { href: '/lesson', labelAr: 'الدروس', labelEn: 'Lessons' },
+  { href: '/lessons', labelAr: 'الدروس', labelEn: 'Lessons' },
   { href: '/lectures', labelAr: 'المحاضرات', labelEn: 'Lectures' },
   { href: '/chat', labelAr: 'المساعد', labelEn: 'Assistant' },
   { href: '/shop', labelAr: 'المتجر', labelEn: 'Store' },
@@ -22,7 +22,7 @@ export function UnifiedNavbar() {
   const [open, setOpen] = useState(false);
 
   // Avoid duplicate chrome on marketing/admin/auth routes that already have their own layouts.
-  const show = pathname.startsWith('/dashboard') || pathname.startsWith('/chat') || pathname.startsWith('/lesson') || pathname.startsWith('/lectures') || pathname.startsWith('/store') || pathname.startsWith('/pricing');
+  const show = pathname.startsWith('/dashboard') || pathname.startsWith('/chat') || pathname.startsWith('/lessons') || pathname.startsWith('/lectures') || pathname.startsWith('/store') || pathname.startsWith('/pricing');
   if (!show) return null;
 
   return (
