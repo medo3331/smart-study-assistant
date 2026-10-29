@@ -1645,7 +1645,7 @@ html {
 }
 
 .btn-marker {
-  background: var(--marker);
+  background: var(--color-primary);
   color: var(--on-marker);
   box-shadow: 0 2px 0 var(--marker-deep);
 }
