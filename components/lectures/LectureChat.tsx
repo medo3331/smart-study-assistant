@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/Button";
+
 export default function LectureChat({ lectureId, contextText }: { lectureId: string; contextText: string }) {
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [input, setInput] = useState("");
@@ -37,7 +39,7 @@ export default function LectureChat({ lectureId, contextText }: { lectureId: str
       <h3 className="text-sm font-bold text-ink">💬 محادثة حول المحاضرة</h3>
       <div className="max-h-64 overflow-auto space-y-2">
         {messages.map((m, i) => (
-          <div key={i} className={`rounded-lg p-2 text-sm ${m.role === "user" ? "bg-indigo-500/10 text-ink" : "bg-black/5 text-ink dark:bg-white/10"}`}>
+          <div key={i} className={`rounded-lg p-2 text-sm ${m.role === "user" ? "bg-[color-mix(in_srgb,var(--color-interactive)_12%,transparent)] text-ink" : "bg-[var(--paper-2)] text-ink"}`}>
             {m.content}
           </div>
         ))}
@@ -50,9 +52,9 @@ export default function LectureChat({ lectureId, contextText }: { lectureId: str
           placeholder="اسأل عن المحاضرة…"
           className="flex-1 rounded-lg border border-[var(--rule)] bg-[var(--card-primary)] px-2 py-1 text-sm text-ink"
         />
-        <button onClick={send} disabled={loading} className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-semibold text-white disabled:opacity-50">
-          {loading ? "…" : "إرسال"}
-        </button>
+        <Button onClick={send} disabled={loading || !input.trim()} loading={loading} variant="primary">
+          إرسال
+        </Button>
       </div>
     </div>
   );
