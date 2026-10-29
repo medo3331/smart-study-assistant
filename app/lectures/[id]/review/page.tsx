@@ -119,7 +119,7 @@ export default function ReviewPage() {
       setReviewedText(data.reviewedText ?? null);
       setReviewStatus(data.reviewStatus ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "فشل حفظ المراجعة.");
+      setError(e instanceof Error ? e.message : "فشل حف� المراجعة.");
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +142,7 @@ export default function ReviewPage() {
       setReviewedText(data.reviewedText ?? editedReviewedText);
       setReviewStatus("completed");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "فشل حفظ النص المراجع.");
+      setError(e instanceof Error ? e.message : "فشل حف� النص المراجع.");
     } finally {
       setSavingReviewed(false);
     }
@@ -225,7 +225,7 @@ export default function ReviewPage() {
             disabled={submitting || Object.keys(decisions).length === 0}
             className="w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {submitting ? "جاري الحفظ…" : "حفظ المراجعة"}
+            {submitting ? "جاري الحفم" : "حف� المراجعة"}
           </button>
         </div>
       )}
@@ -243,7 +243,7 @@ export default function ReviewPage() {
             disabled={savingReviewed}
             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {savingReviewed ? "جاري الحفظ…" : "حفظ النص المراجع"}
+            {savingReviewed ? "جاري الحفم" : "حف� النص المراجع"}
           </button>
         </div>
       )}

@@ -23,7 +23,7 @@ import type { ThemeColor, ThemeStyles } from "./types";
    واحدة بدل سكرول.
 
    ⚠️ لوحات الأقسام **متركّبة دايماً** و`hidden` هي اللي بتخفي. سببين:
-   (١) `aria-controls` لازم يلاقي عنصر موجود وإلا الرابط بينكسر لقارئ
+   (١) `aria-controls` لازم يلاقي عنصر موجود وإلا الراب� بينكسر لقارئ
    الشاشة، (٢) الحالة اللي جوه اللوحة (القارئ المختار والبحث في المكتبة
    الصوتية) بتعيش لما تقفل القسم وتفتحه تاني — لو التركيب شرطي كان اختيارك
    بيضيع مع كل قفلة.
@@ -38,7 +38,7 @@ interface SettingsDrawerProps {
   isMenuOpen: boolean;
   setIsMenuOpen: (open: boolean) => void;
 
-  // تعديل اسم المادة (المودال المرتبط بالسايدبار)
+  // تعديل اسم المادة (المودال المرتب� بالسايدبار)
   showSubjectModal: boolean;
   setShowSubjectModal: (show: boolean) => void;
   newSubjectInput: string;
@@ -211,7 +211,7 @@ export function SettingsDrawer({
           <div className="space-y-3">
             <p className="tag">الثيم</p>
             <p className="text-xs leading-5 text-ink-soft">
-              اختر مظهر الداشبورد — يُحفظ تلقائياً
+              اختر مظهر الداشبورد — يُحف� تلقائياً
             </p>
             <div
               className="flex items-center gap-3 flex-wrap"
@@ -409,7 +409,7 @@ export function SettingsDrawer({
                 disabled={isChangingSubject}
                 className="btn btn-marker text-sm"
               >
-                {isChangingSubject ? "بيحفظ…" : "حفظ"}
+                {isChangingSubject ? "بيحفم" : "حفظ"}
               </button>
             </div>
           </div>

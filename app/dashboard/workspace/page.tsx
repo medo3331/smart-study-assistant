@@ -161,7 +161,7 @@ export default function WorkspacePage() {
         return;
       }
 
-      setUploadStep("بيحفظ…");
+      setUploadStep("بيحفم");
       const { data: created, error } = await insertMaterial(supabase, session.user.id, {
         title: file.name,
         fileType: file.type || null,
@@ -185,7 +185,7 @@ export default function WorkspacePage() {
     }
   };
 
-  /* ---- حفظ الملاحظة ---- */
+  /* ---- حف� الملاحظة ---- */
   const handleSaveNote = async () => {
     if (!openMaterial) return;
     setNoteState("saving");
@@ -225,7 +225,7 @@ export default function WorkspacePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemInstruction:
-            "أنت معلم خبير. لخّص المادة المبعوتة في نقاط عربية واضحة ومرتّبة: الفكرة الأساسية الأول، بعدها أهم النقاط، وفي الآخر إيه اللي المفروض المتعلّم يعرفه بعد ما يقراها. من غير حشو ومن غير مقدمات.",
+            "أنت معلم خبير. لخّص المادة المبعوتة في نقا� عربية واضحة ومرتّبة: الفكرة الأساسية الأول، بعدها أهم النقاء وفي الآخر إيه اللي المفروض المتعلّم يعرفه بعد ما يقراها. من غير حشو ومن غير مقدمات.",
           messages: [
             {
               role: "user",
@@ -379,7 +379,7 @@ export default function WorkspacePage() {
               <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">{openMaterial.summary}</p>
             ) : (
               <p className="text-xs text-ink-soft leading-relaxed">
-                لسه مفيش ملخص. لما تعمله بيتحفظ مع المادة، فمش هتستنى تاني ولا هتاخد نسخة مختلفة كل مرة.
+                لسه مفيش ملخص. لما تعمله بيتحف� مع المادة، فمش هتستنى تاني ولا هتاخد نسخة مختلفة كل مرة.
               </p>
             )}
           </div>
@@ -411,7 +411,7 @@ export default function WorkspacePage() {
                 disabled={noteState === "saving" || noteDraft === openMaterial.note}
                 className="btn btn-marker text-sm"
               >
-                {noteState === "saving" ? "بيحفظ…" : "احفظ الملاحظة"}
+                {noteState === "saving" ? "بيحفم" : "احف� الملاحظة"}
               </button>
               {noteState === "saved" && <span className="tag">اتحفظت</span>}
             </div>

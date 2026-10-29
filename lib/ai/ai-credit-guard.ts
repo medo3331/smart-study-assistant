@@ -1,14 +1,14 @@
 /**
- * Phase H + Phase B + Phase C â€” AI Credit Guard (shared helper)
+ * Phase H + Phase B + Phase C — AI Credit Guard (shared helper)
  *
- * ط§ظ„ظ‚ط§ط¹ط¯ط© ط§ظ„ط°ظ‡ط¨ظٹط©: Client requests an action. Server decides whether it is allowed and what it costs.
- * â€” Entitlement check BEFORE reserve (403 does not consume credit)
- * â€” Rate limits BEFORE reserve (429 does not consume credit)
- * â€” Reserve is server-generated requestId, NOT client-provided
- * â€” 1 request = 1 credit; failure/refund is idempotent
+ * القاعدة الذهبية: Client requests an action. Server decides whether it is allowed and what it costs.
+ * — Entitlement check BEFORE reserve (403 does not consume credit)
+ * — Rate limits BEFORE reserve (429 does not consume credit)
+ * — Reserve is server-generated requestId, NOT client-provided
+ * — 1 request = 1 credit; failure/refund is idempotent
  *
  * Phase A: 10 text/3h, 6 vision/5h
- * Phase B: per-model (super 5/24h, ultra 3/24h) + per-agent (quiz 8/3h etc) â€” abstraction ط¢ظ…ظ†ط©
+ * Phase B: per-model (super 5/24h, ultra 3/24h) + per-agent (quiz 8/3h etc) — abstraction آمنة
  * Phase C: Guest 5/24h via anonymous userId
  */
 
@@ -67,7 +67,7 @@ export async function guardAiAccessAndReserve(
     }
   }
 
-  // ---- Phase A: Per-User Rate Limit (BEFORE entitlement/credit) â€” 429 ----
+  // ---- Phase A: Per-User Rate Limit (BEFORE entitlement/credit) — 429 ----
   if (userId && !isAnonymous) {
     const rate = await checkAiRateLimit(supabase, userId, { isVisionOrFile: opts?.isVisionOrFile ?? false });
     if (!rate.allowed) {
@@ -85,7 +85,7 @@ export async function guardAiAccessAndReserve(
     }
   }
 
-  // ---- Phase B: Per-Model Rate Limit (BEFORE reserve) â€” 429 ----
+  // ---- Phase B: Per-Model Rate Limit (BEFORE reserve) — 429 ----
   if (userId && !isAnonymous) {
     const modelRate = await checkModelRateLimit(supabase, userId, modelId);
     if (!modelRate.allowed) {
@@ -100,7 +100,7 @@ export async function guardAiAccessAndReserve(
     }
   }
 
-  // ---- Phase B: Per-Agent Rate Limit (abstraction ط¢ظ…ظ†ط©) ----
+  // ---- Phase B: Per-Agent Rate Limit (abstraction آمنة) ----
   const agentId = opts?.agentId ?? null;
   if (agentId && isKnownAgentLimit(agentId) && userId && !isAnonymous) {
     const agentRate = await checkAgentRateLimit(supabase, userId, agentId);
@@ -116,7 +116,7 @@ export async function guardAiAccessAndReserve(
     }
   }
 
-  // ---- Entitlement gate (BEFORE reserve) â€” 0 credit consumed on 403 ----
+  // ---- Entitlement gate (BEFORE reserve) — 0 credit consumed on 403 ----
   if (policy.access === "entitlement" && policy.entitlement) {
     if (!userId) {
       return {
@@ -124,7 +124,7 @@ export async function guardAiAccessAndReserve(
         response: new Response(
           JSON.stringify({
             ok: false,
-            error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ طھط³ط¬ظٹظ„ ط¯ط®ظˆظ„ ظˆطµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.",
+            error: "هذا النموذج يتطلب تسجيل دخول وصلاحية. اشترِها من المتجر.",
             code: "MODEL_ACCESS_REQUIRED",
             model: modelId,
             required: policy.entitlement,
@@ -133,14 +133,14 @@ export async function guardAiAccessAndReserve(
         ),
       };
     }
-    // Anonymous cannot have entitlement â€” already blocked above, but double-check
+    // Anonymous cannot have entitlement — already blocked above, but double-check
     if (isAnonymous) {
       return {
         ok: false,
         response: new Response(
           JSON.stringify({
             ok: false,
-            error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ ط­ط³ط§ط¨ ظ…ط³ط¬ظ„ ظˆطµظ„ط§ط­ظٹط©. ط³ط¬ظ‘ظ„ ط­ط³ط§ط¨ظƒ ط£ظˆظ„ط§ظ‹.",
+            error: "هذا النموذج يتطلب حساب مسجل وصلاحية. سجّل حسابك أولاً.",
             code: "MODEL_ACCESS_REQUIRED",
             model: modelId,
             required: policy.entitlement,
@@ -157,7 +157,7 @@ export async function guardAiAccessAndReserve(
     if (error) {
       return {
         ok: false,
-        response: new Response(JSON.stringify({ ok: false, error: "طھط¹ط°ط± ط§ظ„طھط­ظ‚ظ‚ ظ…ظ† ط§ظ„طµظ„ط§ط­ظٹط©.", code: "ENTITLEMENT_CHECK_FAILED" }), {
+        response: new Response(JSON.stringify({ ok: false, error: "تعذر التحقق من الصلاحية.", code: "ENTITLEMENT_CHECK_FAILED" }), {
           status: 500,
           headers: { "Content-Type": "application/json" },
         }),
@@ -169,7 +169,7 @@ export async function guardAiAccessAndReserve(
         response: new Response(
           JSON.stringify({
             ok: false,
-            error: "ظ‡ط°ط§ ط§ظ„ظ†ظ…ظˆط°ط¬ ظٹطھط·ظ„ط¨ طµظ„ط§ط­ظٹط© ط؛ظٹط± ظ…طھظˆظپط±ط© ظ„ط¯ظٹظƒ. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.",
+            error: "هذا النموذج يتطلب صلاحية غير متوفرة لديك. اشترِها من المتجر.",
             code: "MODEL_ACCESS_REQUIRED",
             model: modelId,
             required: policy.entitlement,
@@ -219,7 +219,7 @@ export async function guardAiAccessAndReserve(
           response: new Response(
             JSON.stringify({
               ok: false,
-              error: "ظˆطµظ„طھ ظ„ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰ ظ„ظ„طھط¬ط±ط¨ط© ط§ظ„ظ…ط¬ط§ظ†ظٹط© ظƒط²ط§ط¦ط± (5 ط·ظ„ط¨ط§طھ ظƒظ„ 24 ط³ط§ط¹ط©). ط³ط¬ظ‘ظ„ ط­ط³ط§ط¨ ظ…ط¬ط§ظ†ظٹ ظ„ظ„ط­طµظˆظ„ ط¹ظ„ظ‰ ط­ط¯ ط£ظƒط¨ط±!",
+              error: "وصلت للحد الأقصى للتجربة المجانية كزائر (5 طلبات كل 24 ساعة). سجّل حساب مجاني للحصول على حد أكبر!",
               code: "GUEST_RATE_LIMIT",
               retryAfterHours: 24,
               retryAfter: 24 * 3600,
@@ -231,7 +231,7 @@ export async function guardAiAccessAndReserve(
       }
       return {
         ok: false,
-        response: new Response(JSON.stringify({ ok: false, error: "طھط¹ط°ط± ط­ط¬ط² ط§ظ„ط·ظ„ط¨. ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰.", code: "RESERVE_FAILED" }), {
+        response: new Response(JSON.stringify({ ok: false, error: "تعذر حجز الطلب. حاول مرة أخرى.", code: "RESERVE_FAILED" }), {
           status: 500,
           headers: { "Content-Type": "application/json" },
         }),
@@ -246,7 +246,7 @@ export async function guardAiAccessAndReserve(
   let reserveErr: unknown = null;
   const agentForMeta = agentId ?? null;
   try {
-    // Attempt Phase B extended RPC (p_model, p_agent) â€” requires migration
+    // Attempt Phase B extended RPC (p_model, p_agent) — requires migration
     const resExt = await supabase.rpc("reserve_ai_credit", {
       p_user_id: userId,
       p_ref_id: refId,
@@ -287,7 +287,7 @@ export async function guardAiAccessAndReserve(
           } as unknown as Record<string, unknown>);
         }
       } catch {
-        // ignore â€” best-effort
+        // ignore — best-effort
       }
     }
   } catch (e) {
@@ -299,14 +299,14 @@ export async function guardAiAccessAndReserve(
       return {
         ok: false,
         response: new Response(
-          JSON.stringify({ ok: false, error: "ط±طµظٹط¯ AI Credits ظ„ط§ ظٹظƒظپظٹ. ط§ط´طھط±ظگ ط­ط²ظ…ط© ظ…ظ† ط§ظ„ظ…طھط¬ط±.", code: "INSUFFICIENT_CREDITS" }),
+          JSON.stringify({ ok: false, error: "رصيد AI Credits لا يكفي. اشترِ حزمة من المتجر.", code: "INSUFFICIENT_CREDITS" }),
           { status: 402, headers: { "Content-Type": "application/json" } }
         ),
       };
     }
     return {
       ok: false,
-      response: new Response(JSON.stringify({ ok: false, error: "طھط¹ط°ط± ط­ط¬ط² AI Credit. ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰.", code: "RESERVE_FAILED" }), {
+      response: new Response(JSON.stringify({ ok: false, error: "تعذر حجز AI Credit. حاول مرة أخرى.", code: "RESERVE_FAILED" }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
       }),

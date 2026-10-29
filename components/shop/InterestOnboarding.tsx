@@ -49,7 +49,7 @@ export function InterestOnboarding({ busy = false, onSave, onSkip }: Props) {
       </fieldset>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button disabled={busy} onClick={() => void onSave(selected, style)} className="btn btn-marker text-sm">{busy ? "بيتحفظ…" : "اختار المقترحات"}</button>
+        <button disabled={busy} onClick={() => void onSave(selected, style)} className="btn btn-marker text-sm">{busy ? "بيتحفم" : "اختار المقترحات"}</button>
         <button disabled={busy} onClick={() => void onSkip()} className="btn btn-quiet text-sm">تخطّي دلوقتي</button>
       </div>
     </section>

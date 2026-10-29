@@ -19,11 +19,11 @@ import { streamWithFallback } from "@/lib/ai/streaming-fallback";
 import { checkSubscriptionQuotas } from "@/lib/ai/quota-check";
 
 /**
- * /api/ai â€” ط§ظ„ظ…ط¯ط®ظ„ ط§ظ„ظ…ط±ظƒط²ظٹ ظ„ظƒظ„ ظ…ظ‡ط§ظ… ط§ظ„ط°ظƒط§ط، ط§ظ„ط§طµط·ظ†ط§ط¹ظٹ.
+ * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
  *
- * ط§ظ„ط·ظ„ط¨:   { task, messages, options?, stream? }
- * ط§ظ„ط±ط¯:    JSON ظ…ظˆط­ظ‘ط¯ { success, data } ط£ظˆ SSE ط¨ظ†ظپط³ chunk ط§ظ„ظ…ظˆط­ظ‘ط¯ ظ…ظ† lib/ai/streaming.
- * ط§ظ„ط£ط®ط·ط§ط،: { success:false, error:{ code, message, retryable } } â€” ط¨ط¯ظˆظ† ط£ظٹ طھظپط§طµظٹظ„ ظ…ط²ظˆظ‘ط¯ظٹظ†.
+ * الطلب:   { task, messages, options?, stream? }
+ * الرد:    JSON موحّد { success, data } أو SSE بنفس chunk الموحّد من lib/ai/streaming.
+ * الأخطاء: { success:false, error:{ code, message, retryable } } — بدون أي تفاصيل مزوّدين.
  */
 
 const MAX_MESSAGES = 30;
@@ -31,7 +31,7 @@ const MAX_MESSAGE_CHARS = 8000;
 
 type IncomingMessage = { role?: unknown; content?: unknown };
 
-/** ط£ظƒظˆط§ط¯ ط§ظ„ط®ط·ط£ ط§ظ„ط¹ط§ظ…ط© â†’ ط­ط§ظ„ط© HTTP ظ„ظ„ظ…طھطµظپط­. */
+/** أكواد الخطأ العامة → حالة HTTP للمتصفح. */
 function httpStatusForCode(code: string): number {
   switch (code) {
     case "RATE_LIMIT": return 429;
@@ -48,7 +48,7 @@ function httpStatusForCode(code: string): number {
 }
 
 function safeUserContext(raw: unknown): AiUserContext | undefined {
-  // ط§ظ„ط³ظٹط§ظ‚ ط§ظ„ظ‚ط§ط¯ظ… ظ…ظ† ط§ظ„ظƒظ„ط§ظٹظ†طھ ظ„ظ„ظ‚ط±ط§ط،ط© ظپظ‚ط·ط› ط§ظ„ظ‡ظˆظٹط© ط§ظ„ط­ظ‚ظٹظ‚ظٹط© ط¨طھطھط­ط¯ط¯ ظ…ظ† ط§ظ„ط¬ظ„ط³ط© طھط­طھ.
+  // السياق القادم من الكلاينت للقراءة فقط؛ الهوية الحقيقية بتتحدد من الجلسة تحت.
   if (typeof raw !== "object" || raw === null) return undefined;
   const data = raw as Record<string, unknown>;
   const preferences =
@@ -70,7 +70,7 @@ function safeUserContext(raw: unknown): AiUserContext | undefined {
 }
 
 export async function GET() {
-  // ظپط­طµ ط¬ط§ظ‡ط²ظٹط© ط¨ط¯ظˆظ† ط£ظٹ ظ‚ظٹظ… ط­ط³ط§ط³ط© â€” ط£ط³ظ…ط§ط، ط§ظ„ظ…ظ‡ط§ظ… ظˆط­ط§ظ„ط© ط§ظ„طھظ‡ظٹط¦ط© ظپظ‚ط· (boolean).
+  // فحص جاهزية بدون أي قيم حساسة — أسماء المهام وحالة التهيئة فقط (boolean).
   const providers = Object.fromEntries(
     (["groq", "nvidia", "openrouter", "gemini"] as const).map((name) => [
       name,
@@ -109,12 +109,12 @@ export async function POST(req: Request) {
     const limited = checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
-    // ط§ظ„ظپط­طµ ط§ظ„ظ…ط±ظƒط²ظٹ ظ„ظ„ظƒظˆطھط© + ط§ظ„ظ…ظپطھط§ط­ ط§ظ„ط°ظƒظٹ ط§ظ„ظپط±ظٹط¯ (idempotency + fail-open/fail-closed)
+    // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)
     const actor = await resolveActor(supabase, user.id, user.email ?? null);
     const quota = await checkSubscriptionQuotas(user.id, "message", actor.isOwner);
     if (!quota.allowed) {
       return NextResponse.json(
-        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "طھظ… طھط¬ط§ظˆط² ط­ط¯ ط±ط³ط§ظٹظ„ ط§ظ„ط¨ط§ظ‚ط©.", retryable: false } },
+        { success: false, error: { code: "MESSAGE_QUOTA_EXCEEDED", message: quota.reasonAr ?? "تم تجاوز حد رسايل الباقة.", retryable: false } },
         { status: 429 }
       );
     }
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_REQUEST", message: "ط§ظ„ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط¨ط¹ظˆطھط© ط؛ظٹط± طµط§ظ„ط­ط©.", retryable: false } },
+        { success: false, error: { code: "INVALID_REQUEST", message: "البيانات المبعوتة غير صالحة.", retryable: false } },
         { status: 400 }
       );
     }
@@ -137,12 +137,12 @@ export async function POST(req: Request) {
 
     if (!isImplementedAiTask(task) && !["image_generation", "image_edit", "video_generation"].includes(task as string)) {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_REQUEST", message: "ظ…ظ‡ظ…ط© ط؛ظٹط± ظ…ط¹ط±ظˆظپط© ط£ظˆ ظ…ط´ ظ…طھط§ط­ط© ط¨ط¹ط¯.", retryable: false } },
+        { success: false, error: { code: "INVALID_REQUEST", message: "مهمة غير معروفة أو مش متاحة بعد.", retryable: false } },
         { status: 400 }
       );
     }
 
-    /* ---------------- ظ…ظ‡ط§ظ… ط§ظ„ظˆط³ط§ط¦ط· (Media Router) ---------------- */
+    /* ---------------- مهام الوسائط (Media Router) ---------------- */
     const MEDIA_TASKS = ["image_generation", "image_edit", "video_generation"] as const;
     type MediaTaskId = (typeof MEDIA_TASKS)[number];
     const mediaTask: MediaTaskId | undefined =
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
         : undefined;
       if (prompt.length < 3) {
         return NextResponse.json(
-          { success: false, error: { code: "INVALID_REQUEST", message: "ط§ظƒطھط¨ ظˆطµظپ ظˆط§ط¶ط­ ظ„ظ„طµظˆط±ط© ط§ظ„ظ…ط·ظ„ظˆط¨ط©.", retryable: false } },
+          { success: false, error: { code: "INVALID_REQUEST", message: "اكتب وصف واضح للصورة المطلوبة.", retryable: false } },
           { status: 400 }
         );
       }
@@ -201,19 +201,19 @@ export async function POST(req: Request) {
     }
 
     /*
-     * ظ…ظ‡ط§ظ… ط§ظ„ظ†طµظˆطµ: ط¨ط¹ط¯ ط§ط³طھط¨ط¹ط§ط¯ ط§ظ„ظˆط³ط§ط¦ط· ظپظˆظ‚طŒ ط§ظ„ظپط­طµ ط¯ظ‡ ط¨ظٹط¶ظٹظ‘ظ‚ ط§ظ„ظ†ظˆط¹
-     * ظ„ظ„ظ…ظ‡ط§ظ… ط§ظ„ظ…ظ†ظپط°ط© ظپط¹ظ„ظٹظ‹ط§ (chat/explain/tutor) ظ‚ط¨ظ„ ط£ظٹ ط§ط³طھط®ط¯ط§ظ….
+     * مهام النصوص: بعد استبعاد الوسائط فوق، الفحص ده بيضيّق النوع
+     * للمهام المنفذة فعليًا (chat/explain/tutor) قبل أي استخدام.
      */
     if (!isImplementedAiTask(task)) {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_REQUEST", message: "ظ…ظ‡ظ…ط© ط؛ظٹط± ظ…ط¹ط±ظˆظپط© ط£ظˆ ظ…ط´ ظ…طھط§ط­ط© ط¨ط¹ط¯.", retryable: false } },
+        { success: false, error: { code: "INVALID_REQUEST", message: "مهمة غير معروفة أو مش متاحة بعد.", retryable: false } },
         { status: 400 }
       );
     }
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_REQUEST", message: "ظ…ظپظٹط´ ط±ط³ط§ظٹظ„ ظ…ط¨ط¹ظˆطھط©.", retryable: false } },
+        { success: false, error: { code: "INVALID_REQUEST", message: "مفيش رسايل مبعوتة.", retryable: false } },
         { status: 400 }
       );
     }
@@ -229,7 +229,7 @@ export async function POST(req: Request) {
 
     if (safeMessages.length === 0) {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_REQUEST", message: "ظ…ظپظٹط´ ط±ط³ط§ظٹظ„ طµط§ظ„ط­ط© ظ„ظ„ط¥ط±ط³ط§ظ„.", retryable: false } },
+        { success: false, error: { code: "INVALID_REQUEST", message: "مفيش رسايل صالحة للإرسال.", retryable: false } },
         { status: 400 }
       );
     }
@@ -245,7 +245,7 @@ export async function POST(req: Request) {
       user: { userId: user.id, ...safeUserContext(clientUser) },
     };
 
-    /* ---------------- ظˆط¶ط¹ ط§ظ„ط¨ط« (SSE) ---------------- */
+    /* ---------------- وضع البث (SSE) ---------------- */
     if (stream === true) {
       // Phase H: credit/entitlement gate even for streaming (same cost)
       const candidates = routeCandidates(task);
@@ -267,7 +267,7 @@ export async function POST(req: Request) {
       }
       if (accessible.length === 0 && candidates.length > 0) {
         return NextResponse.json(
-          { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "ظ‡ط°ظ‡ ط§ظ„ظ…ظ‡ظ…ط© طھطھط·ظ„ط¨ طµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.", retryable: false } },
+          { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
           { status: 403 }
         );
       }
@@ -309,7 +309,7 @@ export async function POST(req: Request) {
       });
     }
 
-    /* ---------------- ظˆط¶ط¹ JSON ط§ظ„ظ…ظˆط­ظ‘ط¯ ---------------- */
+    /* ---------------- وضع JSON الموحّد ---------------- */
     // Phase H: entitlement filter + credit reserve before execution
     const candidates = routeCandidates(task);
     const hasEnt = async (k: string, v: string) => {
@@ -330,7 +330,7 @@ export async function POST(req: Request) {
     }
     if (accessible.length === 0 && candidates.length > 0) {
       return NextResponse.json(
-        { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "ظ‡ط°ظ‡ ط§ظ„ظ…ظ‡ظ…ط© طھطھط·ظ„ط¨ طµظ„ط§ط­ظٹط©. ط§ط´طھط±ظگظ‡ط§ ظ…ظ† ط§ظ„ظ…طھط¬ط±.", retryable: false } },
+        { success: false, error: { code: "MODEL_ACCESS_REQUIRED", message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", retryable: false } },
         { status: 403 }
       );
     }
@@ -353,7 +353,7 @@ export async function POST(req: Request) {
         latencyMs: Date.now() - startedAt,
         fallbackAttempts: result.fallback?.attempts,
       });
-      // ط³ط¬ظ„ ظ…ط±ط§ظ‚ط¨ط© ط¢ظ…ظ† â€” ط¨ط¯ظˆظ† ط£ظٹ ظ…ط­طھظˆظ‰ ط·ظ„ط¨/ط§ط³طھط¬ط§ط¨ط© ط£ظˆ ظ…ظپط§طھظٹط­.
+      // سجل مراقبة آمن — بدون أي محتوى طلب/استجابة أو مفاتيح.
       console.info(
         [
           "ai-telemetry",
@@ -408,7 +408,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: { code: "UNKNOWN", message: "ط­طµظ„ ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹ ط£ط«ظ†ط§ط، ط§ظ„ط§طھطµط§ظ„.", retryable: false },
+        error: { code: "UNKNOWN", message: "حصل خطأ غير متوقع أثناء الاتصال.", retryable: false },
       },
       { status: 500 }
     );
