@@ -1,11 +1,12 @@
+"use client";
+
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { useAuthUser } from "@/components/dashboard/components/use-page-data";
+import { useAuthUser } from "@/app/dashboard/components/use-page-data";
 import type { StudyDay } from "@/app/dashboard/components/types";
-import { EmptyState, LoadingSheets } from "@/components/dashboard/components/PageShell";
-import ProgressBar from "@/components/common/ProgressBar";
+import { EmptyState, LoadingSheets } from "@/app/dashboard/components/PageShell";
 
 export default function LessonsPage() {
   const router = useRouter();
@@ -51,14 +52,17 @@ export default function LessonsPage() {
         day: Number(r.day),
         title: r.title || `اليوم ${r.day}`,
         topic: r.topic || "درس",
-        is_completed: Boolean(r.is_completed)
+        description: r.description || "",
+        isCompleted: Boolean(r.is_completed),
+        xpReward: r.xp_reward ?? 100,
+        learningStyle: (r.learning_style as StudyDay["learningStyle"]) ?? "practical",
       })) as StudyDay[];
       setDays(parsed);
       setState(parsed.length ? "ready" : "empty");
     })();
   }, [session, supabase]);
 
-  const done = days.filter(d => d.is_completed).length;
+  const done = days.filter(d => d.isCompleted).length;
   const pct = days.length ? Math.round((done / days.length) * 100) : 0;
 
   return (
@@ -72,7 +76,9 @@ export default function LessonsPage() {
           <span className="tag">
             <span className="mono">{done}/{days.length}</span> مكتمل
           </span>
-          <ProgressBar pct={pct} barClass="meter-sm" />
+          <div className="mt-3 h-2.5 w-32 overflow-hidden rounded-full bg-paper-3 border border-rule" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-full rounded-full bg-ink transition-all duration-700" style={{ width: `${pct}%` }} />
+          </div>
         </div>
       </div>
 
@@ -97,15 +103,15 @@ export default function LessonsPage() {
             <Link
               key={day.id}
               href={"/lesson/" + day.day}
-              className={"sheet-card flex items-start gap-3 rounded p-4" + (day.is_completed ? " opacity-60" : "")}
+              className={"sheet-card flex items-start gap-3 rounded p-4" + (day.isCompleted ? " opacity-60" : "")}
             >
-              <span className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display font-black text-sm " + (day.is_completed ? "bg-emerald/15 text-emerald" : "bg-white/5 text-ink-soft")}>
+              <span className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display font-black text-sm " + (day.isCompleted ? "bg-emerald/15 text-emerald" : "bg-white/5 text-ink-soft")}>
                 <span className="mono text-[9px]">{i + 1}</span>
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-ink truncate">{day.title}</h3>
-                  {day.is_completed && <span className="tag">مكتمل</span>}
+                  {day.isCompleted && <span className="tag">مكتمل</span>}
                 </div>
                 <p className="text-[11px] text-ink-soft mt-0.5">{day.topic}</p>
               </div>
