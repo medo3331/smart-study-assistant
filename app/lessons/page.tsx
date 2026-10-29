@@ -43,14 +43,14 @@ export default function LessonsPage() {
     (async () => {
       const { data, error } = await supabase
         .from("study_days")
-        .select("id, day, title, topic, is_completed")
+        .select("id, day_number, title, topic, description, is_completed, xp_reward, learning_style")
         .eq("user_id", session.user.id)
-        .order("day", { ascending: true });
+        .order("day_number", { ascending: true });
       if (error) { setError(error.message); setState("error"); return; }
       const parsed = (data ?? []).map((r: any) => ({
         id: r.id,
-        day: Number(r.day),
-        title: r.title || `اليوم ${r.day}`,
+        day: Number(r.day_number),
+        title: r.title || `اليوم ${r.day_number}`,
         topic: r.topic || "درس",
         description: r.description || "",
         isCompleted: Boolean(r.is_completed),
@@ -102,7 +102,7 @@ export default function LessonsPage() {
           {days.map((day, i) => (
             <Link
               key={day.id}
-              href={"/lesson/" + day.day}
+              href={"/lesson/" + day.id}
               className={"sheet-card flex items-start gap-3 rounded p-4" + (day.isCompleted ? " opacity-60" : "")}
             >
               <span className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display font-black text-sm " + (day.isCompleted ? "bg-emerald/15 text-emerald" : "bg-white/5 text-ink-soft")}>

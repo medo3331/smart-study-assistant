@@ -1466,6 +1466,7 @@ export default function DashboardPage() {
         <div className="motion-safe:animate-[wheelPulse_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
         <MagicWheelDashboard
           currentDay={currentDayNumber}
+          currentDayId={currentTaskForCoach?.id}
           totalDays={days.length}
           subject={config?.subject ?? ""}
           completedSteps={completedCount}

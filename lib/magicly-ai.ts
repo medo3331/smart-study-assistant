@@ -91,13 +91,13 @@ export async function getStudentContext(
 
   const [configResult, daysResult, memoryResult, profileResult] = await Promise.all([
     supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
-    supabase.from("study_days").select("day, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
+    supabase.from("study_days").select("day_number, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
     supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
     supabase.from("profiles").select("study_field, learning_goal").eq("id", userId).maybeSingle(),
   ]);
 
-  const days = (daysResult.data ?? []) as Array<{ day: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
-  const currentDay = lessonDay === null ? undefined : days.find((day) => day.day === lessonDay);
+  const days = (daysResult.data ?? []) as Array<{ day_number: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
+  const currentDay = lessonDay === null ? undefined : days.find((day) => day.day_number === lessonDay);
   const completed = days.filter((day) => day.is_completed).length;
 
   return {
