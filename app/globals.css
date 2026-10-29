@@ -69,6 +69,22 @@
   /* النص اللي بيقع فوق الأصفر الفسفوري. مش بيتغير مع الثيم عن قصد:
      الفسفوري أصفر في الحالتين، فلازم يفضل عليه حبر كحلي. */
   --on-marker: #232D49;
+
+  /* ---- V2 Semantic tokens (alias theme-adaptive vars) ----
+     These resolve lazily per active theme/shop-pack. Do NOT hardcode here.
+     primary = red (important actions); interactive/focus = indigo-blue;
+     progress = blue; danger = red (outlined + icon in components). */
+  --color-primary: var(--redpen);
+  --color-primary-hover: var(--redpen);
+  --color-interactive: var(--hl-indigo-fill);
+  --color-progress: var(--hl-blue-fill);
+  --color-danger: var(--redpen);
+  --color-surface-1: var(--paper-2);
+  --color-surface-2: var(--paper-3);
+  --color-text-primary: var(--ink);
+  --color-text-muted: var(--ink-soft);
+  --color-border: var(--rule);
+  --color-focus-ring: var(--hl-indigo-fill);
 }
 
 /* ==========================================================================
@@ -1662,7 +1678,7 @@ html {
 }
 
 .btn-marker {
-  background: var(--marker);
+  background: var(--color-primary);
   color: var(--on-marker);
   box-shadow: 0 2px 0 var(--marker-deep);
 }

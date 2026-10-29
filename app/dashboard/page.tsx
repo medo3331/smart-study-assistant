@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import MagicWheelDashboard from "@/components/MagicWheelDashboard";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TodayPlanCard, DailyMissionsCard, WeeklyProgressCard, CompanionStatusCard } from "@/components/DashboardExtraCards";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -1485,28 +1486,22 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto mb-6">
-        <div className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-5">
-          <h2 className="text-lg font-extrabold mb-3">رحلة اليوم</h2>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {[
-              { label: "1. خطة", done: days.length > 0 },
-              { label: "2. درس اليوم", done: days.length > 0 && completedCount < days.length ? false : days.length > 0 && completedCount >= 1 },
-              { label: "3. مراجعة", done: completedCount > 0 },
-              { label: "4. تقدم", done: overallProgress >= 50 },
-            ].map((s) => (
-              <span key={s.label} className={`px-3 py-1 rounded-full text-xs font-bold ${s.done ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-500/20 text-slate-300"}`}>{s.label}</span>
-            ))}
+        {/* ── V2: greeting + profile summary ── */}
+        <div className="flex items-center gap-3 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4">
+          <ProfileAvatar
+            initial={railAccountFromUser(authUser)?.avatarInitial ?? "؟"}
+            name={railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
+            size={48}
+          />
+          <div className="min-w-0">
+            <p className="text-sm text-[var(--color-text-muted)]">أهلاً بعودتك 👋</p>
+            <p className="text-base font-semibold text-[var(--color-text-primary)] truncate">
+              {railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
+            </p>
           </div>
-          {days.length === 0 ? (
-            <a href="/dashboard/create" className="inline-block px-5 py-2.5 rounded-xl bg-violet-500/20 text-violet-300 font-bold">أنشئ خطة للبدء</a>
-          ) : completedCount >= days.length ? (
-            <a href="/dashboard/progress" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold">راجع تقدمك</a>
-          ) : (
-            <a href="/dashboard/courses" className="inline-block px-5 py-2.5 rounded-xl bg-violet-500/20 text-violet-300 font-bold">ابدأ درس اليوم</a>
-          )}
         </div>
-      </div>
+
+
       <div className="max-w-6xl mx-auto space-y-10">
         {isPrimary && primaryDashboardSafe ? (
           <div className="space-y-6">

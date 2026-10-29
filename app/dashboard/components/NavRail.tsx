@@ -254,7 +254,7 @@ export function NavRail({
           aria-disabled={dim || undefined}
           aria-current={current}
           aria-pressed={isToggle ? isOn : undefined}
-          className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--r-sm)] text-right transition ${
+          className={`relative w-full flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-[var(--r-sm)] text-right transition ${
             dim
               ? "opacity-45 cursor-default text-ink-soft"
               : isOn

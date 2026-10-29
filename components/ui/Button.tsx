@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-type Variant = "primary" | "ghost" | "success";
+type Variant = "primary" | "ghost" | "success" | "danger";
 
 interface ButtonProps {
   children: React.ReactNode;
@@ -11,20 +11,27 @@ interface ButtonProps {
   variant?: Variant;
   className?: string;
   disabled?: boolean;
+  loading?: boolean;
+  type?: "button" | "submit" | "reset";
 }
 
 /**
  * The ONE button component. Every interactive element uses it so icons,
  * sizing (h-11 / px-4), radius, and hover states stay identical everywhere.
  * Icons are always size 18 (lucide default scale) and use currentColor.
+ *
+ * V2: variants consume semantic tokens (--color-primary, --color-danger, etc.)
+ * so they adapt to all 8 themes + shop packs.
  */
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-[#7C5CFF] text-white hover:bg-[#8E72FF] shadow-[0_6px_20px_rgba(124,92,255,0.35)]",
+    "bg-[var(--color-primary)] text-[var(--on-marker,#fff)] hover:opacity-90 shadow-[0_6px_20px_color-mix(in_srgb,var(--color-primary)_35%,transparent)]",
   success:
-    "bg-[#2DD4BF] text-[#06231F] hover:bg-[#3DE0CC] shadow-[0_6px_20px_rgba(45,212,191,0.30)]",
+    "bg-[var(--hl-green-fill)] text-[var(--on-marker,#fff)] hover:opacity-90 shadow-[0_6px_20px_color-mix(in_srgb,var(--hl-green-fill)_30%,transparent)]",
+  danger:
+    "border border-[var(--color-danger)] text-[var(--color-danger)] bg-transparent hover:bg-[color-mix(in_srgb,var(--color-danger)_12%,transparent)]",
   ghost:
-    "bg-white/[0.04] text-[#E7E9F5] border border-white/[0.08] hover:bg-white/[0.08]",
+    "bg-[var(--paper-3)] text-[var(--ink)] border border-[var(--rule)] hover:bg-[var(--paper-2)]",
 };
 
 export function Button({
@@ -35,25 +42,32 @@ export function Button({
   variant = "primary",
   className,
   disabled = false,
+  loading = false,
+  type = "button",
 }: ButtonProps) {
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || loading}
       className={cn(
-        "inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4",
+        "inline-flex h-11 items-center justify-center gap-2 rounded-[var(--r-md)] px-4",
         "text-sm font-semibold transition-colors duration-200",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C5CFF]/60",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]/60",
         VARIANTS[variant],
-        disabled && "opacity-50 cursor-not-allowed",
+        (disabled || loading) && "opacity-50 cursor-not-allowed",
         className
       )}
     >
-      {/* In RTL, "start" of the flex row is the right edge visually. */}
-      {Icon && iconPosition === "start" && <Icon size={18} aria-hidden />}
+      {loading && (
+        <span
+          aria-hidden
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+        />
+      )}
+      {Icon && iconPosition === "start" && !loading && <Icon size={18} aria-hidden />}
       <span>{children}</span>
-      {Icon && iconPosition === "end" && <Icon size={18} aria-hidden />}
+      {Icon && iconPosition === "end" && !loading && <Icon size={18} aria-hidden />}
     </button>
   );
 }
