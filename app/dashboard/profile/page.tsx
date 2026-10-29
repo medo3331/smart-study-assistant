@@ -86,6 +86,8 @@ export default function ProfilePage() {
     } catch {
       setCodeCopied(false);
     }
+  }
+
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-4">
@@ -240,5 +242,4 @@ export default function ProfilePage() {
       )}
     </div>
   );
-}
 }
