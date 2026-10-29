@@ -207,6 +207,17 @@ export async function activateSubscription(
 
     const activationId = (activationData as any)?.id || null;
 
+    // ── Insert entitlement so quota-check & profile reflect the new plan ──
+    try {
+      const expiresAt = new Date(Date.now() + (input.durationDays || 0) * 86400_000).toISOString();
+      // Revoke any prior active plan entitlements
+      await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").is("expires_at", null);
+      await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
+      await privileged.from("entitlements").insert({ user_id: userId, kind: "plan", value: input.planKey, expires_at: expiresAt });
+    } catch (entErr) {
+      console.warn("activateSubscription entitlement insert failed:", entErr);
+    }
+
     // 5. Audit PASS
     const auditResult = await recordAuditLog({
       actor: adminUserId,
