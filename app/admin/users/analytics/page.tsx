@@ -1,45 +1,56 @@
 import Link from "next/link";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
-import { createServiceClient } from "@/lib/supabase/admin";
+import { isPgConfigured, pgQuery } from "@/lib/admin/pg";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
+
+type ProfileRow = { id: string; display_name: string | null; email: string | null; public_user_code: string | null; created_at: string | null; is_premium: boolean; is_trial: boolean };
+type CountRow = { user_id: string; total: string; ok: string; fail: string };
 
 export default async function AdminUsersAnalyticsPage() {
   await requireAdminPermission("users.read");
-  const privileged = createServiceClient();
 
-  const [{ data: profiles }, { data: ops }] = await Promise.all([
-    privileged.from("profiles").select("id, display_name, email, public_user_code, created_at, entitlements(kind, value, metadata)").limit(100),
-    privileged.from("ai_operations").select("user_id, status").limit(5000),
-  ]);
+  let profiles: ProfileRow[] = [];
+  let counts: Record<string, { total: number; ok: number; fail: number }> = {};
 
-  // enrich emails
-  let emailMap: Record<string, string> = {};
-  try {
-    const { data: listData } = await privileged.auth.admin.listUsers();
-    for (const u of listData?.users ?? []) if (u.email) emailMap[u.id] = u.email;
-  } catch {}
-
-  const counts: Record<string, { total: number; ok: number; fail: number }> = {};
-  for (const o of ops ?? []) {
-    const id = (o as any).user_id;
-    if (!id) continue;
-    if (!counts[id]) counts[id] = { total: 0, ok: 0, fail: 0 };
-    counts[id].total++;
-    if ((o as any).status === "completed") counts[id].ok++;
-    else counts[id].fail++;
+  if (isPgConfigured()) {
+    try {
+      profiles = await pgQuery<ProfileRow>(`
+        SELECT p.id::text AS id,
+               p.display_name,
+               p.email,
+               p.public_user_code,
+               p.created_at::text AS created_at,
+               EXISTS (SELECT 1 FROM public.entitlements e WHERE e.user_id=p.id AND e.kind='plan' AND e.value='premium' AND (e.expires_at IS NULL OR e.expires_at > now())) AS is_premium,
+               EXISTS (SELECT 1 FROM public.entitlements e WHERE e.user_id=p.id AND e.kind='plan' AND e.metadata->>'source'='premium_trial_0_5' AND (e.expires_at IS NULL OR e.expires_at > now())) AS is_trial
+        FROM public.profiles p
+        ORDER BY p.created_at DESC NULLS LAST
+        LIMIT 100
+      `);
+    } catch {}
+    try {
+      const c = await pgQuery<CountRow>(`
+        SELECT user_id::text AS user_id,
+               count(*)::text AS total,
+               count(*) FILTER (WHERE status='completed')::text AS ok,
+               count(*) FILTER (WHERE status IS DISTINCT FROM 'completed')::text AS fail
+        FROM public.ai_operations
+        WHERE user_id IS NOT NULL
+        GROUP BY user_id
+      `);
+      for (const row of c) {
+        counts[row.user_id] = { total: parseInt(row.total, 10), ok: parseInt(row.ok, 10), fail: parseInt(row.fail, 10) };
+      }
+    } catch {}
   }
 
-  const rows = (profiles ?? []).map((p: any) => {
-    const ents = p.entitlements as any[] | undefined;
-    const isTrial = !!ents?.some?.((e) => e.kind === "plan" && e.metadata?.source === "premium_trial_0_5");
-    const hasPremium = !!ents?.some?.((e) => e.kind === "plan" && e.value === "premium");
+  const rows = profiles.map((p) => {
     const c = counts[p.id] ?? { total: 0, ok: 0, fail: 0 };
     return {
       id: p.id,
       name: p.display_name?.trim() || `مستخدم #${p.id.slice(0, 6)}`,
-      email: p.email || emailMap[p.id] || "—",
+      email: p.email || "—",
       code: p.public_user_code || "—",
-      plan: hasPremium ? (isTrial ? "تجربة" : "Premium") : "مجاني",
+      plan: p.is_premium ? (p.is_trial ? "تجربة" : "Premium") : "مجاني",
       aiTotal: c.total,
       aiOk: c.ok,
       aiFail: c.fail,
@@ -86,9 +97,11 @@ export default async function AdminUsersAnalyticsPage() {
           </AdminTableWrap>
         )}
       </AdminCard>
+      {!isPgConfigured() ? <AdminNotice tone="amber">DATABASE_URL غير متاح — لا توجد بيانات.</AdminNotice> : null}
       <AdminNotice tone="default">
         <Link href="/admin/users" className="underline hover:text-amber-300">العودة إلى إدارة المستخدمين</Link>
       </AdminNotice>
     </div>
   );
 }
+
