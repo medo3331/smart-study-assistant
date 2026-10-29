@@ -109,6 +109,7 @@ export async function sendAdminMessage(input: {
 
   await recordAuditLog({
     actor: user.id,
+    actor_email: user.email ?? null,
     action: "admin_message_send",
     resource_type: "announcement",
     resource_id: ann.id,
