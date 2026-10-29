@@ -114,6 +114,8 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
 };
 }
 
+export interface ResetQuotaResult { ok: boolean; message: string; }
+
 
 export async function resetSubscriptionQuota(
   userIdOrCode: string,
