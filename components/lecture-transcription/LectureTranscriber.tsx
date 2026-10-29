@@ -64,6 +64,7 @@ import {
   type FailureStage,
 } from "@/lib/media/lecture-recovery";
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 
 /** خصائص بطاقة الاسترداد — كلها قيم للعرض فقط، بلا أي بيانات مستخدم. */
 type RecoveryCardProps = {
@@ -859,15 +860,16 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
           {FORMATS_LABEL} — الحد الأقصى {MAX_SIZE_LABEL}
         </p>
 
-        <button
-          type="button"
+        <Button
           onClick={openPicker}
           disabled={working}
-          className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          loading={false}
+          variant="primary"
+          className="mt-5"
         >
           <Upload size={18} aria-hidden />
           <span>اختر ملف</span>
-        </button>
+        </Button>
 
         <input
           ref={inputRef}
@@ -958,16 +960,16 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
               </p>
             </div>
           ) : (
-            <button
-              type="button"
+            <Button
               onClick={run}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] text-sm font-semibold text-white transition-colors hover:opacity-90"
+              variant="primary"
+              className="mt-4 w-full"
             >
               <Mic size={18} aria-hidden />
               {/* الملف لسه مرفوع؟ يعني دوسنا الأول رفع من غير ما يوصل،
                   فالتسميات لازم توضّح إننا مش بنرفع تاني. */}
               <span>{uploadedPath ? "حاول تحويلها تاني" : "تحويل إلى نص"}</span>
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -1009,9 +1011,9 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4"
+          className="flex items-start gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--color-danger)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] p-4"
         >
-          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden />
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-[var(--color-danger)]" aria-hidden />
            <div className="flex-1">
              <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
              <a href="https://wa.me/201204556797" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">تواصل مع الدعم (واتساب)</a>
