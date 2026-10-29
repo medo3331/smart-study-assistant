@@ -31,14 +31,22 @@ export interface QuotaCheckResult {
   ownerBypass?: boolean;
 }
 
-/** اليوم بالتقويم UTC كمفتاح فترة — يتطابق مع date_trunc('day') في الـ RPC والـ lazy reset. */
-function quotaPeriodKey(): string {
-  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD (UTC)
-}
-
-/** مفتاح العنفة (idempotency key): يضمن عدم الاستهلاك المكرر لنفس المستخدم/النوع/اليوم. */
+/** مفتاح العنفة (idempotency key): فريد لكل طلب HTTP.
+ *
+ *  ملاحظة: المفتاح اليومي (userId+kind+date) كان يسبّب bug — كل طلبات اليوم
+ *  تُعتبر "مستهلكة مسبقًا" بعد أول طلب، فلا يُستهلك إلا طلب واحد. وللحماية
+ *  من إعادة المحاولة (retry) يجب على العميل إرسال معرف طلب ثابت (X-Request-Id)
+ *  وإعادة استخدامه؛ في غيابه نولّد UUID جديد لكل طلب (لا حماية retry، لكن
+ *  العدّ يبقى صحيحًا). */
 function quotaIdempotencyKey(userId: string, kind: QuotaKind): string {
-  return `quota:${userId}:${kind}:${quotaPeriodKey()}`;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof crypto !== "undefined" && typeof (crypto as any).randomUUID === "function") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return `quota:${userId}:${kind}:${(crypto as any).randomUUID()}`;
+    }
+  } catch {}
+  return `quota:${userId}:${kind}:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** سياسة fail-open: لو true يُسمح بالطلب عند تعطل الـRPC، لو false يُرفض الطلب (fail-closed).
