@@ -18,6 +18,7 @@ export const NAV_SIGNALS = [
   "parentReport",
   "leaderboard",
   "xpShop",
+  "ai",
 ] as const;
 
 export type NavSignal = (typeof NAV_SIGNALS)[number];
