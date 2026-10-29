@@ -16,6 +16,8 @@ export default async function AdminAnalyticsPage() {
   let emailSent = 0;
   let aiTotal = 0;
   let ai24h = 0;
+  type UserRow = { id: string; email: string | null; display_name: string | null; created_at: string | null; files_count: string; ai_count: string; last_ai: string | null; is_premium: boolean };
+  let users: UserRow[] = [];
   if (pgReady) {
     try {
       const [a, r, i, e, t, h] = await Promise.all([
@@ -32,6 +34,21 @@ export default async function AdminAnalyticsPage() {
       emailSent = parseInt(e[0]?.c || "0", 10);
       aiTotal = parseInt(t[0]?.c || "0", 10);
       ai24h = parseInt(h[0]?.c || "0", 10);
+    } catch {}
+    try {
+      users = await pgQuery<UserRow>(`
+        SELECT p.id::text AS id,
+               p.email,
+               p.display_name,
+               p.created_at::text AS created_at,
+               COALESCE((SELECT count(*) FROM public.files f WHERE f.user_id = p.id),0)::text AS files_count,
+               COALESCE((SELECT count(*) FROM public.ai_credit_ledger l WHERE l.user_id = p.id AND l.reason='ai_reserve'),0)::text AS ai_count,
+               (SELECT max(l.created_at)::text FROM public.ai_credit_ledger l WHERE l.user_id = p.id) AS last_ai,
+               EXISTS (SELECT 1 FROM public.entitlements e WHERE e.user_id=p.id AND e.kind='plan' AND e.value='premium' AND (e.expires_at IS NULL OR e.expires_at > now())) AS is_premium
+        FROM public.profiles p
+        ORDER BY p.created_at DESC NULLS LAST
+        LIMIT 200
+      `);
     } catch {}
   }
 
@@ -61,6 +78,37 @@ export default async function AdminAnalyticsPage() {
           <Link href="/admin/subscriptions" className="underline">الاشتراكات</Link>
           <Link href="/admin/messaging" className="underline">الرسائل</Link>
           <Link href="/inbox" className="underline">صندوق المستخدم</Link>
+        </div>
+      </AdminCard>
+      <AdminCard title="مستخدمون وحركتهم (آخر 200)" tone="default">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-right">
+                <th className="p-2">المستخدم</th>
+                <th className="p-2">الباقة</th>
+                <th className="p-2">ملفات</th>
+                <th className="p-2">AI</th>
+                <th className="p-2">آخر AI</th>
+                <th className="p-2">انضم</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-t border-slate-800">
+                  <td className="p-2">
+                    <div className="font-medium">{u.display_name || "—"}</div>
+                    <div className="text-xs text-slate-400">{u.email || u.id}</div>
+                  </td>
+                  <td className="p-2">{u.is_premium ? "Premium" : "Free"}</td>
+                  <td className="p-2">{u.files_count}</td>
+                  <td className="p-2">{u.ai_count}</td>
+                  <td className="p-2">{u.last_ai ? new Date(u.last_ai).toLocaleString() : "—"}</td>
+                  <td className="p-2">{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </AdminCard>
       <AdminNotice tone="default">
