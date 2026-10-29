@@ -91,6 +91,9 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<any> 
   upload_limit: uploadLimit,
   quota_updated_at: (quotaRow as any)?.updated_at || null,
 };
+  } catch (e) {
+    return null;
+  }
 }
 
 
