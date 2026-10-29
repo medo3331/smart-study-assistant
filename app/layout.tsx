@@ -196,7 +196,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ar"
       dir="rtl"
-      suppressHydrationWarning
       className={`${display.variable} ${body.variable} ${mono.variable}`}
     >
       <head>
