@@ -9,6 +9,7 @@ import { recordAuditLog } from "./audit-log-record";
 import { resolveActor } from "@/lib/policy";
 import type { SubscriptionStatus, ResetQuotaResult, RevokeSubscriptionResult, ExtendSubscriptionResult } from "@/lib/admin/subscription-types";
 
+
 export async function getSubscriptionStatus(userIdOrCode: string): Promise<SubscriptionStatus | null> {
   const supabase = createServiceClient();
   try {

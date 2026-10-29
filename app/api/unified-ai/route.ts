@@ -5,7 +5,7 @@
  *   POST multipart/form-data  â†’ prompt + file/image + language + [model] + [task]
  *   POST application/json     â†’ prompt + imageInput/fileInput + context + [model] + [task]
  *
- * Phase H Flow (à¤ªà¥‚à¤°à¥à¤£ ÇáÊßÇãá ÇáäåÇÆí):
+ * Phase H Flow (à¤ªà¥‚à¤°à¥à¤£ Ø§Ù„ØªÙƒØ§Ù…Ù„ Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ):
  *   Request â†’ Authenticate â†’ Resolve model
  *     â”œâ”€ explicit model? â†’ validate exists/enabled â†’ getModelAccessPolicy â†’ has_entitlement
  *     â”‚         â†’ DENIED 403 MODEL_ACCESS_REQUIRED (NO reserve, 0 credit consumed)
@@ -24,7 +24,7 @@
  *   429 rate/concurrency (from api-guard if enabled; not invented in H)
  *   500 provider/internal
  *
- * Anonymous: íÈŞì ãÌÇäğÇ ááÜ free models İŞØ (áÇ Credits æáÇ Entitlements) â€” áÇ íÓÊÎÏã ÑÕíÏ ãÕÇÏŞ Úáíå
+ * Anonymous: ÙŠØ¨Ù‚Ù‰ Ù…Ø¬Ø§Ù†Ù‹Ø§ Ù„Ù„Ù€ free models ÙÙ‚Ø· (Ù„Ø§ Credits ÙˆÙ„Ø§ Entitlements) â€” Ù„Ø§ ÙŠØ³ØªØ®Ø¯Ù… Ø±ØµÙŠØ¯ Ù…ØµØ§Ø¯Ù‚ Ø¹Ù„ÙŠÙ‡
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -46,11 +46,17 @@ import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
-import { resolveActor } from "@/lib/policy";
-import { generateIncidentId, getHttpStatus, sanitizeErrorMessage } from "@/lib/unified-ai/error-taxonomy";
-import { logIncident } from "@/lib/unified-ai/incident-log";
 import type { AiTaskType } from "@/lib/ai/types";
+import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
+import {
+  buildMagiclySystemPrompt,
+  getStudentContext,
+  getStudyToolFacts,
+  parseMode,
+  rememberSessionContext,
+  type MagiclyContextInput,
+} from "@/lib/magicly-ai";
+
 function serverRequestId(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -89,8 +95,6 @@ const VALID_TASKS = new Set<string>([
   "rag_embeddings",
 ]);
 
-const VALID_LANGUAGES = new Set<string>(["ar", "en", "mixed"]);
-
 function clampModel(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined;
   const s = input.trim();
@@ -108,7 +112,6 @@ export async function POST(req: Request) {
   let reserveRef: string | null = null;
   let userId: string | null = null;
   let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
-  let refunded = false;
 
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -130,140 +133,48 @@ export async function POST(req: Request) {
       if (f instanceof File) fileInput = f;
       const i = formData.get("imageInput");
       if (i instanceof File) imageInput = i;
-      // ÍÌã Çáãáİ: ÍÏ ÃŞÕì ~4 ãíÌÇ áÊÌäÈ 413 ãä Vercel
-      const attached = fileInput || imageInput;
-      if (attached && attached.size > 4 * 1024 * 1024) {
-        return NextResponse.json(
-          { ok: false, error: "ÍÌã Çáãáİ ßÈíÑ ÌÏÇğ¡ íÑÌì ÑİÚ ãáİ ÃÕÛÑ ãä 4 ãíÌÇ", code: "FILE_TOO_LARGE" },
-          { status: 413 }
-        );
-      }
       const lang = formData.get("language");
-      if (lang === null) {
-        // keep default
-      } else if (typeof lang !== "string") {
-        return NextResponse.json({ ok: false, error: "áÛÉ ÛíÑ ãÏÚæãÉ", code: "INVALID_LANGUAGE" }, { status: 400 });
-      } else {
-        const trimmed = lang.trim();
-        if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
-        return NextResponse.json({ ok: false, error: "áÛÉ ÛíÑ ãÏÚæãÉ", code: "INVALID_LANGUAGE" }, { status: 400 });
-        }
-        if (trimmed !== "") language = trimmed;
-      }
+      if (typeof lang === "string") language = lang;
       const ctx = formData.get("context");
-      if (ctx === null) {
-        // keep default
-      } else if (typeof ctx !== "string") {
-        return NextResponse.json({ ok: false, error: "ÓíÇŞ ÛíÑ ÕÇáÍ", code: "INVALID_CONTEXT" }, { status: 400 });
-      } else if (ctx.trim() !== "") {
+      if (typeof ctx === "string") {
         try {
-          const parsed = JSON.parse(ctx);
-          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("bad");
-          context = parsed as Record<string, unknown>;
+          context = JSON.parse(ctx);
         } catch {
-          return NextResponse.json({ ok: false, error: "ÓíÇŞ ÛíÑ ÕÇáÍ", code: "INVALID_CONTEXT" }, { status: 400 });
+          /* ignore */
         }
       }
       const m = formData.get("model");
-      if (m === null) {
-        // absent
-      } else if (typeof m !== "string") {
-        return NextResponse.json({ ok: false, error: "ãæÏíá ÛíÑ ÕÇáÍ", code: "INVALID_MODEL" }, { status: 400 });
-      } else {
-        const trimmed = m.trim();
-        if (trimmed === "") {
-          // absent
-        } else if (trimmed.length > 200) {
-          return NextResponse.json({ ok: false, error: "ãæÏíá ÛíÑ ÕÇáÍ", code: "INVALID_MODEL" }, { status: 400 });
-        } else {
-          requestedModel = trimmed;
-        }
-      }
+      requestedModel = clampModel(m);
       const t = formData.get("task");
-      if (t === null) {
-        // absent
-      } else if (typeof t !== "string") {
-        return NextResponse.json({ ok: false, error: "ãåãÉ ÛíÑ ÕÇáÍÉ", code: "INVALID_TASK" }, { status: 400 });
-      } else {
-        const trimmed = t.trim();
-        if (trimmed === "") {
-          // absent
-        } else if (!VALID_TASKS.has(trimmed)) {
-          return NextResponse.json({ ok: false, error: "äæÚ ÇáãåãÉ ÛíÑ ãÏÚæã", code: "UNSUPPORTED_TASK" }, { status: 400 });
-        } else {
-          requestedTask = trimmed as AiTaskType;
-        }
-      }
+      requestedTask = clampTask(t);
     } else {
       const body = await req.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return NextResponse.json({ ok: false, error: "ÈíÇäÇÊ ÛíÑ ÕÇáÍÉ", code: "INVALID_REQUEST" }, { status: 400 });
+      if (!body || typeof body !== "object") {
+        return NextResponse.json({ ok: false, error: "Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± ØµØ§Ù„Ø­Ø©", code: "INVALID_REQUEST" }, { status: 400 });
       }
-      const b = body as Record<string, unknown>;
-      prompt = typeof b.prompt === "string" ? b.prompt : "";
-      if ("language" in b && b.language !== undefined && b.language !== null) {
-        if (typeof b.language !== "string") {
-        return NextResponse.json({ ok: false, error: "áÛÉ ÛíÑ ãÏÚæãÉ", code: "INVALID_LANGUAGE" }, { status: 400 });
-        }
-        const trimmed = b.language.trim();
-        if (trimmed !== "" && !VALID_LANGUAGES.has(trimmed)) {
-        return NextResponse.json({ ok: false, error: "áÛÉ ÛíÑ ãÏÚæãÉ", code: "INVALID_LANGUAGE" }, { status: 400 });
-        }
-        if (trimmed !== "") language = trimmed;
-      }
-      if ("context" in b && b.context !== undefined && b.context !== null) {
-        if (typeof b.context !== "object" || Array.isArray(b.context)) {
-          return NextResponse.json({ ok: false, error: "ÓíÇŞ ÛíÑ ÕÇáÍ", code: "INVALID_CONTEXT" }, { status: 400 });
-        }
-        context = b.context as Record<string, unknown>;
-      }
-      if ("model" in b && b.model !== undefined && b.model !== null) {
-        if (typeof b.model !== "string") {
-          return NextResponse.json({ ok: false, error: "ãæÏíá ÛíÑ ÕÇáÍ", code: "INVALID_MODEL" }, { status: 400 });
-        }
-        const trimmed = b.model.trim();
-        if (trimmed !== "" && trimmed.length > 200) {
-          return NextResponse.json({ ok: false, error: "ãæÏíá ÛíÑ ÕÇáÍ", code: "INVALID_MODEL" }, { status: 400 });
-        }
-        if (trimmed !== "") requestedModel = trimmed;
-      }
-      if ("task" in b && b.task !== undefined && b.task !== null) {
-        if (typeof b.task !== "string") {
-          return NextResponse.json({ ok: false, error: "ãåãÉ ÛíÑ ÕÇáÍÉ", code: "INVALID_TASK" }, { status: 400 });
-        }
-        const trimmed = b.task.trim();
-        if (trimmed !== "" && !VALID_TASKS.has(trimmed)) {
-          return NextResponse.json({ ok: false, error: "äæÚ ÇáãåãÉ ÛíÑ ãÏÚæã", code: "UNSUPPORTED_TASK" }, { status: 400 });
-        }
-        if (trimmed !== "") requestedTask = trimmed as AiTaskType;
-      }
+      prompt = (body as Record<string, unknown>).prompt as string || "";
+      language = ((body as Record<string, unknown>).language as string) || "ar";
+      context = ((body as Record<string, unknown>).context as Record<string, unknown>) || {};
+      requestedModel = clampModel((body as Record<string, unknown>).model);
+      requestedTask = clampTask((body as Record<string, unknown>).task);
+      // Legacy: body.model as X handled above
     }
 
-    if (fileInput && imageInput) {
-      return NextResponse.json({ ok: false, error: "áÇ íãßä ÅÑÓÇá ãáİ æÕæÑÉ ãÚÇğ", code: "INCONSISTENT_ATTACHMENTS" }, { status: 400 });
-    }
-
-    if (!prompt || typeof prompt !== "string" || (prompt.trim().length === 0 && !fileInput && !imageInput)) {
-      return NextResponse.json({ ok: false, error: "ÇáãØáæÈ äÕ (prompt)", code: "INVALID_REQUEST" }, { status: 400 });
-    }
-    if (!prompt.trim() && (fileInput || imageInput)) {
-      prompt = "áÎøÕáí ÇáãÍÊæì Ïå æÇÔÑÍå ÈÃÓáæÈ æÇÖÍ æãäÙã.";
+    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+      return NextResponse.json({ ok: false, error: "Ø§Ù„Ù…Ø·Ù„ÙˆØ¨ Ù†Øµ (prompt)", code: "INVALID_REQUEST" }, { status: 400 });
     }
 
     // ---- Auth ----
     let isAnonymous = false;
-    let userEmail: string | null = null;
     try {
       supabase = await createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       userId = user?.id ?? null;
-      userEmail = user?.email ?? null;
       isAnonymous = Boolean(user?.is_anonymous);
     } catch {
       userId = null;
-      userEmail = null;
       isAnonymous = false;
     }
 
@@ -283,8 +194,8 @@ export async function POST(req: Request) {
       return Boolean(data);
     };
 
-    // Phase 2: ÊÍÏíË ÍÇáÉ ÇáãæÏíáÇÊ ãä ÇáÏÇÊÇÈíÒ ŞÈá Ãí ÍÓã â€”
-    // ÊÈÏíáÇÊ /admin/models (enabled/priority/daily_limit) ÈÊÃËÑ åäÇ İÚáíğÇ.
+    // Phase 2: ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø§Ù„Ù…ÙˆØ¯ÙŠÙ„Ø§Øª Ù…Ù† Ø§Ù„Ø¯Ø§ØªØ§Ø¨ÙŠØ² Ù‚Ø¨Ù„ Ø£ÙŠ Ø­Ø³Ù… â€”
+    // ØªØ¨Ø¯ÙŠÙ„Ø§Øª /admin/models (enabled/priority/daily_limit) Ø¨ØªØ£Ø«Ø± Ù‡Ù†Ø§ ÙØ¹Ù„ÙŠÙ‹Ø§.
     await refreshModelStateCache();
 
     let modelToUse: string = CURRENT_AI_MODEL;
@@ -295,20 +206,20 @@ export async function POST(req: Request) {
       const m = findModel(requestedModel);
       if (!m) {
         return NextResponse.json(
-          { ok: false, error: `ÇáãæÏíá ÛíÑ ãæÌæÏ: ${requestedModel}`, code: "MODEL_NOT_FOUND", model: requestedModel },
+          { ok: false, error: `Ø§Ù„Ù…ÙˆØ¯ÙŠÙ„ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯: ${requestedModel}`, code: "MODEL_NOT_FOUND", model: requestedModel },
           { status: 404 }
         );
       }
       if (!m.enabled) {
         return NextResponse.json(
-          { ok: false, error: `ÇáãæÏíá ÛíÑ ãÊÇÍ ÍÇáíğÇ: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
+          { ok: false, error: `Ø§Ù„Ù…ÙˆØ¯ÙŠÙ„ ØºÙŠØ± Ù…ØªØ§Ø­ Ø­Ø§Ù„ÙŠÙ‹Ø§: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
           { status: 404 }
         );
       }
-      // Phase 2: ÍÇáÉ ÇáÏÇÊÇÈíÒ İæŞ ŞíãÉ ÇáÓÌá â€” ãæŞæİ ÅÏÇÑíğÇ Ãæ ÊÌÇæÒ ÍÏå Çáíæãí
+      // Phase 2: Ø­Ø§Ù„Ø© Ø§Ù„Ø¯Ø§ØªØ§Ø¨ÙŠØ² ÙÙˆÙ‚ Ù‚ÙŠÙ…Ø© Ø§Ù„Ø³Ø¬Ù„ â€” Ù…ÙˆÙ‚ÙˆÙ Ø¥Ø¯Ø§Ø±ÙŠÙ‹Ø§ Ø£Ùˆ ØªØ¬Ø§ÙˆØ² Ø­Ø¯Ù‡ Ø§Ù„ÙŠÙˆÙ…ÙŠ
       if (!isModelRuntimeEnabled(m.id, m.enabled)) {
         return NextResponse.json(
-          { ok: false, error: `ÇáãæÏíá ãæŞæİ ÅÏÇÑíğÇ Ãæ ÊÌÇæÒ ÍÏå Çáíæãí: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
+          { ok: false, error: `Ø§Ù„Ù…ÙˆØ¯ÙŠÙ„ Ù…ÙˆÙ‚ÙˆÙ Ø¥Ø¯Ø§Ø±ÙŠÙ‹Ø§ Ø£Ùˆ ØªØ¬Ø§ÙˆØ² Ø­Ø¯Ù‡ Ø§Ù„ÙŠÙˆÙ…ÙŠ: ${requestedModel}`, code: "MODEL_UNAVAILABLE", model: requestedModel },
           { status: 404 }
         );
       }
@@ -318,7 +229,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               ok: false,
-              error: "åĞÇ ÇáäãæĞÌ íÊØáÈ ÊÓÌíá ÏÎæá æÕáÇÍíÉ. ÇÔÊÑöåÇ ãä ÇáãÊÌÑ.",
+              error: "Ù‡Ø°Ø§ Ø§Ù„Ù†Ù…ÙˆØ°Ø¬ ÙŠØªØ·Ù„Ø¨ ØªØ³Ø¬ÙŠÙ„ Ø¯Ø®ÙˆÙ„ ÙˆØµÙ„Ø§Ø­ÙŠØ©. Ø§Ø´ØªØ±ÙÙ‡Ø§ Ù…Ù† Ø§Ù„Ù…ØªØ¬Ø±.",
               code: "MODEL_ACCESS_REQUIRED",
               model: m.id,
               required: policy.entitlement,
@@ -328,11 +239,11 @@ export async function POST(req: Request) {
         }
         const ok = await hasEntitlement(policy.entitlement.kind, policy.entitlement.value);
         if (!ok) {
-          // Â§4: 403 ŞÈá ÇáÍÌÒ â€” áÇ íÓÊåáß credit
+          // Â§4: 403 Ù‚Ø¨Ù„ Ø§Ù„Ø­Ø¬Ø² â€” Ù„Ø§ ÙŠØ³ØªÙ‡Ù„Ùƒ credit
           return NextResponse.json(
             {
               ok: false,
-              error: "åĞÇ ÇáäãæĞÌ íÊØáÈ ÕáÇÍíÉ ÛíÑ ãÊæİÑÉ áÏíß. ÇÔÊÑöåÇ ãä ÇáãÊÌÑ.",
+              error: "Ù‡Ø°Ø§ Ø§Ù„Ù†Ù…ÙˆØ°Ø¬ ÙŠØªØ·Ù„Ø¨ ØµÙ„Ø§Ø­ÙŠØ© ØºÙŠØ± Ù…ØªÙˆÙØ±Ø© Ù„Ø¯ÙŠÙƒ. Ø§Ø´ØªØ±ÙÙ‡Ø§ Ù…Ù† Ø§Ù„Ù…ØªØ¬Ø±.",
               code: "MODEL_ACCESS_REQUIRED",
               model: m.id,
               required: policy.entitlement,
@@ -348,25 +259,19 @@ export async function POST(req: Request) {
       const candidates = routeCandidates(requestedTask);
       if (candidates.length === 0) {
         return NextResponse.json(
-          { ok: false, error: `áÇ íæÌÏ ãæÏíá ãÊÇÍ ááãåãÉ: ${requestedTask}`, code: "TASK_UNAVAILABLE", task: requestedTask },
+          { ok: false, error: `Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ù…ÙˆØ¯ÙŠÙ„ Ù…ØªØ§Ø­ Ù„Ù„Ù…Ù‡Ù…Ø©: ${requestedTask}`, code: "TASK_UNAVAILABLE", task: requestedTask },
           { status: 404 }
         );
       }
-      let accessible: typeof candidates = [];
-      try {
-        accessible = await filterAccessibleModels(candidates, hasEntitlement);
-      } catch (e) {
-        console.error("[unified-ai] filterAccessibleModels failed, falling back to candidates:", e);
-        accessible = candidates;
-      }
+      const accessible = await filterAccessibleModels(candidates, hasEntitlement);
       if (accessible.length === 0) {
-        // ßá ÇáãÑÔÍíä ãŞİáíä â€” áÇ fallback íßÓÑ ÇáÓíÇÓÉ
+        // ÙƒÙ„ Ø§Ù„Ù…Ø±Ø´Ø­ÙŠÙ† Ù…Ù‚ÙÙ„ÙŠÙ† â€” Ù„Ø§ fallback ÙŠÙƒØ³Ø± Ø§Ù„Ø³ÙŠØ§Ø³Ø©
         const required =
           candidates[0]?.model ? getModelAccessPolicy(candidates[0].model).entitlement : undefined;
         return NextResponse.json(
           {
             ok: false,
-            error: "ßá ÇáäãÇĞÌ ÇáãÊÇÍÉ áåĞå ÇáãåãÉ ÊÊØáÈ ÕáÇÍíÉ. ÇÔÊÑöåÇ ãä ÇáãÊÌÑ Ãæ ÌÑøÈ ãåãÉ ÃÎÑì.",
+            error: "ÙƒÙ„ Ø§Ù„Ù†Ù…Ø§Ø°Ø¬ Ø§Ù„Ù…ØªØ§Ø­Ø© Ù„Ù‡Ø°Ù‡ Ø§Ù„Ù…Ù‡Ù…Ø© ØªØªØ·Ù„Ø¨ ØµÙ„Ø§Ø­ÙŠØ©. Ø§Ø´ØªØ±ÙÙ‡Ø§ Ù…Ù† Ø§Ù„Ù…ØªØ¬Ø± Ø£Ùˆ Ø¬Ø±Ù‘Ø¨ Ù…Ù‡Ù…Ø© Ø£Ø®Ø±Ù‰.",
             code: "MODEL_ACCESS_REQUIRED",
             task: requestedTask,
             required,
@@ -374,20 +279,20 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       }
-      // Ãæá ãÑÔÍ ãÓãæÍ åæ ÇáİÇÆÒ (íÍÊÑã ÇáÊÑÊíÈ æÇáÜ health ÏÇÎá routeCandidates)
+      // Ø£ÙˆÙ„ Ù…Ø±Ø´Ø­ Ù…Ø³Ù…ÙˆØ­ Ù‡Ùˆ Ø§Ù„ÙØ§Ø¦Ø² (ÙŠØ­ØªØ±Ù… Ø§Ù„ØªØ±ØªÙŠØ¨ ÙˆØ§Ù„Ù€ health Ø¯Ø§Ø®Ù„ routeCandidates)
       const winner = accessible[0];
       modelToUse = winner.model ?? CURRENT_AI_MODEL;
       resolvedVia = "auto";
     } else {
-      // ---- Default (legacy): CURRENT_AI_MODEL free â†’ ÏÇÆãğÇ ãÓãæÍ ----
+      // ---- Default (legacy): CURRENT_AI_MODEL free â†’ Ø¯Ø§Ø¦Ù…Ù‹Ø§ Ù…Ø³Ù…ÙˆØ­ ----
       const policy = getModelAccessPolicy(CURRENT_AI_MODEL);
       if (policy.access === "entitlement" && policy.entitlement) {
-        // Defensive: áæ İí ÇáãÓÊŞÈá ÃÕÈÍ default gated¡ äÍÊÇÌ İÍÕ
+        // Defensive: Ù„Ùˆ ÙÙŠ Ø§Ù„Ù…Ø³ØªÙ‚Ø¨Ù„ Ø£ØµØ¨Ø­ default gatedØŒ Ù†Ø­ØªØ§Ø¬ ÙØ­Øµ
         if (!userId || !supabase) {
           return NextResponse.json(
             {
               ok: false,
-              error: "åĞÇ ÇáäãæĞÌ íÊØáÈ ÊÓÌíá ÏÎæá æÕáÇÍíÉ.",
+              error: "Ù‡Ø°Ø§ Ø§Ù„Ù†Ù…ÙˆØ°Ø¬ ÙŠØªØ·Ù„Ø¨ ØªØ³Ø¬ÙŠÙ„ Ø¯Ø®ÙˆÙ„ ÙˆØµÙ„Ø§Ø­ÙŠØ©.",
               code: "MODEL_ACCESS_REQUIRED",
               model: CURRENT_AI_MODEL,
               required: policy.entitlement,
@@ -400,7 +305,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               ok: false,
-              error: "åĞÇ ÇáäãæĞÌ íÊØáÈ ÕáÇÍíÉ ÛíÑ ãÊæİÑÉ áÏíß.",
+              error: "Ù‡Ø°Ø§ Ø§Ù„Ù†Ù…ÙˆØ°Ø¬ ÙŠØªØ·Ù„Ø¨ ØµÙ„Ø§Ø­ÙŠØ© ØºÙŠØ± Ù…ØªÙˆÙØ±Ø© Ù„Ø¯ÙŠÙƒ.",
               code: "MODEL_ACCESS_REQUIRED",
               model: CURRENT_AI_MODEL,
               required: policy.entitlement,
@@ -446,13 +351,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // ---- Phase B: Per-Agent Rate Limit (abstraction ÂãäÉ) â€” 429, 0 credit ----
-    // İŞØ ÅĞÇ ßÇä åäÇß agent identity ÍŞíŞí İí ÇáØáÈ (context.agentId) æãÚÑæİ İí AGENT_LIMITS
-    // áÇ äÎÊÑÚ agent ãä task ÚÇÏí â€” Stub = áÇ İÍÕ
+    // ---- Phase B: Per-Agent Rate Limit (abstraction Ø¢Ù…Ù†Ø©) â€” 429, 0 credit ----
+    // ÙÙ‚Ø· Ø¥Ø°Ø§ ÙƒØ§Ù† Ù‡Ù†Ø§Ùƒ agent identity Ø­Ù‚ÙŠÙ‚ÙŠ ÙÙŠ Ø§Ù„Ø·Ù„Ø¨ (context.agentId) ÙˆÙ…Ø¹Ø±ÙˆÙ ÙÙŠ AGENT_LIMITS
+    // Ù„Ø§ Ù†Ø®ØªØ±Ø¹ agent Ù…Ù† task Ø¹Ø§Ø¯ÙŠ â€” Stub = Ù„Ø§ ÙØ­Øµ
     const requestedAgentId = (() => {
       const raw = (context as Record<string, unknown>)?.agentId;
       if (typeof raw === "string" && raw.trim().length > 0 && isKnownAgentLimit(raw.trim())) return raw.trim();
-      // ÃíÖÇğ áæ task === agent æ context.agentId ãæÌæÏ â€” áÇ äÓÊäÊÌ ãä prompt
+      // Ø£ÙŠØ¶Ø§Ù‹ Ù„Ùˆ task === agent Ùˆ context.agentId Ù…ÙˆØ¬ÙˆØ¯ â€” Ù„Ø§ Ù†Ø³ØªÙ†ØªØ¬ Ù…Ù† prompt
       return null;
     })();
     if (requestedAgentId && userId && supabase && !isAnonymous) {
@@ -460,20 +365,6 @@ export async function POST(req: Request) {
       if (!agentRate.allowed) {
         const body = buildAgentRateLimitBody(agentRate);
         return NextResponse.json(body, { status: 429, headers: { "Retry-After": String(agentRate.retryAfter) } });
-      }
-    }
-
-    // ---- Phase 1: Subscription message quota (same canonical helper as /api/chat) ----
-    // Enforce before reserve so rejected quota does not consume AI credits.
-    // Anonymous guests are exempt (no authenticated UUID / plan); owners bypass via resolveActor.
-    if (userId && supabase && !isAnonymous) {
-      const actor = await resolveActor(supabase, userId, userEmail);
-      const quota = await checkSubscriptionQuota(userId, "message", actor.isOwner);
-      if (!quota.allowed) {
-        return NextResponse.json(
-          { ok: false, error: quota.reasonAr ?? "Êã ÊÌÇæÒ ÍÏ ÑÓÇíá ÇáÈÇŞÉ.", code: "MESSAGE_QUOTA_EXCEEDED" },
-          { status: 429 }
-        );
       }
     }
 
@@ -572,7 +463,7 @@ export async function POST(req: Request) {
             return NextResponse.json(
               {
                 ok: false,
-                error: `æÕáÊ ááÍÏ ÇáÃŞÕì ááÊÌÑÈÉ ÇáãÌÇäíÉ ßÒÇÆÑ (5 ØáÈÇÊ ßá 24 ÓÇÚÉ). ÓÌøá ÍÓÇÈ ãÌÇäí ááÍÕæá Úáì ÍÏ ÃßÈÑ!`,
+                error: `ÙˆØµÙ„Øª Ù„Ù„Ø­Ø¯ Ø§Ù„Ø£Ù‚ØµÙ‰ Ù„Ù„ØªØ¬Ø±Ø¨Ø© Ø§Ù„Ù…Ø¬Ø§Ù†ÙŠØ© ÙƒØ²Ø§Ø¦Ø± (5 Ø·Ù„Ø¨Ø§Øª ÙƒÙ„ 24 Ø³Ø§Ø¹Ø©). Ø³Ø¬Ù‘Ù„ Ø­Ø³Ø§Ø¨ Ù…Ø¬Ø§Ù†ÙŠ Ù„Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ø­Ø¯ Ø£ÙƒØ¨Ø±!`,
                 code: "GUEST_RATE_LIMIT",
                 retryAfterHours: 24,
                 retryAfter: 24 * 3600,
@@ -582,12 +473,12 @@ export async function POST(req: Request) {
             );
           }
           return NextResponse.json(
-            { ok: false, error: "ÑÕíÏ AI Credits áÇ íßİí. ÇÔÊÑö ÍÒãÉ ãä ÇáãÊÌÑ.", code: "INSUFFICIENT_CREDITS" },
+            { ok: false, error: "Ø±ØµÙŠØ¯ AI Credits Ù„Ø§ ÙŠÙƒÙÙŠ. Ø§Ø´ØªØ±Ù Ø­Ø²Ù…Ø© Ù…Ù† Ø§Ù„Ù…ØªØ¬Ø±.", code: "INSUFFICIENT_CREDITS" },
             { status: 402 }
           );
         }
         console.error("[PhaseF] reserve failed:", msg);
-        return NextResponse.json({ ok: false, error: "ÊÚĞÑ ÍÌÒ AI Credit. ÍÇæá ãÑÉ ÃÎÑì.", code: "RESERVE_FAILED" }, { status: 400 });
+        return NextResponse.json({ ok: false, error: "ØªØ¹Ø°Ø± Ø­Ø¬Ø² AI Credit. Ø­Ø§ÙˆÙ„ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.", code: "RESERVE_FAILED" }, { status: 500 });
       }
     }
 
@@ -601,23 +492,24 @@ export async function POST(req: Request) {
     if (imageInput) input.imageInput = imageInput;
     if (fileInput) input.fileInput = fileInput;
 
-    // ğŸ§¾ Phase 5-C5: åæíÉ ÇáØáÈ ÈÊÊæáøÏ åäÇ **ãÑÉ æÇÍÏÉ** æÈÊäÒá Ìæå
-    // `unifiedAI` áßá ãÍÇæáÉ ãÒæøÏ. ÇáãÓÇÑ Ïå ßÇä Èíáİø Úáì
-    // `callGroqWithModel` ãÈÇÔÑÉğ İãÇÈíÔæİ `routing.ts` ÎÇáÕ â€” æÏå ÓÈÈ
-    // Åä Chat ßÇä ÈíÑÏ ÚÇÏí æEvent = 0.
+    // ğŸ§¾ Phase 5-C5: Ù‡ÙˆÙŠØ© Ø§Ù„Ø·Ù„Ø¨ Ø¨ØªØªÙˆÙ„Ù‘Ø¯ Ù‡Ù†Ø§ **Ù…Ø±Ø© ÙˆØ§Ø­Ø¯Ø©** ÙˆØ¨ØªÙ†Ø²Ù„ Ø¬ÙˆÙ‡
+    // `unifiedAI` Ù„ÙƒÙ„ Ù…Ø­Ø§ÙˆÙ„Ø© Ù…Ø²ÙˆÙ‘Ø¯. Ø§Ù„Ù…Ø³Ø§Ø± Ø¯Ù‡ ÙƒØ§Ù† Ø¨ÙŠÙ„ÙÙ‘ Ø¹Ù„Ù‰
+    // `callGroqWithModel` Ù…Ø¨Ø§Ø´Ø±Ø©Ù‹ ÙÙ…Ø§Ø¨ÙŠØ´ÙˆÙ `routing.ts` Ø®Ø§Ù„Øµ â€” ÙˆØ¯Ù‡ Ø³Ø¨Ø¨
+    // Ø¥Ù† Chat ÙƒØ§Ù† Ø¨ÙŠØ±Ø¯ Ø¹Ø§Ø¯ÙŠ ÙˆEvent = 0.
     //
-    // âš ï¸ `feature = "chat"`: ÇáãÓÇÑ Ïå **åæ** ÇáãÍÇÏËÉ ÇáÃÓÇÓíÉ (äİÓ
-    //    ÇáæÙíİÉ ÈÊÇÚÉ `/api/chat`)¡ İÇáÊÕäíİ ÇáÏáÇáí æÇÍÏ ãŞÕæÏ.
-    //    ÇáÊãííÒ Èíä ÇáãÓÇÑíä ÈíÍÕá İí `metadata.path` ("unified_ai"
-    //    ãŞÇÈá "media"/"chat") â€” æÏå Çááí ÈíÎáøí C5 íİÑøŞ ãä ÛíÑ ãÇ
-    //    äßÈøÑ ÇáÜ taxonomy.
+    // âš ï¸ `feature = "chat"`: Ø§Ù„Ù…Ø³Ø§Ø± Ø¯Ù‡ **Ù‡Ùˆ** Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ø§Ù„Ø£Ø³Ø§Ø³ÙŠØ© (Ù†ÙØ³
+    //    Ø§Ù„ÙˆØ¸ÙŠÙØ© Ø¨ØªØ§Ø¹Ø© `/api/chat`)ØŒ ÙØ§Ù„ØªØµÙ†ÙŠÙ Ø§Ù„Ø¯Ù„Ø§Ù„ÙŠ ÙˆØ§Ø­Ø¯ Ù…Ù‚ØµÙˆØ¯.
+    //    Ø§Ù„ØªÙ…ÙŠÙŠØ² Ø¨ÙŠÙ† Ø§Ù„Ù…Ø³Ø§Ø±ÙŠÙ† Ø¨ÙŠØ­ØµÙ„ ÙÙŠ `metadata.path` ("unified_ai"
+    //    Ù…Ù‚Ø§Ø¨Ù„ "media"/"chat") â€” ÙˆØ¯Ù‡ Ø§Ù„Ù„ÙŠ Ø¨ÙŠØ®Ù„Ù‘ÙŠ C5 ÙŠÙØ±Ù‘Ù‚ Ù…Ù† ØºÙŠØ± Ù…Ø§
+    //    Ù†ÙƒØ¨Ù‘Ø± Ø§Ù„Ù€ taxonomy.
     input.usage = resolveUsageRequestContext(req, userId, {
       feature: "chat",
       diagnostics: { route: "unified_ai" },
     });
 
-    // ---- Unified brain (ãä /api/chat): ÔÎÕíÉ ÇáØÇáÈ + ÓíÇŞå ÇáÏÑÇÓí â€” best-effort ----
-    // ááãÓÌáíä İŞØº ÇáÒæÇÑ æÇáãÌåæáæä íßãáæä ÈÏæäåÇ æáÇ íÊÚØáæä.
+    // ---- Unified brain (Ù…Ù† /api/chat): Ø´Ø®ØµÙŠØ© Ø§Ù„Ø·Ø§Ù„Ø¨ + Ø³ÙŠØ§Ù‚Ù‡ Ø§Ù„Ø¯Ø±Ø§Ø³ÙŠ â€” best-effort ----
+    // Ù„Ù„Ù…Ø³Ø¬Ù„ÙŠÙ† ÙÙ‚Ø·Ø› Ø§Ù„Ø²ÙˆØ§Ø± ÙˆØ§Ù„Ù…Ø¬Ù‡ÙˆÙ„ÙˆÙ† ÙŠÙƒÙ…Ù„ÙˆÙ† Ø¨Ø¯ÙˆÙ†Ù‡Ø§ ÙˆÙ„Ø§ ÙŠØªØ¹Ø·Ù„ÙˆÙ†.
+    const ctxInput = context as unknown as MagiclyContextInput;
     const rawMode = (context as Record<string, unknown>)?.mode;
     const rawConversationId = (context as Record<string, unknown>)?.conversationId;
     let incomingConversationId = "";
@@ -626,13 +518,22 @@ export async function POST(req: Request) {
     }
     if (userId && supabase && !isAnonymous) {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "ÇáØÇáÈ";
-        input.system = language === "en"
-          ? "You are «Magicly», a study assistant. User: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". Answer in clear English. Do not assume database data."
-          : "ÃäÊ «ãÇÌíßáí»¡ ãÓÇÚÏ ãĞÇßÑÉ. ÇáãÓÊÎÏã: " + displayName + (user?.email ? " (" + user.email + ")" : "") + ". ÃÌÈ ÈÇáÚÑÈíÉ ÇáãİåæãÉ æÇáæÇÖÍÉ. áÇ ÊİÊÑÖ ÈíÇäÇÊ ãä ŞÇÚÏÉ ÇáÈíÇäÇÊ.";
+        const studentContext = await getStudentContext(supabase, userId, ctxInput);
+        const selectedMode = parseMode(rawMode, prompt);
+        const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt);
+        const magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+        let personaPrompt = "";
+        try {
+          personaPrompt = await buildSystemPrompt(userId);
+        } catch (e) {
+          console.warn("[unified-ai] persona prompt build failed, using base system prompt:", e);
+        }
+        input.system = personaPrompt
+          ? `${personaPrompt}\n\n--- Ø§Ù„Ø³ÙŠØ§Ù‚ Ø§Ù„ØªØ¹Ù„ÙŠÙ…ÙŠ Ø§Ù„Ø¥Ø¶Ø§ÙÙŠ ---\n${magiclySystem}`
+          : magiclySystem;
+        void rememberSessionContext(supabase, userId, studentContext, prompt);
       } catch (e) {
-        console.warn("[unified-ai] user context build failed, continuing without it:", e);
+        console.warn("[unified-ai] student context build failed, continuing without it:", e);
       }
     }
 
@@ -640,42 +541,21 @@ export async function POST(req: Request) {
     const result: UnifiedAIResult = await unifiedAI(input);
 
     if (!result.ok) {
-      if (userId && reserveRef && supabase && !refunded) {
-        refunded = true;
+      // FAILURE â†’ refund reservation (idempotent) â€” Ù„Ø§ ÙŠØ³ØªÙ‡Ù„Ùƒ credit
+      if (userId && reserveRef && supabase) {
         try {
-          await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef } )
+          await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
         } catch (e) {
           console.error("[PhaseF] refund after provider failure failed:", e);
         }
       }
-      const code = result.code || result.errorCode || "AI_PROVIDER_FAILED";
-      const incidentId = generateIncidentId();
-      console.error("[unified-ai] incident", incidentId, "code", code, "stage", sanitizeErrorMessage(result.error || ""));
-      // Best-effort persistent logging (never throws, never blocks on failure).
-      try {
-        await logIncident({
-          incidentId,
-          errorCode: code,
-          stage: result.error,
-          httpStatus: getHttpStatus(code),
-        });
-      } catch {
-        /* best-effort */
-      }
-      return NextResponse.json(
-        {
-          ok: false,
-          error: result.error || "ÍÏË ÎØÃ ãÄŞÊ. ÌÑÈ ãÑÉ ÃÎÑì.",
-          code,
-          incidentId,
-          retryable: true,
-        },
-        { status: getHttpStatus(code) }
-      );
+      // Provider failure: spec Â§16 â†’ 500 but we keep 200 for client resilience with ok:false
+      // To honor Â§16, return 502 for provider errors; client already handles both.
+      return NextResponse.json({ ok: false, error: result.error || "Ø­Ø¯Ø« Ø®Ø·Ø£ Ù…Ø¤Ù‚Øª. Ø¬Ø±Ø¨ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.", code: "PROVIDER_ERROR" }, { status: 502 });
     }
 
     // SUCCESS â†’ consume is implicit (reserve = consume); no extra ledger write
-    // ÍİÙ ÇáãÍÇÏËÉ best-effort (äİÓ äãØ /api/chat) â€” ÇáİÔá åäÇ áÇ íÍÑã ÇáØÇáÈ ãä ÇáÑÏ.
+    // Ø­ÙØ¸ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© best-effort (Ù†ÙØ³ Ù†Ù…Ø· /api/chat) â€” Ø§Ù„ÙØ´Ù„ Ù‡Ù†Ø§ Ù„Ø§ ÙŠØ­Ø±Ù… Ø§Ù„Ø·Ø§Ù„Ø¨ Ù…Ù† Ø§Ù„Ø±Ø¯.
     let savedConversationId = incomingConversationId;
     if (userId && supabase && !isAnonymous && result.answer) {
       try {
@@ -691,7 +571,7 @@ export async function POST(req: Request) {
         if (!savedConversationId) {
           const { data: conversation } = await supabase
             .from("chat_conversations")
-            .insert({ user_id: userId, title: prompt.slice(0, 80) || "ãÍÇÏËÉ ÌÏíÏÉ" })
+            .insert({ user_id: userId, title: prompt.slice(0, 80) || "Ù…Ø­Ø§Ø¯Ø«Ø© Ø¬Ø¯ÙŠØ¯Ø©" })
             .select("id")
             .single();
           savedConversationId = conversation?.id ?? "";
@@ -722,29 +602,14 @@ export async function POST(req: Request) {
     };
     return NextResponse.json(uiResponse);
   } catch (e: unknown) {
-    if (userId && reserveRef && supabase && !refunded) {
-      refunded = true;
+    if (userId && reserveRef && supabase) {
       try {
         await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef });
       } catch (re) {
         console.error("[PhaseF] refund after exception failed:", re);
       }
     }
-    console.error("unified-ai route error:", sanitizeErrorMessage((e as Error)?.message || String(e)));
-    const incidentId = generateIncidentId();
-    try {
-      await logIncident({
-        incidentId,
-        errorCode: "UNKNOWN_INTERNAL_ERROR",
-        stage: (e as Error)?.message || String(e),
-        httpStatus: 500,
-      });
-    } catch {
-      /* best-effort */
-    }
-    return NextResponse.json({ ok: false, error: "ÍÏË ÎØÃ ÛíÑ ãÊæŞÚ. ÌÑÈ ãÑÉ ÃÎÑì.", code: "UNKNOWN_INTERNAL_ERROR", incidentId, retryable: true }, { status: 500 });
+    console.error("unified-ai route error:", (e as Error)?.message || String(e));
+    return NextResponse.json({ ok: false, error: "Ø­Ø¯Ø« Ø®Ø·Ø£ ØºÙŠØ± Ù…ØªÙˆÙ‚Ø¹. Ø¬Ø±Ø¨ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.", code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
-// export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
-
-
