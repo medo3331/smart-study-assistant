@@ -27,6 +27,7 @@ import { LectureNote } from "@/components/lectures/LectureNote";
 import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
 import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
 import { McqQuiz } from "@/components/lectures/McqQuiz";
+import { LectureTranscriptEditor } from "@/components/lectures/LectureTranscriptEditor";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
 
 export const metadata: Metadata = {
@@ -234,9 +235,14 @@ export default async function MyLecturesPage() {
                     >
                       {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
                       {lecture.transcript_text ? (
-                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                          {lecture.transcript_text}
-                        </pre>
+                        <>
+                          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
+                            {lecture.transcript_text}
+                          </pre>
+                          <div className="mt-3">
+                            <LectureTranscriptEditor lectureId={lecture.id} initialText={lecture.transcript_text} />
+                          </div>
+                        </>
                       ) : (
                         <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
                       )}
