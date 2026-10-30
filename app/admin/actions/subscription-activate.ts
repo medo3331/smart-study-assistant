@@ -214,6 +214,22 @@ export async function activateSubscription(
       await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").is("expires_at", null);
       await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
       await privileged.from("entitlements").insert({ user_id: userId, kind: "plan", value: input.planKey, expires_at: expiresAt });
+      // Keep quota table in sync so plan limits reflect the new plan immediately.
+      try {
+        await privileged.from("subscription_quotas").upsert(
+          {
+            user_id: userId,
+            plan_key: input.planKey,
+            messages_24h: 0,
+            uploads_today: 0,
+            last_reset_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+      } catch (qErr) {
+        console.warn("activateSubscription quota upsert failed:", qErr);
+      }
     } catch (entErr) {
       console.warn("activateSubscription entitlement insert failed:", entErr);
     }
