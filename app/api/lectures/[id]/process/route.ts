@@ -122,7 +122,7 @@ export async function POST(
 
     // ── ٢) الـ body ──
     const body = (await request.json().catch(() => null)) as
-      | { type?: unknown; count?: unknown }
+      | { type?: unknown; count?: unknown; feedback?: unknown }
       | null;
     const type = typeof body?.type === "string" ? body.type : "";
     const studyKind = STUDY_TYPES[type];
@@ -180,13 +180,13 @@ export async function POST(
     }
 
     // ── ٤) التفريغ ──
-    // إذا وُجد نص مُراجع معتمد، استخدمه بدل الأصلي.
+    const feedback =
+      typeof body?.feedback === "string" ? body.feedback.trim().slice(0, 2000) : "";
+    const baseTranscript = lecture.transcript_text;
     const transcript =
-      lecture.review_status === "completed" &&
-      typeof lecture.transcript_reviewed_text === "string" &&
-      lecture.transcript_reviewed_text.trim() !== ""
-        ? lecture.transcript_reviewed_text
-        : lecture.transcript_text;
+      feedback !== ""
+        ? `${baseTranscript}\n\nملاحظات الطالب للشرح (عدّل الشرح وفقها): ${feedback}`
+        : baseTranscript;
     if (typeof transcript !== "string" || transcript.trim() === "") {
       return NextResponse.json(
         {
