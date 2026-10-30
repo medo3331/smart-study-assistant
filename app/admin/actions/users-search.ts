@@ -42,7 +42,7 @@ export async function searchUsers(
 
     let baseQuery = privileged
       .from("profiles")
-      .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at, user_codes(code, is_active), entitlements(kind, value, metadata)");
+      .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at");
 
     if (q) {
       const like = `%${q}%`;
@@ -75,20 +75,78 @@ export async function searchUsers(
         if (u.email) emailMap[u.id] = u.email;
       }
     } catch {}
+
+    // Fetch related codes/entitlements separately (no FK dependency on PostgREST joins)
+    const profileIds = (data ?? []).map((r: any) => r.id).filter(Boolean);
+    const codesByUser: Record<string, string | null> = {};
+    const entitlementsByUser: Record<string, any[]> = {};
+    if (profileIds.length) {
+      try {
+        const { data: codeRows } = await privileged
+          .from("user_codes")
+          .select("user_id, code, is_active")
+          .in("user_id", profileIds);
+        for (const c of codeRows ?? []) {
+          if (c?.is_active && c?.user_id && !codesByUser[c.user_id]) codesByUser[c.user_id] = c.code ?? null;
+        }
+      } catch {}
+      try {
+        const { data: entRows } = await privileged
+          .from("entitlements")
+          .select("user_id, kind, value, metadata")
+          .in("user_id", profileIds);
+        for (const e of entRows ?? []) {
+          if (!e?.user_id) continue;
+          if (!entitlementsByUser[e.user_id]) entitlementsByUser[e.user_id] = [];
+          entitlementsByUser[e.user_id].push(e);
+        }
+      } catch {}
+    }
+
+    // Attach nested-like fields for mapRows compatibility
+    const enrichedData = (data ?? []).map((r: any) => ({
+      ...r,
+      user_codes: codesByUser[r.id] ? [{ code: codesByUser[r.id], is_active: true }] : [],
+      entitlements: entitlementsByUser[r.id] ?? [],
+    }));
+
     if (error || !data) {
       // fallback: سكيمة قديمة بدون created_at — أعد المحاولة بدون الأعمدة الزمنية
       if (error?.message?.includes("created_at")) {
         const retry = await privileged
           .from("profiles")
-          .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, user_codes(code, is_active), entitlements(kind, value, metadata)")
+          .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason")
           .limit(50);
         if (retry.error || !retry.data) return [];
-        return mapRows(retry.data as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
+        // enrich retry too
+        const retryIds = (retry.data ?? []).map((r: any) => r.id).filter(Boolean);
+        const retryCodes: Record<string, string | null> = {};
+        const retryEnts: Record<string, any[]> = {};
+        if (retryIds.length) {
+          try {
+            const { data: cr } = await privileged.from("user_codes").select("user_id, code, is_active").in("user_id", retryIds);
+            for (const c of cr ?? []) if (c?.is_active && c?.user_id && !retryCodes[c.user_id]) retryCodes[c.user_id] = c.code ?? null;
+          } catch {}
+          try {
+            const { data: er } = await privileged.from("entitlements").select("user_id, kind, value, metadata").in("user_id", retryIds);
+            for (const e of er ?? []) {
+              if (!e?.user_id) continue;
+              if (!retryEnts[e.user_id]) retryEnts[e.user_id] = [];
+              retryEnts[e.user_id].push(e);
+            }
+          } catch {}
+        }
+        const retryEnriched = (retry.data ?? []).map((r: any) => ({
+          ...r,
+          user_codes: retryCodes[r.id] ? [{ code: retryCodes[r.id], is_active: true }] : [],
+          entitlements: retryEnts[r.id] ?? [],
+        }));
+        return mapRows(retryEnriched as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
       }
       return [];
     }
 
-    const mapped = mapRows(data as any[], planFilter);
+    const mapped = mapRows(enrichedData as any[], planFilter);
     const enriched = mapped.map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
     // fallback: profiles.email غالباً NULL...
     if (q && enriched.length === 0) {
@@ -102,10 +160,34 @@ export async function searchUsers(
         if (matchedIds.length > 0) {
           const { data: fallbackRows } = await privileged
             .from("profiles")
-            .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at, user_codes(code, is_active), entitlements(kind, value, metadata)")
+            .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at")
             .in("id", matchedIds)
             .limit(50);
-          if (fallbackRows) return mapRows(fallbackRows as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
+          if (fallbackRows) {
+            const fbIds = fallbackRows.map((r: any) => r.id).filter(Boolean);
+            const fbCodes: Record<string, string | null> = {};
+            const fbEnts: Record<string, any[]> = {};
+            if (fbIds.length) {
+              try {
+                const { data: cr } = await privileged.from("user_codes").select("user_id, code, is_active").in("user_id", fbIds);
+                for (const c of cr ?? []) if (c?.is_active && c?.user_id && !fbCodes[c.user_id]) fbCodes[c.user_id] = c.code ?? null;
+              } catch {}
+              try {
+                const { data: er } = await privileged.from("entitlements").select("user_id, kind, value, metadata").in("user_id", fbIds);
+                for (const e of er ?? []) {
+                  if (!e?.user_id) continue;
+                  if (!fbEnts[e.user_id]) fbEnts[e.user_id] = [];
+                  fbEnts[e.user_id].push(e);
+                }
+              } catch {}
+            }
+            const fbEnriched = fallbackRows.map((r: any) => ({
+              ...r,
+              user_codes: fbCodes[r.id] ? [{ code: fbCodes[r.id], is_active: true }] : [],
+              entitlements: fbEnts[r.id] ?? [],
+            }));
+            return mapRows(fbEnriched as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
+          }
         }
       } catch {
         // fallback الأفضل جهد — لو فشل، أرجع النتائج الأصلية (فارغة)
