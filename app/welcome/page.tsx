@@ -45,6 +45,22 @@ export default function WelcomePage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const { t } = useLanguage();
   const [guestLoading, setGuestLoading] = useState(false);
+  const [accountLoading, setAccountLoading] = useState(false);
+
+  async function handleSameDevice(): Promise<void> {
+    setAccountLoading(true);
+    setMessage(null);
+    if (!supabaseRef.current) supabaseRef.current = createClient();
+    const { data } = await supabaseRef.current.auth.getUser();
+    if (data.user && !data.user.is_anonymous) {
+      markWelcomeSeen();
+      router.push(currentNext());
+      router.refresh();
+    } else {
+      router.push("/login");
+    }
+    setAccountLoading(false);
+  }
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   /* مستخدم حقيقي داخل بالفعل؟ ملوش شغل هنا — داشبورد دوره على طول.
@@ -129,8 +145,17 @@ export default function WelcomePage() {
               {t.welcome_cta_start}
             </button>
 
-            <Link href="/login" className="btn btn-quiet btn-block" onClick={markWelcomeSeen}>
-              {t.welcome_cta_login}
+            <button
+              type="button"
+              className="btn btn-quiet btn-block"
+              onClick={handleSameDevice}
+              disabled={accountLoading}
+            >
+              {accountLoading ? t.login_guest_loading : "دخول إلى حسابي"}
+            </button>
+
+            <Link href="/login/mag" className="btn btn-quiet btn-block" onClick={markWelcomeSeen}>
+              الدخول من جهاز جديد (MAG ID)
             </Link>
 
             <button

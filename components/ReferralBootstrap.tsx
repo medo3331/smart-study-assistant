@@ -45,7 +45,10 @@ export function ReferralBootstrap() {
           success?: boolean;
         } | null;
         // اتجاهل أو اتسجل؟ في الحالتين امسح عشان مايتحاولش تاني.
-        if (!cancelled && data?.success) clearStoredReferralCode();
+        if (!cancelled && data?.success) {
+          clearStoredReferralCode();
+          void fetch("/api/referrals/entry", { method: "POST" }).catch(() => {});
+        }
       } catch {
         // النت قاطع — الكود يفضل محفوظ للمحاولة الجاية
       }

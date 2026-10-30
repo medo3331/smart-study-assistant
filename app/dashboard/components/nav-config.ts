@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    قايمة التنقل — مصدر واحد للحقيقة
 
    كل البنود متعرّفين هنا مرة واحدة. NavRail بترسمهم، والداشبورد
@@ -10,15 +10,15 @@
      signal    → إجراء محتاج حالة الداشبورد نفسها (مودال)
    ========================================================================== */
 
-/* ⚠️ الليستة دي هي المرجع لـ `isNavSignal` تحت. أي إشارة جديدة تتزوّد هنا
+/* âڑ ï¸ڈ الليستة دي هي المرجع لـ `isNavSignal` تحت. أي إشارة جديدة تتزوّد هنا
    وبس — التحقق من النية المحفوظة بيتولّد منها، فمافيش مكان تاني تنساه. */
 export const NAV_SIGNALS = [
-  "ai",
   "settings",
   "emergency",
   "parentReport",
   "leaderboard",
   "xpShop",
+  "ai",
 ] as const;
 
 export type NavSignal = (typeof NAV_SIGNALS)[number];
@@ -44,76 +44,92 @@ export interface NavGroupDef {
   items: NavItemDef[];
 }
 
-// ⚠️ الترتيب هنا هو ترتيب المستخدم بالظبط. المجموعات اتزوّدت عشان البنود
+// âڑ ï¸ڈ الترتيب هنا هو ترتيب المستخدم بالظبط. المجموعات اتزوّدت عشان البنود
 // ورا بعض بيبقوا حيطة، بس من غير ما يتغيّر ترتيب أي بند.
 //
-// 🗓️ ٨ أغسطس: الشريط العلوي في الداشبورد اتشال بالكامل (طلب المستخدم:
-// «قايمة واحدة بس اللي على الشمال فيها كل حاجة»). بنوده اتوزّعوا هنا —
-// الطوارئ في «المذاكرة»، والمتصدرين واصرف نقاطك في «التقدّم»، وتقرير
-// المتابعة في «الحساب». البنود القديمة كلها فضلت بنفس ترتيبها النسبي.
+// ًں—“ï¸ڈ ٨ أغسطس: الشريط العلوي في الداشبورد اتشال بالكامل (طلب المستخدم:
+// آ«قايمة واحدة بس اللي على الشمال فيها كل حاجةآ»). بنوده اتوزّعوا هنا —
+// الطوارئ في آ«المذاكرةآ»، والمتصدرين واصرف نقاطك في آ«التقدّمآ»، وتقرير
+// المتابعة في آ«الحسابآ». البنود القديمة كلها فضلت بنفس ترتيبها النسبي.
 export const NAV_GROUPS: NavGroupDef[] = [
   {
-    title: "المذاكرة",
+    title: "الرئيسية",
     items: [
       { id: "home", icon: "🏠", label: "الرئيسية", latin: "Home", href: "/dashboard" },
+      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
+    ],
+  },
+  {
+    title: "التعلم",
+    items: [
       { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
+      { id: "subjects", icon: "📖", label: "المواد", latin: "Subjects", href: "/subjects" },
       { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
-      // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
-      // مكانه هنا لأنه بيغيّر المذاكرة نفسها، مش إعداد في الحساب.
+      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
+      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
+      { id: "programming", icon: "💻", label: "البرمجة", latin: "Programming", href: "/programming" },
+      { id: "university", icon: "🎓", label: "الجامعة", latin: "University", href: "/university" },
+      { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
+      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
+      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
+      { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
+      { id: "escape", icon: "🧩", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
       { id: "emergency", icon: "🚨", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
     ],
   },
   {
-    title: "الأدوات",
+    title: "مساحة AI",
     items: [
       { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
-      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — مين هيعرف إنه
-      // موجود؟ البند ده بينزّل على كارت القرآن في الداشبورد، والكارت نفسه
-      // فيه زرار للمكتبة الكاملة. جنب الملاحظات لأن الاتنين `scrollTo`.
-      { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
-      // 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
-      // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
-      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
-      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
-      // 📚 محاضراتي — محاضرات المستخدم المحفوظة وتفريغها (المرحلة ٣).
-      // جنب بنك الامتحانات: الاتنين «محتوى الطالب الخاص» — محاضراته هو.
-      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
-      { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
-      { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
-      { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
-      { id: "escape", icon: "🧩", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
       { id: "slides", icon: "🖥️", label: "العروض", latin: "Slides", href: "/dashboard/slides" },
+      { id: "chat", icon: "💬", label: "المحادثة", latin: "Chat", href: "/chat" },
+      { id: "studyTools", icon: "🛠️", label: "أدوات الدراسة", latin: "Study Tools", href: "/study-tools" },
+      { id: "aiStudio", icon: "🎨", label: "استوديو AI", latin: "AI Studio", href: "/ai-studio" },
     ],
   },
   {
-    title: "التقدّم",
+    title: "التخطيط",
+    items: [
+      { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
+      { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
+      { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
+    ],
+  },
+  {
+    title: "التقدم",
     items: [
       { id: "achievements", icon: "🏆", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
-      { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
       { id: "rewards", icon: "🪙", label: "سجل المكافآت", latin: "Rewards", href: "/rewards" },
-      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
       { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
       { id: "leaderboard", icon: "🥇", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
-      // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب
-      // بالمذاكرة، فالمكان الطبيعي ليهم جنب الإنجازات والتحليلات.
       { id: "shop", icon: "🛍️", label: "المتجر", latin: "Shop", href: "/shop" },
       { id: "plans", icon: "📋", label: "الخطط", latin: "Plans", href: "/plans" },
-      // ⚠️ ده مش المتجر. المتجر بيصرف كوينز، وده بيصرف XP على تجميد
-      // السلسلة وفتح اليوم اللي بعده بدري. عملتين مختلفتين خالص.
       { id: "xpShop", icon: "✨", label: "اصرف نقاطك", latin: "XP Rewards", signal: "xpShop" },
       { id: "inventory", icon: "🎒", label: "المخزن", latin: "Inventory", href: "/inventory" },
     ],
   },
   {
-    title: "الحساب",
+    title: "المجتمع",
     items: [
-      { id: "career", icon: "💼", label: "المسار المهني", latin: "Career", href: "/dashboard/career" },
-      { id: "community", icon: "👥", label: "المجتمع", latin: "Community", href: "/community" },
-      { id: "parentReport", icon: "📄", label: "تقرير المتابعة", latin: "Report", signal: "parentReport" },
-      { id: "settings", icon: "⚙️", label: "الإعدادات", latin: "Settings", signal: "settings" },
+      { id: "community", icon: "C", label: "المجتمع", latin: "Community", href: "/community" },
+    ],
+  },
+  {
+    title: "الباقة والرصيد",
+    items: [
+      { id: "pricing", icon: "ًں’³", label: "الباقات", latin: "Pricing", href: "/pricing" },
+      { id: "store", icon: "ًں›’", label: "حزم الرصيد", latin: "Credit Store", href: "/store" },
+    ],
+  },
+  {
+    title: "حسابي وإعداداتي",
+    items: [
+      { id: "career", icon: "ًں’¼", label: "المسار المهني", latin: "Career", href: "/dashboard/career" },
+      { id: "parentReport", icon: "ًں“„", label: "تقرير المتابعة", latin: "Report", signal: "parentReport" },
+      { id: "settings", icon: "âڑ™ï¸ڈ", label: "الإعدادات", latin: "Settings", signal: "settings" },
+      { id: "profile", icon: "P", label: "الملف الشخصي", latin: "Profile", href: "/dashboard/profile" },
     ],
   },
 ];
@@ -123,7 +139,7 @@ export const NAV_ITEMS: NavItemDef[] = NAV_GROUPS.flatMap((g) => g.items);
 /* --------------------------------------------------------------------------
    نية التنقل
 
-   المشكلة: بنود زي «المساعد الذكي» و«الملاحظات» جوه صفحة الداشبورد —
+   المشكلة: بنود زي آ«المساعد الذكيآ» وآ«الملاحظاتآ» جوه صفحة الداشبورد —
    مودال أو قسم. لو المستخدم دوس عليهم وهو في /dashboard/workspace، لازم
    ننقله للداشبورد **وبعدين** نفتح المودال أو نسكرول.
 
@@ -172,12 +188,12 @@ export function takeNavIntent(): NavIntent | null {
 /* --------------------------------------------------------------------------
    بذرة المحادثة
 
-   من مساحة العمل، «اسأل المساعد عن المادة دي» لازم تفتح المحادثة **ومعاها**
+   من مساحة العمل، آ«اسأل المساعد عن المادة ديآ» لازم تفتح المحادثة **ومعاها**
    نص المادة مرفوع كمرفق. المحادثة عايشة في الداشبورد، فالمادة بتتكتب هنا،
    وبنكتب معاها نية `modal → ai`، والداشبورد بتسلّمها للمودال.
 
    ليه sessionStorage ومش state؟ لأن فيه تنقّل صفحة كامل بين الاتنين.
-   ⚠️ حد الحجم: النص بيتقص على ٦ آلاف حرف — نفس حد المرفقات في المحادثة
+   âڑ ï¸ڈ حد الحجم: النص بيتقص على ٦ آلاف حرف — نفس حد المرفقات في المحادثة
    (MAX_FILE_CHARS)، فمفيش فايدة من تخزين أكتر من كده.
    -------------------------------------------------------------------------- */
 
@@ -226,7 +242,7 @@ export function takeAiSeed(): AiSeed | null {
 /* --------------------------------------------------------------------------
    بذرة العرض التقديمي
 
-   من صفحة الدرس، «اعمل عرض من الشرح ده» لازم تفتح مولّد العروض والموضوع
+   من صفحة الدرس، آ«اعمل عرض من الشرح دهآ» لازم تفتح مولّد العروض والموضوع
    والمحتوى محطوطين جواه. نفس منطق بذرة المحادثة بالظبط: تنقّل صفحة كامل
    بين الاتنين، فالـ state مش بينفع و sessionStorage هو الحل.
 
@@ -270,7 +286,7 @@ export function takeSlidesSeed(): SlidesSeed | null {
   }
 }
 
-/** أي بند «مفتوح» حالياً بناءً على المسار لوحده. */
+/** أي بند آ«مفتوحآ» حالياً بناءً على المسار لوحده. */
 export function activeNavId(pathname: string): string | null {
   const exact = NAV_ITEMS.find((i) => i.href === pathname);
   if (exact) return exact.id;
@@ -324,3 +340,4 @@ export function railAccountFromUser(user: AuthUserLike | null | undefined): Rail
     isGuest,
   };
 }
+

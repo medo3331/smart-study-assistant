@@ -48,8 +48,6 @@ interface NavRailProps {
   themeStyles: ThemeStyles;
   /** بتتبعت من صفحة الداشبورد بس — بتفتح المودال على طول من غير تنقّل */
   onSignal?: (signal: NavSignal) => void;
-  /** المساعد مش متاح قبل ما تبقى فيه خطة */
-  aiReady?: boolean;
   motivation?: RailMotivation;
   /**
    * بيانات كارت الحساب. الداشبورد بتبعتها لأنها محمّلة المستخدم أصلاً؛
@@ -107,7 +105,6 @@ function useIsOwner(): boolean {
 export function NavRail({
   themeStyles,
   onSignal,
-  aiReady = true,
   motivation,
   account,
   emergencyOn = false,
@@ -188,7 +185,7 @@ export function NavRail({
     };
   }, [drawerOpen]);
 
-  const isDim = (item: NavItemDef) => item.signal === "ai" && !aiReady;
+  const isDim = (_item: NavItemDef) => false;
 
   const handleClick = (item: NavItemDef) => {
     if (isDim(item)) return;
@@ -257,7 +254,7 @@ export function NavRail({
           aria-disabled={dim || undefined}
           aria-current={current}
           aria-pressed={isToggle ? isOn : undefined}
-          className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--r-sm)] text-right transition ${
+          className={`relative w-full flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-[var(--r-sm)] text-right transition ${
             dim
               ? "opacity-45 cursor-default text-ink-soft"
               : isOn

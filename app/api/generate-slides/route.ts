@@ -7,7 +7,7 @@ import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /* ==========================================================================
    توليد عرض تقديمي
@@ -189,6 +189,7 @@ export async function POST(req: Request) {
     await recordDirectProviderAttempt({ usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       return NextResponse.json(
         { success: false, error: "مرجعش أي محتوى. حاول تاني." },
         { status: 502 }

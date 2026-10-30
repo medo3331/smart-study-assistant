@@ -178,7 +178,7 @@ export default function ReferralsPage() {
           <p className="mt-1 text-xs text-ink-soft">إجمالي الدعوات</p>
         </div>
         <div className="sheet-card p-4 text-center">
-          <p className="font-mono text-2xl font-bold text-accent tabular-nums">{rewardedCount}</p>
+          <p className="font-mono text-2xl font-bold text-accent tabular-nums">{rewardedCount} <span className="text-xs">كريدت</span></p>
           <p className="mt-1 text-xs text-ink-soft">تمت مكافأتها</p>
         </div>
       </section>

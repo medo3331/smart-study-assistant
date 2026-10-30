@@ -28,17 +28,28 @@ export interface QuotaCheckResult {
   resetAt: string | null;
   reasonAr?: string;
   /** true إذا تم تجاوز الفحص لأن المستخدم مالك (بypass للحدود الداخلية) */
+  /** مفتاح العنفة (idempotency key) للطلب — يُستخدم لاسترداد كوتة الاشتراك عند الفشل. */
+  idempotencyKey?: string;
+
   ownerBypass?: boolean;
 }
 
-/** اليوم بالتقويم UTC كمفتاح فترة — يتطابق مع date_trunc('day') في الـ RPC والـ lazy reset. */
-function quotaPeriodKey(): string {
-  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD (UTC)
-}
-
-/** مفتاح العنفة (idempotency key): يضمن عدم الاستهلاك المكرر لنفس المستخدم/النوع/اليوم. */
+/** مفتاح العنفة (idempotency key): فريد لكل طلب HTTP.
+ *
+ *  ملاحظة: المفتاح اليومي (userId+kind+date) كان يسبّب bug — كل طلبات اليوم
+ *  تُعتبر "مستهلكة مسبقًا" بعد أول طلب، فلا يُستهلك إلا طلب واحد. وللحماية
+ *  من إعادة المحاولة (retry) يجب على العميل إرسال معرف طلب ثابت (X-Request-Id)
+ *  وإعادة استخدامه؛ في غيابه نولّد UUID جديد لكل طلب (لا حماية retry، لكن
+ *  العدّ يبقى صحيحًا). */
 function quotaIdempotencyKey(userId: string, kind: QuotaKind): string {
-  return `quota:${userId}:${kind}:${quotaPeriodKey()}`;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof crypto !== "undefined" && typeof (crypto as any).randomUUID === "function") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return `quota:${userId}:${kind}:${(crypto as any).randomUUID()}`;
+    }
+  } catch {}
+  return `quota:${userId}:${kind}:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** سياسة fail-open: لو true يُسمح بالطلب عند تعطل الـRPC، لو false يُرفض الطلب (fail-closed).
@@ -153,6 +164,7 @@ export async function checkSubscriptionQuota(
       used,
       limit,
       resetAt,
+      idempotencyKey,
       ...(result.already_consumed ? { reasonAr: "تم استهلاك هذه الكوتا سابقًا (عنفة مكررة)" } : undefined),
     };
   } catch (e) {
@@ -184,5 +196,29 @@ export async function checkSubscriptionQuota(
       resetAt: null,
       reasonAr: "نظام الكوتة غير متاح حاليًا. حاول مرة أخرى لاحقًا.",
     };
+  }
+}
+/**
+ * استرداد كوتة الاشتراك (transactional) — no-op if already refunded or never consumed.
+ * يعتمد على RPC public.refund_subscription_quota (migration NOT EXECUTED yet).
+ */
+export async function refundSubscriptionQuota(
+  userId: string,
+  kind: QuotaKind,
+  idempotencyKey?: string | null
+): Promise<void> {
+  if (!idempotencyKey) return;
+  try {
+    const privileged = createServiceClient();
+    const { error } = await privileged.rpc("refund_subscription_quota", {
+      p_user_id: userId,
+      p_kind: kind,
+      p_idempotency_key: idempotencyKey,
+    } as unknown as { p_user_id: string; p_kind: string; p_idempotency_key: string });
+    if (error) {
+      console.warn("refundSubscriptionQuota failed:", error.message);
+    }
+  } catch (e) {
+    console.warn("refundSubscriptionQuota exception:", (e as { message?: string })?.message || String(e));
   }
 }

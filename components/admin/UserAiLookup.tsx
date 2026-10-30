@@ -62,7 +62,11 @@ export default function UserAiLookup() {
               <p className="font-bold">{result.rateLimits.phaseB.ultra.used} / {result.rateLimits.phaseB.ultra.limit} <span className="text-xs text-slate-400">متبقي {result.rateLimits.phaseB.ultra.remaining}</span></p>
             </div>
           </div>
-          {result.entitlements && result.entitlements.length>0 && <p className="text-xs text-slate-400">Entitlements: {result.credits.entitlements.map((e:any)=>`${e.kind}:${e.value}`).join(", ")}</p>}
+          {Array.isArray(result?.credits?.entitlements) && result.credits.entitlements.length > 0 && (
+  <p className="text-xs text-slate-400">
+    Entitlements: {result.credits.entitlements.map((e: any) => `${e.kind}:${e.value}`).join(", ")}
+  </p>
+)}
           <div>
             <p className="text-xs text-slate-400 mb-1">آخر 5 عمليات:</p>
             <div className="space-y-1">

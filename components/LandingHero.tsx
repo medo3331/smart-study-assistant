@@ -305,7 +305,7 @@ export function LandingHero() {
                 البريف الجديد: الهيرو يقود للتسجيل وبدء الخطة على طول.
                 الديمو نزل للزرار الثانوي — لسه في متناول اللي عايز يجرّب
                 من غير ما يعمل حساب، بس مايزاحمش نداء البداية. */}
-            <Link href="/login?next=/assessment" className="btn btn-marker hero-cta">
+            <Link href="/welcome?next=/assessment" className="btn btn-marker hero-cta">
               {t.hero_cta}
               <ArrowIcon />
             </Link>

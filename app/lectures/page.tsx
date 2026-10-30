@@ -25,6 +25,7 @@ import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/Pa
 import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
 import { LectureNote } from "@/components/lectures/LectureNote";
 import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
+import LectureChat from "@/components/lectures/LectureChat";
 import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
 import { McqQuiz } from "@/components/lectures/McqQuiz";
 import { LectureTranscriptEditor } from "@/components/lectures/LectureTranscriptEditor";
@@ -75,13 +76,17 @@ type LectureListItem = {
   created_at: string;
   duration_seconds: number | null;
   transcript_text: string | null;
+  review_status: string | null;
+  transcript_reviewed_text: string | null;
   summary: string | null;
   explanation: string | null;
   flashcards: Flashcard[] | null;
   mcqs: Mcq[] | null;
 };
 
-export default async function MyLecturesPage() {
+export default async function MyLecturesPage({ searchParams }: { searchParams: Promise<{ subject?: string }> }) {
+  const resolved = await searchParams;
+  const subjectFilter = resolved?.subject?.trim() || null;
   const supabase = await createClient();
 
   // ١) المصادقة — الزائر يروح لصفحة الدخول (بعده = /lectures عشان يرجع).
@@ -94,13 +99,14 @@ export default async function MyLecturesPage() {
   //    ⚠️ `summary` و`explanation` اتضافوا للاختيار عشان نعرف نعرض زرار
   //    المعالجة بس لو المحاضرة **لسه** مالهاش. الاختيار ده مش بيكسر
   //    حاجة: الأعمدة موجودة فعلاً في الجدول من migration #14.
-  const { data, error } = await supabase
+  const lecturesQuery = supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, summary, explanation, flashcards, mcqs",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, review_status, transcript_reviewed_text, summary, explanation, flashcards, mcqs",
     )
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .eq("user_id", user.id);
+  if (subjectFilter) lecturesQuery.eq("subject_id", subjectFilter);
+  const { data, error } = await lecturesQuery.order("created_at", { ascending: false });
 
   const lectures = (data ?? []) as LectureListItem[];
 
@@ -138,9 +144,9 @@ export default async function MyLecturesPage() {
           body="ارفع تسجيل محاضرة من صفحة تفريغ المحاضرات، وسجّل دخول الأول — وهي تتحفظ هنا."
         />
       ) : (
-        <section className="sheet-card divide-y divide-rule">
+        <section className="grid gap-4">
           {lectures.map((lecture) => (
-            <article key={lecture.id} className="p-4">
+            <article key={lecture.id} className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm transition hover:shadow-md">
               <details>
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -246,6 +252,15 @@ export default async function MyLecturesPage() {
                       ) : (
                         <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
                       )}
+                     <LectureChat
+                       lectureId={lecture.id}
+                       contextText={
+                         lecture.review_status === "completed" && lecture.transcript_reviewed_text
+                           ? lecture.transcript_reviewed_text
+                           : (lecture.transcript_text ?? "")
+                       }
+                     />
+
                     </LectureSection>
                   </div>
                 </LectureWorkspace>

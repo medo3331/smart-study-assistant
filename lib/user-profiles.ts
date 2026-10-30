@@ -8,8 +8,12 @@
 */
 
 import { useState, useMemo } from "react";
+import { personaToRole, type AppRole } from "@/lib/auth-roles";
 
-export type ProfilePersona = "student" | "teacher" | "graduate" | "freelancer" | "parent";
+/* persona البروفايل = الدور بعد التطبيع — نفس AppRole بالظبط (مصدر الحقيقة
+   lib/auth-roles.ts، لا يُعدَّل هنا). قيم الـ DB هي student | grad | freelancer،
+   والتحويل grad → graduate بيحصل في مكان واحد بس: personaToRole. */
+export type ProfilePersona = AppRole;
 
 export interface ProfileContext {
   persona: ProfilePersona;
@@ -55,11 +59,21 @@ export function useProfileState(initialPersona: ProfilePersona = "student") {
   return { profiles, activeProfile, switchActiveProfile, addProfile, removeProfile };
 }
 
+/**
+ * المُطبِّع الوحيد لقيمة persona الجاية من الـ DB إلى مجال التطبيق (ProfilePersona).
+ * - "student" → "student" · "freelancer" → "freelancer"
+ * - "grad" → "graduate" (نفس تحويل العمود المولَّد — عبر personaToRole في auth-roles)
+ * - أي قيمة تانية (null / "teacher" / "parent" / مستقبلية) → "student"
+ *   ده fallback مقصود: مفيش قيمة تانية توصل أصلًا من الـ DB (CHECK constraint)،
+ *   فمعناها إن التايب اتعدّل من غير migration — نرجع القيمة الآمنة بدل ما نسقط.
+ */
+export function normalizePersona(value: string | null | undefined): ProfilePersona {
+  return personaToRole(value) ?? "student";
+}
+
 /* Default profile assignment for existing users (migration logic — EPIC 6 reference) */
 export function defaultProfileForUser(existingPersona?: string | null): ProfilePersona {
-  // Priority: existing persona from DB -> student default -> parent (if no student context)
-  if (existingPersona && ["student", "teacher", "graduate", "freelancer", "parent"].includes(existingPersona)) {
-    return existingPersona as ProfilePersona;
-  }
-  return "student";
+  // DB persona → ProfilePersona مُطبَّع. بيغطي "grad" كمان — قبل التعديل كان
+  // الـ allowlist القديم يقبل "graduate" بس فالخريج كان بياخد بروفايل طالب صامت.
+  return normalizePersona(existingPersona);
 }

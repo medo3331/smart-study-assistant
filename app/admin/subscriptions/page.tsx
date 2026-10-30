@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { CalendarClock, Search } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
-import { getSubscriptionStatus, extendSubscription } from "@/app/admin/actions/subscription-manage";
+import { getSubscriptionStatus, extendSubscription, revokeSubscription, resetSubscriptionQuota } from "@/app/admin/actions/subscription-manage";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard } from "@/components/admin/ui";
 
 /**
@@ -107,8 +107,8 @@ export default async function AdminSubscriptionsPage({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <AdminStatCard label="رسائل 24h" value={status.messages_24h} hint="subscription_quotas.messages_24h" />
-              <AdminStatCard label="رفعات اليوم" value={status.uploads_today} hint="subscription_quotas.uploads_today" />
+              <AdminStatCard label="رسائل 24h" value={`${status.messages_24h}${status.message_limit != null ? ` / ${status.message_limit}` : ""}`} hint="subscription_quotas.messages_24h" />
+              <AdminStatCard label="رفعات اليوم" value={`${status.uploads_today}${status.upload_limit != null ? ` / ${status.upload_limit}` : ""}`} hint="subscription_quotas.uploads_today" />
               <AdminStatCard label="مدة التفعيل الأخير" value={status.activation_duration_days ?? "—"} hint="subscription_activations.duration_days" />
               <AdminStatCard
                 label="تاريخ آخر تفعيل"
@@ -257,6 +257,19 @@ export default async function AdminSubscriptionsPage({
           <br />
           <code>audit_log.action = &apos;subscriptions.manage&apos;</code> (حساس — إلزامي) · <code>user_codes</code>: code, user_id, is_active, activated_by, activation_note.
         </AdminNotice>
+      </AdminCard>
+      <AdminCard title="إلغاء اشتراك" description="إلغاء آخر اشتراك نشط (Owner فقط، مسجّل في audit_log)." tone="rose">
+        <form action={async (formData: FormData) => { "use server"; const r = await revokeSubscription(formData.get("lookup")?.toString() || "", user.id, user.email ?? null, formData.get("note")?.toString() || null); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
+          <input name="lookup" type="text" placeholder="MAG-XXX-XXXX أو UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
+          <input name="note" type="text" placeholder="ملاحظة (اختياري)" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs" />
+          <button type="submit" className="bg-rose-600 text-white font-bold rounded-lg px-4 py-2 text-xs hover:bg-rose-500">إلغاء</button>
+        </form>
+      </AdminCard>
+      <AdminCard title="إعادة تعيين الحصص" description="تصفير messages_24h / uploads_today (Owner/Admin)." tone="amber">
+        <form action={async (formData: FormData) => { "use server"; const r = await resetSubscriptionQuota(formData.get("lookup")?.toString() || "", user.id, user.email ?? null); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
+          <input name="lookup" type="text" placeholder="MAG-XXX-XXXX أو UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
+          <button type="submit" className="bg-amber-500 text-slate-950 font-bold rounded-lg px-4 py-2 text-xs hover:bg-amber-400">إعادة تعيين</button>
+        </form>
       </AdminCard>
     </div>
   );

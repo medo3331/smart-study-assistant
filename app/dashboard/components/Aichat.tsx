@@ -4,6 +4,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { PERSONA_NAME } from "@/lib/persona";
 import { prepareFileForUpload, isImageFile } from "@/lib/image-compress";
+import { createClient } from "@/lib/supabase/client";
 import { MicButton } from "@/components/MicButton";
 import { ReadAloud } from "@/components/ReadAloud";
 import { detectExamIntent, type ExamIntent } from "@/lib/exam-intent";
@@ -26,7 +27,13 @@ interface AttachedFile {
   truncated: boolean;
 }
 
+interface LectureOption {
+  id: string;
+  title: string;
+}
+
 const TEXT_FILE_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json"];
+
 const MAX_FILE_CHARS = 6000;
 
 type StudyMode = "explain" | "quiz" | "summarize" | "review" | "file" | "flashcards";
@@ -79,6 +86,11 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
    * يقول «مش دلوقتي» أو يبعت رسالة جديدة عادية.
    */
   const [pendingExam, setPendingExam] = useState<{ intent: ExamIntent; sourceText: string } | null>(null);
+  const [lectures, setLectures] = useState<LectureOption[]>([]);
+  const [lecturesLoading, setLecturesLoading] = useState(true);
+  const [lecturesError, setLecturesError] = useState<string | null>(null);
+  const [selectedLectureId, setSelectedLectureId] = useState("");
+  const [conversationId, setConversationId] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ✅ تحميل محادثة اليوم الحالي لما المودال يفتح أو يتغير الدرس
@@ -135,10 +147,52 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
     return result.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadLectures = async () => {
+      setLecturesLoading(true);
+      setLecturesError(null);
+      try {
+        const supabase = createClient();
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData.user;
+        if (!user) {
+          if (!cancelled) setLectures([]);
+          return;
+        }
+        const { data, error } = await supabase
+          .from("lectures")
+          .select("id,title,original_filename,status,transcript_text")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        const usable = (data ?? [])
+          .filter((row) => row.status === "completed" && Boolean(row.transcript_text?.trim()))
+          .map((row) => ({
+            id: String(row.id),
+            title: (row.title || row.original_filename || "محاضرة").trim(),
+          }));
+        if (!cancelled) setLectures(usable);
+      } catch {
+        if (!cancelled) {
+          setLectures([]);
+          setLecturesError("تعذر تحميل المحاضرات. حاول تاني.");
+        }
+      } finally {
+        if (!cancelled) setLecturesLoading(false);
+      }
+    };
+    void loadLectures();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleClearChat = () => {
     if (!activeAiLesson || !configId) return;
     if (!confirm("متأكد إنك عايز تمسح المحادثة دي؟ الخطوة دي لا يمكن التراجع عنها.")) return;
     setChatMessages([]);
+    setConversationId("");
     localStorage.removeItem(`chat_${configId}_${activeAiLesson.day}`);
   };
 
@@ -262,6 +316,8 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: attachedFile ? "file" : studyMode,
+          conversationId: conversationId || undefined,
+          lectureId: selectedLectureId || undefined,
           context: {
             configId,
             lessonDay: activeAiLesson.day,
@@ -276,8 +332,20 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || "خطأ في الاتصال");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg =
+          (data?.reasonAr as string | undefined) ||
+          (data?.message as string | undefined) ||
+          (data?.error?.message as string | undefined) ||
+          (response.status === 429
+            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
+            : "خطأ في الاتصال");
+        throw new Error(msg);
+      }
+
+      const returnedConversationId = typeof data?.conversationId === "string" ? data.conversationId : "";
+      if (returnedConversationId) setConversationId(returnedConversationId);
 
       const aiReply = data?.choices?.[0]?.message?.content || "لم يتم استقبال رد.";
       setChatMessages([...updatedMessages, { sender: "ai", text: aiReply, timestamp: Date.now() }]);
@@ -487,6 +555,46 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
               ))}
             </div>
           )}
+          <div className="px-5 pt-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-[11px] text-ink-soft shrink-0" htmlFor="lecture-selector">محاضرة (اختياري)</label>
+              {lecturesLoading ? (
+                <span className="text-[11px] text-ink-soft">جاري تحميل المحاضرات…</span>
+              ) : lecturesError ? (
+                <span className="text-[11px] text-red-500 truncate">{lecturesError}</span>
+              ) : lectures.length === 0 ? (
+                <span className="text-[11px] text-ink-soft truncate">لا توجد محاضرات جاهزة (مكتملة مع نص).</span>
+              ) : (
+                <select
+                  id="lecture-selector"
+                  value={selectedLectureId}
+                  onChange={(e) => setSelectedLectureId(e.target.value)}
+                  className="flex-1 min-w-0 bg-paper-2 border border-rule rounded-[var(--r-sm)] px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-rule-strong"
+                >
+                  <option value="">بدون محاضرة</option>
+                  {lectures.map((lecture) => (
+                    <option key={lecture.id} value={lecture.id}>
+                      {lecture.title}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {selectedLectureId && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedLectureId("")}
+                  className="text-[11px] shrink-0 rounded-[6px] border border-rule px-2 py-1 text-ink-soft hover:text-ink hover:bg-paper-3 transition"
+                >
+                  إلغاء
+                </button>
+              )}
+            </div>
+            {selectedLectureId && (
+              <p className="mt-1 text-[11px] text-ink-soft truncate">
+                المختارة: {lectures.find((l) => l.id === selectedLectureId)?.title ?? "محاضرة"}
+              </p>
+            )}
+          </div>
           <div className="flex gap-1.5 overflow-x-auto pb-0.5" aria-label="وضع المذاكرة">
             {MODE_CHOICES.map((choice) => {
               const disabled = Boolean(choice.needsFile && !attachedFile);
