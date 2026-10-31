@@ -18,7 +18,7 @@ export default function InboxPage() {
   useEffect(() => {
     if (session.status === "loading") return;
     if (session.status === "anonymous") { router.push("/dashboard"); return; }
-    if (session.status === "error" || !supabase || !session.user) return;
+    if (session.status !== "ready" || !supabase) return;
     const uid = session.user.id;
     (async () => {
       setLoading(true);
