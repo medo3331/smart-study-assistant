@@ -1,6 +1,13 @@
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { AdminPageHeader, AdminCard, AdminNotice, AdminTableWrap } from "@/components/admin/ui";
 import { isPgConfigured, pgQuery } from "@/lib/admin/pg";
+import {
+  replyToTicket,
+  updateTicketStatus,
+  markTicketRead,
+  deleteSupportMessage,
+  deleteSupportTicket,
+} from "@/app/admin/actions/support-manage";
 
 type Ticket = {
   id: string;
@@ -23,10 +30,17 @@ type SupportMessage = {
   author_role: string;
   body: string;
   created_at: string;
+  read_at: string | null;
 };
 
-export default async function AdminSupportPage() {
+export default async function AdminSupportPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ success?: string; error?: string }>;
+}) {
   await requireAdminPermission("support.manage");
+
+  const sp = (await searchParams) || {};
 
   let tickets: Ticket[] = [];
   let messages: SupportMessage[] = [];
@@ -43,7 +57,7 @@ export default async function AdminSupportPage() {
       LIMIT 200
     `);
     messages = await pgQuery<SupportMessage>(`
-      SELECT id, ticket_id, author_id, author_role, body, created_at
+      SELECT id, ticket_id, author_id, author_role, body, created_at, read_at
       FROM public.support_messages
       ORDER BY created_at ASC
     `);
@@ -60,10 +74,12 @@ export default async function AdminSupportPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="صندوق الدعم"
-        subtitle="تذاكر الدعم والرسائل (قراءة حقيقية من قاعدة البيانات)"
+        subtitle="تذاكر الدعم والرسائل (قراءة/كتابة حقيقية من قاعدة البيانات)"
         badge="support"
         permissionKey="support.manage"
       />
+      {sp.success ? <AdminNotice tone="emerald">{sp.success}</AdminNotice> : null}
+      {sp.error ? <AdminNotice tone="rose">{sp.error}</AdminNotice> : null}
       {!isPgConfigured() ? (
         <AdminNotice tone="amber">DATABASE_URL غير متاح — لا يمكن عرض التذاكر.</AdminNotice>
       ) : null}
@@ -77,6 +93,7 @@ export default async function AdminSupportPage() {
               <th>الحالة</th>
               <th>الأولوية</th>
               <th>تاريخ الإنشاء</th>
+              <th>إجراءات</th>
             </tr>
           </thead>
           <tbody>
@@ -88,11 +105,19 @@ export default async function AdminSupportPage() {
                 <td>{t.status}</td>
                 <td>{t.priority}</td>
                 <td>{new Date(t.created_at).toLocaleString()}</td>
+                <td>
+                  <form action={deleteSupportTicket} className="inline">
+                    <input type="hidden" name="ticket_id" value={t.id} />
+                    <button type="submit" className="text-[10px] text-red-400 hover:underline">
+                      حذف
+                    </button>
+                  </form>
+                </td>
               </tr>
             ))}
             {tickets.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center text-slate-400 py-4">
+                <td colSpan={7} className="text-center text-slate-400 py-4">
                   لا توجد تذاكر دعم.
                 </td>
               </tr>
@@ -103,21 +128,69 @@ export default async function AdminSupportPage() {
 
       {tickets.map((t) => {
         const msgs = messagesByTicket.get(t.id) || [];
-        if (!msgs.length) return null;
+        const unreadUser = msgs.filter((m) => m.author_role === "user" && !m.read_at).length;
         return (
           <AdminCard key={t.id} title={`${t.title} — الرسائل (${msgs.length})`} tone="default">
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-[11px] text-slate-400 whitespace-pre-wrap">{t.description}</p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <form action={updateTicketStatus} className="flex items-center gap-2">
+                  <input type="hidden" name="ticket_id" value={t.id} />
+                  <select name="status" defaultValue={t.status} className="text-xs bg-slate-900 border border-slate-700 rounded px-2 py-1">
+                    <option value="open">open</option>
+                    <option value="pending">pending</option>
+                    <option value="resolved">resolved</option>
+                    <option value="closed">closed</option>
+                  </select>
+                  <button type="submit" className="text-xs px-2 py-1 bg-slate-700 rounded">
+                    تحديث الحالة
+                  </button>
+                </form>
+                <form action={markTicketRead}>
+                  <input type="hidden" name="ticket_id" value={t.id} />
+                  <button type="submit" className="text-xs px-2 py-1 bg-blue-700 rounded">
+                    تحديد مقروء ({unreadUser})
+                  </button>
+                </form>
+              </div>
+
               <ul className="space-y-2">
                 {msgs.map((m) => (
                   <li key={m.id} className="border border-slate-800 rounded-lg p-2">
-                    <p className="text-[10px] text-slate-500">
-                      {m.author_role} — {new Date(m.created_at).toLocaleString()}
-                    </p>
-                    <p className="text-xs whitespace-pre-wrap">{m.body}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-slate-500">
+                        {m.author_role} — {new Date(m.created_at).toLocaleString()}
+                        {m.read_at ? " · مقروء" : " · غير مقروء"}
+                      </p>
+                      <form action={deleteSupportMessage}>
+                        <input type="hidden" name="message_id" value={m.id} />
+                        <button type="submit" className="text-[10px] text-red-400 hover:underline">
+                          حذف
+                        </button>
+                      </form>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap mt-1">{m.body}</p>
                   </li>
                 ))}
+                {msgs.length === 0 ? (
+                  <li className="text-slate-400 text-xs">لا توجد رسائل.</li>
+                ) : null}
               </ul>
+
+              <form action={replyToTicket} className="space-y-2">
+                <input type="hidden" name="ticket_id" value={t.id} />
+                <textarea
+                  name="body"
+                  rows={3}
+                  placeholder="اكتب ردًا للمستخدم..."
+                  className="w-full text-xs bg-slate-900 border border-slate-700 rounded p-2"
+                  required
+                />
+                <button type="submit" className="text-xs px-3 py-1 bg-emerald-700 rounded">
+                  إرسال رد
+                </button>
+              </form>
             </div>
           </AdminCard>
         );
