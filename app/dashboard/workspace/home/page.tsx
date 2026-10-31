@@ -25,7 +25,7 @@ export default function WorkspaceHomePage() {
   useEffect(() => {
     if (session.status === "loading") return;
     if (session.status === "anonymous") { router.push("/dashboard"); return; }
-    if (session.status === "error" || !supabase || !session.user) return;
+    if (session.status !== "ready" || !supabase) return;
     const uid = session.user.id;
     (async () => {
       setLoading(true);
@@ -43,7 +43,7 @@ export default function WorkspaceHomePage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabase || !session.user) return;
+    if (session.status !== "ready" || !supabase) return;
     setCreating(true);
     const res = await createSubject(supabase, session.user.id, {
       name: name.trim(), stage,
