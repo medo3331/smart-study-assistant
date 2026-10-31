@@ -1,3 +1,5 @@
+import type { ChatIntent } from "@/lib/ai/chat-intent";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
@@ -39,17 +41,17 @@ function shortText(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, MAX_CONTEXT_TEXT) : "";
 }
 
-export function parseMode(value: unknown, latestMessage: string): MagiclyMode {
+export function parseMode(value: unknown, latestMessage: string, intent?: ChatIntent): MagiclyMode {
   if (typeof value === "string" && (MAGICLY_MODES as readonly string[]).includes(value)) {
     return value as MagiclyMode;
   }
 
   const text = latestMessage.toLowerCase();
-  if (/                    quiz/.test(text)) return "quiz";
-  if (/      ]|     summary/.test(text)) return "summarize";
-  if (/              review/.test(text)) return "review";
-  if (/    |flashcard/.test(text)) return "flashcards";
-  if (/   |       pdf|    /.test(text)) return "file";
+  if (/اختبرني|اختبار|كويز|quiz/.test(text)) return "quiz";
+  if (/لخ[ّصص]|ملخص|summary/.test(text)) return "summarize";
+  if (/راجعني|مراجعة|review/.test(text)) return "review";
+  if (/فلاش|flashcard/.test(text)) return "flashcards";
+  if (/ملف|مستند|pdf|صورة|file|document|image/.test(text) && (intent === undefined || intent === "WORKSPACE_SEARCH")) return "file";
   return "explain";
 }
 
@@ -119,7 +121,8 @@ export async function getStudyToolFacts(
   supabase: SupabaseClient,
   userId: string,
   input: MagiclyContextInput,
-  latestMessage: string
+  latestMessage: string,
+  options?: { allowFileSearch?: boolean }
 ) {
   const configId = shortText(input.configId);
   const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
@@ -128,7 +131,7 @@ export async function getStudyToolFacts(
   const [lesson, progress, files] = await Promise.all([
     lessonDay === null ? Promise.resolve(null) : getCurrentLesson(supabase, userId, configId, lessonDay),
     getStudentProgress(supabase, userId, configId),
-    searchUserFiles(supabase, userId, latestMessage),
+    (options?.allowFileSearch ?? true) ? searchUserFiles(supabase, userId, latestMessage) : Promise.resolve([]),
   ]);
 
   const facts = [`               ${progress.completed}/${progress.total}.`];

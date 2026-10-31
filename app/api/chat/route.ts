@@ -5,6 +5,7 @@ import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { classifyChatIntent } from "@/lib/ai/chat-intent";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
@@ -99,8 +100,10 @@ export async function POST(req: Request) {
     // الـ prompt بقى على السيرفر. الكلاينت يمرر سياقًا محدودًا فقط، لكن
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
-    const selectedMode = parseMode(mode, safeMessages.at(-1)?.content ?? "");
-    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, safeMessages.at(-1)?.content ?? "");
+    const latestMessage = safeMessages.at(-1)?.content ?? "";
+    const intentResult = classifyChatIntent(latestMessage, context ?? {});
+    const selectedMode = parseMode(mode, latestMessage, intentResult.intent);
+    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
 
     // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي

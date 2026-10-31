@@ -29,6 +29,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
+import { classifyChatIntent } from "@/lib/ai/chat-intent";
 
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import type { UnifiedAIInput, UnifiedAIResult } from "@/lib/unified-ai/types";
@@ -518,11 +519,12 @@ export async function POST(req: Request) {
     if (typeof rawConversationId === "string" && rawConversationId.trim().length > 0) {
       incomingConversationId = rawConversationId.trim().slice(0, 80);
     }
+    const intentResult = classifyChatIntent(prompt, ctxInput as any);
     if (userId && supabase && !isAnonymous) {
       try {
         const studentContext = await getStudentContext(supabase, userId, ctxInput);
-        const selectedMode = parseMode(rawMode, prompt);
-        const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt);
+        const selectedMode = parseMode(rawMode, prompt, intentResult.intent);
+        const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
         let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
         let personaPrompt = "";
         try {
@@ -541,6 +543,22 @@ export async function POST(req: Request) {
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
     if (userId && supabase && !isAnonymous) {
+      if (intentResult.intent === "CLARIFICATION") {
+        const answer = "هل تقصد ملفات Workspace أم المحاضرات المسجلة؟ حدد المصدر أو اسم الملف.";
+        if (reserveRef) {
+          try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
+        }
+        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+      }
+      if (intentResult.intent === "RECORDED_LECTURES_SEARCH") {
+        const answer = "البحث في المحاضرات المسجلة will be available in a later phase. حالياً، حدد ملف Workspace أو اشرح سؤالك مباشرة.";
+        if (reserveRef) {
+          try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
+        }
+        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+      }
+    }
+    if (userId && supabase && !isAnonymous && intentResult.intent === "WORKSPACE_SEARCH") {
       try {
         const ws = await buildWorkspaceSourceContext({ supabase, userId, message: prompt });
         if (ws.ok) {
@@ -564,6 +582,12 @@ export async function POST(req: Request) {
           return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
         } else if (ws.resolution.status === "empty_source") {
           const answer = "المصدر موجود لكنه لا يحتوي على محتوى قابل للاستخدام.";
+          if (reserveRef) {
+            try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
+          }
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+        } else if (ws.resolution.status === "error") {
+          const answer = "تعذّر الوصول للمصدر تقنيًا. حاول مرة أخرى أو حدد الملف.";
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
