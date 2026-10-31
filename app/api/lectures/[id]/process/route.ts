@@ -182,7 +182,8 @@ export async function POST(
     // ── ٤) التفريغ ──
     const feedback =
       typeof body?.feedback === "string" ? body.feedback.trim().slice(0, 2000) : "";
-    const baseTranscript = lecture.transcript_text;
+    const baseTranscript =
+      typeof lecture.transcript_text === "string" ? lecture.transcript_text : "";
     const transcript =
       feedback !== ""
         ? `${baseTranscript}\n\nملاحظات الطالب للشرح (عدّل الشرح وفقها): ${feedback}`
