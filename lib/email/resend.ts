@@ -7,7 +7,10 @@ export type ResendSendResult = {
 };
 
 function getSender(): string | null {
-  const from = process.env.FEEDBACK_EMAIL_FROM?.trim();
+  const from =
+    process.env.FEEDBACK_EMAIL_FROM?.trim() ||
+    process.env.RESEND_FROM_EMAIL?.trim() ||
+    process.env.RESEND_FROM?.trim();
   if (!from) return null;
   return `ماجيكلي <${from}>`;
 }
