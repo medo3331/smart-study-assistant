@@ -18,6 +18,7 @@ export default function AdminAiOverviewPage() {
   if (err) return <div className="p-6"><AdminNotice tone="rose">{err}</AdminNotice></div>;
   if (!data) return <div className="p-6">جاري التحميل…</div>;
 
+
   const o = data.overview ?? {};
   const limits = data.limits ?? {};
   const models = data.models ?? [];
@@ -25,8 +26,11 @@ export default function AdminAiOverviewPage() {
   const system = data.system ?? {};
 
   return (
+
     <div className="space-y-6 p-6">
       <AdminPageHeader title="AI Overview" subtitle="نظرة عامة على استخدام الذكاء الاصطناعي والحدود والنماذج" badge="ai" permissionKey="admin" />
+       {data.dbError ? <AdminNotice tone="amber">تحذير: {data.dbError}</AdminNotice> : null}
+
 
       <AdminCard title="إحصائيات الاستخدام" tone="blue">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

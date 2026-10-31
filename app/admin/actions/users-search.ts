@@ -110,14 +110,13 @@ export async function searchUsers(
       entitlements: entitlementsByUser[r.id] ?? [],
     }));
 
-    if (error || !data) {
-      // fallback: سكيمة قديمة بدون created_at — أعد المحاولة بدون الأعمدة الزمنية
+    if (error) {
       if (error?.message?.includes("created_at")) {
         const retry = await privileged
           .from("profiles")
           .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason")
           .limit(50);
-        if (retry.error || !retry.data) return [];
+        if (retry.error || !retry.data) throw new Error(retry.error?.message || "profiles retry failed");
         // enrich retry too
         const retryIds = (retry.data ?? []).map((r: any) => r.id).filter(Boolean);
         const retryCodes: Record<string, string | null> = {};
@@ -141,10 +140,12 @@ export async function searchUsers(
           user_codes: retryCodes[r.id] ? [{ code: retryCodes[r.id], is_active: true }] : [],
           entitlements: retryEnts[r.id] ?? [],
         }));
-        return mapRows(retryEnriched as any[], planFilter).map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
+        const mappedRetry = mapRows(retryEnriched as any[], planFilter);
+        return mappedRetry.map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
       }
-      return [];
+      throw new Error(error.message || "profiles query failed");
     }
+    if (!data) throw new Error("profiles query returned no data");
 
     const mapped = mapRows(enrichedData as any[], planFilter);
     const enriched = mapped.map((u) => ({ ...u, email: u.email || emailMap[u.id] || null }));
@@ -195,8 +196,9 @@ export async function searchUsers(
     }
 
     return enriched;
-  } catch {
-    return [];
+  } catch (e: any) {
+    console.error("[admin users-search] failed:", e?.message || e);
+    throw new Error(e?.message || "searchUsers failed");
   }
 }
 

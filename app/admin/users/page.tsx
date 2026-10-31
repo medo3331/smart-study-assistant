@@ -46,14 +46,20 @@ export default async function AdminUsersPage({
   const plan = sp.plan ?? "all";
   const status = sp.status ?? "all";
   const code = sp.code ?? "all";
-  const userSearchResults = await searchUsers(
-    (sp.q ?? "").trim(),
-    plan,
-    status,
-    code,
-    sp.after || null,
-    sp.before || null
-  );
+  let userSearchResults: any[] = [];
+  let searchError: string | null = null;
+  try {
+    userSearchResults = await searchUsers(
+      (sp.q ?? "").trim(),
+      plan,
+      status,
+      code,
+      sp.after || null,
+      sp.before || null
+    );
+  } catch (e: any) {
+    searchError = e?.message || "تعذّر جلب المستخدمين";
+  }
 
   const exportHref =
     `/api/admin/users/export?q=${encodeURIComponent(sp.q ?? "")}` +
@@ -72,6 +78,8 @@ export default async function AdminUsersPage({
 
       {sp.success ? <AdminNotice tone="emerald">تم: {sp.success}</AdminNotice> : null}
       {sp.error ? <AdminNotice tone="rose">خطأ: {sp.error}</AdminNotice> : null}
+       {searchError ? <AdminNotice tone="rose">خطأ في جلب المستخدمين: {searchError}</AdminNotice> : null}
+
 
       <AdminNotice tone="emerald" title="الفجوة الموثقة أُغلقت (المرحلة 4.4)">
         حالة الحظر الآن حقيقية من الداتابيز: <code>banUser</code> يكتب <code>is_banned/banned_at/ban_reason</code> في
