@@ -23,12 +23,13 @@ export default async function AdminUsersAnalyticsPage() {
       profiles = await pgQuery<ProfileRow>(`
         SELECT p.id::text AS id,
                p.display_name,
-               p.email,
+               u.email,
                p.public_user_code,
                p.created_at::text AS created_at,
                EXISTS (SELECT 1 FROM public.entitlements e WHERE e.user_id=p.id AND e.kind='plan' AND e.value='premium' AND (e.expires_at IS NULL OR e.expires_at > now())) AS is_premium,
                EXISTS (SELECT 1 FROM public.entitlements e WHERE e.user_id=p.id AND e.kind='plan' AND e.metadata->>'source'='premium_trial_0_5' AND (e.expires_at IS NULL OR e.expires_at > now())) AS is_trial
         FROM public.profiles p
+        LEFT JOIN auth.users u ON u.id = p.id
         ORDER BY p.created_at DESC NULLS LAST
         LIMIT 100
       `);
@@ -58,10 +59,15 @@ export default async function AdminUsersAnalyticsPage() {
       const supabase = createServiceClient();
       const { data: profData, error: profErr } = await supabase
         .from("profiles")
-        .select("id, display_name, email, public_user_code, created_at")
+        .select("id, display_name, public_user_code, created_at")
         .order("created_at", { ascending: false, nullsFirst: false })
         .limit(100);
       if (profErr) throw profErr;
+      const emailMap = new Map<string, string | null>();
+      try {
+        const { data: usersData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        for (const u of usersData?.users ?? []) emailMap.set(String(u.id), u.email ?? null);
+      } catch {}
       const ids = (profData ?? []).map((p: any) => p.id);
       let ents: any[] = [];
       if (ids.length) {
@@ -84,7 +90,7 @@ export default async function AdminUsersAnalyticsPage() {
       profiles = (profData ?? []).map((p: any) => ({
         id: String(p.id),
         display_name: p.display_name ?? null,
-        email: p.email ?? null,
+        email: emailMap.get(String(p.id)) ?? null,
         public_user_code: p.public_user_code ?? null,
         created_at: p.created_at ?? null,
         is_premium: premiumSet.has(String(p.id)),
