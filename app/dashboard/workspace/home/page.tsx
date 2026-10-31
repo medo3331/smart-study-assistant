@@ -62,7 +62,7 @@ export default function WorkspaceHomePage() {
   const stageLabel: Record<AcademicStage, string> = { basic: "ابتدائي", secondary: "متوسط/ثانوي", university: "جامعي", postgraduate: "دراسات عليا" };
 
   return (
-    <PageShell title="مساحة العمل الأكاديمية" subtitle="موادك، محاضراتك، وملفاتك في مكان واحد">
+    <PageShell title="مساحة العمل الأكاديمية" lede="موادك، محاضراتك، وملفاتك في مكان واحد">
       {notice && <DataNotice message={notice} />}
       {loading ? <LoadingSheets /> : (
         <>
