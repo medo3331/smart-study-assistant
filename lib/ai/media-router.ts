@@ -125,7 +125,7 @@ export async function generateImageWithFallback(
       });
       attempts.push({ ...candidate, ok: false, reason: `HTTP ${status}` });
       // طلب تالف (400 عيلة) مايتعادش على مزوّد تاني.
-      if ([400, 413, 422].includes(status)) break;
+      if ([400, 422].includes(status)) break;
     }
   }
 

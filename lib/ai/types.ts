@@ -33,9 +33,13 @@ export type AiTaskType =
   | "image_edit"
   | "video_generation";
 
+export type AiChatMessageContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export type AiChatMessage = {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | AiChatMessageContentPart[];
 };
 
 export type AiChatRequest = {

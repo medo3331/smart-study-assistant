@@ -29,38 +29,22 @@ export function ContextualNotification() {
   const [prayerCtx, setPrayerCtx] = useState<PrayerContext | null>(null);
   const [streakRisk, setStreakRisk] = useState(false);
   const [visible, setVisible] = useState(true);
+const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+useEffect(() => {
+  try {
+    const raw = window.localStorage.getItem("dismissed_notifications");
+    if (raw) setDismissed(new Set(JSON.parse(raw)));
+  } catch {}
+}, []);
 
   // Prayer context: load via existing prayer-time utilities only
   useEffect(() => {
     let cancelled = false;
     async function loadPrayer() {
       try {
-        // Dynamic import of existing prayer-time utilities (verified in repo)
-        const prayerMod = await import("@/lib/islamic/prayer-times/next-prayer");
-        // Use same service mechanism existing in repo (service uses AlAdhan with env/default config)
-        // We only call the calculation helpers (getNextPrayer / getTimeUntilNextPrayer / formatTimeRemaining)
-        // NOT the external fetch directly — reuse the data the hook/service provides.
-        // Since the hook requires React state and may not be available synchronously, we attempt
-        // to read from window/local prayer data or fall back to a safe no-message mode.
-        // For minimal safe in-app notification: we rely ONLY on the verified calculation functions.
-        // We load the service response pattern via the existing mechanism (same as usePrayerTimes hook).
-        const res = await fetch("/api/prayer-times").catch(() => null); // if endpoint exists; else skip
-        // If no endpoint, we do NOT invent data. We skip prayer-based message.
-        if (!res || cancelled) return;
-        const data = await res.json().catch(() => null);
-        if (!data || !data.timestamps) return;
-        const next = prayerMod.getNextPrayer(data);
-        const remainingMs = prayerMod.getTimeUntilNextPrayer(data);
-        if (next && remainingMs > 0 && remainingMs < 60 * 60 * 1000) {
-          // Prayer approaching within 1 hour — contextual reason exists
-          if (!cancelled) {
-            setPrayerCtx({
-              arabicName: next.arabicName || next.name,
-              time: next.time,
-              remainingMinutes: Math.round(remainingMs / (1000 * 60)),
-            });
-          }
-        }
+        // Prayer context disabled: no /api/prayer-times endpoint; avoid console errors.
+        return;
       } catch {
         // If prayer data unavailable: do not crash; do not invent message.
         // This keeps the notification safe — only shows when real context exists.
@@ -85,7 +69,7 @@ export function ContextualNotification() {
         const { data: profile, error } = await supabase
           .from("profiles")
           .select("streak, last_study_day")
-          .single();
+          .maybeSingle();
         if (cancelled) return;
         if (error || !profile) return;
         // Existing convention: daily_missions uses UTC; streak risk only shown if today
@@ -107,7 +91,13 @@ export function ContextualNotification() {
   // Only show if at least ONE contextual reason is genuinely supported by real data.
   const hasPrayerContext = !!(prayerCtx?.remainingMinutes && prayerCtx.remainingMinutes <= 60);
   const hasStreakContext = streakRisk;
-  const shouldShow = visible && (hasPrayerContext || hasStreakContext);
+  const notifKey = hasPrayerContext && prayerCtx
+  ? `prayer:${prayerCtx.arabicName}:${prayerCtx.remainingMinutes}`
+  : hasStreakContext
+  ? `streak:${new Date().toISOString().slice(0, 10)}`
+  : null;
+const isDismissed = notifKey ? dismissed.has(notifKey) : false;
+const shouldShow = visible && !isDismissed && (hasPrayerContext || hasStreakContext);
 
   if (!shouldShow) return null;
 
@@ -165,14 +155,21 @@ export function ContextualNotification() {
           </p>
         </div>
 
-        <button
+<button
           type="button"
-          onClick={() => setVisible(false)}
-          className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors hover:brightness-110"
-          style={{ backgroundColor: "var(--card-primary)", color: "var(--muted)", border: "1px solid var(--rule)" }}
-          aria-label="إخفاء الإشعار"
+          onClick={() => {
+            if (notifKey) {
+              const next = new Set(dismissed);
+              next.add(notifKey);
+              setDismissed(next);
+              try { window.localStorage.setItem("dismissed_notifications", JSON.stringify([...next])); } catch {}
+            }
+            setVisible(false);
+          }}
+          className="shrink-0 rounded-full p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-2)] transition"
+          aria-label="إغلاق الإشعار"
         >
-          إخفاء
+          <span aria-hidden>✕</span>
         </button>
       </div>
     </motion.section>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable react-hooks/exhaustive-deps -- TODO: stable deps */
 /* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system is intentional */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import MagicWheelDashboard from "@/components/MagicWheelDashboard";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TodayPlanCard, DailyMissionsCard, WeeklyProgressCard, CompanionStatusCard } from "@/components/DashboardExtraCards";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -30,35 +31,39 @@ import type {
 
 import { useProfileState, ProfilePersona, defaultProfileForUser } from "@/lib/user-profiles";
 import { HeroSection } from "./components/HeroSection";
+import MagIdCard from "@/components/MagIdCard";
+import SubscriptionQuotaCard from "./components/SubscriptionQuotaCard";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
 import { useAudio } from "@/components/audio/AudioProvider";
-import { Sidebar, type SettingsSectionId } from "./components/Sidebar";
+import { SettingsDrawer, type SettingsSectionId } from "./components/SettingsDrawer";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
 import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components/nav-config";
 import { WeeklyProgress } from "./components/WeeklyProgress";
 import { AchievementsStrip } from "./components/AchievementsStrip";
 import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
-// 🎴 إعادة تصميم الداشبورد (نظام موحّد): هيرو + كروت أرقام + الخطوة الحالية.
+// ًںژ´ إعادة تصميم الداشبورد (نظام موحّد): هيرو + كروت أرقام + الخطوة الحالية.
 // نفس حالة الصفحة الحقيقية (profiles / study_days / activity_log) بدون أي مصدر بيانات جديد.
 import { HeroCard } from "./components/HeroCard";
 import { StatCards } from "./components/StatCards";
+import { UserQrCard } from "./components/UserQrCard";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
+import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
-// 🧩 سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
+// ًں§© سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // Preview branch: conservative control center extension (stats + navigation + focus)
 import { DashboardStats } from "./components/DashboardStats";
 import { QuickNavigation, buildQuickNavItems } from "./components/QuickNavigation";
 import { TodayFocus } from "./components/TodayFocus";
-// 🎯 First Session — "ماذا تريد أن تفعل اليوم؟" (Control Center entry point)
+// ًںژ¯ First Session — "ماذا تريد أن تفعل اليوم؟" (Control Center entry point)
 import { FirstSession } from "./components/FirstSession";
-// 📝 قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
+// ًں“‌ قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
 import { DEFAULT_PERSONA, getUiText, isPersona } from "@/lib/user-persona";
@@ -67,11 +72,11 @@ import { LeaderboardModal } from "./components/Models/LeaderboardModal";
 import {  ShopModal } from "./components/Models/ShopModal";
 import {  ParentReportModal,  } from "./components/Models/ParentReportModal";
 import {  WeeklySummaryModal } from "./components/Models/WeeklySummaryModal";
-// 🚨 خطة الطوارئ + الرأي + الجروب — كومبوننتات عامة بره مجلد الداشبورد
+// ًںڑ¨ خطة الطوارئ + الرأي + الجروب — كومبوننتات عامة بره مجلد الداشبورد
 import { ExamPlanCard } from "@/components/ExamPlanCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { CommunityInvite } from "@/components/CommunityInvite";
-// 🐣 الرفيق: الكمبوننت موجود من الأول، والمتجر بيغيّر إيموجيه بس
+// ًںگ£ الرفيق: الكمبوننت موجود من الأول، والمتجر بيغيّر إيموجيه بس
 import { StudyPet } from "@/components/StudyPet";
 
 import { useEquippedCompanion } from "@/lib/shop/use-companion";
@@ -85,7 +90,7 @@ import { BaccalaureateDashboard } from "@/components/dashboard/baccalaureate/Bac
 import { UniversityDashboard } from "@/components/dashboard/university/UniversityDashboard";
 import { isPrimaryExperience } from "@/lib/education/experience";
 
-// ⚔️ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
+// âڑ”ï¸ڈ تقسيم الأيام لفصول (Chapters) كل 5 أيام - يشغّل زرار Boss Fight بعد كل فصل مكتمل
 // ✅ ملحوظة: نفس القيمة دي متعرّفة جوه StudySections.tsx كمان (بيستخدمها في عرض زرار البوس) -
 // لو غيّرت الرقم هنا لازم تغيّره هناك كمان عشان الاتنين يفضلوا متزامنين.
 const CHAPTER_SIZE = 5;
@@ -197,7 +202,7 @@ export default function DashboardPage() {
   const [streak, setStreak] = useState(1);
   const [theme, setTheme] = useState<ThemeColor>("amber");
 
-  /* 🐣 الرفيق الملبوس — استعلام واحد، وأي فشل معناه الرفيق الأصلي.
+  /* ًںگ£ الرفيق الملبوس — استعلام واحد، وأي فشل معناه الرفيق الأصلي.
      مش داخل في `isInitialized` عن قصد: الصفحة مالهاش تستنى إيموجي. */
   const companion = useEquippedCompanion(supabase, authUser?.id ?? null);
 
@@ -212,17 +217,17 @@ export default function DashboardPage() {
 
   // 3. الصوت — الحالة كلها في `AudioProvider` على مستوى الموقع.
   //
-  // ⚠️ كانت هنا (activeTrack/isPlayingAudio/audioVolume/audioError +
+  // âڑ ï¸ڈ كانت هنا (activeTrack/isPlayingAudio/audioVolume/audioError +
   // عنصر <audio>). المشكلة إن التنقّل بـ router.push بيشيل الصفحة دي من
-  // الشجرة ومعاها عنصر الصوت، فالصوت كان بيفصل أول ما تروح «الكورسات».
+  // الشجرة ومعاها عنصر الصوت، فالصوت كان بيفصل أول ما تروح آ«الكورساتآ».
   // الصفحة بتقرا الحالة دلوقتي بس — التشغيل مش شغلها.
   const { activeTrack, isPlaying: isPlayingAudio } = useAudio();
 
   // 4. المودالات والقوائم
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  /* 📖 ١٢ أغسطس: الدرج بيفتح على قسم بعينه. كارت القرآن بيقول «كل السور
-     والقرّاء» — يعني افتح الإعدادات على «الصوت» على طول، مش سيب المستخدم
-     يدوّر. بيترجع `null` مع القفل عشان الفتحة اللي بعدها من ⚙️ تبدأ
+  /* ًں“– ١٢ أغسطس: الدرج بيفتح على قسم بعينه. كارت القرآن بيقول آ«كل السور
+     والقرّاءآ» — يعني افتح الإعدادات على آ«الصوتآ» على طول، مش سيب المستخدم
+     يدوّر. بيترجع `null` مع القفل عشان الفتحة اللي بعدها من âڑ™ï¸ڈ تبدأ
      بالأقسام كلها مقفولة زي ما هي مفروض. */
   const [settingsFocus, setSettingsFocus] = useState<SettingsSectionId | null>(null);
   const [showSubjectModal, setShowSubjectModal] = useState(false);
@@ -245,10 +250,10 @@ export default function DashboardPage() {
   const [activityLog, setActivityLog] = useState<ActivityLog>({});
   const [analyticsRange, setAnalyticsRange] = useState<"weekly" | "monthly">("weekly");
 
-  /* 🎡 عجلة ماجيك — عدّاد الكورسات + توزيع المواد (بيانات حقيقية).
+  /* ًںژ، عجلة ماجيك — عدّاد الكورسات + توزيع المواد (بيانات حقيقية).
      fetchCourses بتجيب study_configs + عدّاد study_days لكل تراك، فبنشتق
      الرقم والـ donut من نفس الرد — ولا جدول جديد ولا endpoint إضافي.
-     null = لسه بيتحمّل أو فشل صامت، والواجهة بتعرض «—» بدل أي رقم وهمي. */
+     null = لسه بيتحمّل أو فشل صامت، والواجهة بتعرض آ«—آ» بدل أي رقم وهمي. */
   const [coursesCount, setCoursesCount] = useState<number | null>(null);
   const [subjectBreakdown, setSubjectBreakdown] = useState<
     { name: string; value: number; completed: number }[]
@@ -295,16 +300,16 @@ export default function DashboardPage() {
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
 
-  // 11. 👤 قايمة التنقل هي مصدر كل الأدوات دلوقتي — الشريط العلوي اتشال
+  // 11. ًں‘¤ قايمة التنقل هي مصدر كل الأدوات دلوقتي — الشريط العلوي اتشال
   // في ٨ أغسطس، فمافيش منيوهات منسدلة في الترويسة تحتاج حالة أو refs.
 
   // 12. فتح الأيام بدري بواسطة XP
   const [earlyUnlockedDays, setEarlyUnlockedDays] = useState<number[]>([]);
 
-  // ⚔️ تحدي البوس النشط حاليًا
+  // âڑ”ï¸ڈ تحدي البوس النشط حاليًا
   const [activeBossChapter, setActiveBossChapter] = useState<number | null>(null);
 
-  // 🏅 عدد أوسمة تحدي الفصل — بيستخدمه شريط الإنجازات في معلَم "أول تحدي فصل".
+  // ًںڈ… عدد أوسمة تحدي الفصل — بيستخدمه شريط الإنجازات في معلَم "أول تحدي فصل".
   // بنجيب العدد بس (head: true) مش الصفوف، لأن القايمة الكاملة في
   // /dashboard/achievements وهي اللي بتقرا الصفوف بـ fetchBadges.
   const [badgeCount, setBadgeCount] = useState(0);
@@ -316,18 +321,18 @@ export default function DashboardPage() {
   const [isChangingSubject, setIsChangingSubject] = useState(false);
   const [isAddingPlanStep, setIsAddingPlanStep] = useState(false);
 
-  // 14. 👤 الشخصية — بتتقرا من profiles.persona وبتغيّر نصوص الواجهة كلها
+  // 14. ًں‘¤ الشخصية — بتتقرا من profiles.persona وبتغيّر نصوص الواجهة كلها
     const [persona, setPersona] = useState<Persona>(DEFAULT_PERSONA);
 
-    // 🎯 للمساعد الشخصي (Phase 2A): الأهداف المعلقة والمستوى الدراسي — خام،
+    // ًںژ¯ للمساعد الشخصي (Phase 2A): الأهداف المعلقة والمستوى الدراسي — خام،
     // والتحويل لسياق مسؤولية buildPersonalContext تحت.
     const [pendingGoals, setPendingGoals] = useState<PendingGoalRow[]>([]);
     const [studentLevel, setStudentLevel] = useState<string | null>(null);
 
-  // 🔴 دالة توليد الأيام
-  // ⚠️ الشخصية بتتمرّر صريح مش بتتقرا من الحالة: أول نداء بيحصل جوه نفس دالة
+  // ًں”´ دالة توليد الأيام
+  // âڑ ï¸ڈ الشخصية بتتمرّر صريح مش بتتقرا من الحالة: أول نداء بيحصل جوه نفس دالة
   // التحميل اللي بتعمل setPersona، و setState مش فورية — فلو قرينا من الحالة
-  // هنا، خريج أو فري لانسر كان هياخد أيام باسم «الدرس ١» بدل «المشروع ١».
+  // هنا، خريج أو فري لانسر كان هياخد أيام باسم آ«الدرس ١آ» بدل آ«المشروع ١آ».
   const generateDays = (parsedConfig: StudyConfig, forPersona: Persona): StudyDay[] => {
     const uiText = getUiText(parsedConfig.category, forPersona);
     const generatedDays: StudyDay[] = Array.from({ length: parsedConfig.daysCount || 7 }, (_, i) => ({
@@ -343,7 +348,7 @@ export default function DashboardPage() {
     return generatedDays;
   };
 
-  // 🔴 إدراج أيام الخطة في قاعدة البيانات (Supabase)
+  // ًں”´ إدراج أيام الخطة في قاعدة البيانات (Supabase)
   async function insertDaysToDb({
     userId,
     cfgId,
@@ -383,7 +388,7 @@ export default function DashboardPage() {
       }));
   }
 
-  // 🔴 تحميل بيانات المستخدم من Supabase عند بداية التشغيل
+  // ًں”´ تحميل بيانات المستخدم من Supabase عند بداية التشغيل
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
@@ -426,7 +431,7 @@ export default function DashboardPage() {
             .select()
             .maybeSingle();
           profile = newProfile;
-          // 🪙 Phase 4.0 — مكافأة التسجيل +20 (مرة/عمر عبر trigger + fallback idempotent).
+          // ًںھ™ Phase 4.0 — مكافأة التسجيل +20 (مرة/عمر عبر trigger + fallback idempotent).
           // الـ trigger trg_signup_bonus يمنحها server-side عند insert، وهذا fallback يغطي
           // حسابات قديمة قبل الـ trigger أو لو الـ trigger لم يُشغل بعد.
           if (profile) {
@@ -434,7 +439,7 @@ export default function DashboardPage() {
           }
         }
 
-        // 👤 الشخصية بتحدد نصوص الواجهة (وحدة التقدم، اسم النقاط، نبرة الزراير).
+        // ًں‘¤ الشخصية بتحدد نصوص الواجهة (وحدة التقدم، اسم النقاط، نبرة الزراير).
         // بتتختار في اللاندينج وبتتحفظ في /assessment.
         // المتغير المحلي ده هو اللي بيتمرّر لـ generateDays تحت — الحالة نفسها
         // مش بتبقى جاهزة قبل نهاية الدالة دي.
@@ -460,10 +465,10 @@ export default function DashboardPage() {
               .update({ streak: currentStreak, last_study_day: new Date().toISOString().slice(0, 10) })
               .eq("id", currentUser.id);
 
-            /* 🪙 كوينز أول زيارة في اليوم. الفرع ده بيتنفّذ مرة واحدة يومياً
-               (`lastVisit !== today`) فهو بالظبط معنى «دخول يومي».
+            /* ًںھ™ كوينز أول زيارة في اليوم. الفرع ده بيتنفّذ مرة واحدة يومياً
+               (`lastVisit !== today`) فهو بالظبط معنى آ«دخول يوميآ».
 
-               ⚠️ مش بـ await: ده جوه مسار تحميل الداشبورد، والانتظار على
+               âڑ ï¸ڈ مش بـ await: ده جوه مسار تحميل الداشبورد، والانتظار على
                نداءين RPC بيأخّر أول رسم. الكوينز إضافة، فبتروح لوحدها
                والصفحة تكمّل. أي فشل (db/shop.sql لسه ما اتشغّلش) بيتسجّل
                في الكونسول وخلاص — التقدّم نفسه اتحفظ فوق.
@@ -476,7 +481,7 @@ export default function DashboardPage() {
                 if (streakGrew) {
                   await awardCoins(supabase, "streak_day");
                   /* كل ٧ أيام متواصلة = أسبوع كامل. نفس عدّاد إنجاز
-                     «week-streak» في صفحة الإنجازات، فالمستخدم بيشوف
+                     آ«week-streakآ» في صفحة الإنجازات، فالمستخدم بيشوف
                      الوسام والكوينز في نفس اليوم مش في يومين مختلفين. */
                   if (currentStreak % 7 === 0) await awardCoins(supabase, "perfect_week");
                 }
@@ -488,7 +493,7 @@ export default function DashboardPage() {
           setStreak(currentStreak);
         }
 
-        // 📚 التراك المفتوح: صفحة الكورسات بتكتب اختيارك في
+        // ًں“ڑ التراك المفتوح: صفحة الكورسات بتكتب اختيارك في
         // profiles.active_config_id، وإحنا بنقراه من البروفايل اللي محمّل فوق
         // خلاص (select *) — فمافيش استعلام زيادة.
         //
@@ -588,7 +593,7 @@ export default function DashboardPage() {
                           setActivityLog(logMap);
                         }
 
-                        // 🎯 الأهداف غير المكتملة بتروح للمساعد الشخصي (تعداد + استعجال).
+                        // ًںژ¯ الأهداف غير المكتملة بتروح للمساعد الشخصي (تعداد + استعجال).
                         // نفس أعمدة fetchGoals في lib/pages-data.ts — والصفوف خام عشان
                         // buildPersonalContext هي اللي بتحسب الـ urgency بموعدها النهائي.
                         const { data: goalRows, error: goalsError } = await supabase
@@ -603,7 +608,7 @@ export default function DashboardPage() {
                           setPendingGoals(goalRows as PendingGoalRow[]);
                         }
 
-        // 🏅 عدد الأوسمة. بيفشل بهدوء عن قصد: جدول badges جاي من
+        // ًںڈ… عدد الأوسمة. بيفشل بهدوء عن قصد: جدول badges جاي من
         // db/pages.sql، ولو الملف ده لسه ما اتشغّلش في Supabase الداشبورد
         // كلها ما تقعش — الشريط بيعرض معلَم "أول تحدي فصل" مقفول وخلاص.
         const { count: badgeRows, error: badgeError } = await supabase
@@ -659,9 +664,9 @@ export default function DashboardPage() {
     }
   }, [streak, theme, isInitialized, authUser]);
 
-  /* 📖 تصفير الفتحة الموجّهة عند قفل الدرج.
-     كارت القرآن بيقول «افتح على الصوت»، والدرج بيفتح القسم ده. لو القيمة
-     فضلت متعلّقة، أي فتحة بعد كده من ⚙️ كانت هتفتح «الصوت» تاني — وأسوأ:
+  /* ًں“– تصفير الفتحة الموجّهة عند قفل الدرج.
+     كارت القرآن بيقول آ«افتح على الصوتآ»، والدرج بيفتح القسم ده. لو القيمة
+     فضلت متعلّقة، أي فتحة بعد كده من âڑ™ï¸ڈ كانت هتفتح آ«الصوتآ» تاني — وأسوأ:
      لو المستخدم قفل القسم بنفسه، إعادة فتح الدرج كانت هتفتحه في وشه تاني
      وتلغي اختياره الصريح. الشرط على القفل مش على الفتح عشان يشتغل مع أي
      طريقة قفل (زرار الإكس، الضغط على الخلفية، أو إشارة تنقّل). */
@@ -669,14 +674,14 @@ export default function DashboardPage() {
     if (!isMenuOpen) setSettingsFocus(null);
   }, [isMenuOpen]);
 
-  // 🔴 حفظ الفلاش كاردز محلياً
+  // ًں”´ حفظ الفلاش كاردز محلياً
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem("study_progress", JSON.stringify({ flashcards }));
     }
   }, [flashcards, isInitialized]);
 
-  // 🔴 حفظ تفضيلات التنبيهات
+  // ًں”´ حفظ تفضيلات التنبيهات
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem("study_notif_prefs", JSON.stringify({ enabled: notificationsEnabled, time: reminderTime }));
@@ -748,7 +753,7 @@ export default function DashboardPage() {
       });
   }, [showLeaderboard]);
 
-  // 🔔 مراقبة موعد التذكير كل دقيقة
+  // ًں”” مراقبة موعد التذكير كل دقيقة
   useEffect(() => {
     if (!notificationsEnabled) return;
     const checkReminder = () => {
@@ -761,7 +766,7 @@ export default function DashboardPage() {
       const hasActivityToday = !!todayEntry && (todayEntry.tasksCompleted > 0 || todayEntry.focusMinutes > 0);
 
       if (currentHM === reminderTime && lastNotified !== todayKey && !hasActivityToday) {
-        new Notification("🔥 حافظ على سلسلتك!", {
+        new Notification("ًں”¥ حافظ على سلسلتك!", {
           body: `لسه ما ذاكرتش النهارده... خلي سلسلة الـ ${streak} يوم ماتنكسرش!`,
           icon: "/favicon.ico",
         });
@@ -793,15 +798,12 @@ export default function DashboardPage() {
     openUnifiedChat(current ?? null);
   };
 
-  /* 📑 كل بند «مودال» في القايمة الجانبية بيوصل هنا.
-     ⚠️ الطوارئ مفتاح مش مودال: من القايمة بيتقلب، وبييجي إجباري `true` لما
+  /* ًں“‘ كل بند آ«مودالآ» في القايمة الجانبية بيوصل هنا.
+     âڑ ï¸ڈ الطوارئ مفتاح مش مودال: من القايمة بيتقلب، وبييجي إجباري `true` لما
      المستخدم يدوس عليه وهو في صفحة فرعية (شوف استهلاك النية تحت) — عشان
-     «شغّل الطوارئ» ماتتحولش لـ «اقفله» بسبب تنقّل بينهم. */
+     آ«شغّل الطوارئآ» ماتتحولش لـ آ«اقفلهآ» بسبب تنقّل بينهم. */
   const handleNavSignal = (signal: NavSignal, opts?: { force?: boolean }) => {
     switch (signal) {
-      case "ai":
-        handleOpenAiAssistant();
-        break;
       case "settings":
         setIsMenuOpen(true);
         break;
@@ -820,7 +822,7 @@ export default function DashboardPage() {
     }
   };
 
-  /* 📑 النية المحفوظة: بند القايمة اللي مالوش صفحة (مودال أو قسم) بيتضغط
+  /* ًں“‘ النية المحفوظة: بند القايمة اللي مالوش صفحة (مودال أو قسم) بيتضغط
      من صفحة فرعية، فبيكتب نيته في sessionStorage وينقل هنا. الإفكت ده هو
      اللي بينفّذها — من غيره الضغط كان بينقل للداشبورد وبس.
      بيستنى `authUser` لأن مودالات زي التقرير والمتصدرين مالهاش معنى قبل
@@ -851,7 +853,7 @@ export default function DashboardPage() {
 
   async function handleToggleNotifications(): Promise<void> {
     if (typeof window === "undefined" || !("Notification" in window)) {
-      alert("😅 المتصفح ده لا يدعم التنبيهات.");
+      alert("ًںک… المتصفح ده لا يدعم التنبيهات.");
       return;
     }
     if (notificationsEnabled) {
@@ -862,7 +864,7 @@ export default function DashboardPage() {
     setNotifPermission(permission);
     if (permission === "granted") {
       setNotificationsEnabled(true);
-      new Notification("🔔 تم تفعيل تذكير الستريك!", { body: `هننبهك الساعة ${reminderTime} لو لسه ما ذاكرتش.` });
+      new Notification("ًں”” تم تفعيل تذكير الستريك!", { body: `هننبهك الساعة ${reminderTime} لو لسه ما ذاكرتش.` });
     } else {
       alert("محتاجين إذنك لإرسال التنبيهات من إعدادات المتصفح.");
     }
@@ -870,12 +872,12 @@ export default function DashboardPage() {
 
   const handleEnableWebPush = async () => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      alert("😅 المتصفح ده لا يدعم التنبيهات في الخلفية (Web Push).");
+      alert("ًںک… المتصفح ده لا يدعم التنبيهات في الخلفية (Web Push).");
       return;
     }
     const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     if (!vapidKey) {
-      alert("⚠️ الميزة دي لسه محتاجة إعداد من ناحية السيرفر (VAPID key + API route). راجع التعليقات فوق الدالة دي في الكود.");
+      alert("âڑ ï¸ڈ الميزة دي لسه محتاجة إعداد من ناحية السيرفر (VAPID key + API route). راجع التعليقات فوق الدالة دي في الكود.");
       return;
     }
     try {
@@ -891,13 +893,13 @@ export default function DashboardPage() {
         body: JSON.stringify({ subscription }),
       });
       if (!res.ok) {
-        alert("⚠️ مقدرناش نحفظ الاشتراك. تأكد إنك مسجّل دخول وحاول تاني.");
+        alert("âڑ ï¸ڈ مقدرناش نحفظ الاشتراك. تأكد إنك مسجّل دخول وحاول تاني.");
         return;
       }
-      alert("🎉 تم تفعيل التنبيهات في الخلفية!");
+      alert("ًںژ‰ تم تفعيل التنبيهات في الخلفية!");
     } catch (err) {
       console.error("Web Push subscribe failed:", err);
-      alert("⚠️ حصل خطأ أثناء تفعيل التنبيهات، حاول تاني.");
+      alert("âڑ ï¸ڈ حصل خطأ أثناء تفعيل التنبيهات، حاول تاني.");
     }
   };
 
@@ -913,7 +915,7 @@ export default function DashboardPage() {
     });
   };
 
-  // 🔴 تحديث الخطوة الحالية
+  // ًں”´ تحديث الخطوة الحالية
   useEffect(() => {
     if (days.length > 0) {
       const lastCompletedIndex = days.filter((d) => d.isCompleted).length;
@@ -921,7 +923,7 @@ export default function DashboardPage() {
     }
   }, [days]);
 
-  // 🔴 منطق مؤقت البومودورو
+  // ًں”´ منطق مؤقت البومودورو
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
     if (isPomoRunning && pomoTime > 0) {
@@ -929,7 +931,7 @@ export default function DashboardPage() {
     } else if (pomoTime === 0) {
       setIsPomoRunning(false);
       logActivity({ focusMinutes: 25 });
-      alert("🎉 انتهت الجلسة! خذ استراحة لمدة 5 دقائق.");
+      alert("ًںژ‰ انتهت الجلسة! خذ استراحة لمدة 5 دقائق.");
     }
     return () => clearInterval(timer);
   }, [isPomoRunning, pomoTime]);
@@ -943,7 +945,7 @@ export default function DashboardPage() {
     const { error: updateError } = await supabase.from("study_configs").update({ subject: newConfig.subject }).eq("id", configId);
 
     if (updateError) {
-      alert("⚠️ حصل خطأ أثناء حفظ اسم المادة، حاول تاني.");
+      alert("âڑ ï¸ڈ حصل خطأ أثناء حفظ اسم المادة، حاول تاني.");
       setIsChangingSubject(false);
       return;
     }
@@ -951,7 +953,7 @@ export default function DashboardPage() {
     const { error: deleteError } = await supabase.from("study_days").delete().eq("config_id", configId);
     if (deleteError) {
       console.error("Failed to delete old days:", deleteError);
-      alert("⚠️ حصل خطأ أثناء مسح أيام المادة القديمة، حاول تاني.");
+      alert("âڑ ï¸ڈ حصل خطأ أثناء مسح أيام المادة القديمة، حاول تاني.");
       setIsChangingSubject(false);
       return;
     }
@@ -960,7 +962,7 @@ export default function DashboardPage() {
     const savedDays = await insertDaysToDb({ userId: authUser.id, cfgId: configId, generatedDays: generated });
 
     if (savedDays.length > 0 && !savedDays[0].id) {
-      alert("⚠️ اتغيّر اسم المادة، لكن حصل خطأ أثناء حفظ أيامها الجديدة. افتح Console (F12) وابعت الخطأ اللي فيه.");
+      alert("âڑ ï¸ڈ اتغيّر اسم المادة، لكن حصل خطأ أثناء حفظ أيامها الجديدة. افتح Console (F12) وابعت الخطأ اللي فيه.");
     }
 
     setConfig(newConfig);
@@ -1079,15 +1081,15 @@ export default function DashboardPage() {
       supabase.rpc("increment_xp", { p_delta: -200 }).then(({ error }) => {
         if (error) console.warn("increment_xp (-200) failed:", error.message);
       });
-      alert("تم شراء تجميد الستريك بنجاح! 🎉 تم خصم 200 XP.");
+      alert("تم شراء تجميد الستريك بنجاح! ًںژ‰ تم خصم 200 XP.");
       setShowShopModal(false);
     } else {
-      alert("عذراً، لا تمتلك رصيد كافي من النقاط! 😅");
+      alert("عذراً، لا تمتلك رصيد كافي من النقاط! ًںک…");
     }
   };
 
   const handleShareReport = async () => {
-    const text = `📊 تقريري في ${config?.subject || "خطتي"}\nالمستوى: L${level}\nالنقاط: ${xp} XP\nالمهام المنجزة: ${completedCount} من ${days.length}\nالسلسلة: 🔥 ${streak} يوم`;
+    const text = `ًں“ٹ تقريري في ${config?.subject || "خطتي"}\nالمستوى: L${level}\nالنقاط: ${xp} XP\nالمهام المنجزة: ${completedCount} من ${days.length}\nالسلسلة: ًں”¥ ${streak} يوم`;
     if (typeof navigator !== "undefined" && (navigator as any).share) {
       try {
         await (navigator as any).share({ text });
@@ -1097,7 +1099,7 @@ export default function DashboardPage() {
     } else if (typeof navigator !== "undefined" && navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(text);
-        alert("تم نسخ التقرير! الصقه في أي مكان للمشاركة 📋");
+        alert("تم نسخ التقرير! الصقه في أي مكان للمشاركة ًں“‹");
       } catch {
         alert(text);
       }
@@ -1120,7 +1122,7 @@ export default function DashboardPage() {
     setFlashcards((prev) => prev.map((card) => (card.id === id ? { ...card, status } : card)));
   };
 
-  // 🖍️ ألوان الثيم بقت في theme-helpers.ts كمصدر واحد. كانت متعرّفة هنا
+  // ًں–چï¸ڈ ألوان الثيم بقت في theme-helpers.ts كمصدر واحد. كانت متعرّفة هنا
   // بقيم مختلفة شوية عن اللي في الملف، فكانت باليتّين بيفرقوا عن بعض.
   const themeStyles = THEME_STYLES[theme];
 
@@ -1154,11 +1156,11 @@ export default function DashboardPage() {
     );
   }
 
-  // 👤 بيانات العرض. كارت الحساب في القايمة الجانبية بيشتقّها بنفسه من نفس
+  // ًں‘¤ بيانات العرض. كارت الحساب في القايمة الجانبية بيشتقّها بنفسه من نفس
   // الدالة، فالاسم اللي في الترحيب هو نفس الاسم اللي في الكارت — مصدر واحد.
   const displayName = railAccountFromUser(authUser)?.displayName ?? "مستخدم";
 
-  // ═══ سياق المساعد الشخصي الحقيقي — نفس حالة هذه الصفحة بالضبط (Phase 2A) ═══
+  // �گ�گ�گ سياق المساعد الشخصي الحقيقي — نفس حالة هذه الصفحة بالضبط (Phase 2A) �گ�گ�گ
   // أي رقم بيوصل للمساعد مصدره حالة الداشبورد دي: profile/study_days/activity/
   // planner_goals — ومفيش أي رقم ملفَّق. لو مفيش خطة أو نشاط، السياق بيسقط
   // الأقسام الفاضية مش بيعرض أرقام وهمية.
@@ -1179,7 +1181,7 @@ export default function DashboardPage() {
   const overallProgress = days.length > 0 ? Math.round((completedCount / days.length) * 100) : 0;
 
   // سطر تحت الاسم في الترويسة: مكانك في الخطة.
-  // ⚠️ الفاصل كلمة "من" مش شرطة مايلة، والأرقام عربية-هندية —
+  // âڑ ï¸ڈ الفاصل كلمة "من" مش شرطة مايلة، والأرقام عربية-هندية —
   // شظية زي "3 / 14" جوه RTL المتصفح بيقلبها فتطلع "14 / 3". الحل
   // المعتاد كلاس .ltr-num، بس ده prop نصي مش JSX فمافيش مكان لـ span،
   // فالكلمات العربية هي اللي بتعزل الأرقام هنا.
@@ -1206,11 +1208,11 @@ export default function DashboardPage() {
     coachTasks.push({
       id: `lesson-${currentTaskForCoach.day}`,
       label: `${uiText.stepPrefix} ${currentTaskForCoach.day}: ${currentTaskForCoach.topic}`,
-      icon: "📘",
+      icon: "ًں“ک",
     });
   }
   if (reviewFlashcardsCount > 0) {
-    coachTasks.push({ id: "flashcards-review", label: `مراجعة ${reviewFlashcardsCount} بطاقة محتاجة تركيز`, icon: "🔁" });
+    coachTasks.push({ id: "flashcards-review", label: `مراجعة ${reviewFlashcardsCount} بطاقة محتاجة تركيز`, icon: "ًں”پ" });
   }
 
   const nextLockedDay = currentDayNumber + 1;
@@ -1219,12 +1221,12 @@ export default function DashboardPage() {
   const handleUnlockNextDayEarly = () => {
     if (!canUnlockNextDayEarly) return;
     if (xp < 150) {
-      alert("عذراً، محتاج 150 XP على الأقل عشان تفتح اليوم ده بدري! 😅");
+      alert("عذراً، محتاج 150 XP على الأقل عشان تفتح اليوم ده بدري! ًںک…");
       return;
     }
     setXp((prev) => prev - 150);
     setEarlyUnlockedDays((prev) => [...prev, nextLockedDay]);
-    alert(`تم فتح ${uiText.stepPrefix} ${nextLockedDay} بدري! 🎉 تقدر دلوقتي تشوفه وتفتحه.`);
+    alert(`تم فتح ${uiText.stepPrefix} ${nextLockedDay} بدري! ًںژ‰ تقدر دلوقتي تشوفه وتفتحه.`);
     setShowShopModal(false);
   };
 
@@ -1440,32 +1442,32 @@ export default function DashboardPage() {
       }}
       dir="rtl"
     >
-      {/* 🎧 عنصر الـ <audio> والمشغّل العائم بقوا في `AudioProvider` جوه
+      {/* ًںژ§ عنصر الـ <audio> والمشغّل العائم بقوا في `AudioProvider` جوه
           app/layout.tsx — عشان الصوت يفضل شغّال لما تنتقل لأي صفحة. */}
 
-      {/* 📑 فهرس الأقسام: شريط ثابت يمين على الشاشات الكبيرة، وشريط أفقي
+      {/* ًں“‘ فهرس الأقسام: شريط ثابت يمين على الشاشات الكبيرة، وشريط أفقي
           بيتسكرول فوق المحتوى في الموبايل. الحشو الإضافي فوق (lg:pe) هو
           اللي بيمنع المحتوى من إنه يدخل تحت الشريط الثابت. */}
       <NavRail
         themeStyles={themeStyles}
-        // 🗓️ ٨ أغسطس: الشريط العلوي اتشال، فكل أدواته بتوصل من هنا.
+        // ًں—“ï¸ڈ ٨ أغسطس: الشريط العلوي اتشال، فكل أدواته بتوصل من هنا.
         // أي إشارة جديدة تتزوّد في nav-config.ts والـ switch ده يتوسّع.
         onSignal={handleNavSignal}
-        aiReady={days.length > 0}
         motivation={{ level, streak }}
         account={railAccountFromUser(authUser)}
         emergencyOn={isEmergencyMode}
         audioOn={isPlayingAudio}
       />
 
-      {/* ═══════════════════════════════════════════════════════
+      {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
           بوابة التنقل الدائرية — عجلة ماجيك (NEW)
           تُضاف فوق كل المجموعات الحالية بدون تغيير أي قسم موجود.
-          ═══════════════════════════════════════════════════════ */}
+          �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
       <div className="relative -mt-4 mb-6 md:mb-8 dashboard-entrance" style={{ animationDelay: "0ms" }}>
         <div className="motion-safe:animate-[wheelPulse_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
         <MagicWheelDashboard
           currentDay={currentDayNumber}
+          currentDayId={currentTaskForCoach?.id}
           totalDays={days.length}
           subject={config?.subject ?? ""}
           completedSteps={completedCount}
@@ -1484,6 +1486,22 @@ export default function DashboardPage() {
         </div>
       </div>
 
+        {/* ── V2: greeting + profile summary ── */}
+        <div className="flex items-center gap-3 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4">
+          <ProfileAvatar
+            initial={railAccountFromUser(authUser)?.avatarInitial ?? "؟"}
+            name={railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
+            size={48}
+          />
+          <div className="min-w-0">
+            <p className="text-sm text-[var(--color-text-muted)]">أهلاً بعودتك 👋</p>
+            <p className="text-base font-semibold text-[var(--color-text-primary)] truncate">
+              {railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
+            </p>
+          </div>
+        </div>
+
+
       <div className="max-w-6xl mx-auto space-y-10">
         {isPrimary && primaryDashboardSafe ? (
           <div className="space-y-6">
@@ -1492,10 +1510,10 @@ export default function DashboardPage() {
             <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
                 <span>المزيد من أدواتك</span>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>â–¾</span>
               </summary>
               <div className="border-t border-rule p-4">
-                <p className="text-xs text-ink-soft">هنا هتلاقي أدوات إضافية لما تكبر شوية — دلوقتي ركز على موادك وخطوتك اليوم 🌟</p>
+                <p className="text-xs text-ink-soft">هنا هتلاقي أدوات إضافية لما تكبر شوية — دلوقتي ركز على موادك وخطوتك اليوم ًںŒں</p>
               </div>
             </details>
           </div>
@@ -1505,7 +1523,7 @@ export default function DashboardPage() {
             <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
                 <span>المزيد من أدواتك</span>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>â–¾</span>
               </summary>
               <div className="border-t border-rule p-4">
                 <p className="text-xs text-ink-soft">أدوات إضافية ستظهر هنا حسب تقدمك — ركز الآن على خطة اليوم والمراجعة</p>
@@ -1518,7 +1536,7 @@ export default function DashboardPage() {
             <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
                 <span>المزيد من أدواتك</span>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>â–¾</span>
               </summary>
               <div className="border-t border-rule p-4">
                 <p className="text-xs text-ink-soft">أدوات إضافية — ركز على خطة الثانوي ومراجعة المسار</p>
@@ -1531,7 +1549,7 @@ export default function DashboardPage() {
             <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
                 <span>المزيد من أدواتك</span>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>â–¾</span>
               </summary>
               <div className="border-t border-rule p-4">
                 <p className="text-xs text-ink-soft">أدوات البكالوريا الإضافية — ركز على مسارك وخطة الجامعة</p>
@@ -1544,7 +1562,7 @@ export default function DashboardPage() {
             <details className="group rounded-[var(--r-sm)] border border-rule bg-paper">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden">
                 <span>المزيد من أدواتك الجامعية</span>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>▾</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>â–¾</span>
               </summary>
               <div className="border-t border-rule p-4">
                 <p className="text-xs text-ink-soft">أدوات جامعية إضافية — مشاريع، مراجع، وتخصصك</p>
@@ -1553,12 +1571,12 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-        {/* ═══════════════════════════════════════════════════════
-            🎯 First Session — "ماذا تريد أن تفعل اليوم؟"
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
+            ًںژ¯ First Session — "ماذا تريد أن تفعل اليوم؟"
             Control Center entry point: يظهر أولاً، يوجّه النية،
             ثم Stats + Quick Nav + Focus + باقي الأقسام كما هي.
             البيانات كلها حقيقية من حالة الصفحة (days/completedCount).
-            ═══════════════════════════════════════════════════════ */}
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <div className="dashboard-entrance" style={{ animationDelay: "0ms" }}>
           <FirstSession
             completedSteps={completedCount}
@@ -1609,14 +1627,14 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ═══════════════════════════════════════════════════════
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
             GROUP A — الهوية والفعل
             HeroCard → CurrentStepCard → ExamPlanCard (conditional)
-            ═══════════════════════════════════════════════════════ */}
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "0ms" }}>
-          {/* ═══ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
-                  إجراءات سريعة (أكمل التعلّم · المساعد الذكي · العبادات · المتجر).
-                  كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. ═══ */}
+          {/* �گ�گ�گ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
+                  إجراءات سريعة (أكمل التعلّم آ· المساعد الذكي آ· العبادات آ· المتجر).
+                  كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. �گ�گ�گ */}
           <HeroCard
             displayName={displayName}
             subtitle={headerSubtitle}
@@ -1633,8 +1651,11 @@ export default function DashboardPage() {
           />
           {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
           <EconomyStrip />
+          <PlanQuotaCard />
           {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
                   (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
+          {/* �گ�گ�گ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
+                  (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة �گ�گ�گ */}
           <CurrentStepCard
             currentDay={currentTaskForCoach ?? null}
             completedSteps={completedCount}
@@ -1658,12 +1679,12 @@ export default function DashboardPage() {
           {/* Phase 0.4 — Light Social Comparison (reuses weekly_quiz_leaderboard; no new DB) */}
           <LightSocialComparison />
 
-          {/* 🚨 خطة الامتحان القريب — أهم deadline إذا وُجد.
+          {/* ًںڑ¨ خطة الامتحان القريب — أهم deadline إذا وُجد.
               مكانها بعد CTA مباشرة عن قصد: اللي عنده امتحان بعد ٣ أيام لازم يشوف
               المطلوب منه النهاردة قبل أي إحصائية. الكارت بيخفي نفسه
               لوحده لو مفيش خطة شغالة. */}
           {authUser && (
-            // ⚠️ الـ key فيه examPlanKey: الكارت بيجيب الخطة مرة واحدة عند
+            // âڑ ï¸ڈ الـ key فيه examPlanKey: الكارت بيجيب الخطة مرة واحدة عند
             // التركيب، فلو المستخدم عمل خطة من الشات الكارت كان هيفضل فاضي
             // لحد ريفريش. تغيير الـ key بيعيد تركيبه فبيجيب الخطة الجديدة.
             <ExamPlanCard
@@ -1684,35 +1705,37 @@ export default function DashboardPage() {
               className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--rule)] bg-[var(--card)] px-4 py-3 transition hover:opacity-90"
             >
               <span className="flex items-center gap-2">
-                <span aria-hidden>🎯</span>
+                <span aria-hidden>ًںژ¯</span>
                 <span className="font-semibold">اعمل تشخيص سريع</span>
               </span>
               <span className="text-sm text-[var(--muted-foreground)]">
-                ١٠ أسئلة · خطتك تتظبط على أساس النتيجة
+                ١ظ  أسئلة آ· خطتك تتظبط على أساس النتيجة
               </span>
             </Link>
           )}
         </div>
 
-        {/* ═══════════════════════════════════════════════════════
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
             GROUP B — السياق اليومي
             PersonalAssistant → HeroSection / AIStudyCoach
-            ═══════════════════════════════════════════════════════ */}
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "60ms" }}>
-          {/* ═══ المساعد الشخصي ─ بين الهيرو وكروت الأرقام ═══ */}
+          {/* �گ�گ�گ المساعد الشخصي ─ بين الهيرو وكروت الأرقام �گ�گ�گ */}
           <PersonalAssistant context={personalAssistantContext} />
 
           <HeroSection displayName={displayName} coachTasks={coachTasks} />
+          <MagIdCard />
+          <SubscriptionQuotaCard />
         </div>
 
-        {/* ═══════════════════════════════════════════════════════
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
             GROUP C — العمل الحقيقي (محفوظ لكن بدون احتلال مساحة ضخمة في Preview)
-            StudySections wrapped in collapsible <details> per task §5.
-            ═══════════════════════════════════════════════════════ */}
+            StudySections wrapped in collapsible <details> per task آ§5.
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <details className="group rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)]" open>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--text)" }}>
-            <span className="flex items-center gap-2"><span aria-hidden>📚</span> المواد الدراسية</span>
-            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--rule)] bg-[var(--card-secondary)] text-[var(--muted)] transition group-open:rotate-180" aria-hidden>▾</span>
+            <span className="flex items-center gap-2"><span aria-hidden>ًں“ڑ</span> المواد الدراسية</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--rule)] bg-[var(--card-secondary)] text-[var(--muted)] transition group-open:rotate-180" aria-hidden>â–¾</span>
           </summary>
           <div className="border-t border-[var(--rule)] p-4">
             <p className="mb-3 text-xs leading-5" style={{ color: "var(--muted)" }}>هذا القسم كان يحتل مساحة كبيرة في الـDashboard. في Preview تم تصغيره داخل عنصر قابل للطي — المحتوى والبيانات نفسها محفوظة، والوصول الكامل عبر <span style={{ color: "var(--text)" }}>/dashboard/courses</span>.</p>
@@ -1754,9 +1777,9 @@ export default function DashboardPage() {
           </div>
         </details>
 
-      {/* ═══════════════════════════════════════════════════════
+      {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
           GROUP C-EXTRA — كاردات إضافية (ربط ببيانات DB حقيقية)
-          ═══════════════════════════════════════════════════════ */}
+          �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
       <div className="dashboard-entrance grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TodayPlanCard
           currentDayNumber={currentDayNumber}
@@ -1786,15 +1809,15 @@ export default function DashboardPage() {
         />
       </div>
 
-        {/* ═══════════════════════════════════════════════════════
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
             GROUP D — الأرقام والتقدّم
             كل progress/metrics في منطقة واحدة بعد العمل الحقيقي
-            ═══════════════════════════════════════════════════════ */}
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "180ms" }}>
-          {/* ═══ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا ═══ */}
+          {/* �گ�گ�گ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا �گ�گ�گ */}
 
-          {/* ═══ كروت الأرقام: XP · السلسلة · خطوات مكتملة · تركيز الأسبوع
-                  — عدّ من صفر مرة واحدة بخط المونو ═══ */}
+          {/* �گ�گ�گ كروت الأرقام: XP آ· السلسلة آ· خطوات مكتملة آ· تركيز الأسبوع
+                  — عدّ من صفر مرة واحدة بخط المونو �گ�گ�گ */}
           <StatCards
             xp={xp}
             streak={streak}
@@ -1803,9 +1826,13 @@ export default function DashboardPage() {
           />
 
           {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
+
+          {/* كارت الكود الشخصي (QR) — يظهر في مكان واضح فور دخول الداشبورد */}
+          <UserQrCard />
+          {/* ًں“ٹ طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
-            {/* 🐣 الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في
+            {/* ًںگ£ الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في
                 الشبكة: الشبكة عمودين، والتالت كان هيسيب فراغ جنبه على
                 الشاشة الكبيرة. والعمود ده أقصر من الرسم البياني أصلاً. */}
             <div className="flex flex-col gap-6">
@@ -1846,7 +1873,7 @@ export default function DashboardPage() {
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-sm)] border border-rule bg-paper px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden marker:content-none">
               <span>مزيد من التحليلات</span>
               <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>
-                ▾
+                â–¾
               </span>
             </summary>
             <div className="mt-4">
@@ -1865,28 +1892,28 @@ export default function DashboardPage() {
           </details>
         </div>
 
-        {/* ═══════════════════════════════════════════════════════
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
             GROUP E — العبادات
             Worship CTA → QuranSection
-            ═══════════════════════════════════════════════════════ */}
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "240ms" }}>
-          {/* 📖 بوابة العبادات — تبقى قبل القرآن مباشرة */}
+          {/* ًں“– بوابة العبادات — تبقى قبل القرآن مباشرة */}
           <Link href="/worship" className="block">
             <button
               type="button"
               aria-label="عباداتي — Worship Center"
               className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-gradient-to-l from-[#2DD4BF]/10 to-[#7C5CFF]/10 border border-[#2DD4BF]/20 hover:border-[#7C5CFF]/40 transition-colors text-right"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] text-xl">🕌</span>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] text-xl">ًں•Œ</span>
               <div className="min-w-0">
                 <h3 className="font-bold text-white leading-snug">عباداتي — Worship Center</h3>
-                <p className="text-sm text-[#B69CFF]">مواقيت الصلاة · الأذكار · القرآن · التسبيح</p>
+                <p className="text-sm text-[#B69CFF]">مواقيت الصلاة آ· الأذكار آ· القرآن آ· التسبيح</p>
               </div>
               <ArrowLeft size={18} className="mr-auto text-[#9AA0C0] shrink-0" aria-hidden />
             </button>
           </Link>
 
-          {/* 📖 القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط المكتبة.
+          {/* ًں“– القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط المكتبة.
               الصوت عايش في AudioProvider فالسورة بتكمّل في أي صفحة. */}
           <QuranSection
             themeStyles={themeStyles}
@@ -1897,10 +1924,10 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ═══════════════════════════════════════════════════════
+        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
             GROUP F — الثانوي
-            ═══════════════════════════════════════════════════════ */}
-        {/* 👥 دعوة الجروب في آخر الصفحة: اللي وصل لحد هنا شاف الموقع
+            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
+        {/* ًں‘¥ دعوة الجروب في آخر الصفحة: اللي وصل لحد هنا شاف الموقع
             كله وبقى مؤهّل يدخل. البانر بيخفي نفسه لو مفيش لينك مظبوط. */}
         <div className="dashboard-entrance" style={{ animationDelay: "300ms" }}>
           <CommunityInvite variant="banner" />
@@ -1955,7 +1982,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <Sidebar
+      <SettingsDrawer
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
         showSubjectModal={showSubjectModal}
@@ -2036,10 +2063,10 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* 😊 سؤال الرأي.
-          ⚠️ enabled بيتقفل لما يكون فيه مودال مفتوح — الودجت fixed
+      {/* ًںکٹ سؤال الرأي.
+          âڑ ï¸ڈ enabled بيتقفل لما يكون فيه مودال مفتوح — الودجت fixed
           فكانت هتقعد فوق طبقة المودال المعتمة وتبان زي إنها بتقاطعه.
-          وكمان: زرار «اسأل ماجيك» العايم على يسار تحت، والودجت على
+          وكمان: زرار آ«اسأل ماجيكآ» العايم على يسار تحت، والودجت على
           نفس الناحية — فمقفولة كمان وقت ما الزرار ظاهر ومفيش مودال؟
           لأ: الودجت start (يمين في RTL) والزرار left، فمافيش تصادم. */}
       <FeedbackWidget

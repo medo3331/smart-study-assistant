@@ -7,7 +7,7 @@ import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /** أقصى طول لأي حقل نصي جاي من الكلاينت. */
 const MAX_FIELD_CHARS = 200;
@@ -163,6 +163,7 @@ export async function POST(req: Request) {
 
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       throw lastError || new Error("فشلت جميع المفاتيح المتاحة في الاتصال بالخدمة.");
     }
 
