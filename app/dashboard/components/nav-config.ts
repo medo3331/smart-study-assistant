@@ -65,15 +65,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
       { id: "subjects", icon: "📖", label: "المواد", latin: "Subjects", href: "/subjects" },
       { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
-      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
-      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
-      { id: "programming", icon: "💻", label: "البرمجة", latin: "Programming", href: "/programming" },
-      { id: "university", icon: "🎓", label: "الجامعة", latin: "University", href: "/university" },
-      { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
-      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
-      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
-      { id: "escape", icon: "🧩", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
+{ id: "academicWorkspace", icon: "📚", label: "المساحة الأكاديمية", latin: "Academic Workspace", href: "/dashboard/workspace/home" },
+      // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
+      // مكانه هنا لأنه بيغيّر المذاكرة نفسها، مش إعداد في الحساب.
       { id: "emergency", icon: "🚨", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
     ],
   },
