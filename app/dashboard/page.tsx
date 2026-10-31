@@ -14,6 +14,7 @@ import type { User } from "@supabase/supabase-js";
 import type { CoachTask } from "@/components/AIStudyCoach";
 import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
+import { MagicAvatar } from "@/components/MagicAvatar";
 import { awardCoins } from "@/lib/shop/shop-data";
 import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
 
@@ -1918,7 +1919,7 @@ export default function DashboardPage() {
             activeTrack ? "bottom-24" : "bottom-6"
           }`}
         >
-          <span className="font-display font-extrabold text-lg leading-none">{PERSONA_NAME.charAt(0)}</span>
+          <MagicAvatar size="sm" />
           <span>اسأل {PERSONA_NAME}</span>
         </button>
       )}

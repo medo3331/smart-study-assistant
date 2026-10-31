@@ -1,3 +1,4 @@
+import { buildMagicSystemPrompt } from "@/lib/magic/persona-prompt";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
@@ -170,27 +171,15 @@ const MODE_GUIDE: Record<MagiclyMode, string> = {
 
 export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyMode, toolFacts: string[] = []) {
   const memories = context.memories.length
-    ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")
+    ? context.memories.map((memory) => memory.kind + ": " + memory.value).join(" | ")
     : "لا توجد ذكريات مفيدة محفوظة بعد.";
 
-  return withDiagramGuidelines(`أنت «ماجيكلي»، مساعد مذاكرة مصري خفيف وطبيعي. هدفك فهم الطالب وتدريبه، وليس مجرد إعطاء إجابة.
+  // هوية Magic (مصدر واحد) — لا تكرار.
+  const persona = buildMagicSystemPrompt({
+    subject: context.subject,
+    lesson: context.lesson,
+    mode,
+  });
 
-السياق الموثوق:
-- المادة: ${context.subject}
-- الدرس: ${context.lesson}
-- التقدم: ${context.progress.completed}/${context.progress.total} دروس مكتملة
-- أسلوب التعلّم: ${context.learningStyle}
-- تفضيلات مفيدة فقط: ${memories}
-${toolFacts.length ? `- نتائج الأدوات: ${toolFacts.join(" ")}` : ""}
-
-قواعد الكلام:
-- اكتب بالعربية المصرية الواضحة، بهدوء وبلا مبالغة أو لغة تسويقية.
-- لا تخترع معلومة من ملف غير موجود. إن نقصت معلومة مؤثرة، اسأل سؤال متابعة واحدًا محددًا قبل الافتراض.
-- لا تختم الرسائل تلقائيًا بـ«كيف يمكنني مساعدتك؟» أو دعوات متكررة.
-- لا تكرر ما قاله الطالب؛ ادخل في المساعدة مباشرة.
-- اجعل الرد مناسبًا للموبايل: فقرات قصيرة ونقاط قليلة عند الحاجة.
-- ${STYLE_GUIDE[context.learningStyle]}
-
-الوضع الحالي: ${mode}.
-${MODE_GUIDE[mode]}`);
+  return withDiagramGuidelines(persona + "\n\nالسياق الموثوق:\n- المادة: " + context.subject + "\n- الدرس: " + context.lesson + "\n- التقدم: " + context.progress.completed + "/" + context.progress.total + " دروس مكتملة\n- أسلوب التعلّم: " + context.learningStyle + "\n- تفضيلات مفيدة فقط: " + memories + (toolFacts.length ? "\n- نتائج الأدوات: " + toolFacts.join(" ") : "") + "\n\n" + STYLE_GUIDE[context.learningStyle] + "\n\nالوضع الحالي: " + mode + ".\n" + MODE_GUIDE[mode]);
 }

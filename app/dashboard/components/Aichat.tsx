@@ -6,6 +6,7 @@ import { PERSONA_NAME } from "@/lib/persona";
 import { prepareFileForUpload, isImageFile } from "@/lib/image-compress";
 import { MicButton } from "@/components/MicButton";
 import { ReadAloud } from "@/components/ReadAloud";
+import { MagicAvatar } from "@/components/MagicAvatar";
 import { detectExamIntent, type ExamIntent } from "@/lib/exam-intent";
 import { ExamPlanChatCard } from "./ExamPlanChatCard";
 import type { StudyConfig, StudyDay, ThemeStyles } from "./types";
@@ -302,10 +303,8 @@ export function AiChatModal({ activeAiLesson, onClose, onSwitchLesson, days, con
 
         <div className="flex items-center justify-between px-5 py-4 border-b border-rule bg-paper">
           <div className="flex items-center gap-3 min-w-0">
-            {/* نفس مونوجرام ماجيك اللي في كارت المدرّب — عشان يتعرف عليه فوراً */}
-            <div className="w-10 h-10 rounded-[var(--r-sm)] bg-emerald-500 text-onmarker flex items-center justify-center shrink-0" aria-hidden>
-              <span className="font-display font-extrabold text-xl leading-none">{PERSONA_NAME.charAt(0)}</span>
-            </div>
+            {/* Avatar Magic — monogram م */}
+<MagicAvatar state={isAiLoading ? "thinking" : "idle"} size="md" />
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-ink truncate">{PERSONA_NAME}</h3>
               <p className="tag truncate">{activeAiLesson.topic}</p>
