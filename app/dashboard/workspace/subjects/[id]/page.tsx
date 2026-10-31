@@ -17,7 +17,7 @@ export default function SubjectDetailPage() {
   useEffect(() => {
     if (session.status === "loading") return;
     if (session.status === "anonymous") { router.push("/dashboard"); return; }
-    if (session.status === "error" || !supabase || !session.user || !params?.id) return;
+    if (session.status !== "ready" || !supabase || !params?.id) return;
     (async () => {
       setLoading(true);
       const res = await fetchSubject(supabase, session.user.id, params.id);
@@ -28,7 +28,7 @@ export default function SubjectDetailPage() {
   }, [session, supabase, router, params]);
 
   return (
-    <PageShell title={subject?.name ?? "مادة"} subtitle="محاضرات، ملفات، وموارد المادة">
+    <PageShell eyebrow="مادة" title={subject?.name ?? "مادة"} lede="محاضرات، ملفات، وموارد المادة">
       {notice && <DataNotice message={notice} />}
       {loading ? <LoadingSheets /> : subject ? (
         <div className="space-y-4">

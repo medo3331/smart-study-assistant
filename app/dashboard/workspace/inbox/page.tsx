@@ -34,7 +34,7 @@ export default function InboxPage() {
   }, [session, supabase, router]);
 
   return (
-    <PageShell title="الملفات غير المنظمة" subtitle="Inbox — صنّفها manually">
+    <PageShell eyebrow="Inbox" title="الملفات غير المنظمة" lede="Inbox — صنّفها manually">
       {notice && <DataNotice message={notice} />}
       {loading ? <LoadingSheets /> : (
         <div className="space-y-4">
