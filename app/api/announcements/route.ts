@@ -18,11 +18,20 @@ function activeQuery(supabase:any){
  const now=new Date().toISOString();
  return supabase.from("announcements").select("*").eq("status","published").or(`publish_at.is.null,publish_at.lte.${now}`).or(`expires_at.is.null,expires_at.gt.${now}`);
 }
-export async function GET(){
+export async function GET(req: Request){
  try{
+  const url=new URL(req.url);
+  const all=url.searchParams.get("all")==="1"||url.searchParams.get("all")==="true";
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)return NextResponse.json({success:false,error:"Authentication required."},{status:401});
+  if(all){
+   const service=createServiceClient();
+   if(!(await hasPermission(service,user.id,user.email??null,"announcements.manage")))return NextResponse.json({success:false,error:"Forbidden."},{status:403});
+   const {data,error}=await service.from("announcements").select("*").order("created_at",{ascending:false});
+   if(error){console.error("[announcements] GET all",error.message);return NextResponse.json({success:false,error:"Failed to load announcements."},{status:500});}
+   return NextResponse.json({success:true,announcements:data??[]});
+  }
   const {data,error}=await activeQuery(supabase).order("created_at",{ascending:false});
   if(error){console.error("[announcements] GET",error.message);return NextResponse.json({success:false,error:"Failed to load announcements."},{status:500});}
   return NextResponse.json({success:true,announcements:data??[]});

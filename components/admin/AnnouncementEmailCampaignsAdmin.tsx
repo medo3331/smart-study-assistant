@@ -22,7 +22,7 @@ export default function AnnouncementEmailCampaignsAdmin() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/announcements").then((r) => r.json()).then((d) => { if (d.success) setAnnouncements(d.announcements || []); }).catch(() => {});
+    fetch("/api/announcements?all=1").then((r) => r.json()).then((d) => { if (d.success) setAnnouncements(d.announcements || []); else setMsg(d.error || "Failed to load announcements"); }).catch(() => setMsg("Failed to load announcements"));
     loadCampaigns();
   }, []);
 
