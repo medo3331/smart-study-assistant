@@ -212,7 +212,7 @@ export class AiRouteError extends Error {
  * - 408/429/5xx: أعطال مؤقتة — تستاهل fallback.
  */
 function shouldTryNextCandidate(status: number): boolean {
-  return ![400, 413, 422].includes(status);
+  return ![400, 422].includes(status);
 }
 
 /**

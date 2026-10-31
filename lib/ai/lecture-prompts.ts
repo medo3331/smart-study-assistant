@@ -28,7 +28,7 @@ export type LectureAnalysisKind = "summary" | "explanation";
 export const MAX_OUTPUT_CHARS = 12_000;
 
 /** الحد الافتراضي لحجم القطعة الواحدة (حروف). */
-export const DEFAULT_CHUNK_CHARS = 12_000;
+export const DEFAULT_CHUNK_CHARS = 9_000;
 
 /**
  * ⚠️ القواعد المشتركة دي هي أهم جزء في الملف كله.
