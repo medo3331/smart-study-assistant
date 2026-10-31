@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { PageShell, LoadingSheets, DataNotice } from "../../components/PageShell";
-import { useAuthUser } from "../../components/use-page-data";
+import { PageShell, LoadingSheets, DataNotice } from "@/app/dashboard/components/PageShell";
+import { useAuthUser } from "@/app/dashboard/components/use-page-data";
 import { fetchSubject, type WorkspaceSubject } from "@/lib/academic-workspace";
 
 export default function SubjectDetailPage() {
