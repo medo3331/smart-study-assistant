@@ -144,7 +144,7 @@ async function runSingle(
       usage,
       messages: buildMessages({
         kind: "synthesis",
-        content: notes.join("\n\n"),
+        content: notes.join("\n\n").slice(0, 8_000),
       }),
       user: { userId: user.userId, language: "ar" },
       options: { temperature: 0.3 },
