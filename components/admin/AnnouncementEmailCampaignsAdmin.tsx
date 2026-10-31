@@ -14,6 +14,7 @@ export default function AnnouncementEmailCampaignsAdmin() {
   const [externalText, setExternalText] = useState("");
   const [externals, setExternals] = useState<string[]>([]);
   const [subject, setSubject] = useState("");
+  const [sender, setSender] = useState("");
   const [campaign, setCampaign] = useState<C | null>(null);
   const [campaigns, setCampaigns] = useState<C[]>([]);
   const [preview, setPreview] = useState(false);
@@ -68,7 +69,7 @@ export default function AnnouncementEmailCampaignsAdmin() {
     try {
       const res = await fetch("/api/announcement-email-campaigns", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ announcement_id: announcementId, internal_user_ids: selectedRecipients.map((r) => r.id), external_emails: externals, subject: subject || undefined }),
+        body: JSON.stringify({ announcement_id: announcementId, internal_user_ids: selectedRecipients.map((r) => r.id), external_emails: externals, subject: subject || undefined, sender: sender || undefined }),
       });
       const d = await res.json();
       if (!d.success) { setMsg(d.error || "Failed"); return; }
@@ -110,6 +111,10 @@ export default function AnnouncementEmailCampaignsAdmin() {
         <div className="space-y-2">
           <label className="text-sm text-slate-200">عنوان (اختياري)</label>
           <input className="w-full rounded border border-slate-600 bg-slate-800 p-2 text-slate-100" value={subject} onChange={(e) => setSubject(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm text-slate-200">المرسل (اختياري)</label>
+          <input className="w-full rounded border border-slate-600 bg-slate-800 p-2 text-slate-100" value={sender} onChange={(e) => setSender(e.target.value)} placeholder="email@domain.com" />
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">

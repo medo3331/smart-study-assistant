@@ -84,6 +84,10 @@ export async function POST(req: Request) {
     }
 
     const subjectOverride = typeof body.subject === "string" ? body.subject.trim().slice(0, 200) : null;
+    const senderOverride = typeof body.sender === "string" ? body.sender.trim().slice(0, 200) : null;
+    if (senderOverride && !EMAIL_RE.test(senderOverride)) {
+      return NextResponse.json({ success: false, error: "Invalid sender email." }, { status: 400 });
+    }
 
     const { data: campaign, error: cErr } = await service
       .from("announcement_email_campaigns")
@@ -93,6 +97,7 @@ export async function POST(req: Request) {
         status: "draft",
         recipient_count: recipientMap.size,
         subject_override: subjectOverride || null,
+       sender_override: senderOverride || null,
       })
       .select("*")
       .single();

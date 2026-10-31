@@ -20,11 +20,17 @@ export async function sendResendEmail(input: {
   subject: string;
   html: string;
   text: string;
+  from?: string | null;
 }): Promise<ResendSendResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const sender = getSender();
+  const envFrom =
+    process.env.FEEDBACK_EMAIL_FROM?.trim() ||
+    process.env.RESEND_FROM_EMAIL?.trim() ||
+    process.env.RESEND_FROM?.trim();
+  const chosenFrom = (input.from || envFrom || "").trim();
+  const sender = chosenFrom ? `ماجيكلي <${chosenFrom}>` : null;
   if (!apiKey || !sender) {
-    return { ok: false, id: null, error: "RESEND_API_KEY or FEEDBACK_EMAIL_FROM missing" };
+    return { ok: false, id: null, error: "RESEND_API_KEY or sender email missing" };
   }
 
   try {

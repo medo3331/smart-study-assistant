@@ -94,6 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         subject,
         html: email.html,
         text: email.text,
+        from: campaign.sender_override,
       });
 
       if (result.ok) {
