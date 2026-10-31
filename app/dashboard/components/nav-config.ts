@@ -58,6 +58,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "home", icon: "🏠", label: "الرئيسية", latin: "Home", href: "/dashboard" },
       { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
       { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
+{ id: "academicWorkspace", icon: "📚", label: "المساحة الأكاديمية", latin: "Academic Workspace", href: "/dashboard/workspace/home" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
       // مكانه هنا لأنه بيغيّر المذاكرة نفسها، مش إعداد في الحساب.
       { id: "emergency", icon: "🚨", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
