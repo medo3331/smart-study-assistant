@@ -187,6 +187,16 @@ export function LectureProcessActions({
         className="mt-2 w-full min-h-[4rem] rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] p-2 text-sm text-[var(--text)]"
         dir="rtl"
       />
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => void run("explanation")}
+          disabled={busy}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+        >
+          {loading === "explanation" ? "جارٍ الشرح…" : "شرح مع الملاحظات"}
+        </button>
+      </div>
 
       {/* ───────── 📚 أدوات المذاكرة (Phase 4-B) ─────────
        *
