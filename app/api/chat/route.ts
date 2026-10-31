@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const latestMessage = safeMessages.at(-1)?.content ?? "";
-    const intentResult = classifyChatIntent(latestMessage, context ?? {});
+    const intentResult = classifyChatIntent(latestMessage, {});
     const selectedMode = parseMode(mode, latestMessage, intentResult.intent);
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
