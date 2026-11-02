@@ -80,7 +80,7 @@ return (
           </div>
         </aside>
         <main className="flex-1 flex flex-col min-h-[600px]">
-          {!activeTicketId || !activeTicket?.ticket ? (
+          {!activeTicketId ? (
             <div className="flex flex-col items-center justify-center h-full text-ink-soft">
               <MessageSquare className="w-16 h-16 mb-3 opacity-30" />
               <h3 className="font-bold">اختر محادثة للبدء</h3>
@@ -90,8 +90,8 @@ return (
             <div className="flex flex-col h-[600px]">
               <header className="border-b border-rule bg-paper-2 p-4 flex items-center justify-between">
                 <div>
-                  <h2 className="font-bold text-ink">{activeTicket.ticket.subject}</h2>
-                  <p className="text-xs text-ink-soft">{activeTicket.ticket.status} · أولوية {activeTicket.ticket.priority}</p>
+                  <h2 className="font-bold text-ink">{ticket?.subject}</h2>
+                  <p className="text-xs text-ink-soft">{ticket?.status} · أولوية {ticket?.priority}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${activeTicket.ticket.status === "open" || activeTicket.ticket.status === "in_progress" ? "bg-emerald-500" : "bg-slate-400"}`} />
