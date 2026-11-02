@@ -94,7 +94,7 @@ return (
                   <p className="text-xs text-ink-soft">{ticket?.status} · أولوية {ticket?.priority}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${activeTicket.ticket.status === "open" || activeTicket.ticket.status === "in_progress" ? "bg-emerald-500" : "bg-slate-400"}`} />
+                  <span className={`w-2 h-2 rounded-full ${ticket?.status === "open" || ticket?.status === "in_progress" ? "bg-emerald-500" : "bg-slate-400"}`} />
                   <span className="text-xs font-bold text-ink-soft">متصل</span>
                 </div>
               </header>
