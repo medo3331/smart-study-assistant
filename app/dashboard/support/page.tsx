@@ -1,5 +1,5 @@
 import { listMyTickets, createTicket, getMyTicketWithReplies, addMyReply } from "@/app/dashboard/actions/support";
-import { AnnouncementBanner } from "@/components/AnnouncementBanner";
+import AnnouncementBanner from "@/components/AnnouncementBanner";
 
 export default async function DashboardSupportPage() {
   const { data } = await listMyTickets();
