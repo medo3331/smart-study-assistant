@@ -152,7 +152,7 @@ export default async function PricingPage() {
     },
   ];
 
-  const tiersWithDb = tiers.map((t) => {
+  const tiersWithDb: Tier[] = tiers.map((t) => {
     const p = (planMap.get(t.id) as any) ?? null;
     if (!p) return t;
     return {
@@ -162,8 +162,6 @@ export default async function PricingPage() {
       popular: p.is_popular ?? t.popular,
       originalPrice: p.original_price,
       discount: p.discount_percentage,
-      discount_percentage: p.discount_percentage,
-      original_price: p.original_price,
     };
   });
 
