@@ -1,37 +1,58 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-export default function NotificationBell(){
- const [open,setOpen]=useState(false);
- const [data,setData]=useState<any>({notifications:[],unread:0});
- const [pulse,setPulse]=useState(false);
- const previousUnreadRef=useRef(0);
- const [error,setError]=useState<string|null>(null);
- const [authReady,setAuthReady]=useState(false);
- const [hasUser,setHasUser]=useState(false);
- const load=async()=>{const r=await fetch("/api/notifications");const d=await r.json().catch(()=>null);if(r.status===401){setData({notifications:[],unread:0});setError(null);return;}if(d?.success){if((d.unread||0)>previousUnreadRef.current){setPulse(true);window.setTimeout(()=>setPulse(false),2500);}previousUnreadRef.current=d.unread||0;setData(d);setError(null);}else{setData({notifications:[],unread:0});setError(d?.error||"Failed to load notifications.");}};
- useEffect(()=>{const supabase=createClient();let mounted=true;const sync=async()=>{try{const {data:a}=await supabase.auth.getUser();if(mounted)setHasUser(Boolean(a.user));}catch{if(mounted)setHasUser(false);}finally{if(mounted)setAuthReady(true);}};sync();const {data:s}=supabase.auth.onAuthStateChange((_e:any,session:any)=>{if(!mounted)return;setHasUser(Boolean(session?.user));setAuthReady(true);});return()=>{mounted=false;s.subscription.unsubscribe();};},[]);
- useEffect(()=>{if(!authReady||!hasUser){setData({notifications:[],unread:0});setError(null);return;}load();const i=setInterval(load,30000);return()=>clearInterval(i);},[authReady,hasUser]);
- const markRead=(id:string)=>fetch("/api/notifications",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})}).then(load);
- const markAll=()=>fetch("/api/notifications",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({all:true})}).then(load);
- if(!authReady||!hasUser)return null;
- return (
-  <div className="relative">
-    <button onClick={()=>setOpen(!open)} className={`relative flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-white text-2xl shadow-sm transition hover:scale-105 dark:border-gray-700 dark:bg-gray-900 ${pulse ? "motion-safe:animate-pulse" : ""}`} aria-label="الإشعارات">{pulse ? "🔔" : "🔔"}{data.unread>0&&<span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold text-white">{data.unread}</span>}</button>
-    {open&&(
-      <div className="absolute right-0 mt-2 w-80 rounded border border-gray-200 bg-white p-2 text-gray-900 shadow z-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-h-96 overflow-auto">
-        <div className="flex justify-between mb-2"><span className="font-bold">الإشعارات</span><button onClick={markAll} className="text-sm text-blue-600 dark:text-blue-400">تحديد الكل</button></div>
-        {data.notifications.map((n:any)=>(
-          <div key={n.id} className={`border border-gray-200 rounded p-2 mb-2 text-gray-900 dark:border-gray-700 dark:text-gray-100 ${n.read_at?"opacity-60":""}`} onClick={()=>!n.read_at&&markRead(n.id)}>
-            <div className="font-semibold">{n.title}</div>
-            {n.body&&<div className="text-sm">{n.body}</div>}
-            {n.link_url&&<a href={n.link_url} className="text-xs text-blue-600 dark:text-blue-400">فتح</a>}
-          </div>
-        ))}
-        {data.notifications.length===0&&<div className="text-sm">لا توجد إشعارات</div>}
-         {error&&<div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
-      </div>
-    )}
-  </div>
- );
+
+import { useEffect, useState } from "react";
+import { Bell } from "lucide-react";
+import { listMyNotifications, markNotificationRead, deleteMyNotification } from "@/app/dashboard/actions/support";
+
+type Notif = { id: string; title: string; message: string; type: string; is_read: boolean; created_at: string };
+
+export default function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<Notif[]>([]);
+
+  const load = async () => {
+    const res = await listMyNotifications();
+    setItems(res.data as Notif[]);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const unread = items.filter((n) => !n.is_read).length;
+
+  const markRead = async (id: string) => {
+    await markNotificationRead(id);
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+  };
+
+  const remove = async (id: string) => {
+    await deleteMyNotification(id);
+    setItems((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen((v) => !v)} className="relative rounded-full p-2 hover:bg-slate-800" aria-label="إشعارات">
+        <Bell className="h-5 w-5" />
+        {unread > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">{unread}</span>}
+      </button>
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl">
+          <p className="mb-2 text-xs font-bold text-amber-300">الإشعارات</p>
+          {items.length === 0 && <p className="text-xs text-slate-400">لا توجد إشعارات</p>}
+          <ul className="space-y-2 max-h-64 overflow-y-auto">
+            {items.slice(0, 5).map((n) => (
+              <li key={n.id} className={`rounded-lg p-2 text-xs ${n.is_read ? "bg-slate-800/50" : "bg-slate-800"}`}>
+                <div className="font-bold">{n.title}</div>
+                <div className="text-slate-300">{n.message}</div>
+                <div className="mt-1 flex gap-2">
+                  {!n.is_read && <button onClick={() => markRead(n.id)} className="text-[10px] text-emerald-400">تعليم كمقروء</button>}
+                  <button onClick={() => remove(n.id)} className="text-[10px] text-rose-400">حذف</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
