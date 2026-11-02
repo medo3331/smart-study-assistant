@@ -153,7 +153,7 @@ export default async function PricingPage() {
   ];
 
   const tiersWithDb = tiers.map((t) => {
-    const p = planMap.get(t.id);
+    const p = (planMap.get(t.id) as any) ?? null;
     if (!p) return t;
     return {
       ...t,
