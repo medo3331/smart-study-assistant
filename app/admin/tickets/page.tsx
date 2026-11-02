@@ -1,7 +1,6 @@
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
 import { Search, MessageSquare, Send, Plus, CheckCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { replyToTicket } from "@/app/admin/actions/tickets-manage";
 
 async function getSessionUser() {
