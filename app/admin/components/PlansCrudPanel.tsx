@@ -111,6 +111,7 @@ export default function PlansCrudPanel({ plans }: { plans: Plan[] }) {
             <h2 className="mb-4 text-lg font-bold">{creating ? "إضافة خطة جديدة" : `تعديل: ${editing?.plan_key}`}</h2>
             <form action={submit} className="space-y-3">
               {!creating && <input type="hidden" name="plan_key" value={editing?.plan_key ?? ""} />}
+              {creating && (
                 <label className="block text-sm">معرّف الخطة (plan_key)
                   <input name="plan_key" required className="mt-1 w-full rounded bg-slate-800 p-2" />
                 </label>

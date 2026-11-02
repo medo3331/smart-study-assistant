@@ -152,6 +152,21 @@ export default async function PricingPage() {
     },
   ];
 
+  const tiersWithDb = tiers.map((t) => {
+    const p = planMap.get(t.id);
+    if (!p) return t;
+    return {
+      ...t,
+      price: p.price != null ? String(p.price) : t.price,
+      features: Array.isArray(p.features) && p.features.length ? p.features : t.features,
+      popular: p.is_popular ?? t.popular,
+      originalPrice: p.original_price,
+      discount: p.discount_percentage,
+      discount_percentage: p.discount_percentage,
+      original_price: p.original_price,
+    };
+  });
+
   return (
     <div dir="rtl" className="min-h-screen bg-paper text-ink px-4 py-14 sm:px-6 md:py-20">
       <div className="max-w-6xl mx-auto">
@@ -187,19 +202,6 @@ export default async function PricingPage() {
             الحدود الموسّعة مفعّلة عندك.
           </div>
         )}
-
-        const tiersWithDb = tiers.map((t) => {
-          const p = planMap.get(t.id);
-          if (!p) return t;
-          return {
-            ...t,
-            price: p.price != null ? String(p.price) : t.price,
-            features: Array.isArray(p.features) && p.features.length ? p.features : t.features,
-            popular: p.is_popular ?? t.popular,
-            originalPrice: p.original_price,
-            discount: p.discount_percentage,
-          };
-        });
 
         <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-14">
           {tiersWithDb.map((tier) => (
