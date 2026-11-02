@@ -36,15 +36,15 @@ export default function NotificationBell() {
         {unread > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">{unread}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl">
-          <p className="mb-2 text-xs font-bold text-amber-300">الإشعارات</p>
-          {items.length === 0 && <p className="text-xs text-slate-400">لا توجد إشعارات</p>}
+        <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl text-right">
+          <p className="mb-2 text-xs font-bold text-amber-300 text-right">الإشعارات</p>
+          {items.length === 0 && <p className="text-xs text-slate-400 text-right">لا توجد إشعارات</p>}
           <ul className="space-y-2 max-h-64 overflow-y-auto">
             {items.slice(0, 5).map((n) => (
               <li key={n.id} className={`rounded-lg p-2 text-xs ${n.is_read ? "bg-slate-800/50" : "bg-slate-800"}`}>
-                <div className="font-bold">{n.title}</div>
-                <div className="text-slate-300">{n.message}</div>
-                <div className="mt-1 flex gap-2">
+                <div className="font-bold text-right">{n.title}</div>
+                <div className="text-slate-300 text-right">{n.message}</div>
+                <div className="mt-1 flex gap-2 justify-end">
                   {!n.is_read && <button onClick={() => markRead(n.id)} className="text-[10px] text-emerald-400">تعليم كمقروء</button>}
                   <button onClick={() => remove(n.id)} className="text-[10px] text-rose-400">حذف</button>
                 </div>

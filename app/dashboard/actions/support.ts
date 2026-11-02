@@ -63,7 +63,14 @@ export async function markNotificationRead(id: string) {
   const user = await getSessionUser();
   if (!user) return { ok: false };
   const db = createServiceClient();
-  await db.from("notifications").update({ is_read: true }).eq("id", id).or(`user_id.eq.${user.id},user_id.is.null`);
+  const { data: existing } = await db
+    .from("notifications")
+    .select("user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing) return { ok: false };
+  if (existing.user_id !== null && existing.user_id !== user.id) return { ok: false };
+  await db.from("notifications").update({ is_read: true }).eq("id", id);
   return { ok: true };
 }
 
@@ -71,6 +78,15 @@ export async function deleteMyNotification(id: string) {
   const user = await getSessionUser();
   if (!user) return { ok: false };
   const db = createServiceClient();
-  await db.from("notifications").delete().eq("id", id).or(`user_id.eq.${user.id},user_id.is.null`);
+  // delete only if owned by user OR broadcast (user_id IS NULL) — explicit ownership check
+  const { data: existing } = await db
+    .from("notifications")
+    .select("user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing) return { ok: false };
+  if (existing.user_id !== null && existing.user_id !== user.id) return { ok: false };
+  const { error } = await db.from("notifications").delete().eq("id", id);
+  if (error) return { ok: false };
   return { ok: true };
 }
