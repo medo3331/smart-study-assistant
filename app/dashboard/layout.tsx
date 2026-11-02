@@ -2,12 +2,8 @@ import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import FoundationRewardsBootstrap from './components/FoundationRewardsBootstrap';
 import RewardToastHost from './components/RewardToastHost';
-/* كل صفحات الداشبورد ورا تسجيل دخول ومحتواها شخصي بالكامل (خطة المستخدم،
-   تقدّمه، ملفاته). الميتاداتا هنا بتتوّرث لكل الراوتس تحت `/dashboard`،
-   فالـ `noIndex` بيغطّيهم كلهم من مكان واحد بدل ما كل صفحة تفتكر تحطه.
-   الصفحات اللي جوّه `'use client'` فمابتقدرش تصدّر metadata أصلاً.
-   ⚠️ أي صفحة جديدة تحت /dashboard بتاخد ده أوتوماتيك — بس لو حطّيت
-   `pageMeta()` فيها من غير `noIndex: true` هتلغي الوراثة دي. */
+import AnnouncementBanner from '@/components/AnnouncementBanner';
+import NotificationBell from '@/components/NotificationBell';
 export const metadata: Metadata = pageMeta({
   title: 'مساحتك',
   description: 'خطتك وتقدّمك وملفاتك في مكان واحد.',
@@ -24,6 +20,12 @@ export default async function DashboardLayout({
     <>
       <FoundationRewardsBootstrap />
       <RewardToastHost />
+      <div className="sticky top-0 z-40 flex items-center justify-end gap-3 border-b border-rule bg-paper/80 px-4 py-2 backdrop-blur">
+        <NotificationBell />
+      </div>
+      <div className="mx-auto max-w-6xl px-4 pt-4">
+        <AnnouncementBanner />
+      </div>
       {children}
     </>
   );
