@@ -1,11 +1,12 @@
 -- ============================================================
 -- Notifications + Support Tickets — Phase: Communication
+-- (idempotent: safe to re-run; adds missing columns if table pre-existed)
 -- ============================================================
 
 -- 1) notifications
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade, -- null = broadcast to all
+  user_id uuid references auth.users(id) on delete cascade,
   title text not null,
   message text not null,
   type text not null default 'info' check (type in ('info','warning','feature','support_reply')),
@@ -14,9 +15,16 @@ create table if not exists public.notifications (
   created_by uuid references auth.users(id) on delete set null
 );
 
+alter table public.notifications add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.notifications add column if not exists title text;
+alter table public.notifications add column if not exists message text;
+alter table public.notifications add column if not exists type text not null default 'info';
+alter table public.notifications add column if not exists is_read boolean not null default false;
+alter table public.notifications add column if not exists created_at timestamptz not null default now();
+alter table public.notifications add column if not exists created_by uuid references auth.users(id) on delete set null;
+
 create index if not exists idx_notifications_user on public.notifications (user_id);
 create index if not exists idx_notifications_created on public.notifications (created_at desc);
-create index if not exists idx_notifications_unread on public.notifications (user_id, is_read) where is_read = false;
 
 alter table public.notifications enable row level security;
 
@@ -35,7 +43,6 @@ drop policy if exists "notifications: own delete" on public.notifications;
 create policy "notifications: own delete"
   on public.notifications for delete
   using (user_id is null or user_id = auth.uid());
-
 -- 2) support_tickets
 create table if not exists public.support_tickets (
   id uuid primary key default gen_random_uuid(),
@@ -48,9 +55,16 @@ create table if not exists public.support_tickets (
   updated_at timestamptz not null default now()
 );
 
+alter table public.support_tickets add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.support_tickets add column if not exists subject text;
+alter table public.support_tickets add column if not exists description text;
+alter table public.support_tickets add column if not exists status text not null default 'open';
+alter table public.support_tickets add column if not exists priority text not null default 'medium';
+alter table public.support_tickets add column if not exists created_at timestamptz not null default now();
+alter table public.support_tickets add column if not exists updated_at timestamptz not null default now();
+
 create index if not exists idx_tickets_user on public.support_tickets (user_id);
 create index if not exists idx_tickets_status on public.support_tickets (status);
-create index if not exists idx_tickets_created on public.support_tickets (created_at desc);
 
 alter table public.support_tickets enable row level security;
 
@@ -80,8 +94,13 @@ create table if not exists public.ticket_replies (
   created_at timestamptz not null default now()
 );
 
+alter table public.ticket_replies add column if not exists ticket_id uuid references public.support_tickets(id) on delete cascade;
+alter table public.ticket_replies add column if not exists sender_id uuid references auth.users(id) on delete set null;
+alter table public.ticket_replies add column if not exists message text;
+alter table public.ticket_replies add column if not exists is_admin boolean not null default false;
+alter table public.ticket_replies add column if not exists created_at timestamptz not null default now();
+
 create index if not exists idx_replies_ticket on public.ticket_replies (ticket_id);
-create index if not exists idx_replies_created on public.ticket_replies (created_at);
 
 alter table public.ticket_replies enable row level security;
 
@@ -101,4 +120,3 @@ create policy "replies: insert if ticket owner or admin"
     or exists (select 1 from public.site_admins sa where sa.user_id = auth.uid())
   );
 
--- Admin read-all policies via service_role (server bypasses RLS); no client admin policies needed.
