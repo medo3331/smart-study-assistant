@@ -20,10 +20,16 @@ export default async function DashboardLayout({
     <>
       <FoundationRewardsBootstrap />
       <RewardToastHost />
-      <div className="sticky top-0 z-40 flex items-center justify-end gap-3 border-b border-rule bg-paper/80 px-4 py-2 backdrop-blur">
-        <NotificationBell />
-      </div>
-      <div className="mx-auto max-w-6xl px-4 pt-4">
+      <header className="sticky top-0 z-50 w-full border-b border-rule bg-paper/90 backdrop-blur-md px-4 py-3">
+        <div className="mx-auto max-w-6xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-ink">
+            <span className="text-marker">Magiclly</span>
+            <span className="text-ink-soft">— مساحة الدراسة</span>
+          </div>
+          <NotificationBell />
+        </div>
+      </header>
+      <div className="mx-auto max-w-6xl px-4 pt-6">
         <AnnouncementBanner />
       </div>
       {children}
