@@ -62,6 +62,8 @@ type Tier = {
   available: boolean;
   current?: boolean;
   popular?: boolean;
+  originalPrice?: string | number | null;
+  discount?: number | null;
   features: string[];
   cta: { label: string; href: string; disabled?: boolean };
 };
@@ -87,6 +89,12 @@ export default async function PricingPage() {
       userPlan = "unknown";
     }
   }
+
+  const { data: dbPlans } = await supabase
+    .from("subscription_plans")
+    .select("plan_key, price, original_price, discount_percentage, is_popular, features, is_active")
+    .eq("is_active", true);
+  const planMap = new Map((dbPlans ?? []).map((p: any) => [p.plan_key, p]));
 
   const tiers: Tier[] = [
     {
@@ -180,8 +188,21 @@ export default async function PricingPage() {
           </div>
         )}
 
+        const tiersWithDb = tiers.map((t) => {
+          const p = planMap.get(t.id);
+          if (!p) return t;
+          return {
+            ...t,
+            price: p.price != null ? String(p.price) : t.price,
+            features: Array.isArray(p.features) && p.features.length ? p.features : t.features,
+            popular: p.is_popular ?? t.popular,
+            originalPrice: p.original_price,
+            discount: p.discount_percentage,
+          };
+        });
+
         <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-14">
-          {tiers.map((tier) => (
+          {tiersWithDb.map((tier) => (
             <section
               key={tier.id}
               className={
@@ -218,6 +239,12 @@ export default async function PricingPage() {
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">{tier.tagline}</p>
 
               <div className="mb-6">
+                {tier.originalPrice && tier.discount ? (
+                  <div className="mb-1 text-sm text-ink-soft">
+                    <span className="line-through">{String(tier.originalPrice)}</span>
+                    <span className="ml-2 rounded bg-rose-600 px-2 py-0.5 text-xs font-bold text-white">-{tier.discount}%</span>
+                  </div>
+                ) : null}
                 <span className="text-4xl font-extrabold">{tier.price}</span>
                 {tier.price === "0" && <span className="text-ink-soft"> ج.م</span>}
                 <span className="text-ink-soft text-sm"> / {tier.priceNote}</span>
