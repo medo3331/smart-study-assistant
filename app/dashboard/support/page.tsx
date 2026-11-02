@@ -35,7 +35,7 @@ export default async function DashboardSupportPage({ searchParams }: { searchPar
   async function replyAction(formData: FormData) {
     "use server";
     const u = await getSessionUser();
-    if (!u || !activeTicketId) return { error: "غير مصرح" };
+    if (!u || !activeTicketId) return;
     await addMyReply(activeTicketId, String(formData.get("message") ?? ""));
   }
 return (
