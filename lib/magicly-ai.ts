@@ -1,6 +1,6 @@
 import { buildMagicSystemPrompt } from "@/lib/magic/persona-prompt";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
+import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress, type ChatIntent } from "@/lib/ai/chat-intent";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
 
 export const MAGICLY_MODES = ["explain", "quiz", "summarize", "review", "file", "flashcards"] as const;
