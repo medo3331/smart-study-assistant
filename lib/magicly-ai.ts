@@ -2,6 +2,7 @@ import { buildMagicSystemPrompt } from "@/lib/magic/persona-prompt";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
+import type { ChatIntent } from "@/lib/ai/chat-intent";
 
 export const MAGICLY_MODES = ["explain", "quiz", "summarize", "review", "file", "flashcards"] as const;
 export type MagiclyMode = (typeof MAGICLY_MODES)[number];

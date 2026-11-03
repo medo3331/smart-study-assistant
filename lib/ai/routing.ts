@@ -600,7 +600,7 @@ export class AiRouter {
 }
 
 // Phase G append
-import OpenAI from "openai";
+const OpenAI = require("openai") as any;
 
 export type MultiProviderConfig = {
   name: string;
@@ -676,13 +676,7 @@ export async function completeChatWithProviderFallback(
       }
       return response;
     } catch (error) {
-      const status =
-        error instanceof AiProviderError
-          ? error.status
-          : error instanceof OpenAI.APIError
-            ? error.status ?? 500
-            : 500;
-      console.warn(`[ai/fallback] provider ${cfg.name} failed (status=${status}):`, error instanceof Error ? error.message : error);
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : String(error);
       if (ctx) {
         await scheduleUsageRecording(() =>
           recordAiUsage({
