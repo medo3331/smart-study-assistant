@@ -17,10 +17,10 @@ export async function POST(req: Request) {
     const userMessage = body?.text || body?.content || "";
 
     // === تحقق من أن المستخدم سأل سؤالاً دراسياً (ليه ناعتذر) ===
-    const studyKeywords = ["فيزياء", "رياضيات", "كيمياء", "معادلة", "تفاضل", "تكامل", "حل"],
-      = /(?:فيزياء|رياضيات|كيمياء|معادلة|تفاضل|تكامل|الحل|السؤال|تمرين)/i;
+    const studyKeywords = ["فيزياء", "رياضيات", "كيمياء", "معادلة", "تفاضل", "تكامل", "حل"];
+    const studyRegex = /(?:فيزياء|رياضيات|كيمياء|معادلة|تفاضل|تكامل|الحل|السؤال|تمرين)/i;
 
-    if (studyKeywords.test(userMessage)) {
+    if (studyRegex.test(userMessage)) {
       return NextResponse.json({
         ok: false,
         response: {
