@@ -9,6 +9,7 @@ interface MagicAssistantChatProps {
 export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps) {
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const sendMessage = async () => {
     const trimmed = input.trim();
