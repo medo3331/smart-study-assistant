@@ -82,8 +82,9 @@ export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps)
           ) : null}
         </div>
       </div>
+    </div>
 
-      <div className="mt-3 flex gap-2">
+    <div className="mt-3 flex gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -101,6 +102,7 @@ export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps)
           أرسل
         </button>
       </div>
+    </div>
     </>
   );
 }
