@@ -82,7 +82,7 @@ const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
 ];
 
 /* Theme swatches - four dashboard themes from magiclly-final design */
-const THEME_SWATCHES: { id: ThemeId; label: string; accent: string; bg: string }[] = [
+const THEME_SWATCHES = [
   { id: "colorful", label: "ملوّن (حالي)", accent: "#F0D24A", bg: "#0D0906" },
   { id: "crimson", label: "أسود وأحمر", accent: "#E23A3A", bg: "#0a0a0c" },
   { id: "azure", label: "أزرق وذهبي", accent: "#3A8FFD", bg: "#0d1321" },

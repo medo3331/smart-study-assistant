@@ -73,7 +73,6 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
-      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
       title: "التخطيط والتنظيم",
     items: [
       { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
