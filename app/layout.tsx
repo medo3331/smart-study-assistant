@@ -7,8 +7,11 @@ import { LanguageProvider } from '../lib/i18n/LanguageProvider';
 import { AudioProvider } from '@/components/audio/AudioProvider';
 import { QuranAudioProvider } from '@/hooks/useQuranAudio';
 import { SupportWidget } from '@/components/SupportWidget';
+import NotificationBell from '@/components/NotificationBell';
+import AnnouncementToast from '@/components/AnnouncementToast';
 import { ReferralBootstrap } from "@/components/ReferralBootstrap";
 import { FloatingAssistant } from '@/components/FloatingAssistant';
+import { UnifiedNavbar } from '@/components/UnifiedNavbar';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { JsonLd } from '@/components/JsonLd';
 
@@ -193,7 +196,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ar"
       dir="rtl"
-      suppressHydrationWarning
       className={`${display.variable} ${body.variable} ${mono.variable}`}
     >
       <head>
@@ -212,8 +214,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <LanguageProvider>
             <AudioProvider>
-              <QuranAudioProvider>{children}</QuranAudioProvider>
+              <QuranAudioProvider>
+            <UnifiedNavbar />
+            {children}
+          </QuranAudioProvider>
               <SupportWidget />
+<NotificationBell />
+<AnnouncementToast />
               {/* لاقط تتبع الإحالات: ?ref= → localStorage → تسجيل أول دخول. null UI. */}
               <ReferralBootstrap />
               <FloatingAssistant />

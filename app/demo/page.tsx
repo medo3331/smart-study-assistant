@@ -24,6 +24,8 @@ import { BrandLock } from '@/components/BrandLogo';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { TopControls } from '@/components/TopControls';
 
+const DEMO_TRIAL_LIMIT = 3;
+
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 /** لازم يطابق حدود الراوت — بنمنع الرفع بدري بدل ما نستنى رد ٤١٣. */
@@ -87,6 +89,9 @@ export default function DemoPage() {
   const [dragging, setDragging] = useState(false);
   const [flipped, setFlipped] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
+  const [trialsRemaining, setTrialsRemaining] = useState<number | null>(null);
+  const [trialsLimit, setTrialsLimit] = useState<number>(DEMO_TRIAL_LIMIT);
+  const [trialsExhausted, setTrialsExhausted] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -113,6 +118,32 @@ export default function DemoPage() {
       resultRef.current.focus();
     }
   }, [phase]);
+
+  /* جلب عدد التجارب المتبقية من السيرفر عند تحميل الصفحة.
+     العداد من السيربر هو المصدر الموثوق — واجهة المستخدم تُحدث بناءً عليه. */
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchTrials() {
+      try {
+        const res = await fetch('/api/demo', { method: 'GET' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setTrialsRemaining(data.trialsRemaining ?? null);
+          setTrialsLimit(data.trialsLimit ?? DEMO_TRIAL_LIMIT);
+          setTrialsExhausted((data.trialsRemaining ?? 0) <= 0);
+        }
+      } catch {
+        // في حال فشل الجلِب، نعرض الحد الأقصى (التفاؤل) ويُفرض الحد على السيربر anyway.
+        if (!cancelled) {
+          setTrialsRemaining(null);
+          setTrialsLimit(DEMO_TRIAL_LIMIT);
+        }
+      }
+    }
+    fetchTrials();
+    return () => { cancelled = true; };
+  }, []);
 
   const validateAndSet = useCallback(
     (next: File) => {
@@ -144,14 +175,26 @@ export default function DemoPage() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
+        // إذا نفدت التجارب، نredirect للرسالة الخاصة بالتسجيل
+        if (res.status === 403 && data?.code === 'TRIALS_EXHAUSTED') {
+          setTrialsExhausted(true);
+          setTrialsRemaining(0);
+          setError(data?.message || 'انتهت تجاربك المجانية.');
+          setPhase('error');
+          return;
+        }
         // الراوت بيرجّع رسايل عربية مفهومة — بنعرضها زي ما هي.
-        // الرسالة العامة للحالات اللي مالهاش رسالة (٥٠٠ من البروكسي مثلاً).
         setError(data?.error || t.demo_err_generic);
         setPhase('error');
         return;
       }
 
       setResult(data.result);
+      if (typeof data.trialsRemaining === 'number') {
+        setTrialsRemaining(data.trialsRemaining);
+        setTrialsLimit(data.trialsLimit ?? DEMO_TRIAL_LIMIT);
+        setTrialsExhausted(data.trialsRemaining <= 0);
+      }
       setPhase('done');
     } catch {
       setError(t.demo_err_network);
@@ -214,6 +257,23 @@ export default function DemoPage() {
               {t.demo_title_a} <span className="mark">{t.demo_title_mark}</span>
             </h1>
             <p className="lede demo-lede">{t.demo_lede}</p>
+
+            {/* شريط التجارب المتبقية — يُحدث من رد السيربر */}
+            {trialsRemaining !== null && (
+              <div className="demo-trials-band">
+                <span className="demo-trials-label">
+                  {t.demo_trials_label}
+                </span>
+                <span className="demo-trials-count">
+                  {trialsRemaining} <span className="demo-trials-of">{t.demo_trials_of}</span> {trialsLimit}
+                </span>
+                {trialsExhausted && (
+                  <span className="demo-trials-exhausted">
+                    {t.demo_trials_exhausted}
+                  </span>
+                )}
+              </div>
+            )}
           </section>
         </div>
 
@@ -335,6 +395,25 @@ export default function DemoPage() {
             )}
           </section>
         </div>
+
+        {/* بطاقة التوجيه للتسجيل عند نفاد التجارب */}
+        {trialsExhausted && phase !== 'done' && (
+          <div className="page">
+            <section className="band band-callout">
+              <div className="callout-content">
+                <h2 className="callout-title">{t.demo_register_title}</h2>
+                <p className="callout-text">{t.demo_register_text}</p>
+                <Link
+                  href="/register"
+                  className="btn btn-marker btn-block"
+                  style={{ marginTop: '12px', display: 'inline-block' }}
+                >
+                  {t.demo_register_button}
+                </Link>
+              </div>
+            </section>
+          </div>
+        )}
 
         {/* ---- النتيجة ---- */}
         <AnimatePresence>

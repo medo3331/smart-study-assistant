@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
 import { ProviderRow } from "@/components/AuthProviders";
+import { readStoredReferralCode, clearStoredReferralCode } from "@/lib/referral/client";
 
 /**
  * 📝 Create Account — المحطة التانية في التدفّق:
@@ -47,8 +48,9 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
-  /** نجاح بلا جلسة = مستنيين تأكيد البريد — بنعرض حالة مخصوصة بدل الفورم. */
-  const [pendingEmailConfirm, setPendingEmailConfirm] = useState(false);
+  /** OTP معلّق بعد signUp — يدخل الكود في نفس الصفحة. */
+  const [pendingVerify, setPendingVerify] = useState<"signup" | null>(null);
+  const [otpCode, setOtpCode] = useState("");
 
   /* حساب حقيقي داخل بالفعل؟ ملوش شغل هنا (تأكيد إضافي فوق شغل الـproxy). */
   useEffect(() => {
@@ -94,7 +96,8 @@ export default function RegisterPage() {
         return;
       }
       setMessage({ type: "success", text: t.login_ok_linked });
-      setPendingEmailConfirm(true);
+      setPendingVerify("signup");
+      setOtpCode("");
       return;
     }
 
@@ -124,14 +127,69 @@ export default function RegisterPage() {
     }
     // تأكيد البريد مفعّل → مفيش جلسة. الرسالة هي الشاشة المؤقتة لحد الضغط.
     setLoading(false);
-    setPendingEmailConfirm(true);
+    setMessage({ type: "success", text: t.login_otp_sent });
+    setPendingVerify("signup");
+    setOtpCode("");
   }
+
+  const handleCodeSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (!pendingVerify) return;
+    setLoading(true);
+    setMessage(null);
+    if (!supabaseRef.current) supabaseRef.current = createClient();
+    const supabase = supabaseRef.current;
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpCode.trim(),
+      type: pendingVerify,
+    });
+    if (error) {
+      setLoading(false);
+      setMessage({ type: "error", text: t.login_otp_err });
+      return;
+    }
+    // referral attribution after successful verification
+    const stored = readStoredReferralCode();
+    if (stored) {
+      try {
+        await fetch("/api/referrals/attribute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: stored }),
+        });
+      } catch {}
+    }
+    try {
+      await fetch("/api/referrals/entry", { method: "POST" });
+    } catch {}
+    clearStoredReferralCode();
+    window.location.href = currentNext();
+  };
+
+  const handleResendCode = async (): Promise<void> => {
+    if (loading) return;
+    setLoading(true);
+    setMessage(null);
+    if (!supabaseRef.current) supabaseRef.current = createClient();
+    const supabase = supabaseRef.current;
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: authCallbackUrl(currentNext()) },
+    });
+    setLoading(false);
+    setMessage({
+      type: error ? "error" : "success",
+      text: error ? t.login_err_reset : t.login_otp_sent,
+    });
+  };
 
   const pwScore = passwordScore(password);
   const pwText =
     password.length === 0 ? t.register_pw_hint : pwScore <= 1 ? t.register_pw_weak : pwScore === 2 ? t.register_pw_medium : t.register_pw_strong;
 
-  if (pendingEmailConfirm) {
+  if (pendingVerify) {
     return (
       <div className="auth">
         <aside className="auth-aside ruled">
@@ -148,20 +206,66 @@ export default function RegisterPage() {
         </aside>
 
         <div className="auth-main">
-          <div className="auth-form stack" style={{ gap: "18px", textAlign: "center" }}>
-            <p className="eyebrow" style={{ alignSelf: "flex-start", margin: 0 }}>
-              {t.register_title}
-            </p>
-            <div className={`notice notice-ok`} role="status" style={{ textAlign: "start" }}>
-              {t.login_ok_created}
+          <div className="auth-form stack" style={{ gap: "22px" }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <p className="eyebrow" style={{ margin: 0 }}>
+                {t.login_otp_title}
+              </p>
+              <TopControls />
             </div>
-            <p className="small muted" style={{ margin: 0, textAlign: "start" }}>
-              {t.onboard_done_lede}
-            </p>
-            <Link href="/login" className="btn btn-quiet btn-block">
-              {t.welcome_cta_login}
-            </Link>
-            <TopControls />
+
+            {message && (
+              <div className={`notice ${message.type === "error" ? "notice-error" : "notice-ok"}`} role={message.type === "error" ? "alert" : "status"}>
+                {message.text}
+              </div>
+            )}
+
+            <form onSubmit={handleCodeSubmit} className="stack" style={{ gap: "16px" }}>
+              <div>
+                <label className="field-label" htmlFor="otpCode">
+                  {t.login_otp_label}
+                </label>
+                <input
+                  id="otpCode"
+                  className="field"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  dir="ltr"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder={t.login_otp_placeholder}
+                  style={{ textAlign: "center", fontSize: "1.35rem", letterSpacing: "0.45em", fontWeight: 700 }}
+                />
+              </div>
+              <p className="muted small" style={{ margin: 0 }}>
+                {t.login_otp_hint}
+              </p>
+              <button type="submit" className="btn btn-marker btn-block" disabled={loading || otpCode.length !== 6}>
+                {loading ? t.login_loading : t.login_otp_submit}
+              </button>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={loading}
+                  className="small muted"
+                  style={{ background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
+                >
+                  {t.login_otp_resend}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPendingVerify(null); setOtpCode(""); setMessage(null); }}
+                  className="small muted"
+                  style={{ background: "none", border: 0, padding: 0, font: "inherit", textDecoration: "underline", cursor: "pointer" }}
+                >
+                  ← {t.login_otp_back}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>

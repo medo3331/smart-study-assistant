@@ -12,7 +12,7 @@ import {
   type ImageSize,
   type ImageStyle,
 } from "@/lib/ai/image-generator";
-import { consumeServiceQuota, IMAGE_MODELS_BY_TIER } from "@/lib/ai/service-registry";
+import { consumeServiceQuota, IMAGE_MODELS_BY_TIER, resolveServiceTier } from "@/lib/ai/service-registry";
 
 const MAX_PROMPT_CHARS = 1000;
 const VALID_SIZES: ImageSize[] = ["1024x1024", "1024x1792", "1792x1024"];
@@ -28,6 +28,20 @@ export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
+
+    // ── صلاحية Premium (خادم-side): فقط Pro/Ultra/plan:premium ──
+    const tier = await resolveServiceTier(supabase, user.id);
+    if (tier === "free") {
+      return NextResponse.json(
+        {
+          error: {
+            code: "PREMIUM_REQUIRED",
+            message: "توليد الصور متاح فقط لمشتركي Premium. قم بالترقية لباقة Pro أو Ultra.",
+          },
+        },
+        { status: 403 }
+      );
+    }
 
     // حماية من الضغط المتواصل (مهم خصوصًا إن المزوّد المجاني مفتوح للكل)
     const limited = checkRateLimit(`image:${user.id}`, 3, 60_000, "message");

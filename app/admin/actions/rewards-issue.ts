@@ -179,6 +179,27 @@ export async function issueReward(
 
       activationId = (activationData as any)?.id || null;
       subscriptionActivationUsed = true;
+
+      // Sync entitlements + quota so the granted plan/limits take effect immediately.
+      try {
+        const expiresAt = new Date(Date.now() + (input.durationDays || 7) * 86400_000).toISOString();
+        await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", recipientUserId).eq("kind", "plan").is("expires_at", null);
+        await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", recipientUserId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
+        await privileged.from("entitlements").insert({ user_id: recipientUserId, kind: "plan", value: planKey, expires_at: expiresAt });
+        await privileged.from("subscription_quotas").upsert(
+          {
+            user_id: recipientUserId,
+            plan_key: planKey,
+            messages_24h: 0,
+            uploads_today: 0,
+            last_reset_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+      } catch (entErr) {
+        console.warn("issueReward entitlement/quota sync failed:", entErr);
+      }
     }
 
     // ── Insert into rewards_issued (always, for all reward types)

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // EPIC-2 / Subscriptions — Manual Activation (Server Action)
 // Created 2026-09-19 — requires DB tables: user_codes, subscription_plans, subscription_activations, audit_log
 // ============================================================
@@ -66,7 +66,6 @@ export async function activateSubscription(
     let usedEmail = false;
 
     if (recipientEmail) {
-      // 1) profiles.email أولاً
       const { data: profileRow } = await privileged
         .from("profiles")
         .select("id")
@@ -74,21 +73,36 @@ export async function activateSubscription(
         .maybeSingle();
       recipientUserId = (profileRow as { id?: string } | null)?.id ?? null;
       usedEmail = true;
-      // 2) fallback: auth.users عبر service_role
       if (!recipientUserId) {
         try {
-          const { data } = await privileged.auth.admin.listUsers();
-          recipientUserId = data.users.find((u) => (u.email ?? "").toLowerCase() === recipientEmail)?.id ?? null;
-        } catch { /* يبقى فارغاً — نرجع خطأ واضح أدناه */ }
+          let page = 1;
+          const perPage = 200;
+          while (!recipientUserId) {
+            const { data } = await privileged.auth.admin.listUsers({ page, perPage });
+            const users = data?.users ?? [];
+            recipientUserId = users.find((u) => (u.email ?? "").toLowerCase() === recipientEmail)?.id ?? null;
+            if (!users.length || users.length < perPage) break;
+            page++;
+            if (page > 50) break;
+          }
+        } catch { }
       }
-    } else if (input.userCode) {
-      // التوافق مع الاستدعاءات القديمة: ابحث عن المستخدم عبر كود المستخدم
+    }
+    if (!recipientUserId && input.userCode) {
       const { data: codeRow } = await privileged
         .from("user_codes")
         .select("user_id")
         .eq("code", input.userCode.trim())
         .maybeSingle();
       recipientUserId = (codeRow as { user_id?: string } | null)?.user_id ?? null;
+      if (!recipientUserId) {
+        const { data: byPublic } = await privileged
+          .from("profiles")
+          .select("id")
+          .eq("public_user_code", input.userCode.trim())
+          .maybeSingle();
+        recipientUserId = (byPublic as { id?: string } | null)?.id ?? null;
+      }
     }
 
     if (!recipientUserId) {
@@ -192,6 +206,33 @@ export async function activateSubscription(
     }
 
     const activationId = (activationData as any)?.id || null;
+
+    // ── Insert entitlement so quota-check & profile reflect the new plan ──
+    try {
+      const expiresAt = new Date(Date.now() + (input.durationDays || 0) * 86400_000).toISOString();
+      // Revoke any prior active plan entitlements
+      await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").is("expires_at", null);
+      await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
+      await privileged.from("entitlements").insert({ user_id: userId, kind: "plan", value: input.planKey, expires_at: expiresAt });
+      // Keep quota table in sync so plan limits reflect the new plan immediately.
+      try {
+        await privileged.from("subscription_quotas").upsert(
+          {
+            user_id: userId,
+            plan_key: input.planKey,
+            messages_24h: 0,
+            uploads_today: 0,
+            last_reset_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+      } catch (qErr) {
+        console.warn("activateSubscription quota upsert failed:", qErr);
+      }
+    } catch (entErr) {
+      console.warn("activateSubscription entitlement insert failed:", entErr);
+    }
 
     // 5. Audit PASS
     const auditResult = await recordAuditLog({

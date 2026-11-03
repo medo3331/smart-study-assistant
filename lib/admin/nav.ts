@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -78,6 +78,76 @@ export const ADMIN_NAV: AdminNavItem[] = [
     href: "/admin/settings",
     label: "الإعدادات",
     description: "إدارة الأدمنز وحالة النظام",
+    permission: "admins.manage",
+    icon: "Settings",
+  },
+  {
+    href: "/admin/ai-usage",
+    label: "استخدام الذكاء الاصطناعي",
+    description: "تقرير Shadow لاستخدام AI (ai_usage_events) — قراءة فقط",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
+  {
+    href: "/admin/runtime-errors",
+    label: "أخطاء Runtime",
+    description: "مراقبة أخطاء الإنتاج (قراءة فقط)",
+    permission: "audit.read",
+    icon: "ScrollText",
+  },
+  {
+    href: "/admin/announcements",
+    label: "الإعلانات",
+    description: "إنشاء وتعديل وحذف إعلانات المستخدمين (metadata + scheduling)",
+    permission: "announcements.manage",
+    icon: "Megaphone",
+  },
+  {
+    href: "/admin/announcement-emails",
+    label: "إرسال إعلان بالبريد",
+    description: "حملات بريد يدوية للإعلانات — اختيار مستلمين، مراجعة، تأكيد",
+    permission: "announcements.manage",
+    icon: "Megaphone",
+  },
+  {
+    href: "/admin/support",
+    label: "الدعم",
+    description: "صندوق بريد الدعم والتذاكر",
+    permission: "support.manage",
+    icon: "LifeBuoy",
+  },
+  {
+    href: "/admin/ai-overview",
+    label: "نظرة عامة AI",
+    description: "ملخص طلبات AI و entitlements (قراءة فقط)",
+    permission: "audit.read",
+    icon: "Cpu",
+  },
+  {
+    href: "/admin/ai-costs",
+    label: "تكاليف AI",
+    description: "CREDIT_COSTS per operation (قراءة فقط)",
+    permission: "plans.manage",
+    icon: "Cpu",
+  },
+  {
+    href: "/admin/users/analytics",
+    label: "تحليلات المستخدمين",
+    description: "اسم، إيميل، باقة، وعمليات AI لكل مستخدم",
+    permission: "users.read",
+    icon: "Users",
+  },
+  {
+    href: "/admin/payments",
+    label: "الدفعات (يدوي)",
+    description: "تسجيل دفعات يدوية وتاريخها",
+    permission: "subscriptions.manage",
+    icon: "CreditCard",
+  },
+  {
+    href: "/admin/db-backup",
+    label: "نسخة قاعدة البيانات",
+    description: "تصدير جداول قاعدة البيانات (JSON) — للمالك فقط",
     permission: "admins.manage",
     icon: "Settings",
   },

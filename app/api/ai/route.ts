@@ -16,7 +16,7 @@ import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-cre
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels } from "@/lib/ai/model-access";
 import { streamWithFallback } from "@/lib/ai/streaming-fallback";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 /**
  * /api/ai — المدخل المركزي لكل مهام الذكاء الاصطناعي.
@@ -283,6 +283,7 @@ export async function POST(req: Request) {
             send({ type: "error", error: publicError });
           } finally {
             if (streamFailed) await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+            if (streamFailed) await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           }
@@ -364,6 +365,7 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
       const publicError = toAiPublicError(error);
       void recordAiOperation(supabase, {
         userId: user.id,

@@ -23,7 +23,6 @@ import {
   Sparkles,
   Landmark,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 /**
  * Adhkar Page — /worship/adhkar
@@ -137,7 +136,7 @@ function AdhkarHome() {
             const completedCounts = counts[cat];
             const isDone =
               completedCounts >= totalCounts && totalCounts > 0;
-            const iconMap: Record<string, LucideIcon> = {
+            const iconMap: Record<string, any> = {
               sunrise: Sun,
               sunset: Moon,
               repeat: Repeat,

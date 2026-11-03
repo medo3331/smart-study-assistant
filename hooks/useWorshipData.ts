@@ -141,7 +141,7 @@ export function useWorshipData(): UseWorshipDataReturn {
       try {
         const { data } = await supabase
           .from("profiles")
-          .select("display_name, full_name")
+          .select("display_name")
           .eq("id", user.id)
           .maybeSingle();
         const row = data as

@@ -62,6 +62,7 @@ export function LectureProcessActions({
   const [explanation, setExplanation] = useState<string | null>(null);
   const [flashcards, setFlashcards] = useState<Flashcard[] | null>(null);
   const [mcqs, setMcqs] = useState<Mcq[] | null>(null);
+  const [feedback, setFeedback] = useState("");
 
   /**
    * ⚠️ القفل بـ `useRef` مش بـ state: الـ state setter بيلفّ async، فدوسين
@@ -83,7 +84,7 @@ export function LectureProcessActions({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type }),
+            body: JSON.stringify({ type, feedback: feedback.trim() || undefined }),
           },
         );
 
@@ -178,6 +179,24 @@ export function LectureProcessActions({
           <p className="text-sm leading-relaxed text-[var(--text)]">{error}</p>
         </div>
       )}
+
+      <textarea
+        value={feedback}
+        onChange={(e) => setFeedback(e.target.value)}
+        placeholder="ملاحظاتك للشرح (اختياري): مثلاً «ركّز على تعريف X» أو «أعد الشرح ببساطة»"
+        className="mt-2 w-full min-h-[4rem] rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] p-2 text-sm text-[var(--text)]"
+        dir="rtl"
+      />
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => void run("explanation")}
+          disabled={busy}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+        >
+          {loading === "explanation" ? "جارٍ الشرح…" : "شرح مع الملاحظات"}
+        </button>
+      </div>
 
       {/* ───────── 📚 أدوات المذاكرة (Phase 4-B) ─────────
        *

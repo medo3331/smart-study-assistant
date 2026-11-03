@@ -64,7 +64,13 @@ export async function getAvailableSubjects(supabase: SupabaseClient, ctx: Partia
           q = q.eq("track_id", ctx.trackId);
         } else {
           // Prefer general curriculum when no track, fallback to any if none
-          const { data: generalOnly } = await supabase.from("curricula").select("id").eq("stage_id", ctx.stageId).eq("grade_id", ctx.gradeId ?? "").is("track_id", null);
+          let generalOnlyQuery = supabase
+        .from("curricula")
+        .select("id")
+        .eq("stage_id", ctx.stageId)
+        .is("track_id", null);
+      if (ctx.gradeId) generalOnlyQuery = generalOnlyQuery.eq("grade_id", ctx.gradeId);
+      const { data: generalOnly } = await generalOnlyQuery;
           if (generalOnly && generalOnly.length > 0) {
             curriculaIds = generalOnly.map((x: { id: string }) => x.id);
           } else {
@@ -110,26 +116,33 @@ export async function getDetailedAIContext(userId: string) {
   const supabase = await createClient();
 
   // 1. جلب بيانات البروفايل مع أسماء المرحلة والصف والشعبة والجامعة
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select(`
-      full_name,
-      persona,
-      goals,
-      learning_style,
-      education_stage_id,
-      education_stages(name, code),
-      education_grade_id,
-      education_grades(name, order_index),
-      education_track_id,
-      education_tracks(name, code),
-      university_id,
-      universities(name),
-      university_faculties(name),
-      university_departments(name)
-    `)
-    .eq("id", userId)
-    .single();
+  let profile: any = null;
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select(`
+        display_name,
+        persona,
+        learning_goal,
+        study_field,
+        education_stage_id,
+        education_stages(name, code),
+        education_grade_id,
+        education_grades(name, order_index),
+        education_track_id,
+        education_tracks(name, code),
+        university_id,
+        universities(name),
+        university_faculties(name),
+        university_departments(name)
+      `)
+      .eq("id", userId)
+      .maybeSingle();
+    profile = data ?? null;
+  } catch (e) {
+    console.error("[education/context] profile fetch failed:", e);
+    profile = null;
+  }
 
   // 2. جلب أسماء المواد التي اختارها الطالب (user_subjects أو من settings)
   let subjects: string[] = [];
@@ -141,17 +154,24 @@ export async function getDetailedAIContext(userId: string) {
     subjects = subjectsData?.map((s: any) => s.subjects?.name).filter(Boolean) || [];
   } catch {
     // fallback: إذا لم يكن جدول user_subjects موجوداً بعد، نقرأ من profile.subject مباشرة
-    if (profile?.subject) subjects = [String(profile.subject)];
+    if (profile?.study_field) subjects = [String(profile.study_field)];
   }
 
   // 3. جلب أهم 3 نقاط ضعف ديناميكية (الأعلى أخطاءً والأقل إتقاناً)
-  const { data: weaknessesData } = await supabase
-    .from("user_weaknesses")
-    .select("topic_name, error_count, mastery_level, subject:subject_id(name)")
-    .eq("user_id", userId)
-    .order("error_count", { ascending: false })
-    .order("mastery_level", { ascending: true })
-    .limit(3);
+  let weaknessesData: any = null;
+  try {
+    const { data } = await supabase
+      .from("user_weaknesses")
+      .select("topic_name, error_count, mastery_level, subject:subject_id(name)")
+      .eq("user_id", userId)
+      .order("error_count", { ascending: false })
+      .order("mastery_level", { ascending: true })
+      .limit(3);
+    weaknessesData = data ?? null;
+  } catch (e) {
+    console.error("[education/context] weaknesses fetch failed:", e);
+    weaknessesData = null;
+  }
 
   const weaknesses = (weaknessesData || []).map((w: any) => ({
     topic: w.topic_name,
@@ -161,7 +181,7 @@ export async function getDetailedAIContext(userId: string) {
   }));
 
   return {
-    name: profile?.full_name || "يا بطل",
+    name: profile?.display_name || "يا بطل",
     persona: profile?.persona ?? null,
     stage: (profile?.education_stages as { name?: string; code?: string } | null)?.name ?? null,
     grade: (profile?.education_grades as { name?: string; order_index?: number } | null)?.name ?? null,
@@ -169,8 +189,12 @@ export async function getDetailedAIContext(userId: string) {
     university: (profile?.universities as { name?: string } | null)?.name ?? null,
     faculty: (profile?.university_faculties as { name?: string } | null)?.name ?? null,
     department: (profile?.university_departments as { name?: string } | null)?.name ?? null,
-    goals: Array.isArray(profile?.goals) ? profile.goals : [],
-    style: profile?.learning_style ?? null,
+    goals: Array.isArray(profile?.learning_goal)
+      ? profile.learning_goal
+      : profile?.learning_goal
+        ? [String(profile.learning_goal)]
+        : [],
+    style: null,
     subjects: subjects,
     weaknesses: weaknesses,
   };

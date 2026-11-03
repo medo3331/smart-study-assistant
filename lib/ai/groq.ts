@@ -1,5 +1,5 @@
 import { GROQ_MODELS } from "../ai-config";
-import type { AiChatPayload, AiChatRequest, AiChatResponse, AiTextProvider } from "./types";
+import type { AiChatPayload, AiChatRequest, AiChatResponse, AiMediaAnalysisRequest, AiMediaProvider, AiTextProvider } from "./types";
 import { AiProviderError } from "./types";
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -74,7 +74,7 @@ function isPayload(value: unknown): value is AiChatPayload {
 }
 
 /** Groq's OpenAI-compatible API adapter. This module is server-only by use. */
-export class GroqProvider implements AiTextProvider {
+export class GroqProvider implements AiTextProvider, AiMediaProvider {
   readonly name = "groq" as const;
 
   async completeChat(input: AiChatRequest): Promise<AiChatResponse> {
@@ -157,5 +157,53 @@ export class GroqProvider implements AiTextProvider {
       sawRateLimit ? 429 : 401,
       this.name
     );
+  }
+
+  async analyzeMedia(input: AiMediaAnalysisRequest): Promise<AiChatResponse> {
+    const keys = orderedGroqKeys();
+    if (keys.length === 0) {
+      throw new AiProviderError("Groq is not configured", 503, this.name);
+    }
+    const model = "llama-3.2-11b-vision-preview";
+    const dataUrl = `data:${input.mimeType};base64,${input.data}`;
+    const messages = [
+      { role: "user" as const, content: [
+        { type: "text" as const, text: input.prompt },
+        { type: "image_url" as const, image_url: { url: dataUrl } },
+      ] },
+    ];
+    let sawRateLimit = false;
+    for (const apiKey of keys) {
+      let response: Response;
+      try {
+        response = await fetch(GROQ_CHAT_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 1024 }),
+          signal: AbortSignal.timeout(GROQ_TIMEOUT_MS),
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "TimeoutError") {
+          throw new AiProviderError("Groq request timed out", 504, this.name);
+        }
+        throw new AiProviderError("Groq request failed", 502, this.name);
+      }
+      if (!response.ok) {
+        reportGroqKeyOutcome(apiKey, { ok: false, status: response.status });
+        if (response.status === 429 || response.status === 401 || response.status === 403) {
+          sawRateLimit ||= response.status === 429;
+          continue;
+        }
+        throw new AiProviderError("Groq returned an error", response.status, this.name);
+      }
+      reportGroqKeyOutcome(apiKey, { ok: true });
+      const payload = await response.json().catch(() => null);
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw new AiProviderError("Groq returned an empty response", 502, this.name);
+      }
+      return { provider: this.name, model, content, payload, usage: { promptTokens: payload?.usage?.prompt_tokens, completionTokens: payload?.usage?.completion_tokens } };
+    }
+    throw new AiProviderError(sawRateLimit ? "Groq rate limited on all keys" : "Groq rejected all configured keys", sawRateLimit ? 429 : 401, this.name);
   }
 }

@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { resolveActor } from "@/lib/policy";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
 export async function uploadFile(formData: FormData) {
   try {
@@ -96,17 +96,10 @@ export async function uploadFile(formData: FormData) {
       subject: null,
     });
 
-    if (insertError) return { ok: false, message: "فشل تسجيل الملف: " + insertError.message, error: insertError.message };
-
-    // 7) Update quota
-    await privileged.from("subscription_quotas").upsert({
-      user_id: user.id,
-      plan_key: planKey,
-      uploads_today: (currentQuota.uploads_today || 0) + 1,
-      messages_24h: (currentQuota.messages_24h || 0),
-      last_reset_at: now.toISOString(),
-      updated_at: now.toISOString(),
-    }, { onConflict: "user_id" });
+    if (insertError) {
+      await refundSubscriptionQuota(user.id, "upload", quota.idempotencyKey);
+      return { ok: false, message: "فشل تسجيل الملف: " + insertError.message, error: insertError.message };
+    }
 
     return { ok: true, message: "تم رفع الملف بنجاح" };
   } catch (e: any) {

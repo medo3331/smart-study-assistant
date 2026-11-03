@@ -264,3 +264,44 @@ describe("buildLectureRow — قيم ناقصة أو خايبة", () => {
     expect(row.transcript_text).toBeTruthy();
   });
 });
+describe("buildLectureRow — subject_id (Phase 1)", () => {
+  it("يحفظ subjectId صالحًا", () => {
+    const subjectId = "22222222-2222-4222-8222-222222222222";
+    const row = buildLectureRow({
+      userId: USER_ID,
+      transcript: makeTranscript(),
+      originalFilename: "محاضرة.mp3",
+      subjectId,
+    });
+    expect(row.subject_id).toBe(subjectId);
+  });
+
+  it("subjectId = null يبقى null", () => {
+    const row = buildLectureRow({
+      userId: USER_ID,
+      transcript: makeTranscript(),
+      originalFilename: "محاضرة.mp3",
+      subjectId: null,
+    });
+    expect(row.subject_id).toBeNull();
+  });
+
+  it("حذف subjectId (omitted) يبقى null", () => {
+    const row = buildLectureRow({
+      userId: USER_ID,
+      transcript: makeTranscript(),
+      originalFilename: "محاضرة.mp3",
+    });
+    expect(row.subject_id).toBeNull();
+  });
+
+  it("subjectId فاضي يتحول إلى null", () => {
+    const row = buildLectureRow({
+      userId: USER_ID,
+      transcript: makeTranscript(),
+      originalFilename: "محاضرة.mp3",
+      subjectId: "   ",
+    });
+    expect(row.subject_id).toBeNull();
+  });
+});

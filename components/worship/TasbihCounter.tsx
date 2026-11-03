@@ -66,7 +66,7 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
   const active = DHIKR_PRESETS.find((d) => d.id === activeId)!;
   const count = counts[active.id] ?? 0;
   const done = count >= active.target;
-  const pct = Math.min(100, Math.round((count / active.target) * 100));
+  const pct = active.target ? Math.min(100, Math.round((count / active.target) * 100)) : 0;
 
   // 🔄 جسر للتخزين المركزي (lib/islamic/worship-progress) — نفس العدّاد
   // المحلي زي ما هو، بس كمان بيتسجّل في سجل اليوم فيصل لـ Supabase

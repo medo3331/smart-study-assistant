@@ -3,13 +3,30 @@ import { GEMINI_MODELS } from "../ai-config";
 import type { AiChatMessage, AiChatRequest, AiChatResponse, AiImageGenerationRequest, AiImageGenerationResponse, AiImageProvider, AiMediaAnalysisRequest, AiMediaProvider, AiTokenUsage } from "./types";
 import { AiProviderError } from "./types";
 
+function messageText(content: string | { type: string; text?: string }[]): string {
+  if (typeof content === "string") return content;
+  return content.map((p) => (p.type === "text" ? p.text ?? "" : "")).join(" ");
+}
+
 function toGeminiContents(messages: AiChatMessage[]) {
   return messages
     .filter((message) => message.role !== "system")
-    .map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    }));
+    .map((message) => {
+      const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [];
+      if (typeof message.content === "string") {
+        parts.push({ text: message.content });
+      } else {
+        for (const p of message.content) {
+          if (p.type === "text") parts.push({ text: p.text });
+          else if (p.type === "image_url") {
+            const url = p.image_url.url;
+            const m = /^data:([^;]+);base64,(.*)$/.exec(url);
+            if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+          }
+        }
+      }
+      return { role: message.role === "assistant" ? "model" : "user", parts };
+    });
 }
 
 function toUsage(response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } }): AiTokenUsage | undefined {
@@ -38,7 +55,7 @@ export class GeminiProvider implements AiMediaProvider, AiImageProvider {
 
     const systemInstruction = input.messages
       .filter((message) => message.role === "system")
-      .map((message) => message.content)
+      .map((message) => messageText(message.content))
       .join("\n\n")
       .trim();
     const contents = toGeminiContents(input.messages);

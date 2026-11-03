@@ -12,7 +12,7 @@ export default function ClosingCTA() {
         {t.closing_title_a} <span className={styles.hl}>{t.closing_title_b}</span>
       </h2>
       <div className={styles.btnRow}>
-        <Link href="/login?next=/assessment" className={styles.btnPrimary}>
+        <Link href="/welcome?next=/assessment" className={styles.btnPrimary}>
           {t.closing_cta}
         </Link>
         <Link href="/features" className={styles.btnGhost}>

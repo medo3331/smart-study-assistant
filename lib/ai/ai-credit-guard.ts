@@ -46,10 +46,11 @@ export async function guardAiAccessAndReserve(
   supabase: SupabaseClient,
   userId: string | null,
   modelId: string,
-  opts?: { isVisionOrFile?: boolean; isAnonymous?: boolean; agentId?: string | null }
+  opts?: { isVisionOrFile?: boolean; isAnonymous?: boolean; agentId?: string | null; cost?: number }
 ): Promise<GuardResult> {
   const policy = getModelAccessPolicy(modelId);
   const isAnonymous = Boolean(opts?.isAnonymous);
+  const cost = Math.max(1, Math.floor(Number(opts?.cost ?? 1)));
 
   // ---- Phase C: Guest Rate Limit (Anonymous 5/24h) ----
   if (isAnonymous && userId) {
@@ -194,6 +195,7 @@ export async function guardAiAccessAndReserve(
       const res = await supabase.rpc("reserve_ai_credit", {
         p_user_id: userId,
         p_ref_id: refId,
+        p_amount: cost,
         p_kind: reserveKind,
       } as unknown as { p_user_id: string; p_ref_id: string });
       reserveErr = (res as { error?: unknown }).error ?? null;
@@ -202,6 +204,7 @@ export async function guardAiAccessAndReserve(
         const retry = await supabase.rpc("reserve_ai_credit", {
           p_user_id: userId,
           p_ref_id: refId,
+          p_amount: cost,
         });
         reserveErr = (retry as { error?: unknown }).error ?? null;
       }
@@ -247,6 +250,7 @@ export async function guardAiAccessAndReserve(
     const resExt = await supabase.rpc("reserve_ai_credit", {
       p_user_id: userId,
       p_ref_id: refId,
+      p_amount: cost,
       p_kind: reserveKind,
       p_model: modelId,
       p_agent: agentForMeta,
@@ -258,6 +262,7 @@ export async function guardAiAccessAndReserve(
       const res = await supabase.rpc("reserve_ai_credit", {
         p_user_id: userId,
         p_ref_id: refId,
+        p_amount: cost,
         p_kind: reserveKind,
       } as unknown as { p_user_id: string; p_ref_id: string });
       reserveErr = (res as { error?: unknown }).error ?? null;
@@ -266,6 +271,7 @@ export async function guardAiAccessAndReserve(
         const retry = await supabase.rpc("reserve_ai_credit", {
           p_user_id: userId,
           p_ref_id: refId,
+          p_amount: cost,
         });
         reserveErr = (retry as { error?: unknown }).error ?? null;
       }

@@ -18,7 +18,6 @@ import {
   Sparkles,
   BookOpen
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 interface AdhkarReaderProps {
   adhkar: Dhikr[];
@@ -27,7 +26,7 @@ interface AdhkarReaderProps {
   onBack?: () => void;
 }
 
-const CATEGORY_ICONS: Record<AdhkarCategory, LucideIcon> = {
+const CATEGORY_ICONS: Record<AdhkarCategory, any> = {
   morning: Sun,
   evening: Moon,
   "after-prayer": Sparkles,

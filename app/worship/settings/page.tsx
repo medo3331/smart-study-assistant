@@ -20,7 +20,6 @@ import {
   Layers as LayersIcon,
   RotateCcw,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 /**
  * Worship Settings Page — /worship/settings
