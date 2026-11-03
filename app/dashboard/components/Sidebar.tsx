@@ -8,6 +8,7 @@ import { SoundLibrary } from "./SoundLibrary";
 import { useTheme, type ThemeId } from "@/theme/ThemeProvider";
 import { useAudio } from "@/components/audio/AudioProvider";
 import type { ThemeColor, ThemeStyles } from "./types";
+import { NAV_GROUPS } from "./nav-config";
 
 /* ==========================================================================
    درج الإعدادات
@@ -31,7 +32,7 @@ import type { ThemeColor, ThemeStyles } from "./types";
 
 /** أقسام الدرج. الداشبورد بتستعمل النوع ده عشان تفتح الدرج على قسم بعينه
     (كارت القرآن بيفتحه على «الصوت»). */
-export type SettingsSectionId = "plan" | "look" | "sound" | "notif";
+
 
 interface SidebarProps {
   // فتح/قفل الدرج الجانبي
@@ -68,12 +69,11 @@ interface SidebarProps {
 
   /** يتفتح على القسم ده أول ما الدرج يفتح. بيتبعت من كارت القرآن في
       الداشبورد («كل السور والقرّاء» → قسم الصوت). */
-  focusSection?: SettingsSectionId | null;
+  focusSection?: string | null;
 }
 
-// 🖍️ الأربع ألوان دي هي أقلام الفسفوري المتاحة. الأسماء الإنجليزية
-// (amber/emerald/...) متسيبة زي ما هي لأنها محفوظة في قاعدة البيانات.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained: PENS kept for legacy DB values (amber/emerald/coral/cyan) even though UI now uses ThemeId
+/* six colors available - Fesfury pencils. English names
+   (amber/emerald/...) are kept as-is since they're stored in the database. */
 const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
   { id: "amber", name: "أصفر", swatch: "bg-amber-500" },
   { id: "emerald", name: "أخضر", swatch: "bg-emerald-500" },
@@ -81,8 +81,18 @@ const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
   { id: "cyan", name: "أزرق", swatch: "bg-cyan-500" },
 ];
 
-// Phase 1 — 4 ثيمات الداشبورد (العقدة الجديدة)
+/* Theme swatches - four dashboard themes from magiclly-final design */
 const THEME_SWATCHES: { id: ThemeId; label: string; accent: string; bg: string }[] = [
+  { id: "colorful", label: "ملوّن (حالي)", accent: "#F0D24A", bg: "#0D0906" },
+  { id: "crimson", label: "أسود وأحمر", accent: "#E23A3A", bg: "#0a0a0c" },
+  { id: "azure", label: "أزرق وذهبي", accent: "#3A8FFD", bg: "#0d1321" },
+  { id: "emerald", label: "أخضر", accent: "#2ECC71", bg: "#1a1a2e" },
+];
+
+/* -------------------------------------------------
+   Render the full sidebar with NAV_GROUPS
+   ------------------------------------------------- */
+export default function Sidebar({
   // 🎡 الثيمات الأربعة المعتمدة في تصميم magiclly-final (نفس دول اللي بيلفّ
   // زرار العجلة عليهم) — متصدرين القايمة، والباقي تحت زي ما هو.
   { id: "colorful", label: "ملوّن (حالي)", accent: "#F0D24A", bg: "#0D0906" },
@@ -333,18 +343,18 @@ export function Sidebar({
                         <h4 className="m-0">
                           <button
                             type="button"
-                            onClick={() => toggleSection(section.id)}
-                            aria-expanded={open}
-                            aria-controls={panelId(section.id)}
+                            onClick={() => setMenuOpen(true)}
+                            aria-expanded={menuOpen}
+                            aria-controls={`panel-${group.title}-${item.id}``}
                             className="w-full flex items-center gap-3 p-3 text-right hover:bg-paper-3 rounded-[var(--r-sm)] transition"
                           >
                             <span aria-hidden className="text-base leading-none shrink-0">
-                              {section.icon}
+                              {item.icon}
                             </span>
                             <span className="flex-1 min-w-0">
-                              <span className="block text-sm font-bold text-ink">{section.label}</span>
+                              <span className="block text-sm font-bold text-ink">{item.label}</span>
                               <span className="block mono text-ink-soft truncate normal-case">
-                                {status ?? section.hint}
+                                {status}
                               </span>
                             </span>
                             {live && (
@@ -357,17 +367,17 @@ export function Sidebar({
                               </>
                             )}
                             <span aria-hidden className="mono text-ink-soft shrink-0">
-                              {open ? "▾" : "▸"}
+                              {menuOpen ? "▾" : "▸"}
                             </span>
                           </button>
                         </h4>
 
                         <div
-                          id={panelId(section.id)}
-                          hidden={!open}
+                          id={`panel-${group.title}-${item.id}`}]
+                          hidden={!menuOpen}
                           className="px-3 pb-3 pt-3 border-t border-rule"
                         >
-                          {sectionBody(section.id)}
+                          {item.children}
                         </div>
                       </div>
                     );

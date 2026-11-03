@@ -53,28 +53,58 @@ export interface NavGroupDef {
 // المتابعة في «الحساب». البنود القديمة كلها فضلت بنفس ترتيبها النسبي.
 export const NAV_GROUPS: NavGroupDef[] = [
   {
-    title: "المذاكرة",
+    title: "الرئيسية",
     items: [
       { id: "home", icon: "🏠", label: "الرئيسية", latin: "Home", href: "/dashboard" },
-      { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
-      { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
-      // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
-      // مكانه هنا لأنه بيغيّر المذاكرة نفسها، مش إعداد في الحساب.
-      { id: "emergency", icon: "🚨", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
     ],
   },
   {
-    title: "الأدوات",
+    title: "التعلّم",
+    items: [
+      { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
+      { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
+      { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
+      { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
+    ],
+  },
+  {
+    title: "مساحة الذكاء",
     items: [
       { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
       { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — مين هيعرف إنه
-      // موجود؟ البند ده بينزّل على كارت القرآن في الداشبورد، والكارت نفسه
-      // فيه زرار للمكتبة الكاملة. جنب الملاحظات لأن الاتنين `scrollTo`.
+      title: "التخطيط والتنظيم",
+    items: [
+      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
       { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
-      // 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
+      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
+      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
+      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
+    ],
+  },
+  {
+    title: "تقدّمي وإنجازاتي",
+    items: [
+      { id: "leaderboard", icon: "🏆", label: "الجداول القيادية", latin: "Leaderboard", signal: "leaderboard" },
+      { id: "xpShop", icon: "🎁", label: "صرف النقاط", latin: "XP Shop", signal: "xpShop" },
+    ],
+  },
+  {
+    title: "الباقة والرصيد",
+    items: [
+      { id: "package", icon: "📦", label: "الباقة الحالية", latin: "Package", href: "/dashboard/package" },
+      { id: "balance", icon: "💰", label: "الرصيد", latin: "Balance", href: "/dashboard/balance" },
+    ],
+  },
+  {
+    title: "حسابي وإعداداتي",
+    items: [
+      { id: "settings", icon: "⚙️", label: "الإعدادات", latin: "Settings", signal: "settings" },
+      { id: "profile", icon: "👤", label: "الملف الشخصي", latin: "Profile", href: "/dashboard/profile" },
+    ],
+  },
+]; 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
       // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
       { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
       { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
