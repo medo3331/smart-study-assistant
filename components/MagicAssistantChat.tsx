@@ -44,10 +44,11 @@ export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps)
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed bottom-6 left-6 right-6 z-50 max-w-md mx-auto"
-      aria-modal="true"
-    >
+    <>
+      <div
+        className="fixed bottom-6 left-6 right-6 z-50 max-w-md mx-auto"
+        aria-modal="true"
+      >
       <div
         className="bg-paper rounded-[var(--r-sm)] shadow-lg border border-rule p-5 transform transition-transform scale-100"
       >
@@ -100,6 +101,6 @@ export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps)
           أرسل
         </button>
       </div>
-    </div>
+    </>
   );
 }
