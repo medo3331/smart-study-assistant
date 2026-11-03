@@ -1,4 +1,4 @@
-export function buildAssistantPrompt(planType) {
+export function buildAssistantPrompt(planType: "free" | "pro" | "ultra") {
   const limits = {
     free: "20 رسالة كل ساعتين، 2 رفع ملفات يومياً، 20 ميجا أقصى حجم ملف",
     pro: "رسائل غير محدودة، رفع ملفات غير محدودة، أولوية في الخدمة",
