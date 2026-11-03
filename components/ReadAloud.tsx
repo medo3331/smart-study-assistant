@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { useSpeak } from "@/lib/speech";
+import { useVoice } from "@/lib/voice/useVoice";
+import { cleanTextForSpeech } from "@/lib/voice/clean";
 
 /* ==========================================================================
    زرار «اسمع الشرح»
@@ -30,8 +31,11 @@ interface ReadAloudProps {
 }
 
 export function ReadAloud({ text, resetKey, className = "" }: ReadAloudProps) {
-  const { supported, speaking, paused, speak, stop, toggle } = useSpeak();
+  const { supported, speaking, paused, speak: speakRaw, stop, toggle } = useVoice();
+  const cleanText = React.useMemo(() => cleanTextForSpeech(text), [text]);
   const [rate, setRate] = React.useState(1);
+
+  const speak = (t: string, r: number) => speakRaw(cleanText, r);
 
   // لو المحتوى نفسه اتغيّر (المستخدم بدّل النمط أو الدرس)، القراءة
   // القديمة بقت بتقرا حاجة مش على الشاشة — لازم تقف.

@@ -1,5 +1,4 @@
-import type { ChatIntent } from "@/lib/ai/chat-intent";
-
+import { buildMagicSystemPrompt } from "@/lib/magic/persona-prompt";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
@@ -199,27 +198,15 @@ const MODE_GUIDE: Record<MagiclyMode, string> = {
 
 export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyMode, toolFacts: string[] = []) {
   const memories = context.memories.length
-    ? context.memories.map((memory) => `${memory.kind}: ${memory.value}`).join(" | ")
-    : "                                ";
+    ? context.memories.map((memory) => memory.kind + ": " + memory.value).join(" | ")
+    : "لا توجد ذكريات مفيدة محفوظة بعد.";
 
-  return withDiagramGuidelines(`Study context for the user.
+  // هوية Magic (مصدر واحد) — لا تكرار.
+  const persona = buildMagicSystemPrompt({
+    subject: context.subject,
+    lesson: context.lesson,
+    mode,
+  });
 
-
-
-- Study field: ${context.studyField ? `in ${context.studyField}` : "unknown"}
-- Learning goal: ${context.learningGoal || "not specified"}
-
-- Subject: ${context.subject}
-- Lesson: ${context.lesson}
-- Progress: ${context.progress.completed}/${context.progress.total} lessons
-- Memories: ${memories}
-${toolFacts.length ? `- Tool facts: ${toolFacts.join(" ")}` : ""}
-
-Style guide:
-- ${STYLE_GUIDE[context.learningStyle]}
-
-${mode}.
-
-${MODE_GUIDE[mode]}`);
-
+  return withDiagramGuidelines(persona + "\n\nالسياق الموثوق:\n- المادة: " + context.subject + "\n- الدرس: " + context.lesson + "\n- التقدم: " + context.progress.completed + "/" + context.progress.total + " دروس مكتملة\n- أسلوب التعلّم: " + context.learningStyle + "\n- تفضيلات مفيدة فقط: " + memories + (toolFacts.length ? "\n- نتائج الأدوات: " + toolFacts.join(" ") : "") + "\n\n" + STYLE_GUIDE[context.learningStyle] + "\n\nالوضع الحالي: " + mode + ".\n" + MODE_GUIDE[mode]);
 }
