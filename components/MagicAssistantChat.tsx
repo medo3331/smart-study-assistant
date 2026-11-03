@@ -14,41 +14,30 @@ export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps)
     const trimmed = input.trim();
     if (!trimmed) return;
 
-    // Add user message
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
+    setIsLoading(true);
 
-    // Simple rule-based responses for now (no AI call to avoid credits/routing complexity)
-    const lower = trimmed.toLowerCase();
-    let response = "";
+    try {
+      const res = await fetch("/api/magic-assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed }),
+      });
 
-    if (
-      lower.includes("رفع") ||
-      lower.includes("upload") ||
-      lower.includes("محاضرة")
-    ) {
-      response = "لرفع محاضرة، اذهب إلى صفحة الدروس واضغط 'رفع ملف'. يقبل الموقع ملفات hasta 20 ميجا بالنسخة المجانية، وأعلى في الخطط الأعلى. بعد الرفع، يمكنك استخدام المعلم الذكي لشرح المحتوى.";
-    } else if (
-      lower.includes("خطة") ||
-      lower.includes("مميزات") ||
-      lower.includes("مجانية")
-    ) {
-      response = "الخطة المجانية تعطيك 20 رسالة كل ساعتين، ورفع ملفات لغاية 20 ميجا، ورسائل غير محدودة في الخطط الأعلى. تقدر تشوف تفاصيل أكثر في صفحة الخطط.";
-    } else if (
-      lower.includes("معلم") ||
-      lower.includes("شات") ||
-      lower.includes("مذاكرة") ||
-      lower.includes("دراسة")
-    ) {
-      response = "أنا مرشد للمنصة، لأجل أسئلة المذاكرة استخدم الشات الرئيسي /chat. أنا موجود لمساعدتك في معرفة كيفية استخدام الموقع وأدواته.";
-    } else if (lower.includes("دعم") || lower.includes("اتصال")) {
-      response = "يمكنك التواصل مع الدعم من خلال صفحة 'Contact Us' في القائمة الجانبية، أو إرسال طلب عبر نموذج الاتصال.";
-    } else {
-      response = "ممكن rephrase سؤالك؟ أنا موجود للمساعدة في استخدام المنصة، وإيجاد المعلومات عن الخطط، وإيجاد طريقة الرفع، أو أي سؤال عن إعدادات الحساب.";
+      const data = await res.json();
+
+      if (data.ok && data.response?.text) {
+        setMessages((prev) => [...prev, { role: "assistant", content: data.response.text }]);
+      } else {
+        setMessages((prev) => prev.concat({ role: "assistant", content: "عذراً، المرشد مشغول حالياً. جرب تاني." }));
+      }
+    } catch (e) {
+      console.error("[magic-assistant] fetch error", e);
+      setMessages((prev) => prev.concat({ role: "assistant", content: "عذراً، المرشد مشغول حالياً. جرب تاني." }));
+    } finally {
+      setIsLoading(false);
     }
-
-    // Add assistant message
-    setMessages((prev) => [...prev, { role: "assistant", content: response }]);
   };
 
   if (!isOpen) return null;
