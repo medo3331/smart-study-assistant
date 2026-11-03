@@ -71,7 +71,7 @@ export function MagicAssistantChat({ isOpen, onClose }: MagicAssistantChatProps)
                 msg.role === "user" ? "bg-emerald-100 self-end" : "bg-paper self-start"
               }`}
             >
-              <p className="text-sm {msg.role === "user" ? "text-emink" : "text-ink"}">
+              <p className={`text-sm ${msg.role === "user" ? "text-emink" : "text-ink"}`}>
                 {msg.content}
               </p>
             </div>
