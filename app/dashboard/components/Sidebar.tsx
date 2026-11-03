@@ -79,6 +79,45 @@ const PENS: { id: ThemeColor; name: string; swatch: string }[] = [
   { id: "cyan", name: "أزرق", swatch: "bg-cyan-500" },
 ];
 
+/* المجموعات التسعة للSidebar الموحّد - تعتمد على NAV_GROUPs من nav-config.ts */
+// مجموعة: الرئيسية
+const NAV_MAIN_ITEMS = [
+  { id: "home", label: "الرئيسية", href: "/dashboard", icon: "🏠" },
+];
+// مجموعة: التعلّم
+const NAV_LEARNING_ITEMS = [
+  { id: "courses", label: "الكورسات", href: "/dashboard/courses", icon: "📚" },
+  { id: "lessons", label: "الدروس", href: "/lectures", icon: "📖" },
+  { id: "workspace", label: "مساحة العمل", href: "/dashboard/workspace", icon: "🗂️" },
+// مجموعة: مساحة الذكاء
+const NAV_AI_ITEMS = [
+  { id: "ai_chat", label: "المحادثة مع Magic", href: "/chat", icon: "🤖", isSignal: true },
+  { id: "ai_agents", label: "وكلاء الذكاء", href: "/dashboard/agents", icon: "✦" },
+// Gruppe: التخطيط والتنظيم
+const NAV_PLANNING_ITEMS = [
+  { id: "planner", label: "المخطط", href: "/dashboard/planner", icon: "🎯" },
+  { id: "calendar", label: "التقويم", href: "/dashboard/calendar", icon: "📅" },
+  { id: "daily_missions", label: "مهام اليوم", href: "/", icon: "✅", isSignal: true },
+// Gruppe: تتقدمي وإنجازاتي
+const NAV_PROGRESS_ITEMS = [
+  { id: "progress", label: "تقدمي", href: "/", icon: "📊", isSignal: true },
+  { id: "achievements", label: "الإنجازات", href: "/dashboard/achievements", icon: "🏆" },
+//gruppe: المجتمع والمكافآت
+const NAV_COMMUNITY_ITEMS = [
+  { id: "community", label: "المجتمع", href: "/community", icon: "👥" },
+  { id: "referrals", label: "الدعوات", href: "/dashboard/referrals", icon: "🎁" },
+  { id: "shop", label: "المتجر", href: "/shop", icon: "🛍️" },
+  { id: "rewards", label: "سجل المكافآت", href: "/rewards", icon: "🪙" },
+//gruppe: الباقة والرصيد
+const NAV_BALANCE_ITEMS = [
+  { id: "plan_current", label: "الباقة الحالية", href: "/plans", icon: "📋" },
+  { id: "balance", label: "الرصيد", href: "/", icon: "💳", isSignal: true },
+//gruppe: حسابي وإعداداتي
+const NAV_ACCOUNT_ITEMS = [
+  { id: "profile", label: "الملف الشخصي", href: "/profile", icon: "P" },
+  { id: "settings", label: "الإعدادات", href: "/", icon: "✉️", isSignal: true },
+];
+
 /* ⚠️ سلّم الورق: `paper-2` هو الأفتح (سطح الورقة) و`paper` أغمق شوية
    (حتة غايرة) و`paper-3` أغمق (تمرير الماوس). فالدرج نفسه `paper-2`،
    وكل عنصر تحكّم جواه `paper` عشان يبان غاير. كروت الأقسام الجديدة

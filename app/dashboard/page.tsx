@@ -78,6 +78,10 @@ import { useEquippedCompanion } from "@/lib/shop/use-companion";
 import { fetchCourses } from "@/lib/pages-data";
 import { getAvailableSubjects, getEducationContext } from "@/lib/education/context";
 import { PrimaryDashboard } from "@/components/dashboard/primary/PrimaryDashboard";
+
+// 🛡️ حالة الشريط الجانبي - يتحكم في فتح وإغلاق الدرج
+const [isMenuOpen, setIsMenuOpen] = useState(false);
+const [menuButtonVisible, setMenuButtonVisible] = useState(false);
 import { PrimaryErrorBoundary } from "@/components/dashboard/primary/PrimaryErrorBoundary";
 import { PreparatoryDashboard } from "@/components/dashboard/preparatory/PreparatoryDashboard";
 import { SecondaryDashboard } from "@/components/dashboard/secondary/SecondaryDashboard";
@@ -933,6 +937,33 @@ export default function DashboardPage() {
     }
     return () => clearInterval(timer);
   }, [isPomoRunning, pomoTime]);
+
+  // 🛠️ كشف التمرير لعرض زر القائمة الجانبية
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let lastScrollY = window.scrollY;
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // إظهار الزر عند التمرير لأسفل
+      if (currentScrollY > lastScrollY && currentScrollY > 300) {
+        setMenuButtonVisible(true);
+      }
+      // إخفاء الزر عند التمرير لأعلى (إلا إذا كان scroll قليل)
+      else if (currentScrollY < lastScrollY && currentScrollY < 300) {
+        setMenuButtonVisible(false);
+      }
+
+      lastScrollY = currentScrollY > 0 ? currentScrollY : 0;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
 
   const handleSubjectChange = async () => {
     if (!newSubjectInput.trim() || !config || !configId || !authUser || isChangingSubject) return;
