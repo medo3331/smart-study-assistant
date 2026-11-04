@@ -1,7 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import {
+  nextUpgrade,
+  findPlanPrice,
+  buildWhatsappHref,
+  type PublicPlan,
+} from "@/lib/config/public-config";
 
 export default function ProfilePage() {
   const supabase = createClient();
@@ -15,6 +22,14 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  /** رصيد الكريدت من /api/me/plan-quota — null = غير متاح (يُعرض «—»). */
+  const [credits, setCredits] = useState<number | null>(null);
+  /** إعدادات المنصة العامة من /api/config/public — null = تُخفى أزرارها. */
+  const [config, setConfig] = useState<{
+    whatsapp_number?: string;
+    whatsapp_template?: string;
+    plans?: PublicPlan[];
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +60,27 @@ export default function ProfilePage() {
           const j = await res.json();
           if (!cancelled) { setPlan(j.planKey ?? "free"); setQuota(j); }
         }
+
+        // الرصيد والباقة الفعلية — مسار قائم ومستقل؛ فشله لا يُسقط الصفحة.
+        try {
+          const qRes = await fetch("/api/me/plan-quota", { credentials: "include" });
+          if (qRes.ok) {
+            const q = await qRes.json();
+            if (!cancelled) {
+              if (typeof q?.credits === "number") setCredits(q.credits);
+              if (typeof q?.tier === "string" && q.tier) setPlan(q.tier);
+            }
+          }
+        } catch { /* اختياري */ }
+
+        // إعدادات المنصة العامة (واتساب/الأسعار) — اختيارية أيضًا.
+        try {
+          const cRes = await fetch("/api/config/public");
+          if (cRes.ok) {
+            const c = await cRes.json();
+            if (!cancelled) setConfig(c);
+          }
+        } catch { /* اختياري */ }
       } catch { if (!cancelled) setMsg("Failed to load profile."); }
       finally { if (!cancelled) setLoading(false); }
     })();
@@ -107,6 +143,21 @@ export default function ProfilePage() {
 
   const initial = (name || email || "U").charAt(0).toUpperCase();
   const isFree = plan === "free";
+
+  // الاشتراك والرصيد: الباقة التالية + سعرها (من الإعدادات العامة) + رابط واتساب.
+  const upgrade = nextUpgrade(plan);
+  const targetPlanName = upgrade?.targetKey === "ultra" ? "Ultra" : "Pro";
+  const targetPrice = upgrade ? findPlanPrice(config?.plans ?? null, upgrade.targetKey) : null;
+  const whatsappHref = buildWhatsappHref({
+    whatsappNumber: config?.whatsapp_number,
+    template: config?.whatsapp_template,
+    vars: {
+      name: name ?? "",
+      mag_code: code ?? "",
+      plan_name: targetPlanName,
+      price: targetPrice?.price ?? "",
+    },
+  });
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6 text-[var(--color-text-primary)]">
@@ -184,6 +235,57 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
+      </section>
+
+      <section className="rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-5 md:p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-lg">الاشتراك والرصيد</h2>
+          <span
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+              isFree
+                ? "bg-[var(--color-surface-2)] border-[var(--color-border)] text-[var(--color-text-muted)]"
+                : "bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] border-[var(--color-primary)] text-[var(--color-primary)]"
+            }`}
+          >
+            {plan}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-[var(--r-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)]">رصيد الكريدت</p>
+            <p className="mt-0.5 text-2xl font-bold" dir="ltr">
+              {credits === null ? "—" : credits.toLocaleString("ar-EG")}
+            </p>
+          </div>
+          <div className="rounded-[var(--r-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)]">الباقة الحالية</p>
+            <p className="mt-0.5 text-2xl font-bold">{plan}</p>
+          </div>
+        </div>
+
+        {(upgrade || whatsappHref) && (
+          <div className="flex flex-wrap gap-2">
+            {upgrade && (
+              <Link
+                href="/pricing"
+                className="rounded-[var(--r-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-[var(--on-marker,#fff)] transition hover:opacity-90"
+              >
+                {upgrade.label}
+              </Link>
+            )}
+            {whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-[var(--r-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-2 text-sm font-bold transition hover:bg-[var(--color-surface-1)]"
+              >
+                تواصل عبر واتساب
+              </a>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-5 md:p-6 space-y-3">
