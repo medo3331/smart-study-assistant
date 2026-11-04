@@ -1,6 +1,8 @@
 import { Server, UserCog, UserPlus } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { providerConfigStatus } from "@/lib/ai/health";
+import { ALLOWED_CURRENCIES } from "@/lib/settings/validation";
+import SiteSettingsForm from "./SiteSettingsForm";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminSkeleton, AdminStatCard, AdminTableWrap } from "@/components/admin/ui";
 
 /**
@@ -18,6 +20,23 @@ export default async function AdminSettingsPage() {
 
   const { data: adminsList } = await supabase.from("site_admins").select("user_id, role, added_at").order("added_at", { ascending: true });
   const admins = (adminsList ?? []) as Array<{ user_id: string; role: string | null; added_at: string | null }>;
+
+  // إعدادات المنصة (Phase B1.6) — القراءة بالجلسة: سياسة site_settings_admin_all
+  // تسمح لأي مستخدم موجود في site_admins بالقراءة/الكتابة.
+  const { data: settingsRows, error: settingsError } = await supabase
+    .from("site_settings")
+    .select("key, value");
+  const settingsMap = new Map(
+    ((settingsRows ?? []) as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])
+  );
+  // المدد مخزّنة كـ JSON array تاريخيًا؛ نحوّلها لصيغة الفاصلة المعروضة.
+  let durationsText = settingsMap.get("subscription_durations") ?? "";
+  try {
+    const parsed = JSON.parse(durationsText);
+    if (Array.isArray(parsed)) durationsText = parsed.join(",");
+  } catch {
+    // ليست JSON — نتركها كما هي، والمُحقِّق يقبل الصيغتين.
+  }
 
   return (
     <div className="space-y-6">
@@ -110,6 +129,27 @@ export default async function AdminSettingsPage() {
               ))}
             </tbody>
           </AdminTableWrap>
+        )}
+      </AdminCard>
+
+      <AdminCard
+        title="إعدادات المنصة (WhatsApp · العملة · مدد الاشتراك)"
+        description="المصدر: جدول site_settings. كل حفظ يتحقق منه السيرفر ويُسجَّل في audit_log تحت admins.manage."
+        tone="default"
+      >
+        {settingsError ? (
+          <AdminNotice tone="rose">
+            تعذّر قراءة <code>site_settings</code>: {settingsError.message}
+          </AdminNotice>
+        ) : (
+          <SiteSettingsForm
+            initial={{
+              whatsappNumber: settingsMap.get("whatsapp_number") ?? "",
+              whatsappTemplate: settingsMap.get("whatsapp_template") ?? "",
+              defaultCurrency: settingsMap.get("default_currency") ?? ALLOWED_CURRENCIES[0],
+              subscriptionDurations: durationsText,
+            }}
+          />
         )}
       </AdminCard>
 
