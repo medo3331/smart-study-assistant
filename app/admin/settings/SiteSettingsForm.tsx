@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { ALLOWED_CURRENCIES, renderTemplate } from "@/lib/settings/validation";
+import { toDisplayString, durationsToInput } from "@/lib/settings/display";
 import { saveSiteSettings } from "@/app/admin/actions/site-settings-manage";
 
 /** قيم المعاينة — ثابتة للعرض فقط، لا تُرسل للقاعدة. */
@@ -29,10 +30,12 @@ export default function SiteSettingsForm({
   const [message, setMessage] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  const [whatsappNumber, setWhatsappNumber] = useState(initial.whatsappNumber);
-  const [whatsappTemplate, setWhatsappTemplate] = useState(initial.whatsappTemplate);
-  const [defaultCurrency, setDefaultCurrency] = useState(initial.defaultCurrency);
-  const [subscriptionDurations, setSubscriptionDurations] = useState(initial.subscriptionDurations);
+  // كل قيمة تُطبَّع إلى نص **قبل** useState: أي شكل غير متوقع (مصفوفة/كائن)
+  // كان سيصل إلى value/textarea ويكسر العرض (React error #31).
+  const [whatsappNumber, setWhatsappNumber] = useState(() => toDisplayString(initial.whatsappNumber));
+  const [whatsappTemplate, setWhatsappTemplate] = useState(() => toDisplayString(initial.whatsappTemplate));
+  const [defaultCurrency, setDefaultCurrency] = useState(() => toDisplayString(initial.defaultCurrency));
+  const [subscriptionDurations, setSubscriptionDurations] = useState(() => durationsToInput(initial.subscriptionDurations));
 
   const preview = renderTemplate(whatsappTemplate, PREVIEW_VARS);
 

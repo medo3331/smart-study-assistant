@@ -2,6 +2,7 @@ import { Server, UserCog, UserPlus } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { providerConfigStatus } from "@/lib/ai/health";
 import { ALLOWED_CURRENCIES } from "@/lib/settings/validation";
+import { toDisplayString, durationsToInput } from "@/lib/settings/display";
 import SiteSettingsForm from "./SiteSettingsForm";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminSkeleton, AdminStatCard, AdminTableWrap } from "@/components/admin/ui";
 
@@ -26,17 +27,16 @@ export default async function AdminSettingsPage() {
   const { data: settingsRows, error: settingsError } = await supabase
     .from("site_settings")
     .select("key, value");
+
+  // ⚠️ كل قيمة تُطبَّع إلى **نص** عند حدّ القاعدة قبل أي JSX/input:
+  // تمرير كائن أو مصفوفة كـ React child يرمي React error #31 ويُسقط الصفحة.
+  const rawSettings = (settingsRows ?? []) as Array<{ key: string; value: unknown }>;
   const settingsMap = new Map(
-    ((settingsRows ?? []) as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])
+    rawSettings.map((row) => [row.key, toDisplayString(row.value)])
   );
-  // المدد مخزّنة كـ JSON array تاريخيًا؛ نحوّلها لصيغة الفاصلة المعروضة.
-  let durationsText = settingsMap.get("subscription_durations") ?? "";
-  try {
-    const parsed = JSON.parse(durationsText);
-    if (Array.isArray(parsed)) durationsText = parsed.join(",");
-  } catch {
-    // ليست JSON — نتركها كما هي، والمُحقِّق يقبل الصيغتين.
-  }
+  const durationsText = durationsToInput(
+    rawSettings.find((row) => row.key === "subscription_durations")?.value ?? ""
+  );
 
   return (
     <div className="space-y-6">
