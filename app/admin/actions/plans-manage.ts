@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { resolveActor } from "@/lib/policy";
 import { recordAuditLog } from "./audit-log-record";
 import { hasPermission } from "@/lib/auth-roles";
+import { validatePlanInput } from "@/lib/plans/validation";
 
 export interface PlanInput {
   plan_key: string;
@@ -12,8 +13,13 @@ export interface PlanInput {
   price: number;
   original_price?: number | null;
   discount_percentage?: number | null;
+  /** Phase B1 — الكريدت الشهري للباقة (db/27). */
+  credits_monthly?: number | null;
   profile_limit: number;
   messages_per_2h: number;
+  /** Phase B1 — الحدود اليومية/الشهرية الموجودة في subscription_plans. */
+  messages_daily?: number | null;
+  messages_monthly?: number | null;
   uploads_daily: number;
   max_file_size_mb: number;
   file_types?: string[] | null;
@@ -57,7 +63,7 @@ export async function listPlans(actorId: string, actorEmail: string | null) {
     const db = createServiceClient();
     const { data, error } = await db
       .from("subscription_plans")
-      .select("plan_key, name, display_name_ar, price, original_price, discount_percentage, profile_limit, messages_per_2h, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, is_active, is_popular, features")
+      .select("plan_key, name, display_name_ar, price, original_price, discount_percentage, credits_monthly, profile_limit, messages_per_2h, messages_daily, messages_monthly, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, is_active, is_popular, features")
       .order("plan_key", { ascending: true });
     if (error) throw error;
     return { ok: true, data: data ?? [], error: null };
@@ -70,6 +76,13 @@ export async function createPlan(input: PlanInput, actorId: string, actorEmail: 
     const g = await guard(actorId, actorEmail, input.plan_key, { op: "create", plan_key: input.plan_key });
     if (g.denied) return { ok: false, message: "غير مصرح: إدارة الخطط متاحة لـ Owner فقط", error: "authorization_denied", auditId: null };
 
+    // تحقّق خادم قبل أي كتابة — أي طلب يمكن أن يصل بدون النموذج.
+    const check = validatePlanInput(input);
+    if (!check.ok) {
+      await recordAuditLog({ actor: actorId, actor_email: actorEmail, action: ACTION, resource_type: "plan", resource_id: input.plan_key, details: { op: "create", reason: "validation_failed", errors: check.errors }, result: "FAIL" });
+      return { ok: false, message: "بيانات غير صالحة: " + check.errors.join(" · "), error: "validation_failed", auditId: null };
+    }
+
     const { error } = await g.db.from("subscription_plans").insert({
       plan_key: input.plan_key,
       name: input.name,
@@ -77,8 +90,11 @@ export async function createPlan(input: PlanInput, actorId: string, actorEmail: 
       price: input.price,
       original_price: input.original_price ?? null,
       discount_percentage: input.discount_percentage ?? 0,
+      credits_monthly: input.credits_monthly ?? 0,
       profile_limit: input.profile_limit,
       messages_per_2h: input.messages_per_2h,
+      messages_daily: input.messages_daily ?? 20,
+      messages_monthly: input.messages_monthly ?? 300,
       uploads_daily: input.uploads_daily,
       max_file_size_mb: input.max_file_size_mb,
       file_types: input.file_types ?? null,
@@ -110,14 +126,23 @@ export async function updatePlan(planKey: string, input: PlanInput, actorId: str
     const g = await guard(actorId, actorEmail, planKey, { op: "update", plan_key: planKey });
     if (g.denied) return { ok: false, message: "غير مصرح: إدارة الخطط متاحة لـ Owner فقط", error: "authorization_denied", auditId: null };
 
+    const check = validatePlanInput(input);
+    if (!check.ok) {
+      await recordAuditLog({ actor: actorId, actor_email: actorEmail, action: ACTION, resource_type: "plan", resource_id: planKey, details: { op: "update", reason: "validation_failed", errors: check.errors }, result: "FAIL" });
+      return { ok: false, message: "بيانات غير صالحة: " + check.errors.join(" · "), error: "validation_failed", auditId: null };
+    }
+
     const { error } = await g.db.from("subscription_plans").update({
       name: input.name,
       display_name_ar: input.display_name_ar ?? null,
       price: input.price,
       original_price: input.original_price ?? null,
       discount_percentage: input.discount_percentage ?? 0,
+      credits_monthly: input.credits_monthly ?? 0,
       profile_limit: input.profile_limit,
       messages_per_2h: input.messages_per_2h,
+      messages_daily: input.messages_daily ?? 20,
+      messages_monthly: input.messages_monthly ?? 300,
       uploads_daily: input.uploads_daily,
       max_file_size_mb: input.max_file_size_mb,
       file_types: input.file_types ?? null,

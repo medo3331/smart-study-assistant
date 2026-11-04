@@ -13,10 +13,10 @@ type Payment = {
   paid_at: string | null;
 };
 
-export default function PaymentsManager({ adminUserId, initial }: { adminUserId: string; initial: Payment[] }) {
+export default function PaymentsManager({ adminUserId, initial, defaultCurrency = "EGP" }: { adminUserId: string; initial: Payment[]; defaultCurrency?: string }) {
   const [rows, setRows] = useState<Payment[]>(initial);
   const [editing, setEditing] = useState<Payment | null>(null);
-  const [form, setForm] = useState({ userId: "", payerName: "", amount: "", currency: "USD", method: "", note: "", paidAt: "" });
+  const [form, setForm] = useState({ userId: "", payerName: "", amount: "", currency: defaultCurrency, method: "", note: "", paidAt: "" });
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 

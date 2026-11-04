@@ -3,6 +3,7 @@ import { getPlanSettings } from "@/lib/plans/settings";
 import { createClient } from "@/lib/supabase/server";
 import PremiumTrialCard from "@/components/plans/PremiumTrialCard";
 import PlansPaymentInfo from "@/components/plans/PaymentInfo";
+import PlansUnavailable from "@/components/plans/PlansUnavailable";
 
 type PlanRow = {
   plan_key: string;
@@ -53,18 +54,20 @@ export default async function PlansPageServer() {
 
   const s = settings || { freePeriodEnabled: true, paymentsEnabled: false, source: "default" };
 
-  const { data: plansData } = await supabase
+  const { data: plansData, error: plansError } = await supabase
     .from("subscription_plans")
     .select("plan_key, name, display_name_ar, profile_limit, messages_per_2h, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, price_monthly, currency, is_active")
     .eq("is_active", true)
     .order("plan_key", { ascending: true });
 
-  const plans = (plansData ?? []) as PlanRow[];
-  const displayPlans = plans.length ? plans : [
-    { plan_key: "free", name: "Free", display_name_ar: "مجاني", profile_limit: 5, messages_per_2h: 20, uploads_daily: 5, max_file_size_mb: 20, file_types: ["pdf", "text", "image"], video_audio_exclusive: false, trial_days: 0, price_monthly: 0, currency: "USD", is_active: true },
-    { plan_key: "pro", name: "Pro", display_name_ar: "Pro", profile_limit: 30, messages_per_2h: 60, uploads_daily: 30, max_file_size_mb: 150, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 7, price_monthly: 9.99, currency: "USD", is_active: true },
-    { plan_key: "ultra", name: "Ultra", display_name_ar: "Ultra", profile_limit: 100, messages_per_2h: 200, uploads_daily: 60, max_file_size_mb: 1024, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 14, price_monthly: 29.99, currency: "USD", is_active: true },
-  ];
+  // ⚠️ مصدر الحقيقة الوحيد = القاعدة. لا fallback: أي قيم مكتوبة هنا تصبح
+  // بيانات كاذبة بمجرد تغيّر الباقة (drift حقيقي حدث فعلًا في الأسعار والحدود).
+  // فشل القراءة أو عدم وجود باقات نشطة = خطأ صريح قابل لإعادة المحاولة.
+  if (plansError || !plansData || plansData.length === 0) {
+    return <PlansUnavailable />;
+  }
+
+  const displayPlans = plansData as PlanRow[];
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#0D1029] text-[#E7E9F5] px-4 sm:px-6 md:px-10 py-10 md:py-16">
@@ -100,7 +103,7 @@ export default async function PlansPageServer() {
                   </h2>
                   {isCurrent && <span className="text-xs font-bold bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full">الحالي</span>}
                 </div>
-                <p className="text-2xl font-extrabold text-[#F0E6D2] mb-2">{p.price_monthly && p.price_monthly > 0 ? `${Number(p.price_monthly).toFixed(2)} ${p.currency || "USD"}/شهر` : "مجاني"}</p>
+                <p className="text-2xl font-extrabold text-[#F0E6D2] mb-2">{p.price_monthly && p.price_monthly > 0 ? `${Number(p.price_monthly).toFixed(2)} ${p.currency || "EGP"}/شهر` : "مجاني"}</p>
                 <p className="text-[#9AA0C0] text-sm mb-6">
                   {p.plan_key === "free" ? "ابدأ الآن — كل ما تحتاجه للتجربة بدون أي دفع." : p.plan_key === "pro" ? "كل مزايا المنصة — AI غير محدود — دعم مباشر — ميزات متقدمة." : "أقصى أداء وحدود أعلى للاستخدام 집중."}
                 </p>

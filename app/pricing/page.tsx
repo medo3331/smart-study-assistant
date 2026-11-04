@@ -21,10 +21,10 @@ import { ALL_AGENTS } from "@/lib/ai/agents/registry";
    أي تعديل على الحدود هناك بينعكس هنا أوتوماتيك — من غير كده الصفحة
    هتقول للطلاب رقم والمنصة بتطبّق رقم تاني.
 
-   ⚠️ الحالة الفعلية للباقات في المشروع: باقتين بس موجودين في الداتا بيز —
-   `free` (الافتراضي) و`premium` (عبر entitlements kind='plan'). مفيش جدول
-   plans ولا user_subscriptions، فـ Pro وUltra معروضين هنا كـ «قريبًا» من
-   غير سعر، لأن عرض سعر لباقة مش موجودة بيعتبر إعلان عن حاجة مش متاحة.
+   ⚠️ الحالة الفعلية (بعد B1): الصفوف الحقيقية في `subscription_plans` هي
+   `free` / `pro` / `ultra` بأسعار EGP وكردت شهري. الأرقام المكتوبة أدناه
+   fallback تسويقي يُلغيه أي صف من القاعدة عند نجاح القراءة (planMap)،
+   والـ CTA يفتح /checkout/[plan] للباقات المتاحة.
 
    🎨 الألوان كلها من توكنز data-theme (paper/paper-2/paper-3/ink/ink-soft/
    rule/marker). مقصود: المشروع فيه ٨ ثيمات والافتراضي **فاتح**
@@ -94,7 +94,10 @@ export default async function PricingPage() {
     .from("subscription_plans")
     .select("plan_key, price, original_price, discount_percentage, is_popular, features, is_active")
     .eq("is_active", true);
-  const planMap = new Map((dbPlans ?? []).map((p: any) => [p.plan_key, p]));
+  // ملاحظة: لا fallback لقيم الباقات هنا — الطبقات الثابتة أدناه هي نص تسويقي
+  // (Pro/Ultra بلا سعر)، والقاعدة تلغي السعر/المزايا فقط عند نجاح القراءة.
+  const dbPlanRows = Array.isArray(dbPlans) ? dbPlans : [];
+  const planMap = new Map(dbPlanRows.map((p: any) => [p.plan_key, p]));
 
   const tiers: Tier[] = [
     {
@@ -122,9 +125,9 @@ export default async function PricingPage() {
       name: "الطالب المتميز (Pro)",
       icon: Zap,
       tagline: "للمذاكرة اليومية والتحضير للاختبارات — حدود أعلى بكتير.",
-      price: "—",
-      priceNote: "السعر يُعلن عند الإطلاق",
-      available: false,
+      price: "199",
+      priceNote: "شهريًا",
+      available: true,
       popular: true,
       features: [
         "رسائل ذكية وتحليل ملفات بلا حدود عملية",
@@ -132,23 +135,23 @@ export default async function PricingPage() {
         "فتح حدود النماذج المتقدمة",
         "أولوية في الدعم",
       ],
-      cta: { label: "قريبًا", href: "/plans", disabled: true },
+      cta: { label: "اشترك الآن", href: "/checkout/pro" },
     },
     {
       id: "ultra",
       name: "العبقري (Ultra)",
       icon: Crown,
       tagline: "بلا حدود، للطالب اللي بيستخدم المنصة طول اليوم.",
-      price: "—",
-      priceNote: "السعر يُعلن عند الإطلاق",
-      available: false,
+      price: "399",
+      priceNote: "شهريًا",
+      available: true,
       features: [
         "كل مزايا Pro",
         "أعلى أولوية في النماذج والوكلاء",
         "دعم فني مباشر",
         "وصول مبكر للميزات الجديدة",
       ],
-      cta: { label: "قريبًا", href: "/plans", disabled: true },
+      cta: { label: "اشترك الآن", href: "/checkout/ultra" },
     },
   ];
 
@@ -246,7 +249,7 @@ export default async function PricingPage() {
                   </div>
                 ) : null}
                 <span className="text-4xl font-extrabold">{tier.price}</span>
-                {tier.price === "0" && <span className="text-ink-soft"> ج.م</span>}
+                {tier.price !== "—" && <span className="text-ink-soft"> ج.م</span>}
                 <span className="text-ink-soft text-sm"> / {tier.priceNote}</span>
               </div>
 
@@ -278,7 +281,7 @@ export default async function PricingPage() {
           ))}
         </div>
 
-        {/* المقارنة — حدود الخطة المجانية الحقيقية مقابل الباقات الجاية */}
+        {/* المقارنة — حدود الخطة المجانية الحقيقية مقابل الباقات المدفوعة */}
         <section className="rounded-3xl border border-rule bg-paper-2 p-6 md:p-8 mb-12 overflow-x-auto">
           <h2 className="text-xl font-extrabold mb-6">المقارنة</h2>
           <table className="w-full text-sm" aria-label="مقارنة الباقات">

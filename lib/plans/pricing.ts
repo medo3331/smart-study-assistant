@@ -1,7 +1,8 @@
+// الأسعار بالجنيه المصري (EGP) — مطابقة لـ db/27-subscription-plans-egp.sql.
 export const PLAN_PRICES: Record<string, { monthly: number | null; currency: string; label?: string }> = {
-  free: { monthly: 0, currency: "USD", label: "مجاني" },
-  pro: { monthly: 9.99, currency: "USD" },
-  ultra: { monthly: 19.99, currency: "USD" },
+  free: { monthly: 0, currency: "EGP", label: "مجاني" },
+  pro: { monthly: 199, currency: "EGP" },
+  ultra: { monthly: 399, currency: "EGP" },
 };
 
 export function formatPlanPrice(planKey: string): string {
