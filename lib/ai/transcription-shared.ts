@@ -30,7 +30,10 @@
  *
  *  لملفات أكبر من ده: الحل الصح presigned multipart upload لـ S3/R2
  *  مباشرة، مش رفع حد الذاكرة. مش جزء من المرحلة دي. */
-export const MAX_LECTURE_FILE_BYTES = 50 * 1024 * 1024;
+// ⚠️ القيمة لازم تطابق التعاقد الموثّق أعلاه (1 جيجا) وتطابق file_size_limit
+// في db/13-lecture-uploads-bucket.sql — كان 50 ميجا، وهو أقل من محاضرة
+// واحدة 3 ساعات (~200 ميجا)، فيرفض رفعًا صالحًا قبل أن يصل الـ bucket.
+export const MAX_LECTURE_FILE_BYTES = 1024 * 1024 * 1024;
 
 /**
  * أقصى حجم يمرّ في جسم طلب الفانكشن.
