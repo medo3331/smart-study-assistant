@@ -12,7 +12,7 @@ export default async function AdminPlansPage() {
     readBillingSettings(),
     supabase
       .from("subscription_plans")
-      .select("plan_key, name, display_name_ar, price, original_price, discount_percentage, profile_limit, messages_per_2h, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, is_active, is_popular, features")
+      .select("plan_key, name, display_name_ar, price, original_price, discount_percentage, credits_monthly, profile_limit, messages_per_2h, messages_daily, messages_monthly, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, is_active, is_popular, features")
       .order("plan_key", { ascending: true }),
   ]);
 
