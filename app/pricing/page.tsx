@@ -94,7 +94,10 @@ export default async function PricingPage() {
     .from("subscription_plans")
     .select("plan_key, price, original_price, discount_percentage, is_popular, features, is_active")
     .eq("is_active", true);
-  const planMap = new Map((dbPlans ?? []).map((p: any) => [p.plan_key, p]));
+  // ملاحظة: لا fallback لقيم الباقات هنا — الطبقات الثابتة أدناه هي نص تسويقي
+  // (Pro/Ultra بلا سعر)، والقاعدة تلغي السعر/المزايا فقط عند نجاح القراءة.
+  const dbPlanRows = Array.isArray(dbPlans) ? dbPlans : [];
+  const planMap = new Map(dbPlanRows.map((p: any) => [p.plan_key, p]));
 
   const tiers: Tier[] = [
     {
