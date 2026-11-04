@@ -42,6 +42,8 @@ const WORKSPACE_KEYWORDS = [
   "documents",
   "file",
   "files",
+  "lecture",
+  "lectures",
 ];
 
 const SEARCH_VERBS = [
@@ -117,7 +119,9 @@ export function classifyChatIntent(message: string, context: ChatIntentContext =
 
   // Explicit workspace/source requests.
   if (hasWorkspace && hasSearchVerb) {
-    if (!hasSourceQualifier(text) && /^(هات|أعطني|اعطني|get|give)\b/.test(text)) {
+    // ⚠️ ممنوع `\b` هنا: JS يعرّف \w بـ ASCII، فحدّ الكلمة لا يُطابق العربية أبدًا
+    // ("هاتلي" كانت تفشل المطابقة وتسقط لـ WORKSPACE_SEARCH).
+    if (!hasSourceQualifier(text) && /^(هات|أعطني|اعطني|get|give)/.test(text)) {
       return { intent: "CLARIFICATION", reason: "source requested without enough qualifier" };
     }
     return { intent: "WORKSPACE_SEARCH", reason: "workspace keywords with search verb" };

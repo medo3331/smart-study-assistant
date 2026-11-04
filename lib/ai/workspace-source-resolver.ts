@@ -77,8 +77,10 @@ function normalize(text: string): string {
 
 export function parseOrdinal(text: string): number | "last" | null {
   const t = normalize(text);
-  if (/\b(last|الأخيرة|الاخيره|الاخير|الأخير|latest)\b/.test(t)) {
-    if (/\b(previous|السابقة|السابق)\b/.test(t)) return null;
+  // ⚠️ ممنوع `\b` مع العربية: JS يعرّف \w بـ ASCII، فلا يوجد حدّ كلمة عربي.
+  // الحدود أدناه تقيّد الحروف اللاتينية فقط، فتعمل للعربية والإنجليزية معًا.
+  if (/(?<![a-z])(last|الأخيرة|الاخيره|الاخير|الأخير|latest)(?![a-z])/.test(t)) {
+    if (/(?<![a-z])(previous|السابقة|السابق)(?![a-z])/.test(t)) return null;
     return "last";
   }
   const numMatch = t.match(/(?:رقم|#|number)\s*(\d{1,4})/);
@@ -108,12 +110,12 @@ export function parseSourceRequest(message: string): ParsedSourceRequest {
 
   const family = detectSourceFamily(raw);
 
-  const relativePrevious = /\b(previous|السابقة|السابق|الماضية|المحاضرة السابقة)\b/.test(t);
+  const relativePrevious = /(?<![a-z])(previous|السابقة|السابق|الماضية|المحاضرة السابقة)(?![a-z])/.test(t);
 
   let temporal: ParsedSourceRequest["temporal"] = null;
-  if (/\b(today|اليوم)\b/.test(t)) temporal = "today";
-  else if (/\b(yesterday|أمس|امس|البارحة)\b/.test(t)) temporal = "yesterday";
-  else if (/\b(last week|الأسبوع الماضي|الاسبوع الماضي)\b/.test(t)) temporal = "last_week";
+  if (/(?<![a-z])(today|اليوم)(?![a-z])/.test(t)) temporal = "today";
+  else if (/(?<![a-z])(yesterday|أمس|امس|البارحة)(?![a-z])/.test(t)) temporal = "yesterday";
+  else if (/(?<![a-z])(last week|الأسبوع الماضي|الاسبوع الماضي)(?![a-z])/.test(t)) temporal = "last_week";
 
   const ordinal = relativePrevious ? null : parseOrdinal(raw);
 
@@ -128,7 +130,11 @@ export function parseSourceRequest(message: string): ParsedSourceRequest {
     titleQuery = titleQuery.replace(new RegExp(w, "gi"), " ");
   }
   for (const f of FILLER_WORDS) {
-    titleQuery = titleQuery.replace(new RegExp(`\\b${f}\\b`, "gi"), " ");
+    // ⚠️ `\b` لا يعمل مع العربية (\w = ASCII)، فكانت كلمات الحشو العربية
+    // («اشرح»، «لخص»…) تبقى داخل titleQuery فتمنع مطابقة العنوان تمامًا
+    // وتُحوّل «عنوان مكرر ⇒ ambiguous» إلى «not_found».
+    const escaped = f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    titleQuery = titleQuery.replace(new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "gi"), " ");
   }
   titleQuery = titleQuery.replace(/[^\w\u0600-\u06FF\s]/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_QUERY_CHARS);
 
