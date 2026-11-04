@@ -8,7 +8,7 @@ export async function recordPayment(input: { userId: string; payerName?: string;
     user_id: input.userId,
     payer_name: input.payerName || null,
     amount: input.amount,
-    currency: input.currency || "USD",
+    currency: input.currency || "EGP",
     method: input.method || null,
     note: input.note || null,
     paid_at: input.paidAt ? new Date(input.paidAt).toISOString() : new Date().toISOString(),

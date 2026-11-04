@@ -4,10 +4,11 @@ import { SITE_LINKS } from "@/lib/site-links";
 import Link from "next/link";
 
 type PlanRow = { plan_key:string; name:string|null; display_name_ar:string|null; profile_limit:number|null; messages_per_2h:number|null; uploads_daily:number|null; max_file_size_mb:number|null; file_types:string[]|null; video_audio_exclusive:boolean|null; trial_days:number|null; price_monthly:number|null; currency:string|null; is_active:boolean|null; };
+// ⚠️ Fallback مطابق لـ db/27-subscription-plans-egp.sql (EGP: 0 / 199 / 399).
 const FALLBACK: Record<string,PlanRow> = {
- free:{plan_key:"free",name:"Free",display_name_ar:"مجاني",profile_limit:5,messages_per_2h:20,uploads_daily:5,max_file_size_mb:20,file_types:["pdf","text","image"],video_audio_exclusive:false,trial_days:0,price_monthly:0,currency:"USD",is_active:true},
- pro:{plan_key:"pro",name:"Pro",display_name_ar:"Pro",profile_limit:30,messages_per_2h:60,uploads_daily:30,max_file_size_mb:150,file_types:["pdf","text","image","video","audio"],video_audio_exclusive:true,trial_days:7,price_monthly:9.99,currency:"USD",is_active:true},
- ultra:{plan_key:"ultra",name:"Ultra",display_name_ar:"Ultra",profile_limit:100,messages_per_2h:200,uploads_daily:60,max_file_size_mb:1024,file_types:["pdf","text","image","video","audio"],video_audio_exclusive:true,trial_days:14,price_monthly:19.99,currency:"USD",is_active:true},
+ free:{plan_key:"free",name:"Free",display_name_ar:"مجاني",profile_limit:5,messages_per_2h:20,uploads_daily:5,max_file_size_mb:20,file_types:["pdf","text","image"],video_audio_exclusive:false,trial_days:0,price_monthly:0,currency:"EGP",is_active:true},
+ pro:{plan_key:"pro",name:"Pro",display_name_ar:"Pro",profile_limit:30,messages_per_2h:60,uploads_daily:30,max_file_size_mb:150,file_types:["pdf","text","image","video","audio"],video_audio_exclusive:true,trial_days:7,price_monthly:199,currency:"EGP",is_active:true},
+ ultra:{plan_key:"ultra",name:"Ultra",display_name_ar:"Ultra",profile_limit:100,messages_per_2h:200,uploads_daily:60,max_file_size_mb:1024,file_types:["pdf","text","image","video","audio"],video_audio_exclusive:true,trial_days:14,price_monthly:399,currency:"EGP",is_active:true},
 };
 export default async function CheckoutPage({ params }: { params: Promise<{ plan: string }> }) {
  const { plan: planKey } = await params;
@@ -18,7 +19,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ plan:
  try { const {data}=await supabase.from("subscription_plans").select("plan_key,name,display_name_ar,profile_limit,messages_per_2h,uploads_daily,max_file_size_mb,file_types,video_audio_exclusive,trial_days,price_monthly,currency,is_active").eq("plan_key",key).eq("is_active",true).maybeSingle(); plan=(data as PlanRow|null)??null;}catch{plan=null;}
  if(!plan) plan=FALLBACK[key]??null;
  if(!plan) return (<main dir="rtl" className="min-h-screen bg-[#0B0F1E] text-[#E7E9F5] flex items-center justify-center p-6"><div className="max-w-md text-center space-y-4"><h1 className="text-2xl font-extrabold">الباقة غير موجودة</h1><p className="text-[#9AA0C0]">لم نجد الباقة المطلوبة.</p><Link href="/plans" className="inline-block px-5 py-2.5 rounded-xl bg-violet-500/20 text-violet-300 font-bold">العودة للباقات</Link></div></main>);
- const price=plan.price_monthly && plan.price_monthly>0?`${Number(plan.price_monthly).toFixed(2)} ${plan.currency||"USD"}`:"مجاني";
+ const price=plan.price_monthly && plan.price_monthly>0?`${Number(plan.price_monthly).toFixed(2)} ${plan.currency||"EGP"}`:"مجاني";
  const waBase=SITE_LINKS.whatsapp;
  const msg=`أهلاً، أريد الاشتراك في باقة ${plan.display_name_ar||plan.name||plan.plan_key} (${price}/شهر).`;
  const waHref=`${waBase}${waBase.includes("?")?"&":"?"}text=${encodeURIComponent(msg)}`;

@@ -2,10 +2,10 @@
 import { useState } from "react";
 import { recordPayment } from "@/app/admin/actions/payments";
 
-export default function PaymentsForm({ adminUserId }: { adminUserId: string }) {
+export default function PaymentsForm({ adminUserId, defaultCurrency = "EGP" }: { adminUserId: string; defaultCurrency?: string }) {
   const [userId, setUserId] = useState("");
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [method, setMethod] = useState("");
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState<string | null>(null);

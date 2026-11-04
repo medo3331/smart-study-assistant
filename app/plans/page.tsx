@@ -60,10 +60,12 @@ export default async function PlansPageServer() {
     .order("plan_key", { ascending: true });
 
   const plans = (plansData ?? []) as PlanRow[];
+  // ⚠️ Fallback مطابق لـ db/27-subscription-plans-egp.sql (EGP: 0 / 199 / 399).
+  // كان بعملة أخرى وبأسعار قديمة، فيعرض أرقامًا تخالف القاعدة عند فشل الاستعلام.
   const displayPlans = plans.length ? plans : [
-    { plan_key: "free", name: "Free", display_name_ar: "مجاني", profile_limit: 5, messages_per_2h: 20, uploads_daily: 5, max_file_size_mb: 20, file_types: ["pdf", "text", "image"], video_audio_exclusive: false, trial_days: 0, price_monthly: 0, currency: "USD", is_active: true },
-    { plan_key: "pro", name: "Pro", display_name_ar: "Pro", profile_limit: 30, messages_per_2h: 60, uploads_daily: 30, max_file_size_mb: 150, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 7, price_monthly: 9.99, currency: "USD", is_active: true },
-    { plan_key: "ultra", name: "Ultra", display_name_ar: "Ultra", profile_limit: 100, messages_per_2h: 200, uploads_daily: 60, max_file_size_mb: 1024, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 14, price_monthly: 29.99, currency: "USD", is_active: true },
+    { plan_key: "free", name: "Free", display_name_ar: "مجاني", profile_limit: 5, messages_per_2h: 20, uploads_daily: 5, max_file_size_mb: 20, file_types: ["pdf", "text", "image"], video_audio_exclusive: false, trial_days: 0, price_monthly: 0, currency: "EGP", is_active: true },
+    { plan_key: "pro", name: "Pro", display_name_ar: "Pro", profile_limit: 30, messages_per_2h: 60, uploads_daily: 30, max_file_size_mb: 150, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 7, price_monthly: 199, currency: "EGP", is_active: true },
+    { plan_key: "ultra", name: "Ultra", display_name_ar: "Ultra", profile_limit: 100, messages_per_2h: 200, uploads_daily: 60, max_file_size_mb: 1024, file_types: ["pdf", "text", "image", "video", "audio"], video_audio_exclusive: true, trial_days: 14, price_monthly: 399, currency: "EGP", is_active: true },
   ];
 
   return (
@@ -100,7 +102,7 @@ export default async function PlansPageServer() {
                   </h2>
                   {isCurrent && <span className="text-xs font-bold bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full">الحالي</span>}
                 </div>
-                <p className="text-2xl font-extrabold text-[#F0E6D2] mb-2">{p.price_monthly && p.price_monthly > 0 ? `${Number(p.price_monthly).toFixed(2)} ${p.currency || "USD"}/شهر` : "مجاني"}</p>
+                <p className="text-2xl font-extrabold text-[#F0E6D2] mb-2">{p.price_monthly && p.price_monthly > 0 ? `${Number(p.price_monthly).toFixed(2)} ${p.currency || "EGP"}/شهر` : "مجاني"}</p>
                 <p className="text-[#9AA0C0] text-sm mb-6">
                   {p.plan_key === "free" ? "ابدأ الآن — كل ما تحتاجه للتجربة بدون أي دفع." : p.plan_key === "pro" ? "كل مزايا المنصة — AI غير محدود — دعم مباشر — ميزات متقدمة." : "أقصى أداء وحدود أعلى للاستخدام 집중."}
                 </p>
