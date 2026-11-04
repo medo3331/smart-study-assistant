@@ -23,11 +23,19 @@ export default function ProfilePage() {
         const { data: userData } = await supabase.auth.getUser();
         const user = userData?.user;
         if (!user) { if (!cancelled) setLoading(false); return; }
+        // نقرأ البروفايل أولًا لأن display_name مصدر أدق للاسم من metadata.
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("public_user_code, avatar_url, display_name")
+          .eq("id", user.id)
+          .maybeSingle();
         if (!cancelled) {
           setEmail(user.email ?? null);
-          setName((user.user_metadata?.full_name as string) ?? null);
+          setName(
+            (((prof as any)?.display_name as string | null) ?? null) ||
+              ((user.user_metadata?.full_name as string) ?? null)
+          );
         }
-        const { data: prof } = await supabase.from("profiles").select("public_user_code, avatar_url").eq("id", user.id).maybeSingle();
         if (!cancelled && prof) {
           setCode((prof as any).public_user_code ?? null);
           setAvatarUrl((prof as any).avatar_url ?? null);
@@ -177,7 +185,7 @@ export default function ProfilePage() {
           </div>
         </div>
       </section>
-"
+
       <section className="rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-5 md:p-6 space-y-3">
         <h2 className="font-semibold text-lg">معلومات الحساب</h2>
         <dl className="divide-y divide-[var(--color-border)]">
