@@ -94,7 +94,7 @@ export async function* streamWithFallback(
       );
       lastError = err as Error;
       const status = err instanceof AiProviderError ? err.status : 0;
-      if (status === 400 || status === 413 || status === 422) throw err;
+      if (status === 400 || status === 422) throw err;
       const safeMsg = lastError.message.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 80);
       console.warn(`[Stream Fallback] ${provider} failed (${status || safeMsg}), trying next…`);
     }

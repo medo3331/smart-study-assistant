@@ -4,7 +4,6 @@ import { useMemo, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";
-import { MobileNav } from "@/components/dashboard/MobileNav";
 import { QuranAudioPlayer } from "@/components/worship/QuranAudioPlayer";
 import { RewardToast, useRewardToast, type RewardToastState } from "./RewardToast";
 import {
@@ -78,7 +77,6 @@ export function WorshipChrome({
             {children}
           </div>
         </main>
-        <MobileNav />
         <QuranAudioPlayer />
       </div>
     </WorshipDataProvider>

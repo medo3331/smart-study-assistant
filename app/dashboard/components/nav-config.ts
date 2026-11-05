@@ -114,6 +114,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "community", icon: "👥", label: "المجتمع", latin: "Community", href: "/community" },
       { id: "parentReport", icon: "📄", label: "تقرير المتابعة", latin: "Report", signal: "parentReport" },
       { id: "settings", icon: "⚙️", label: "الإعدادات", latin: "Settings", signal: "settings" },
+      { id: "support", icon: "🎧", label: "الدعم الفني", latin: "Support", href: "/dashboard/support" },
     ],
   },
 ];

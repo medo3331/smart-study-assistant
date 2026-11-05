@@ -7,7 +7,7 @@ function mockSupabaseWithHistory(history: Array<{ role: string; content: string 
     from: (table: string) => ({
       select: () => ({
         eq: () => ({
-          single: async () => ({ data: table === "profiles" ? { full_name: "أحمد" } : null }),
+          maybeSingle: async () => ({ data: table === "profiles" ? { display_name: "أحمد" } : null }),
           order: () => ({
             limit: async () => ({ data: table === "chat_messages" ? history : [] }),
           }),
@@ -83,7 +83,7 @@ describe("Chaos: Token Limits", () => {
       { maxHistoryMessages: 1 },
       mockSupabaseWithHistory([{ role: "user", content: "x".repeat(8000) }]) as never
     );
-    const hist = messages.find((m) => m.content.startsWith("x"));
+    const hist = messages.find((m: any) => m.content.startsWith("x"));
     expect((hist?.content.length ?? 0)).toBeLessThanOrEqual(4001);
   });
 

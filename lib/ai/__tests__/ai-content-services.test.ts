@@ -30,14 +30,45 @@ import {
 import { generateFile } from "../file-generator";
 import { DIAGRAM_GUIDELINES, withDiagramGuidelines } from "../prompt-engine";
 
-/** Supabase وهمي — بيحدد نتيجة entitlement حسب السيناريو. */
+/**
+ * Supabase وهمي — entitlement + عدّادات كوته داخل الذاكرة.
+ *
+ * ⚠️ لازم يغطّي **كل** RPC بتناديه الخدمة، مش `has_entitlement` بس:
+ * الخدمة انتقلت للاستهلاك عبر `consume_service_quota` / `peek_service_quota` /
+ * `refund_service_quota`، وأي mock ناقص بيرجّع `undefined` فتُترجم
+ * `allowed=false` (fail-closed) — وده اللي كان بيولّد فشلًا وهميًا.
+ */
 function fakeSupabase(entitlements: Array<{ kind: string; value: string }>): SupabaseClient {
+  const used = new Map<string, number>();
+  const keyOf = (args: Record<string, unknown>) => `${args.p_user_id}:${args.p_service}`;
+
   return {
-    rpc: vi.fn(async (_name: string, args: { p_kind: string; p_value: string }) => {
-      const hit = entitlements.some(
-        (e) => e.kind === args.p_kind && e.value === args.p_value
-      );
-      return { data: hit, error: null };
+    rpc: vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "has_entitlement") {
+        const hit = entitlements.some(
+          (e) => e.kind === args.p_kind && e.value === args.p_value
+        );
+        return { data: hit, error: null };
+      }
+      if (name === "consume_service_quota") {
+        const key = keyOf(args);
+        const current = used.get(key) ?? 0;
+        const limit = Number(args.p_limit ?? 0);
+        if (current >= limit) return { data: [{ allowed: false, used: current }], error: null };
+        const next = current + 1;
+        used.set(key, next);
+        return { data: [{ allowed: true, used: next }], error: null };
+      }
+      if (name === "refund_service_quota") {
+        const key = keyOf(args);
+        const current = used.get(key) ?? 0;
+        if (current > 0) used.set(key, current - 1);
+        return { data: null, error: null };
+      }
+      if (name === "peek_service_quota") {
+        return { data: used.get(keyOf(args)) ?? 0, error: null };
+      }
+      return { data: null, error: null };
     }),
   } as unknown as SupabaseClient;
 }
@@ -112,7 +143,7 @@ describe("generateEducationalImage fallback chain", () => {
     // keys are present. With the keys emptied the chain should have hit
     // Pollinations at least once before giving up.
     expect(fetchMock).toHaveBeenCalled();
-    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
     expect(urls.some((u) => u.includes("pollinations"))).toBe(true);
   }, 30000);
 
@@ -231,8 +262,9 @@ describe("Service Registry", () => {
   });
 
   it("plan matrix matches product spec (free tier)", () => {
-    // الصور بقت متاحة مجانًا عبر Pollinations
-    expect(SERVICE_REGISTRY.image.dailyLimits.free).toBe(3);
+    // الصور ممنوعة على الباقة المجانية عمدًا (تحكم في التكلفة) — راجع
+    // SERVICE_REGISTRY.image و IMAGE_MODELS_BY_TIER.free.
+    expect(SERVICE_REGISTRY.image.dailyLimits.free).toBe(0);
     expect(SERVICE_REGISTRY.diagram.dailyLimits.free).toBe(3);
     expect(SERVICE_REGISTRY.file_pdf.dailyLimits.free).toBeGreaterThan(0);
     expect(SERVICE_REGISTRY.file_docx.dailyLimits.free).toBe(0);
@@ -240,8 +272,9 @@ describe("Service Registry", () => {
     expect(SERVICE_REGISTRY.file_pptx.dailyLimits.free).toBe(0);
   });
 
-  it("image models gated by tier — free gets Pollinations only", () => {
-    expect(IMAGE_MODELS_BY_TIER.free).toEqual(["pollinations"]);
+  it("image models gated by tier — free tier has no image generation", () => {
+    // الباقة المجانية بلا أي موديل صور: قرار تكلفة، مش نقص في الإعداد.
+    expect(IMAGE_MODELS_BY_TIER.free).toEqual([]);
     expect(IMAGE_MODELS_BY_TIER.free).not.toContain("dall-e-3");
     expect(IMAGE_MODELS_BY_TIER.pro).toContain("pollinations");
     expect(IMAGE_MODELS_BY_TIER.pro).toContain("stable-diffusion-xl");
@@ -262,15 +295,16 @@ describe("Service Registry", () => {
     await expect(resolveServiceTier(fakeSupabase([]), null)).resolves.toBe("free");
   });
 
-  it("free user gets Pollinations images (3/day) then blocked", async () => {
+  it("free user gets zero images — blocked on the very first attempt", async () => {
     const sb = fakeSupabase([]);
-    for (let i = 0; i < 3; i++) {
-      const q = await consumeServiceQuota(sb, "user-free-img", "image");
-      expect(q.allowed).toBe(true);
-      expect(q.tier).toBe("free");
-    }
-    const blocked = await consumeServiceQuota(sb, "user-free-img", "image");
-    expect(blocked.allowed).toBe(false);
+    const first = await consumeServiceQuota(sb, "user-free-img", "image");
+    expect(first.allowed).toBe(false);
+    expect(first.limit).toBe(0);
+    expect(first.tier).toBe("free");
+    // تضييق الاتحاد: reasonAr موجودة في فرع الرفض فقط.
+    if (first.allowed) throw new Error("unreachable: free tier must be denied");
+    // رسالة الترقية هي الظاهرة للطالب — لازم تذكر Premium صراحةً.
+    expect(first.reasonAr).toContain("Premium");
   });
 
   it("free user gets 3 diagrams/day then blocked", async () => {
@@ -296,7 +330,7 @@ describe("Service Registry", () => {
     await consumeServiceQuota(sb, "user-refund", "diagram");
     const during = await peekServiceQuota(sb, "user-refund", "diagram");
     expect(during.used).toBe(before.used + 1);
-    refundServiceQuota("user-refund", "diagram");
+    refundServiceQuota(sb, "user-refund", "diagram");
     const after = await peekServiceQuota(sb, "user-refund", "diagram");
     expect(after.used).toBe(before.used);
   });

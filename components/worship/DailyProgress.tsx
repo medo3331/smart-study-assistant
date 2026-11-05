@@ -13,10 +13,9 @@ import {
   BookOpen,
   Clock 
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { DailyProgressItem } from "@/lib/islamic/types";
 
-const ICON_MAP: Record<string, LucideIcon> = {
+const ICON_MAP: Record<string, any> = {
   Sun,
   Moon,
   Sparkles,

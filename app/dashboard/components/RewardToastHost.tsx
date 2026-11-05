@@ -38,14 +38,14 @@ export default function RewardToastHost() {
     const next = queue[0];
     setCurrent(next);
     setQueue((q) => q.slice(1));
-    const t = setTimeout(() => setCurrent(null), 3800);
+    const t = setTimeout(() => setCurrent(null), 10000);
     return () => clearTimeout(t);
   }, [queue, current]);
 
   // Also auto-advance after current dismissed
   useEffect(() => {
     if (!current) return;
-    const t = setTimeout(() => setCurrent(null), 3800);
+    const t = setTimeout(() => setCurrent(null), 10000);
     return () => clearTimeout(t);
   }, [current]);
 
@@ -158,6 +158,14 @@ export default function RewardToastHost() {
               <p className="text-xs text-[var(--text-muted)]">{line3}</p>
             </div>
 
+            <button
+              type="button"
+              onClick={() => setCurrent(null)}
+              className="absolute top-2 right-2 rounded-full p-1 text-[var(--text-muted)] hover:text-[var(--text)]"
+              aria-label="إغلاق"
+            >
+              ✕
+            </button>
             {/* subtle progress bar */}
             <motion.div
               initial={{ scaleX: 0 }}

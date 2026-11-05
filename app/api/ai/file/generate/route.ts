@@ -188,7 +188,7 @@ export async function POST(req: Request) {
       data = parsed as Record<string, unknown>;
     } catch (e) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-      if (type) refundServiceQuota(user.id, `file_${type}` as AiServiceId);
+      if (type) refundServiceQuota(supabase, user.id, `file_${type}` as AiServiceId);
       throw e;
     }
 
@@ -210,7 +210,7 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       // المحتوى اتولّد لكن التحويل لملف فشل — نرجّع حد الملف للمستخدم
-      refundServiceQuota(user.id, `file_${type}` as AiServiceId);
+      refundServiceQuota(supabase, user.id, `file_${type}` as AiServiceId);
       throw e;
     }
 

@@ -19,7 +19,7 @@ import { createServerClient } from "@supabase/ssr";
  */
 
 /** صفحات الحساب اللي المستخدم المكتمل ما محتاجش يرجع لها. */
-const ACCOUNT_PATHS = new Set(["/welcome", "/login", "/register", "/onboarding"]);
+const ACCOUNT_PATHS = new Set(["/welcome", "/login", "/login/mag", "/register", "/onboarding"]);
 
 function isProtected(pathname: string): boolean {
   return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
@@ -164,5 +164,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*", "/welcome", "/login", "/register", "/onboarding", "/admin", "/admin/:path*"],
+  matcher: ["/dashboard", "/dashboard/:path*", "/welcome", "/login", "/login/mag", "/register", "/onboarding", "/admin", "/admin/:path*"],
 };

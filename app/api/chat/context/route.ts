@@ -10,26 +10,38 @@ export async function GET() {
   if (authError) return authError;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [profileResult, configResult] = await Promise.all([
-    supabase.from("profiles").select("subject").eq("id", user.id).maybeSingle(),
-    supabase
-      .from("study_configs")
-      .select("id, subject")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-
-  const config = configResult.data;
-  const daysResult = config
-    ? await supabase
-        .from("study_days")
-        .select("id, day, topic, is_completed")
-        .eq("config_id", config.id)
+  let profileResult: any = { data: null, error: null };
+  let configResult: any = { data: null, error: null };
+  try {
+    [profileResult, configResult] = await Promise.all([
+      supabase.from("profiles").select("subject").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("study_configs")
+        .select("id, subject")
         .eq("user_id", user.id)
-        .order("day", { ascending: true })
-    : { data: [], error: null };
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+  } catch (e) {
+    console.error("[chat/context] profile/config fetch failed:", e);
+  }
+
+  const config = configResult?.data ?? null;
+  let daysResult: any = { data: [], error: null };
+  try {
+    daysResult = config
+      ? await supabase
+          .from("study_days")
+          .select("id, day, topic, is_completed")
+          .eq("config_id", config.id)
+          .eq("user_id", user.id)
+          .order("day", { ascending: true })
+      : { data: [], error: null };
+  } catch (e) {
+    console.error("[chat/context] study_days fetch failed:", e);
+    daysResult = { data: [], error: null };
+  }
 
   const days = (daysResult.data ?? []) as Array<{
     id: string;

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
+import { LowCreditsBanner } from '@/components/upsell/LowCreditsBanner';
+import { ExhaustedGuard } from '@/components/upsell/ExhaustedGuard';
 
 /* ==========================================================================
    العنوان الديناميكي لصفحة الدرس.
@@ -36,5 +38,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default function LessonLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      <LowCreditsBanner />
+      <ExhaustedGuard />
+      {children}
+    </>
+  );
 }

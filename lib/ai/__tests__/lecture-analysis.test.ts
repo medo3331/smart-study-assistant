@@ -83,8 +83,8 @@ describe("chunkTranscript — تقسيم التفريغ الطويل", () => {
   });
 
   it("محاضرة متوسطة مش بتتقسّم بالحد الافتراضي", () => {
-    const text = "سطر من التفريغ. ".repeat(500);
-    expect(DEFAULT_CHUNK_CHARS).toBeGreaterThanOrEqual(12_000);
+    const text = "سطر من التفريغ. ".repeat(100);
+    expect(DEFAULT_CHUNK_CHARS).toBeLessThanOrEqual(10_000);
     expect(chunkTranscript(text, DEFAULT_CHUNK_CHARS)).toHaveLength(1);
   });
 });

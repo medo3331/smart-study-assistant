@@ -22,7 +22,7 @@ export function ProgressRing({ pct, size = 150, stroke = 12, subLabel, className
   const reduceMotion = useReducedMotion();
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const clamped = Math.max(0, Math.min(100, pct));
+  const clamped = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0));
   const offset = circumference - (clamped / 100) * circumference;
 
   return (

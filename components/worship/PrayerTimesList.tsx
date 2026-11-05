@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import type { PrayerTime, PrayerTimesData } from "@/lib/islamic/types";
 import { formatTimeRemaining } from "@/lib/islamic/prayer-times";
-import type { LucideIcon } from "lucide-react";
 import {
   Sun,
   Moon,
@@ -34,7 +33,7 @@ interface PrayerTimesListProps {
 export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps) {
   const [showDetails, setShowDetails] = useState(false);
 
-  const prayerIcons: Record<string, LucideIcon> = {
+  const prayerIcons: Record<string, any> = {
     Fajr: Sun,
     Sunrise: Sunrise,
     Dhuhr: Sun,
@@ -190,7 +189,7 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
 
 interface PrayerTimeRowProps {
   prayer: PrayerTime;
-  icons: Record<string, LucideIcon>;
+  icons: Record<string, any>;
   colors: Record<string, { color: string; bg: string }>;
   index: number;
 }

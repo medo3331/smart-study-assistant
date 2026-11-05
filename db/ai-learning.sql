@@ -20,3 +20,5 @@ drop policy if exists "ai memories: owner updates" on public.ai_memories;
 create policy "ai memories: owner reads" on public.ai_memories for select using (auth.uid() = user_id);
 create policy "ai memories: owner writes" on public.ai_memories for insert with check (auth.uid() = user_id);
 create policy "ai memories: owner updates" on public.ai_memories for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "ai memories: owner deletes" on public.ai_memories;
+create policy "ai memories: owner deletes" on public.ai_memories for delete using (auth.uid() = user_id);

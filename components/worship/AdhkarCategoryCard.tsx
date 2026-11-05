@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   CheckCircle
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
 interface AdhkarCategoryCardProps {

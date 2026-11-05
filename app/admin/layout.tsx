@@ -31,7 +31,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-[var(--app-bg,#090d16)] text-white" dir="rtl">
-      <nav className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur border-b border-slate-800 px-4 sm:px-6 py-3 space-y-2">
+      {/* شريط علوي للموبايل */}
+      <nav className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur border-b border-slate-800 px-4 sm:px-6 py-3 space-y-2 lg:hidden">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <Link href="/admin" className="text-amber-400 font-extrabold text-base sm:text-lg flex items-center gap-2">
             <Shield size={20} /> لوحة الأدمن
@@ -47,9 +48,28 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
         <AdminNav links={links} />
       </nav>
-      <main className="max-w-7xl mx-auto p-4 sm:p-6 md:p-10">
-        {children}
-      </main>
+
+      <div className="flex min-h-screen">
+        {/* Sidebar للشاشات الكبيرة */}
+        <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 border-l border-slate-800 bg-slate-950/95 sticky top-0 h-screen overflow-y-auto">
+          <div className="px-4 py-5 border-b border-slate-800">
+            <Link href="/admin" className="text-amber-400 font-extrabold text-lg flex items-center gap-2">
+              <Shield size={22} /> لوحة الأدمن
+            </Link>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-1 rounded">{roleLabel}</span>
+              <Link href="/dashboard" className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded hover:bg-slate-700">الداشبورد</Link>
+            </div>
+          </div>
+          <div className="px-3 py-4">
+            <AdminNav links={links} />
+          </div>
+        </aside>
+
+        <main className="flex-1 max-w-7xl mx-auto p-4 sm:p-6 md:p-10">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

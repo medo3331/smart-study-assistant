@@ -34,6 +34,8 @@ export type LectureRow = {
   id: string;
   /** صاحب المحاضرة. NOT NULL في القاعدة — من الجلسة بس، مش من الـ body. */
   user_id: string;
+  /** رابط اختياري للمادة الجامعية. NULL = Uncategorized/محاضرة قديمة. */
+  subject_id: string | null;
   title: string | null;
   original_filename: string | null;
   storage_path: string | null;
@@ -53,6 +55,7 @@ export type LectureRow = {
 /** الصف كما بيرجع للعميل (أخف من كل الأعمدة — مفيش transcript_data). */
 export type SavedLectureRef = {
   id: string;
+  subject_id?: string | null;
   title: string | null;
   original_filename: string | null;
   source_type: string;
@@ -128,6 +131,7 @@ export function buildLectureRow(input: {
   storagePath?: string | null;
   mimeType?: string | null;
   fileSize?: number | null;
+  subjectId?: string | null;
 }): LectureRow {
   const { userId, transcript } = input;
   const filename = asText(input.originalFilename, MAX_TITLE_CHARS) ?? "محاضرة";
@@ -139,6 +143,10 @@ export function buildLectureRow(input: {
     // لـ "فشل الحفظ" عند الطالب. الـ ESLint warning على `userId` غير
     // المستخدم كان الإشارة، والتغطية من الاختبارات (user_id جوه الصف).
     user_id: userId,
+    subject_id:
+      typeof input.subjectId === "string" && input.subjectId.trim() !== ""
+        ? input.subjectId.trim()
+        : null,
     title: titleFromFilename(filename),
     original_filename: filename,
     storage_path: asText(input.storagePath, 300),
@@ -160,7 +168,11 @@ export function buildLectureRow(input: {
 /** النتيجة: الحفظ نجح ولا لأ، وليه. */
 export type SaveLectureResult =
   | { ok: true; lecture: SavedLectureRef }
-  | { ok: false; code: "AUTH_REQUIRED" | "DB_FAILED"; message: string };
+  | {
+      ok: false;
+      code: "AUTH_REQUIRED" | "DB_FAILED" | "SUBJECT_INVALID";
+      message: string;
+    };
 
 /**
  * يحفظ المحاضرة لصاحب الجلسة.
@@ -175,6 +187,7 @@ export async function saveLectureForCurrentUser(input: {
   storagePath?: string | null;
   mimeType?: string | null;
   fileSize?: number | null;
+  subjectId?: string | null;
 }): Promise<SaveLectureResult> {
   const supabase = await createClient();
 
@@ -191,8 +204,50 @@ export async function saveLectureForCurrentUser(input: {
     };
   }
 
+  // ١.٥) تحقق من subject_id على السيرفر (لا نثق بالعميل).
+  // undefined = omitted → preserve existing association on upsert.
+  // null = explicitly cleared.
+  let resolvedSubjectId: string | null;
+  if (input.subjectId === undefined) {
+    resolvedSubjectId = null;
+    if (input.storagePath) {
+      const { data: existing } = await supabase
+        .from("lectures")
+        .select("subject_id")
+        .eq("user_id", user.id)
+        .eq("storage_path", input.storagePath)
+        .maybeSingle();
+      resolvedSubjectId = (existing?.subject_id as string | null) ?? null;
+    }
+  } else if (input.subjectId === null) {
+    resolvedSubjectId = null;
+  } else {
+    const candidate = input.subjectId.trim();
+    if (candidate === "") {
+      resolvedSubjectId = null;
+    } else {
+      const { data: subject, error: subjectError } = await supabase
+        .from("university_subjects")
+        .select("id")
+        .eq("id", candidate)
+        .maybeSingle();
+      if (subjectError || !subject) {
+        return {
+          ok: false,
+          code: "SUBJECT_INVALID",
+          message: "المادة المختارة غير موجودة أو غير متاحة.",
+        };
+      }
+      resolvedSubjectId = candidate;
+    }
+  }
+
   // ٢) السطر — `user_id` من الخطوة ١ بالظبط.
-  const row = buildLectureRow({ userId: user.id, ...input });
+  const row = buildLectureRow({
+    userId: user.id,
+    ...input,
+    subjectId: resolvedSubjectId,
+  });
 
   // ٣) الحفظ. RLS شغّال لأن ده عميل الجلسة (anon + bearer) مش service
   //    role، فـ `with check (auth.uid() = user_id)` بيمسكنا لو حاولنا
@@ -200,7 +255,7 @@ export async function saveLectureForCurrentUser(input: {
   const { data, error } = await supabase
     .from("lectures")
     .upsert(row, { onConflict: "user_id,storage_path" })
-    .select("id, title, original_filename, source_type, status, created_at, duration_seconds")
+    .select("id, subject_id, title, original_filename, source_type, status, created_at, duration_seconds")
     .single();
 
   if (error || !data) {

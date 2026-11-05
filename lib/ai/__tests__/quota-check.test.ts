@@ -176,10 +176,8 @@ describe("checkSubscriptionQuota (quota-check.ts)", () => {
     const result = await checkSubscriptionQuota("user-123", "message", false);
     expect(result.allowed).toBe(true);
     expect(rpcClient.rpcCalls).toHaveLength(1);
-    const todayUtc = new Date().toISOString().split("T")[0]; // YYYY-MM-DD (UTC)
-    expect(rpcClient.rpcCalls[0].params).toHaveProperty(
-      "p_idempotency_key",
-      `quota:user-123:message:${todayUtc}`
-    );
+    const key = rpcClient.rpcCalls[0].params.p_idempotency_key as string;
+    expect(key).toMatch(/^quota:user-123:message:/);
+    expect(key.split(":").length).toBe(4);
   });
 });

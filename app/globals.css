@@ -1,5 +1,38 @@
 @import "tailwindcss";
 
+/* ---- Cairo Arabic font (local, git-tracked in public/fonts/) ---- */
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-arabic-400-normal.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-arabic-700-normal.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-latin-400-normal.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/cairo-latin-700-normal.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ==========================================================================
    ماجيكلي — نظام التصميم
    الاتجاه: "الملزمة" — ورق دفتر بخطوط، هامش أحمر، وقلم فسفوري.
@@ -9,8 +42,8 @@
 
 :root {
   /* ---- الخطوط (بتتحمّل من next/font في layout.tsx) ---- */
-  --font-display: var(--font-display-src), "Segoe UI", sans-serif;
-  --font-body: var(--font-body-src), system-ui, sans-serif;
+  --font-display: var(--font-display-src), "Tahoma", "Segoe UI", sans-serif;
+  --font-body: var(--font-body-src), "Tahoma", system-ui, sans-serif;
   --font-mono: var(--font-mono-src), ui-monospace, monospace;
 
   /* ---- سلم الخطوط ---- */
@@ -36,6 +69,22 @@
   /* النص اللي بيقع فوق الأصفر الفسفوري. مش بيتغير مع الثيم عن قصد:
      الفسفوري أصفر في الحالتين، فلازم يفضل عليه حبر كحلي. */
   --on-marker: #232D49;
+
+  /* ---- V2 Semantic tokens (alias theme-adaptive vars) ----
+     These resolve lazily per active theme/shop-pack. Do NOT hardcode here.
+     primary = red (important actions); interactive/focus = indigo-blue;
+     progress = blue; danger = red (outlined + icon in components). */
+  --color-primary: var(--redpen);
+  --color-primary-hover: var(--redpen);
+  --color-interactive: var(--hl-indigo-fill);
+  --color-progress: var(--hl-blue-fill);
+  --color-danger: var(--redpen);
+  --color-surface-1: var(--paper-2);
+  --color-surface-2: var(--paper-3);
+  --color-text-primary: var(--ink);
+  --color-text-muted: var(--ink-soft);
+  --color-border: var(--rule);
+  --color-focus-ring: var(--hl-indigo-fill);
 }
 
 /* ==========================================================================
@@ -1629,7 +1678,7 @@ html {
 }
 
 .btn-marker {
-  background: var(--marker);
+  background: var(--color-primary);
   color: var(--on-marker);
   box-shadow: 0 2px 0 var(--marker-deep);
 }

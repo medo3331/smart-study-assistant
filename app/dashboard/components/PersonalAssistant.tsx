@@ -185,7 +185,7 @@ export function PersonalAssistant({
                   aria-hidden
                 >
                   <path d="M22 10L12 5 2 10l10 5 10-5z" />
-                  <path d="M6 12v5c0 1.7 2.7 6 3s6-1.3 6-3v-5" />
+                  <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
                 </svg>
                 <span className="text-sm leading-[1.85] font-medium text-ink whitespace-pre-line">
                   {line.text}
@@ -329,7 +329,7 @@ function RoleLine({ message }: { message: string }) {
         aria-hidden
       >
         <path d="M22 10L12 5 2 10l10 5 10-5z" />
-        <path d="M6 12v5c0 1.7 2.7 6 3s6-1.3 6-3v-5" />
+        <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
       </svg>
       <span className="text-sm leading-[1.85] font-medium text-ink">
         {message}

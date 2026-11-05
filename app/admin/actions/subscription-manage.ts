@@ -8,28 +8,9 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
 import { resolveActor } from "@/lib/policy";
 
-export interface SubscriptionStatus {
-  user_id: string;
-  user_email: string | null;
-  user_display_name: string | null;
-  user_code: string | null;
-  public_user_code: string | null;
-  current_plan_key: string | null;
-  current_plan_name: string | null;
-  activation_id: string | null;
-  activation_created_at: string | null;
-  activation_duration_days: number | null;
-  activation_note: string | null;
-  activation_activated_by: string | null;
-  entitlement_expires_at: string | null;
-  entitlement_kind: string | null;
-  entitlement_value: string | null;
-  messages_24h: number;
-  uploads_today: number;
-  quota_updated_at: string | null;
-}
 
-export async function getSubscriptionStatus(userIdOrCode: string): Promise<SubscriptionStatus | null> {
+
+export async function getSubscriptionStatus(userIdOrCode: string): Promise<any> {
   const supabase = createServiceClient();
   try {
     // Try by UUID first
@@ -75,9 +56,15 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
 
     // Get plan info
     let planName = "Free";
+    let messageLimit: number | null = null;
+    let uploadLimit: number | null = null;
     const planKey = (entitlementRow as any)?.value || (activationRow as any)?.plan_key || "free";
-    const { data: planData } = await supabase.from("subscription_plans").select("name, display_name_ar").eq("plan_key", planKey).maybeSingle();
-    if (planData) planName = (planData as any).display_name_ar || (planData as any).name || planKey;
+    const { data: planData } = await supabase.from("subscription_plans").select("name, display_name_ar, messages_per_day, uploads_per_day").eq("plan_key", planKey).maybeSingle();
+    if (planData) {
+      planName = (planData as any).display_name_ar || (planData as any).name || planKey;
+      messageLimit = (planData as any).messages_per_day ?? null;
+      uploadLimit = (planData as any).uploads_per_day ?? null;
+    }
 
     // Get quota usage (simplified — real quota tracking requires additional logic)
     const { data: quotaRow } = await supabase.from("subscription_quotas").select("messages_24h, uploads_today, updated_at").eq("user_id", userId).maybeSingle();
@@ -96,15 +83,113 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
       activation_note: (activationRow as any)?.note || null,
       activation_activated_by: (activationRow as any)?.activated_by || null,
       entitlement_expires_at: (entitlementRow as any)?.expires_at || null,
-      entitlement_kind: (entitlementRow as any)?.kind || null,
-      entitlement_value: (entitlementRow as any)?.value || null,
-      messages_24h: (quotaRow as any)?.messages_24h || 0,
-      uploads_today: (quotaRow as any)?.uploads_today || 0,
-      quota_updated_at: (quotaRow as any)?.updated_at || null,
-    };
-  } catch (e: any) {
-    console.error("[subscription-manage] Error:", e?.message || e);
+  entitlement_kind: (entitlementRow as any)?.kind || null,
+  entitlement_value: (entitlementRow as any)?.value || null,
+  messages_24h: (quotaRow as any)?.messages_24h || 0,
+  uploads_today: (quotaRow as any)?.uploads_today || 0,
+  message_limit: messageLimit,
+  upload_limit: uploadLimit,
+  quota_updated_at: (quotaRow as any)?.updated_at || null,
+};
+  } catch (e) {
     return null;
+  }
+}
+
+
+export async function resetSubscriptionQuota(
+  userIdOrCode: string,
+  adminUserId: string,
+  adminEmail: string | null = null
+): Promise<any> {
+  const lookup = (userIdOrCode || "").trim();
+  const db = createServiceClient();
+  const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription_quota", resource_id: lookup || null };
+  try {
+    const actor = await resolveActor(db, adminUserId, adminEmail);
+    if (!actor.isOwner && actor.role !== "admin") {
+      await recordAuditLog({ ...auditBase, details: { op: "quota_reset", reason: "forbidden" }, result: "BLOCKED" });
+      return { ok: false, message: "غير مصرح" };
+    }
+    if (!lookup) return { ok: false, message: "معرّف المستخدم مطلوب" };
+    let userId = lookup;
+    const { data: profile } = await db.from("profiles").select("id").eq("id", lookup).maybeSingle();
+    if (!profile) {
+      const { data: codeRow } = await db.from("user_codes").select("user_id").eq("code", lookup).maybeSingle();
+      if (codeRow) userId = (codeRow as any).user_id;
+      else {
+        await recordAuditLog({ ...auditBase, details: { op: "quota_reset", reason: "user_not_found" }, result: "FAIL" });
+        return { ok: false, message: "المستخدم غير موجود" };
+      }
+    }
+    const nowIso = new Date().toISOString();
+    const { error } = await db.from("subscription_quotas").upsert({ user_id: userId, messages_24h: 0, uploads_today: 0, last_reset_at: nowIso, updated_at: nowIso }, { onConflict: "user_id" });
+    if (error) {
+      await recordAuditLog({ ...auditBase, details: { op: "quota_reset", user_id: userId, reason: "update_failed", error: error.message }, result: "FAIL" });
+      return { ok: false, message: "فشل إعادة التعيين: " + error.message };
+    }
+    await recordAuditLog({ ...auditBase, resource_id: userId, details: { op: "quota_reset", user_id: userId }, result: "PASS" });
+    return { ok: true, message: "تم إعادة تعيين الحصص" };
+  } catch (e: any) {
+    await recordAuditLog({ ...auditBase, details: { op: "quota_reset", reason: "unexpected_error", error: e?.message }, result: "FAIL" });
+    return { ok: false, message: "خطأ غير متوقع: " + (e?.message || String(e)) };
+  }
+}
+
+
+export async function revokeSubscription(
+  userIdOrCode: string,
+  adminUserId: string,
+  adminEmail: string | null = null,
+  note: string | null = null
+): Promise<any> {
+  const lookup = (userIdOrCode || "").trim();
+  const db = createServiceClient();
+  const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription", resource_id: lookup || null };
+  try {
+    const actor = await resolveActor(db, adminUserId, adminEmail);
+    if (!actor.isOwner) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", reason: "non_owner_attempt" }, result: "BLOCKED" });
+      return { ok: false, message: "غير مصرح: الإلغاء متاح لـ Owner فقط" };
+    }
+    if (!lookup) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", reason: "missing_lookup" }, result: "FAIL" });
+      return { ok: false, message: "معرّف المستخدم مطلوب" };
+    }
+    let userRow: any = null;
+    try {
+      const { data } = await db.from("profiles").select("id, email, display_name").eq("id", lookup).maybeSingle();
+      if (data) userRow = data;
+    } catch {}
+    if (!userRow) {
+      const { data: codeRow } = await db.from("user_codes").select("user_id").eq("code", lookup).maybeSingle();
+      if (codeRow) {
+        const { data: profileData } = await db.from("profiles").select("id, email, display_name").eq("id", (codeRow as any).user_id).maybeSingle();
+        if (profileData) userRow = profileData;
+      }
+    }
+    if (!userRow) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", reason: "user_not_found" }, result: "FAIL" });
+      return { ok: false, message: "المستخدم غير موجود" };
+    }
+    const userId = userRow.id;
+    const { data: latest } = await db.from("subscription_activations").select("id, plan_key").eq("user_id", userId).is("revoked_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!latest) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", user_id: userId, reason: "no_active_activation" }, result: "FAIL" });
+      return { ok: false, message: "لا يوجد اشتراك نشط للإلغاء" };
+    }
+    const { error: revErr } = await db.from("subscription_activations").update({ revoked_at: new Date().toISOString(), revoked_by: adminUserId }).eq("id", (latest as any).id);
+    if (revErr) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", user_id: userId, reason: "update_failed", error: revErr.message }, result: "FAIL" });
+      return { ok: false, message: "فشل الإلغاء: " + revErr.message };
+    }
+    await db.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").is("expires_at", null);
+    await db.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
+    await recordAuditLog({ ...auditBase, resource_id: userId, details: { op: "revoke", user_id: userId, activation_id: (latest as any).id, plan_key: (latest as any).plan_key, note: note || null }, result: "PASS" });
+    return { ok: true, message: "تم إلغاء الاشتراك" };
+  } catch (e: any) {
+    await recordAuditLog({ ...auditBase, details: { op: "revoke", reason: "unexpected_error", error: e?.message }, result: "FAIL" });
+    return { ok: false, message: "خطأ غير متوقع: " + (e?.message || String(e)) };
   }
 }
 
@@ -113,13 +198,6 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<Subsc
 // + تمديد entitlements.expires_at + تسجيل audit_log إلزامي)
 // ============================================================
 
-export interface ExtendSubscriptionResult {
-  ok: boolean;
-  message: string;
-  previousExpiry: string | null;
-  newExpiry: string | null;
-  entitlementExtended: boolean;
-}
 
 /**
  * تمديد اشتراك مستخدم — نفس درجة حماية activateSubscription: **Owner فقط**
@@ -143,7 +221,7 @@ export async function extendSubscription(
   note: string | null,
   adminUserId: string,
   adminEmail: string | null = null
-): Promise<ExtendSubscriptionResult> {
+): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const extraDays = Math.floor(durationDays);
   const auditBase = {

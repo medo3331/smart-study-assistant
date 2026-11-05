@@ -36,8 +36,7 @@ import {
   ScanText,
   Target,
   Users,
-  type LucideIcon,
-} from 'lucide-react';
+  type } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
 import type { Dictionary } from '@/lib/i18n/dictionaries';
 
