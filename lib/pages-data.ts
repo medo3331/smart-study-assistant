@@ -315,6 +315,8 @@ export interface CourseLessonsData {
   curriculumLevel: CurriculumLevel | null;
   focusTopics: string[];
   lessons: CourseLesson[];
+  /** IDs الدروس المفتوحة مبكراً من study_day_unlocks. */
+  unlockedDayIds: string[];
   /** المادة دي هي active_config_id بتاع الحساب؟ */
   isActive: boolean;
 }
@@ -351,12 +353,29 @@ function asFocusTopics(value: unknown): string[] {
     .map((item) => item.trim());
 }
 
+/** IDs الدروس المفتوحة مبكراً لمستخدم معيّن — تُستخدم في صفحات الدروس. */
+export async function fetchUnlockedDayIds(
+  supabase: SupabaseClient,
+  userId: string,
+  dayIds: string[]
+): Promise<Result<string[]>> {
+  if (dayIds.length === 0) return ok([]);
+
+  const { data, error } = await supabase
+    .from("study_day_unlocks")
+    .select("day_id")
+    .eq("user_id", userId)
+    .in("day_id", dayIds);
+
+  if (error) return fail(error);
+  return ok(((data ?? []) as { day_id: string }[]).map((row) => row.day_id));
+}
+
 export async function fetchCourseLessons(
   supabase: SupabaseClient,
   userId: string,
   configId: string
-): Promise<Result<CourseLessonsData | null>> {
-  const { data: config, error: configError } = await supabase
+): Promise<Result<CourseLessonsData | null>> {  const { data: config, error: configError } = await supabase
     .from("study_configs")
     .select("id, subject, category, curriculum_level, focus_topics")
     .eq("id", configId)
@@ -401,6 +420,17 @@ export async function fetchCourseLessons(
     learningStyle: day.learning_style ?? "practical",
   }));
 
+  const unlockedResult = await fetchUnlockedDayIds(
+    supabase,
+    userId,
+    lessons.map((lesson) => lesson.id)
+  );
+  if (unlockedResult.error) {
+    // الجدول لسه ما اتعملش؟ الصفحة تفضل شغالة بدون فتح مبكر بدل ما تقع.
+    console.warn("fetchCourseLessons: unlocks unavailable", unlockedResult.error.message);
+  }
+  const unlockedDayIds = unlockedResult.error ? [] : unlockedResult.data;
+
   return ok({
     id: row.id,
     subject: row.subject,
@@ -408,6 +438,7 @@ export async function fetchCourseLessons(
     curriculumLevel: asCurriculumLevel(row.curriculum_level),
     focusTopics: asFocusTopics(row.focus_topics),
     lessons,
+    unlockedDayIds,
     isActive: activeConfigId === row.id,
   });
 }

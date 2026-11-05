@@ -20,14 +20,14 @@ import {
 } from "@/app/dashboard/components/PageShell";
 import { useAuthUser } from "@/app/dashboard/components/use-page-data";
 import { fetchCourseLessons, type CourseLesson, type CourseLessonsData } from "@/lib/pages-data";
-import { sequenceLessons } from "@/lib/learning/lesson-sequence";
+import { buildLessonSequence } from "@/lib/learning/lesson-sequence";
 import { curriculumCreditCost } from "@/lib/ai/credit-pricing";
 import { CURRICULUM_MAX_LESSONS } from "@/lib/curriculum/types";
 
 /* ==========================================================================
    دروس مادة واحدة
 
-   - القفل التسلسلي بيتحسب في `sequenceLessons` (دالة نقية ومختبرة).
+   - القفل التسلسلي بيتحسب في `buildLessonSequence` (دالة نقية ومختبرة).
    - العنوان الرئيسي هو `topic`، و`title` بقى لافتة صغيرة فوقه.
    - زر التوسيع بيظهر بعد 80% إكمال، والسيرفر بيفرض نفس الشرط.
    ========================================================================== */
@@ -107,7 +107,10 @@ export function CourseLessonsView({ configId }: CourseLessonsViewProps) {
   }, [session, supabase, configId, reloadToken]);
 
   const sequenced = useMemo(
-    () => (data ? sequenceLessons(data.lessons) : []),
+    () =>
+      data
+        ? buildLessonSequence(data.lessons, { unlockedDays: data.unlockedDayIds })
+        : [],
     [data]
   );
 
@@ -328,7 +331,7 @@ export function CourseLessonsView({ configId }: CourseLessonsViewProps) {
       </section>
 
       <ol className="space-y-3 list-none m-0 p-0">
-        {sequenced.map(({ lesson, isLocked, isCurrent }) => {
+        {sequenced.map(({ lesson, isLocked, isCurrent, isEarlyUnlocked }) => {
           const isCompleted = lesson.isCompleted;
 
           return (
@@ -364,6 +367,11 @@ export function CourseLessonsView({ configId }: CourseLessonsViewProps) {
                       {isCurrent && (
                         <span className="tag tag-box border border-redpen text-redpen">
                           الدرس الحالي
+                        </span>
+                      )}
+                      {isEarlyUnlocked && (
+                        <span className="tag tag-box border border-rule-strong text-ink-soft">
+                          مفتوح بدري
                         </span>
                       )}
                       {isCompleted && <span className="tag">مكتمل</span>}
