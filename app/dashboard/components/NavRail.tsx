@@ -3,6 +3,48 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertTriangle,
+  BookMarked,
+  BookOpen,
+  Bot,
+  BrainCircuit,
+  Briefcase,
+  CalendarDays,
+  ChartNoAxesColumn,
+  ChevronDown,
+  ClipboardList,
+  Coffee,
+  Coins,
+  CreditCard,
+  FileText,
+  FolderOpen,
+  Gift,
+  GraduationCap,
+  Layers,
+  LayoutDashboard,
+  LifeBuoy,
+  ListChecks,
+  Medal,
+  Mic,
+  Moon,
+  NotebookPen,
+  Package,
+  Presentation,
+  Puzzle,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Trophy,
+  User,
+  Users,
+  Wallet,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { BrandGlyph } from "@/components/BrandLogo";
 import { SITE_NAME, SITE_NAME_EN } from "@/lib/seo";
@@ -12,10 +54,63 @@ import {
   activeNavId,
   railAccountFromUser,
   setNavIntent,
+  type NavIconName,
   type NavItemDef,
   type NavSignal,
   type RailAccount,
 } from "./nav-config";
+
+/* --------------------------------------------------------------------------
+   أيقونات الأقسام والبنود
+
+   ⚠️ كل اسم في NavIconName لازم يكون له مفتاح هنا — الـ Record بيفرض ده
+   وقت الـ typecheck، فأي أيقونة تتضاف هناك وما تتضافش هنا البناء يفشل
+   بدل ما تظهر مربع فاضي. الخريطة top-level عشان ما تتعملش كل render.
+   -------------------------------------------------------------------------- */
+const NAV_ICONS: Record<NavIconName, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  subjects: BookOpen,
+  lessons: GraduationCap,
+  workspace: FolderOpen,
+  lectures: Mic,
+  exams: ClipboardList,
+  slides: Presentation,
+  aiMentor: Bot,
+  agents: BrainCircuit,
+  assistant: Sparkles,
+  create: Wand2,
+  planner: Target,
+  calendar: CalendarDays,
+  missions: ListChecks,
+  notes: NotebookPen,
+  emergency: AlertTriangle,
+  quran: BookMarked,
+  worship: Moon,
+  break: Coffee,
+  escape: Puzzle,
+  progress: TrendingUp,
+  achievements: Trophy,
+  analytics: ChartNoAxesColumn,
+  leaderboard: Medal,
+  xpShop: Sparkles,
+  inventory: Package,
+  community: Users,
+  referrals: Gift,
+  shop: ShoppingBag,
+  rewards: Coins,
+  pricing: CreditCard,
+  balance: Wallet,
+  plans: Layers,
+  profile: User,
+  settings: Settings,
+  career: Briefcase,
+  report: FileText,
+  support: LifeBuoy,
+  admin: ShieldCheck,
+};
+
+/** كل الأقسام مفتوحة أول مرة — المستخدم يشوف كل حاجة قبل ما يقرر يقفل. */
+const DEFAULT_OPEN_GROUPS: string[] = NAV_GROUPS.map((group) => group.id);
 
 /* ==========================================================================
    قايمة التنقل — فهرس الملزمة
@@ -116,8 +211,11 @@ export function NavRail({
   // البند النشط: المسار هو الحقيقة. بنود القسم (الملاحظات/التحليلات)
   // مالهاش مسار، فبتتعلّم بالضغط — وده بيتصفّر أول ما تسيب الصفحة.
   const [clickedId, setClickedId] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  // 🗂️ الأقسام المفتوحة. الحالة هنا (مش جوه كل قسم) عشان لو قفلت قسم
+  // وفتحت التاني، الأول يفضل مقفول — كل مجموعة مستقلة عن التانية.
+  const [openGroups, setOpenGroups] = useState<string[]>(DEFAULT_OPEN_GROUPS);
 
   const selfAccount = useSelfAccount(account === undefined);
   const acct = account ?? selfAccount;
@@ -128,6 +226,9 @@ export function NavRail({
   const onDashboard = pathname === "/dashboard";
   const activeId = onDashboard ? clickedId ?? routeId : routeId;
 
+  const toggleGroup = (id: string) =>
+    setOpenGroups((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
   const drawerRef = useRef<HTMLElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -135,11 +236,11 @@ export function NavRail({
   // الصفحة ورا الدرج ماتسكرولش، والـ Tab مايخرجش منه. الشريط الثابت على
   // الشاشات الكبيرة مش مودال — هو جزء من الصفحة — فالسلوك ده للموبايل بس.
   useEffect(() => {
-    if (!drawerOpen) return;
+    if (!isMenuOpen) return;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setDrawerOpen(false);
+        setIsMenuOpen(false);
         return;
       }
       if (e.key !== "Tab") return;
@@ -183,13 +284,16 @@ export function NavRail({
       window.cancelAnimationFrame(frame);
       trigger?.focus();
     };
-  }, [drawerOpen]);
+  }, [isMenuOpen]);
 
-  const isDim = (_item: NavItemDef) => false;
+  const isDim = (_item: NavItemDef) => {
+    void _item;
+    return false;
+  };
 
   const handleClick = (item: NavItemDef) => {
     if (isDim(item)) return;
-    setDrawerOpen(false);
+    setIsMenuOpen(false);
 
     // بند بمسار: تنقّل عادي. لو إحنا واقفين عليه خلاص، رجّعه لفوق.
     if (item.href) {
@@ -235,6 +339,7 @@ export function NavRail({
   const renderItem = (item: NavItemDef) => {
     const dim = isDim(item);
     const danger = item.tone === "danger";
+    const Icon = NAV_ICONS[item.icon];
     // الطوارئ مفتاح مش صفحة: «مفتوح» عنده معناها «شغّال»، فبياخد
     // aria-pressed بدل aria-current — ده الفرق الوحيد بينه وبين الباقي.
     const isToggle = item.id === "emergency";
@@ -254,13 +359,13 @@ export function NavRail({
           aria-disabled={dim || undefined}
           aria-current={current}
           aria-pressed={isToggle ? isOn : undefined}
-          className={`relative w-full flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-[var(--r-sm)] text-right transition ${
+          className={`relative w-full flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-[var(--r-sm)] text-right transition-colors duration-150 ${
             dim
               ? "opacity-45 cursor-default text-ink-soft"
               : isOn
               ? "bg-red-500 text-ondanger"
               : isActive
-              ? "bg-paper-3 text-ink"
+              ? `${themeStyles.lightBg} text-ink`
               : danger
               ? "text-red-400 hover:bg-red-950"
               : "text-ink-soft hover:bg-paper-3 hover:text-ink"
@@ -274,9 +379,12 @@ export function NavRail({
               style={{ insetInlineEnd: "-6px" }}
             />
           )}
-          <span aria-hidden className={`text-base leading-none shrink-0 ${dim ? "grayscale" : ""}`}>
-            {item.icon}
-          </span>
+          <Icon
+            aria-hidden
+            size={17}
+            strokeWidth={isActive ? 2.2 : 1.8}
+            className={`shrink-0 ${dim ? "opacity-60" : ""}`}
+          />
           {/* الاسم ثابت مهما كانت الحالة: aria-pressed هو اللي بيقول شغّال
               ولا لأ. لو الاسم نفسه بيتغيّر، قارئ الشاشة بيقرا زرار جديد. */}
           <span className="flex-1 min-w-0 text-sm font-semibold truncate">{item.label}</span>
@@ -305,34 +413,67 @@ export function NavRail({
     );
   };
 
-  /* ---- جسم القايمة: نفس المحتوى بالظبط في الشريط الثابت وفي درج الموبايل ---- */
-  // تعريف Admin owner-only — لا يظهر في NAV_GROUPS الأصلية عشان لا يكون hardcoded للكل
-  const adminItem: NavItemDef = { id: "admin", icon: "🛡️", label: "لوحة الإدارة", latin: "Admin", href: "/admin" };
-  const navBody = (
-    <div className="p-3 space-y-5">
-      {NAV_GROUPS.map((group) => (
-        <div key={group.title}>
-          {/* العنوان مكتوب مرتين عن قصد: مرة بالعين، ومرة كاسم لليستة —
-              من غير aria-label القوايم الأربع بتتقري كليستة واحدة طويلة. */}
-          <p className="tag px-3 mb-1.5" aria-hidden>
-            {group.title}
-          </p>
-          <ul aria-label={group.title} className="space-y-0.5 list-none m-0 p-0">
-            {group.items.map(renderItem)}
-          </ul>
-        </div>
-      ))}
-      {/* Admin — يظهر للـOwner فقط عبر Server check بدون تسريب Email */}
-      {isOwner && (
-        <div>
-          <p className="tag px-3 mb-1.5" aria-hidden>
-            الإدارة
-          </p>
-          <ul aria-label="الإدارة" className="space-y-0.5 list-none m-0 p-0">
-            {renderItem(adminItem)}
-          </ul>
-        </div>
-      )}
+  /* ---- جسم القايمة: نفس المحتوى بالظبط في الشريط الثابت وفي درج الموبايل ----
+     كل قسم زرار قابل للطي؛ لوحة البنود تفضل مركّبة و`hidden` هي اللي
+     بتخفيها عشان `aria-controls` يفضل شغّال، والأهم إن أي حالة جوه البند
+     (زي مؤشر الصوت) ما تتفكّش مع القفل والفتح. */
+  const renderNavBody = (scope: "rail" | "drawer") => (
+    <div className="p-3 space-y-1.5">
+      {NAV_GROUPS.map((group) => {
+        // لوحة الأدمن ownerOnly — بتتشال من القايمة قبل ما تترسم.
+        const items = group.items.filter((item) => !item.ownerOnly || isOwner);
+        if (items.length === 0) return null;
+
+        const open = openGroups.includes(group.id);
+        const GroupIcon = NAV_ICONS[group.icon];
+        const groupActive = items.some((item) => item.id === activeId);
+        const panelId = `nav-group-${scope}-${group.id}`;
+
+        return (
+          <div key={group.id} className="rounded-[var(--r-sm)]">
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.id)}
+              aria-expanded={open}
+              aria-controls={panelId}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 min-h-[40px] rounded-[var(--r-sm)] text-right transition-colors duration-150 hover:bg-paper-3 ${
+                groupActive ? "text-ink" : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              <GroupIcon
+                aria-hidden
+                size={15}
+                strokeWidth={1.8}
+                className={`shrink-0 ${groupActive ? themeStyles.accentText : ""}`}
+              />
+              <span className="flex-1 min-w-0 text-xs font-bold truncate">{group.title}</span>
+              {/* القسم مقفول وفيه الصفحة الحالية؟ نقطة صغيرة تقول كده. */}
+              {groupActive && !open && (
+                <span
+                  aria-hidden
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${themeStyles.accentBg}`}
+                />
+              )}
+              <span className="mono text-[0.58rem] text-ink-soft/60 hidden xl:inline truncate max-w-[5.5rem]">
+                {group.latin}
+              </span>
+              <ChevronDown
+                aria-hidden
+                size={14}
+                className={`shrink-0 text-ink-soft transition-transform duration-200 ${
+                  open ? "" : "-rotate-90"
+                }`}
+              />
+            </button>
+
+            <div id={panelId} hidden={!open} className="pt-0.5 pb-1">
+              <ul aria-label={group.title} className="space-y-0.5 list-none m-0 p-0">
+                {items.map(renderItem)}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -395,7 +536,7 @@ export function NavRail({
               {acct.isGuest ? (
                 <button
                   onClick={() => {
-                    setDrawerOpen(false);
+                    setIsMenuOpen(false);
                     router.push("/login");
                   }}
                   className="btn btn-marker btn-block text-sm"
@@ -477,7 +618,7 @@ export function NavRail({
 
         {/* البنود بقت أكتر بعد ما الترويسة اتشالت، فالسكرول بقى على الجزء
             ده لوحده — الفهرس وكارت الحساب لازم يفضلوا ثابتين. */}
-        <div className="flex-1 overflow-y-auto">{navBody}</div>
+        <div className="flex-1 overflow-y-auto">{renderNavBody("rail")}</div>
 
         <div className="shrink-0">{renderAccountCard("rail")}</div>
       </nav>
@@ -487,8 +628,8 @@ export function NavRail({
         <button
           ref={menuBtnRef}
           type="button"
-          onClick={() => setDrawerOpen(true)}
-          aria-expanded={drawerOpen}
+          onClick={() => setIsMenuOpen(true)}
+          aria-expanded={isMenuOpen}
           aria-controls="nav-drawer"
           className="mono flex items-center gap-2 px-3 py-2 rounded-[var(--r-sm)] border border-rule bg-paper text-ink hover:bg-paper-3 transition"
         >
@@ -511,7 +652,7 @@ export function NavRail({
       </div>
 
       <AnimatePresence>
-        {drawerOpen && (
+        {isMenuOpen && (
           <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="أقسام لوحة التحكم">
             <motion.div
               key="nav-scrim"
@@ -520,7 +661,7 @@ export function NavRail({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => setIsMenuOpen(false)}
               className="absolute inset-0 bg-ink/45 backdrop-blur-sm"
             />
             <motion.nav
@@ -546,7 +687,7 @@ export function NavRail({
               <div className="shrink-0 flex items-start justify-between border-b border-rule">
                 <div className="min-w-0">{brand}</div>
                 <button
-                  onClick={() => setDrawerOpen(false)}
+                  onClick={() => setIsMenuOpen(false)}
                   aria-label="إغلاق القايمة"
                   className="mono text-ink-soft hover:text-ink m-3 px-2 py-1 rounded-[var(--r-sm)] hover:bg-paper-3 transition shrink-0"
                 >
@@ -554,7 +695,7 @@ export function NavRail({
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto">{navBody}</div>
+              <div className="flex-1 overflow-y-auto">{renderNavBody("drawer")}</div>
 
               <div className="shrink-0">{renderAccountCard("drawer")}</div>
             </motion.nav>
