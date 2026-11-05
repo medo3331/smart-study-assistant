@@ -29,6 +29,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
+import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
 
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
@@ -525,7 +526,8 @@ export async function POST(req: Request) {
         const studentContext = await getStudentContext(supabase, userId, ctxInput);
         const selectedMode = parseMode(rawMode, prompt, intentResult.intent);
         const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
-        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+        const workspaceDigest = await getWorkspaceDigest(supabase, userId);
+        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest);
         let personaPrompt = "";
         try {
           personaPrompt = await buildSystemPrompt(userId);
