@@ -1,4 +1,5 @@
-﻿"use client";
+"use client";
+/* eslint-disable react-hooks/set-state-in-effect -- syncing conversations and URL-selected chat with external state */
 /* eslint-disable @next/next/no-img-element -- previewUrl is dynamic blob URL, next/image not suitable */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 /**
@@ -41,7 +42,15 @@ type LessonContext = {
   description?: string;
 };
 
-export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; lesson?: LessonContext }) {
+export function UnifiedChat({
+  initialContext,
+  lesson,
+  initialConversationId,
+}: {
+  initialContext?: any;
+  lesson?: LessonContext;
+  initialConversationId?: string;
+}) {
   const router = useRouter();
   const { locale } = useLanguage();
   const isAr = locale === "ar";
@@ -117,6 +126,12 @@ export function UnifiedChat({ initialContext, lesson }: { initialContext?: any; 
       }
     } catch {}
   }, []);
+
+  // فتح محادثة قديمة من رابط Workspace: /chat?conversation=<id>
+  useEffect(() => {
+    if (!initialConversationId) return;
+    void openConversation(initialConversationId);
+  }, [initialConversationId, openConversation]);
 
   const renameConversation = useCallback(async (id: string) => {
     if (!renameValue.trim()) { setRenamingId(null); return; }

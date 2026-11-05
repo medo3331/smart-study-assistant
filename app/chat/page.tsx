@@ -27,6 +27,7 @@ export default async function ChatPage({
 }) {
   const params = (await searchParams) ?? {};
   const configId = first(params, "configId");
+  const conversationId = first(params, "conversation");
   const lessonDayRaw = first(params, "lessonDay");
   const lessonDay = lessonDayRaw && Number.isInteger(Number(lessonDayRaw)) ? Number(lessonDayRaw) : undefined;
   const subject = first(params, "subject");
@@ -55,7 +56,11 @@ export default async function ChatPage({
     <>
       <LowCreditsBanner />
       <ExhaustedGuard />
-      <UnifiedChat initialContext={hasContext ? initialContext : undefined} lesson={lesson} />
+      <UnifiedChat
+        initialContext={hasContext ? initialContext : undefined}
+        lesson={lesson}
+        initialConversationId={conversationId || undefined}
+      />
     </>
   );
 }
