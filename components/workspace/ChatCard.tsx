@@ -1,3 +1,5 @@
+// TODO(B4.0.3): integrate after page.tsx migration to server component
+// Currently orphan — see merge/sidebar-clean-to-main commit 768eb102
 import Link from "next/link";
 import type { ChatCard as ChatCardType } from "@/lib/workspace/overview";
 

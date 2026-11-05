@@ -1,3 +1,5 @@
+// TODO(B4.0.3): integrate after page.tsx migration to server component
+// Currently orphan — see merge/sidebar-clean-to-main commit 768eb102
 "use client";
 import { Plus, Upload, MessageSquarePlus } from "lucide-react";
 import Link from "next/link";
