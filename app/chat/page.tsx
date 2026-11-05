@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { UnifiedChat } from "@/components/unified-ai/UnifiedChat";
+import { LowCreditsBanner } from "@/components/upsell/LowCreditsBanner";
+import { ExhaustedGuard } from "@/components/upsell/ExhaustedGuard";
 
 export const metadata: Metadata = {
   title: "مساعد Magic — Unified AI",
@@ -49,5 +51,11 @@ export default async function ChatPage({
       : undefined;
 
   const hasContext = Object.keys(initialContext).length > 0;
-  return <UnifiedChat initialContext={hasContext ? initialContext : undefined} lesson={lesson} />;
+  return (
+    <>
+      <LowCreditsBanner />
+      <ExhaustedGuard />
+      <UnifiedChat initialContext={hasContext ? initialContext : undefined} lesson={lesson} />
+    </>
+  );
 }
