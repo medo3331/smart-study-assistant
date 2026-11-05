@@ -521,12 +521,19 @@ export async function POST(req: Request) {
       incomingConversationId = rawConversationId.trim().slice(0, 80);
     }
     const intentResult = classifyChatIntent(prompt, ctxInput as any);
+    console.log("[UNIFIED-AI DEBUG]", { intent: intentResult.intent, prompt: prompt.slice(0, 80) });
     if (userId && supabase && !isAnonymous) {
       try {
         const studentContext = await getStudentContext(supabase, userId, ctxInput);
         const selectedMode = parseMode(rawMode, prompt, intentResult.intent);
         const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
-        const workspaceDigest = await getWorkspaceDigest(supabase, userId);
+        let workspaceDigest: string | null = null;
+        try {
+          workspaceDigest = await getWorkspaceDigest(supabase, userId);
+        } catch (e) {
+          console.error("[UNIFIED-AI DEBUG] digest failed:", e);
+        }
+        console.log("[UNIFIED-AI DEBUG]", { hasDigest: !!workspaceDigest, digestLen: workspaceDigest?.length ?? 0 });
         let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest);
         let personaPrompt = "";
         try {

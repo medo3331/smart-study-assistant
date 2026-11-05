@@ -103,9 +103,16 @@ export async function POST(req: Request) {
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const latestMessage = safeMessages.at(-1)?.content ?? "";
     const intentResult = classifyChatIntent(latestMessage, {});
+    console.log("[CHAT DEBUG]", { intent: intentResult.intent, latestMessage: latestMessage.slice(0, 80) });
     const selectedMode = parseMode(mode, latestMessage, intentResult.intent);
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
-    const workspaceDigest = await getWorkspaceDigest(supabase, user.id);
+    let workspaceDigest: string | null = null;
+    try {
+      workspaceDigest = await getWorkspaceDigest(supabase, user.id);
+    } catch (e) {
+      console.error("[CHAT DEBUG] digest failed:", e);
+    }
+    console.log("[CHAT DEBUG]", { hasDigest: !!workspaceDigest, digestLen: workspaceDigest?.length ?? 0 });
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest);
 
     // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
