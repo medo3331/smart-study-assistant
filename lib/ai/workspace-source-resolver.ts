@@ -169,33 +169,65 @@ function materialTitle(r: MaterialRow): string {
 }
 
 function isEligibleLecture(r: LectureRow): boolean {
-  return r.status === "completed" && typeof r.transcript_text === "string" && r.transcript_text.trim().length > 0;
+  // If transcript_text is null (NULL byte fallback), still consider eligible
+  // by status so ordinal/title resolution works. Content fetched separately.
+  if (r.transcript_text === null) {
+    return r.status === "completed";
+  }
+  return r.status === "completed" && r.transcript_text.trim().length > 0;
 }
 
 function isEligibleMaterial(r: MaterialRow): boolean {
-  return typeof r.content === "string" && r.content.trim().length > 0;
+  if (r.content === null) {
+    return true; // content unavailable (NULL byte fallback) — still resolvable by ordinal/title
+  }
+  return r.content.trim().length > 0;
 }
 
 async function fetchLectures(supabase: SupabaseClient, userId: string): Promise<LectureRow[]> {
-  const { data, error } = await supabase
-    .from("lectures")
-    .select("id, title, original_filename, status, transcript_text, created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as LectureRow[];
+  try {
+    const { data, error } = await supabase
+      .from("lectures")
+      .select("id, title, original_filename, status, transcript_text, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as LectureRow[];
+  } catch {
+    // Fallback: NULL bytes in transcript_text may cause 22P05 — fetch metadata only
+    const { data, error } = await supabase
+      .from("lectures")
+      .select("id, title, original_filename, status, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r) => ({ ...r, transcript_text: null })) as LectureRow[];
+  }
 }
 
 async function fetchMaterials(supabase: SupabaseClient, userId: string): Promise<MaterialRow[]> {
-  const { data, error } = await supabase
-    .from("materials")
-    .select("id, title, content, created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as MaterialRow[];
+  try {
+    const { data, error } = await supabase
+      .from("materials")
+      .select("id, title, content, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as MaterialRow[];
+  } catch {
+    // Fallback: NULL bytes in content may cause 22P05 — fetch metadata only
+    const { data, error } = await supabase
+      .from("materials")
+      .select("id, title, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r) => ({ ...r, content: null })) as MaterialRow[];
+  }
 }
 
 function toCandidateLecture(r: LectureRow): SourceCandidate {

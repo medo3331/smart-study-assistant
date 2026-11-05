@@ -197,7 +197,12 @@ const MODE_GUIDE: Record<MagiclyMode, string> = {
   flashcards: "                                                                          5                                    ",
 };
 
-export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyMode, toolFacts: string[] = []) {
+export function buildMagiclySystemPrompt(
+  context: StudentContext,
+  mode: MagiclyMode,
+  toolFacts: string[] = [],
+  workspaceDigest?: string | null
+) {
   const memories = context.memories.length
     ? context.memories.map((memory) => memory.kind + ": " + memory.value).join(" | ")
     : "لا توجد ذكريات مفيدة محفوظة بعد.";
@@ -209,5 +214,11 @@ export function buildMagiclySystemPrompt(context: StudentContext, mode: MagiclyM
     mode,
   });
 
-  return withDiagramGuidelines(persona + "\n\nالسياق الموثوق:\n- المادة: " + context.subject + "\n- الدرس: " + context.lesson + "\n- التقدم: " + context.progress.completed + "/" + context.progress.total + " دروس مكتملة\n- أسلوب التعلّم: " + context.learningStyle + "\n- تفضيلات مفيدة فقط: " + memories + (toolFacts.length ? "\n- نتائج الأدوات: " + toolFacts.join(" ") : "") + "\n\n" + STYLE_GUIDE[context.learningStyle] + "\n\nالوضع الحالي: " + mode + ".\n" + MODE_GUIDE[mode]);
+  const base = withDiagramGuidelines(persona + "\n\nالسياق الموثوق:\n- المادة: " + context.subject + "\n- الدرس: " + context.lesson + "\n- التقدم: " + context.progress.completed + "/" + context.progress.total + " دروس مكتملة\n- أسلوب التعلّم: " + context.learningStyle + "\n- تفضيلات مفيدة فقط: " + memories + (toolFacts.length ? "\n- نتائج الأدوات: " + toolFacts.join(" ") : "") + "\n\n" + STYLE_GUIDE[context.learningStyle] + "\n\nالوضع الحالي: " + mode + ".\n" + MODE_GUIDE[mode]);
+
+  if (workspaceDigest) {
+    return base + "\n\n" + workspaceDigest;
+  }
+
+  return base;
 }

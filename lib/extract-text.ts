@@ -356,5 +356,7 @@ export async function extractTextFromFile(
     );
   }
 
-  return text.slice(0, options.maxTextChars);
+  // Strip NULL bytes (U+0000) — they break PostgREST JSON serialization (22P05)
+  const cleaned = text.replace(/\x00/g, "");
+  return cleaned.slice(0, options.maxTextChars);
 }

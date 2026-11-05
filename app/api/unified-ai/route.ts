@@ -29,6 +29,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
+import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
 
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
@@ -520,12 +521,20 @@ export async function POST(req: Request) {
       incomingConversationId = rawConversationId.trim().slice(0, 80);
     }
     const intentResult = classifyChatIntent(prompt, ctxInput as any);
+    console.log("[UNIFIED-AI DEBUG]", { intent: intentResult.intent, prompt: prompt.slice(0, 80) });
     if (userId && supabase && !isAnonymous) {
       try {
         const studentContext = await getStudentContext(supabase, userId, ctxInput);
         const selectedMode = parseMode(rawMode, prompt, intentResult.intent);
         const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
-        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+        let workspaceDigest: string | null = null;
+        try {
+          workspaceDigest = await getWorkspaceDigest(supabase, userId);
+        } catch (e) {
+          console.error("[UNIFIED-AI DEBUG] digest failed:", e);
+        }
+        console.log("[UNIFIED-AI DEBUG]", { hasDigest: !!workspaceDigest, digestLen: workspaceDigest?.length ?? 0 });
+        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest);
         let personaPrompt = "";
         try {
           personaPrompt = await buildSystemPrompt(userId);
@@ -550,15 +559,10 @@ export async function POST(req: Request) {
         }
         return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
       }
-      if (intentResult.intent === "RECORDED_LECTURES_SEARCH") {
-        const answer = "البحث في المحاضرات المسجلة will be available in a later phase. حالياً، حدد ملف Workspace أو اشرح سؤالك مباشرة.";
-        if (reserveRef) {
-          try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
-        }
-        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
-      }
+      // RECORDED_LECTURES_SEARCH now flows through WORKSPACE_SEARCH path below
+      // (buildWorkspaceSourceContext supports lecture family — transcript_text)
     }
-    if (userId && supabase && !isAnonymous && intentResult.intent === "WORKSPACE_SEARCH") {
+    if (userId && supabase && !isAnonymous && (intentResult.intent === "WORKSPACE_SEARCH" || intentResult.intent === "RECORDED_LECTURES_SEARCH")) {
       try {
         const ws = await buildWorkspaceSourceContext({ supabase, userId, message: prompt });
         if (ws.ok) {

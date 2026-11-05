@@ -76,7 +76,9 @@ export async function buildWorkspaceSourceContext(input: {
         message: r.message,
       };
     }
-    return { ok: true, source, context: r.material.content };
+    // Clean NULL bytes (defensive)
+    const cleaned = (r.material.content ?? "").replace(/\x00/g, "");
+    return { ok: true, source, context: cleaned };
   }
 
   // lecture: read transcript_text with ownership filter
@@ -94,7 +96,9 @@ export async function buildWorkspaceSourceContext(input: {
         message: "Failed to load lecture content.",
       };
     }
-    const text = ((data as { transcript_text: string | null }).transcript_text ?? "").trim();
+    const raw = ((data as { transcript_text: string | null }).transcript_text ?? "");
+    // Clean NULL bytes (defensive)
+    const text = raw.replace(/\x00/g, "").trim();
     if (!text) {
       return {
         ok: false,
@@ -103,11 +107,12 @@ export async function buildWorkspaceSourceContext(input: {
       };
     }
     return { ok: true, source, context: text.slice(0, maxChars) };
-  } catch {
+  } catch (err) {
+    console.error("[workspace-source-context] lecture fetch failed:", err);
     return {
       ok: false,
-      resolution: { status: "error", message: "Failed to load lecture content." },
-      message: "Failed to load lecture content.",
+      resolution: { status: "empty_source", source, message: "Lecture content unavailable (NULL byte issue)." },
+      message: "Lecture content unavailable.",
     };
   }
 }

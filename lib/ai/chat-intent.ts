@@ -117,6 +117,16 @@ export function classifyChatIntent(message: string, context: ChatIntentContext =
     return { intent: "RECORDED_LECTURES_SEARCH", reason: "recorded-lecture keywords with request" };
   }
 
+  // Workspace overview questions → GENERAL_CHAT (digest is already in system prompt).
+  // "عندي إيه في مساحة العمل؟" should NOT trigger the source resolver.
+  if (
+    /مساحة العمل|workspace/.test(text) &&
+    /إيه|ماذا|كم|ما هي|ما هو|overview|summary|ملخص/.test(text) &&
+    !/(اشرح|لخص|حل|محاضرة رقم|ملف رقم|رقم \d)/.test(text)
+  ) {
+    return { intent: "GENERAL_CHAT", reason: "workspace overview question" };
+  }
+
   // Explicit workspace/source requests.
   if (hasWorkspace && hasSearchVerb) {
     // ⚠️ ممنوع `\b` هنا: JS يعرّف \w بـ ASCII، فحدّ الكلمة لا يُطابق العربية أبدًا

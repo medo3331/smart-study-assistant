@@ -5,6 +5,7 @@ import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
@@ -102,9 +103,17 @@ export async function POST(req: Request) {
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const latestMessage = safeMessages.at(-1)?.content ?? "";
     const intentResult = classifyChatIntent(latestMessage, {});
+    console.log("[CHAT DEBUG]", { intent: intentResult.intent, latestMessage: latestMessage.slice(0, 80) });
     const selectedMode = parseMode(mode, latestMessage, intentResult.intent);
     const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
-    const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts);
+    let workspaceDigest: string | null = null;
+    try {
+      workspaceDigest = await getWorkspaceDigest(supabase, user.id);
+    } catch (e) {
+      console.error("[CHAT DEBUG] digest failed:", e);
+    }
+    console.log("[CHAT DEBUG]", { hasDigest: !!workspaceDigest, digestLen: workspaceDigest?.length ?? 0 });
+    const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest);
 
     // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
     let personaPrompt = "";
