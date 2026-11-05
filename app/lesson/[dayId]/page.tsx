@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -13,6 +13,8 @@ import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { StudyTutorWidget } from "@/components/StudyTutorWidget";
 import { UnifiedChat } from "@/components/unified-ai/UnifiedChat";
 import { awardCoins } from "@/lib/shop/shop-data";
+import { buildLessonSequence } from "@/lib/learning/lesson-sequence";
+import { fetchUnlockedDayIds } from "@/lib/pages-data";
 
 // 🎴 إعادة تصميم صفحة الدرس — نفس نظام الداشبورد المنفَّذ (بنفسجي/تيل/عنبري على داكن)
 // كل الأرقام من نفس حالة الصفحة الحقيقية؛ مفيش مصدر بيانات جديد ولا منطق بديل.
@@ -281,6 +283,9 @@ export default function LessonDetailPage() {
   // 🧩 أيام الخطة (id/day_number/is_completed) لتقدّم الوحدة المجزّأ — نفس الاستعلام الموجود
   const [planDays, setPlanDays] = useState<UnitDayLite[]>([]);
   const [nextDayId, setNextDayId] = useState<string | null>(null);
+  const [previousDayId, setPreviousDayId] = useState<string | null>(null);
+  // القفل التسلسلي: بيتحسب بعد تحميل أيام الخطة + study_day_unlocks.
+  const [isLockedBySequence, setIsLockedBySequence] = useState(false);
 
   // ✅ إضافة: حالة محلية لأزرار الإجراءات السريعة (حفظ/مفضلة) - بصرية بحتة
   const [isSaved, setIsSaved] = useState(false);
@@ -434,6 +439,7 @@ export default function LessonDetailPage() {
         .from("study_days")
         .select("id, day_number, is_completed")
         .eq("config_id", day.config_id)
+        .eq("user_id", user.id)
         .order("day_number", { ascending: true });
 
       if (allDays) {
@@ -448,6 +454,29 @@ export default function LessonDetailPage() {
         );
         const next = allDays.find((d: { day_number: number }) => d.day_number === typedDay.day_number + 1);
         setNextDayId(next ? (next as any).id : null);
+        const previous = allDays.find(
+          (d: { day_number: number }) => d.day_number === typedDay.day_number - 1
+        );
+        setPreviousDayId(previous ? (previous as any).id : null);
+
+        // 🔓 الفتح المبكر بقى من الداتابيز — نفس المصدر اللي صفحة الدروس بتقرأ منه.
+        const unlockedResult = await fetchUnlockedDayIds(
+          supabase,
+          user.id,
+          allDays.map((d: { id: string }) => d.id)
+        );
+        const unlockedDays = unlockedResult.error ? [] : unlockedResult.data;
+
+        const sequence = buildLessonSequence(
+          allDays.map((d: { id: string; day_number: number; is_completed: boolean }) => ({
+            id: d.id,
+            dayNumber: d.day_number,
+            isCompleted: Boolean(d.is_completed),
+          })),
+          { unlockedDays }
+        );
+        const current = sequence.find((item) => item.lesson.id === typedDay.id);
+        setIsLockedBySequence(Boolean(current?.isLocked));
       }
 
       setLoading(false);
@@ -740,6 +769,43 @@ export default function LessonDetailPage() {
             >
               الرجوع للداشبورد
             </button>
+          </GlassCard>
+        </div>
+      </LessonShell>
+    );
+  }
+
+  if (isLockedBySequence) {
+    return (
+      <LessonShell>
+        <div className="flex min-h-screen items-center justify-center p-4" dir="rtl">
+          <GlassCard className="w-full max-w-sm space-y-4 p-6">
+            <div>
+              <p className="mb-1.5 text-xs font-bold tracking-wide text-[var(--accent-highlight)]">
+                مقفول
+              </p>
+              <h1 className="text-lg font-bold text-[var(--text)]">الدرس ده لسه مقفول</h1>
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--muted)]">
+              خلّص الدرس اللي قبله الأول عشان يفتح. تقدر كمان تفتحه بدري من الداشبورد
+              مقابل 150 XP.
+            </p>
+            <div className="flex flex-col gap-2">
+              {previousDayId && (
+                <button
+                  onClick={() => router.push(`/lesson/${previousDayId}`)}
+                  className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-semibold transition-colors hover:brightness-110"
+                >
+                  افتح الدرس السابق
+                </button>
+              )}
+              <button
+                onClick={() => router.push(`/lessons/${dayRow.config_id}`)}
+                className="inline-flex h-10 w-full items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--text)] text-sm font-semibold transition-colors hover:bg-[var(--card-secondary)]"
+              >
+                كل دروس المادة
+              </button>
+            </div>
           </GlassCard>
         </div>
       </LessonShell>

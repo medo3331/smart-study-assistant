@@ -27,9 +27,52 @@ function isNavSignal(value: unknown): value is NavSignal {
   return typeof value === "string" && (NAV_SIGNALS as readonly string[]).includes(value);
 }
 
+/** أسماء أيقونات lucide. الاسم هنا مفتاح بس — الخريطة نفسها في NavRail،
+    عشان الملف ده يفضل بيانات خالصة (مفيش React) ويُقرأ من السيرفر. */
+export type NavIconName =
+  | "dashboard"
+  | "subjects"
+  | "lessons"
+  | "workspace"
+  | "lectures"
+  | "exams"
+  | "slides"
+  | "aiMentor"
+  | "agents"
+  | "assistant"
+  | "create"
+  | "planner"
+  | "calendar"
+  | "missions"
+  | "notes"
+  | "emergency"
+  | "quran"
+  | "worship"
+  | "break"
+  | "escape"
+  | "progress"
+  | "achievements"
+  | "analytics"
+  | "leaderboard"
+  | "xpShop"
+  | "inventory"
+  | "community"
+  | "referrals"
+  | "shop"
+  | "rewards"
+  | "pricing"
+  | "balance"
+  | "plans"
+  | "profile"
+  | "settings"
+  | "career"
+  | "report"
+  | "support"
+  | "admin";
+
 export interface NavItemDef {
   id: string;
-  icon: string;
+  icon: NavIconName;
   label: string; // العربي — هو الأساسي
   latin: string; // الإنجليزي — لافتة صغيرة، بتدي إيقاع للقايمة
   href?: string;
@@ -37,84 +80,145 @@ export interface NavItemDef {
   signal?: NavSignal;
   /** بند خطر — بيتلوّن أحمر بدل الرمادي الهادي (الطوارئ بس دلوقتي) */
   tone?: "danger";
+  /** بند إداري — مايتعرضش غير لصاحب المنصة */
+  ownerOnly?: boolean;
 }
 
 export interface NavGroupDef {
+  /** معرّف ثابت — حالة الفتح/القفل بتتعامل بيه، فمايتغيّرش مع الترجمة. */
+  id: string;
   title: string;
+  latin: string;
+  icon: NavIconName;
   items: NavItemDef[];
 }
 
-// ⚠️ الترتيب هنا هو ترتيب المستخدم بالظبط. المجموعات اتزوّدت عشان البنود
-// ورا بعض بيبقوا حيطة، بس من غير ما يتغيّر ترتيب أي بند.
+// ⚠️ الترتيب هنا هو ترتيب المستخدم بالظبط: ٩ أقسام، من لوحة التحكم للدعم
+// والإدارة. البنود القديمة كلها محفوظة جوه الأقسام المناسبة — مفيش أداة
+// اتشالت، بس اتوزّعت على المجموعات التسعة.
 //
 // 🗓️ ٨ أغسطس: الشريط العلوي في الداشبورد اتشال بالكامل (طلب المستخدم:
 // «قايمة واحدة بس اللي على الشمال فيها كل حاجة»). بنوده اتوزّعوا هنا —
-// الطوارئ في «المذاكرة»، والمتصدرين واصرف نقاطك في «التقدّم»، وتقرير
-// المتابعة في «الحساب». البنود القديمة كلها فضلت بنفس ترتيبها النسبي.
+// الطوارئ في «التخطيط»، والمتصدرين واصرف نقاطك في «التقدّم»، وتقرير
+// المتابعة في «الحساب».
 export const NAV_GROUPS: NavGroupDef[] = [
   {
-    title: "المذاكرة",
+    id: "main",
+    title: "الرئيسية",
+    latin: "Main",
+    icon: "dashboard",
     items: [
-      { id: "home", icon: "🏠", label: "الرئيسية", latin: "Home", href: "/dashboard" },
-      { id: "courses", icon: "📚", label: "الكورسات", latin: "Courses", href: "/dashboard/courses" },
-      { id: "workspace", icon: "🗂️", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
+      { id: "home", icon: "dashboard", label: "لوحة التحكم", latin: "Dashboard", href: "/dashboard" },
+    ],
+  },
+  {
+    id: "learning",
+    title: "التعلّم",
+    latin: "Learning",
+    icon: "subjects",
+    items: [
+      // «المواد» هي صفحة الكورسات الحالية — نفس المحتوى اللي المستخدم
+      // بيدخل منه مادته. مسار /dashboard/subjects المختصر هيتبني لاحقاً.
+      { id: "courses", icon: "subjects", label: "المواد", latin: "Subjects", href: "/dashboard/courses" },
+      { id: "lessons", icon: "lessons", label: "الدروس", latin: "Lessons", href: "/lessons" },
+      { id: "workspace", icon: "workspace", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
+      { id: "lectures", icon: "lectures", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
+      { id: "exams", icon: "exams", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
+      { id: "slides", icon: "slides", label: "العروض", latin: "Slides", href: "/dashboard/slides" },
+    ],
+  },
+  {
+    id: "ai",
+    title: "مساحة الذكاء",
+    latin: "AI Space",
+    icon: "aiMentor",
+    items: [
+      { id: "ai_chat", icon: "aiMentor", label: "المعلم الشخصي", latin: "AI Mentor", href: "/chat" },
+      { id: "agents", icon: "agents", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
+      { id: "ai", icon: "assistant", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
+      { id: "create", icon: "create", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
+    ],
+  },
+  {
+    id: "planning",
+    title: "التخطيط والتنظيم",
+    latin: "Planning",
+    icon: "planner",
+    items: [
+      { id: "planner", icon: "planner", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
+      { id: "calendar", icon: "calendar", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
+      { id: "missions", icon: "missions", label: "المهام اليومية", latin: "Daily Missions", href: "/missions" },
+      { id: "notes", icon: "notes", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
-      // مكانه هنا لأنه بيغيّر المذاكرة نفسها، مش إعداد في الحساب.
-      { id: "emergency", icon: "🚨", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
+      { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
+      // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — البند ده بينزّل
+      // على كارت القرآن في الداشبورد، والكارت فيه زرار للمكتبة الكاملة.
+      { id: "quran", icon: "quran", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
+      { id: "worship", icon: "worship", label: "عباداتي", latin: "Worship Center", href: "/worship" },
+      { id: "break", icon: "break", label: "استراحة", latin: "Break Zone", href: "/break" },
+      { id: "escape", icon: "escape", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
     ],
   },
   {
-    title: "الأدوات",
+    id: "progress",
+    title: "تقدمي وإنجازاتي",
+    latin: "Progress",
+    icon: "progress",
     items: [
-      { id: "ai", icon: "🤖", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
-      { id: "agents", icon: "✦", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
-      { id: "create", icon: "✎", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
-      { id: "notes", icon: "📝", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — مين هيعرف إنه
-      // موجود؟ البند ده بينزّل على كارت القرآن في الداشبورد، والكارت نفسه
-      // فيه زرار للمكتبة الكاملة. جنب الملاحظات لأن الاتنين `scrollTo`.
-      { id: "quran", icon: "📖", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
-      // 🕌 مركز العبادات — صفحة مستقلة على /worship (Task 2). جنب القرآن
-      // لأنهم نفس العائلة؛ البند ده مجرّد اختصار تنقّل، مش قسم جديد.
-      { id: "worship", icon: "🕌", label: "عباداتي", latin: "Worship Center", href: "/worship" },
-      { id: "exams", icon: "📋", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
-      // 📚 محاضراتي — محاضرات المستخدم المحفوظة وتفريغها (المرحلة ٣).
-      // جنب بنك الامتحانات: الاتنين «محتوى الطالب الخاص» — محاضراته هو.
-      { id: "lectures", icon: "🎙️", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
-      { id: "planner", icon: "🎯", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
-      { id: "calendar", icon: "📅", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
-      { id: "break", icon: "☕", label: "استراحة", latin: "Break Zone", href: "/break" },
-      { id: "escape", icon: "🧩", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
-      { id: "slides", icon: "🖥️", label: "العروض", latin: "Slides", href: "/dashboard/slides" },
-    ],
-  },
-  {
-    title: "التقدّم",
-    items: [
-      { id: "achievements", icon: "🏆", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
-      { id: "missions", icon: "✅", label: "مهام اليوم", latin: "Daily Missions", href: "/missions" },
-      { id: "rewards", icon: "🪙", label: "سجل المكافآت", latin: "Rewards", href: "/rewards" },
-      { id: "referrals", icon: "🎁", label: "الدعوات", latin: "Referrals", href: "/dashboard/referrals" },
-      { id: "analytics", icon: "📊", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
-      { id: "leaderboard", icon: "🥇", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
-      // المتجر والمخزن في «التقدّم» مش في «الحساب»: الكوينز بتتكسب
-      // بالمذاكرة، فالمكان الطبيعي ليهم جنب الإنجازات والتحليلات.
-      { id: "shop", icon: "🛍️", label: "المتجر", latin: "Shop", href: "/shop" },
-      { id: "plans", icon: "📋", label: "الخطط", latin: "Plans", href: "/plans" },
+      { id: "progress", icon: "progress", label: "التقدم", latin: "Progress", href: "/dashboard/progress" },
+      { id: "achievements", icon: "achievements", label: "الإنجازات", latin: "Achievements", href: "/dashboard/achievements" },
+      { id: "analytics", icon: "analytics", label: "التحليلات", latin: "Analytics", scrollTo: "analytics" },
+      { id: "leaderboard", icon: "leaderboard", label: "لوحة المتصدرين", latin: "Leaderboard", signal: "leaderboard" },
       // ⚠️ ده مش المتجر. المتجر بيصرف كوينز، وده بيصرف XP على تجميد
       // السلسلة وفتح اليوم اللي بعده بدري. عملتين مختلفتين خالص.
-      { id: "xpShop", icon: "✨", label: "اصرف نقاطك", latin: "XP Rewards", signal: "xpShop" },
-      { id: "inventory", icon: "🎒", label: "المخزن", latin: "Inventory", href: "/inventory" },
+      { id: "xpShop", icon: "xpShop", label: "اصرف نقاطك", latin: "XP Rewards", signal: "xpShop" },
+      { id: "inventory", icon: "inventory", label: "المخزن", latin: "Inventory", href: "/inventory" },
     ],
   },
   {
-    title: "الحساب",
+    id: "community",
+    title: "المجتمع والمكافآت",
+    latin: "Community",
+    icon: "community",
     items: [
-      { id: "career", icon: "💼", label: "المسار المهني", latin: "Career", href: "/dashboard/career" },
-      { id: "community", icon: "👥", label: "المجتمع", latin: "Community", href: "/community" },
-      { id: "parentReport", icon: "📄", label: "تقرير المتابعة", latin: "Report", signal: "parentReport" },
-      { id: "settings", icon: "⚙️", label: "الإعدادات", latin: "Settings", signal: "settings" },
-      { id: "support", icon: "🎧", label: "الدعم الفني", latin: "Support", href: "/dashboard/support" },
+      { id: "community", icon: "community", label: "المجتمع", latin: "Community", href: "/community" },
+      { id: "referrals", icon: "referrals", label: "الإحالات", latin: "Referrals", href: "/dashboard/referrals" },
+      { id: "shop", icon: "shop", label: "المتجر", latin: "Shop", href: "/shop" },
+      { id: "rewards", icon: "rewards", label: "المكافآت", latin: "Rewards", href: "/rewards" },
+    ],
+  },
+  {
+    id: "balance",
+    title: "الباقة والرصيد",
+    latin: "Balance",
+    icon: "balance",
+    items: [
+      { id: "plan_current", icon: "pricing", label: "الخطة الحالية", latin: "Current Plan", href: "/pricing" },
+      { id: "balance", icon: "balance", label: "الرصيد", latin: "Balance", href: "/dashboard/balance" },
+      { id: "plans", icon: "plans", label: "الخطط", latin: "Plans", href: "/plans" },
+    ],
+  },
+  {
+    id: "account",
+    title: "حسابي وإعداداتي",
+    latin: "Account",
+    icon: "profile",
+    items: [
+      { id: "profile", icon: "profile", label: "الملف الشخصي", latin: "Profile", href: "/dashboard/profile" },
+      { id: "settings", icon: "settings", label: "الإعدادات", latin: "Settings", signal: "settings" },
+      { id: "career", icon: "career", label: "المسار المهني", latin: "Career", href: "/dashboard/career" },
+      { id: "parentReport", icon: "report", label: "تقرير المتابعة", latin: "Report", signal: "parentReport" },
+    ],
+  },
+  {
+    id: "support",
+    title: "الدعم والإدارة",
+    latin: "Support & Admin",
+    icon: "support",
+    items: [
+      { id: "support", icon: "support", label: "الدعم الفني", latin: "Support", href: "/dashboard/support" },
+      // يظهر للـ Owner بس — الفلترة في NavRail عبر isOwner.
+      { id: "admin", icon: "admin", label: "لوحة الأدمن", latin: "Admin", href: "/admin", ownerOnly: true },
     ],
   },
 ];

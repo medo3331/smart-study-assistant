@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable react-hooks/exhaustive-deps -- TODO: stable deps */
 /* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system is intentional */
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
@@ -44,6 +44,8 @@ import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components
 import { WeeklyProgress } from "./components/WeeklyProgress";
 import { AchievementsStrip } from "./components/AchievementsStrip";
 import { THEME_STYLES, HEATMAP_COLORS } from "./components/theme-helpers";
+import { fetchUnlockedDayIds } from "@/lib/pages-data";
+import { unlockStudyDay } from "./actions/unlock-day";
 // ًںژ´ إعادة تصميم الداشبورد (نظام موحّد): هيرو + كروت أرقام + الخطوة الحالية.
 // نفس حالة الصفحة الحقيقية (profiles / study_days / activity_log) بدون أي مصدر بيانات جديد.
 import { HeroCard } from "./components/HeroCard";
@@ -195,6 +197,8 @@ export default function DashboardPage() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  /** منع double-click على «افتح اللي بعده بدري» أثناء نداء السيرفر. */
+  const unlockingDayRef = useRef(false);
   /** بيزيد لما خطة امتحان تتحفظ من الشات — بيعيد تركيب كارت الخطة. */
   const [examPlanKey, setExamPlanKey] = useState(0);
 
@@ -576,15 +580,6 @@ export default function DashboardPage() {
         setConfigId(activeConfigId);
         setNewSubjectInput(activeConfig.subject);
 
-        const savedEarlyUnlocked = localStorage.getItem(`early_unlocked_${activeConfigId}`);
-        if (savedEarlyUnlocked) {
-          try {
-            setEarlyUnlockedDays(JSON.parse(savedEarlyUnlocked));
-          } catch {
-            /* ignore */
-          }
-        }
-
         const { data: activityRows } = await supabase.from("activity_log").select("*").eq("user_id", currentUser.id);
                 if (activityRows) {
                           const logMap: ActivityLog = {};
@@ -689,12 +684,33 @@ export default function DashboardPage() {
     }
   }, [notificationsEnabled, reminderTime, isInitialized]);
 
-  // ✅ حفظ الأيام المفتوحة بدري محليًا
+  // ✅ الأيام المفتوحة بدري بقت من study_day_unlocks — مفيش localStorage.
   useEffect(() => {
-    if (isInitialized && configId) {
-      localStorage.setItem(`early_unlocked_${configId}`, JSON.stringify(earlyUnlockedDays));
-    }
-  }, [earlyUnlockedDays, isInitialized, configId]);
+    if (!authUser || !configId || days.length === 0) return;
+
+    const dayIds = days
+      .map((day) => day.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (dayIds.length === 0) return;
+
+    let alive = true;
+
+    (async () => {
+      const result = await fetchUnlockedDayIds(supabase, authUser.id, dayIds);
+      if (!alive || result.error) return;
+
+      const unlockedIds = new Set(result.data);
+      setEarlyUnlockedDays(
+        days
+          .filter((day) => day.id && unlockedIds.has(day.id))
+          .map((day) => day.day)
+      );
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [authUser, configId, days, supabase]);
 
   // ✅ ملخص أسبوعي تلقائي
   useEffect(() => {
@@ -1219,16 +1235,40 @@ export default function DashboardPage() {
   const nextLockedDay = currentDayNumber + 1;
   const canUnlockNextDayEarly = nextLockedDay <= days.length && !earlyUnlockedDays.includes(nextLockedDay);
 
-  const handleUnlockNextDayEarly = () => {
+  const handleUnlockNextDayEarly = async () => {
     if (!canUnlockNextDayEarly) return;
     if (xp < 150) {
-      alert("عذراً، محتاج 150 XP على الأقل عشان تفتح اليوم ده بدري! ًںک…");
+      alert("عذراً، محتاج 150 XP على الأقل عشان تفتح اليوم ده بدري! 😅");
       return;
     }
-    setXp((prev) => prev - 150);
-    setEarlyUnlockedDays((prev) => [...prev, nextLockedDay]);
-    alert(`تم فتح ${uiText.stepPrefix} ${nextLockedDay} بدري! ًںژ‰ تقدر دلوقتي تشوفه وتفتحه.`);
-    setShowShopModal(false);
+
+    const targetDay = days.find((day) => day.day === nextLockedDay);
+    if (!targetDay?.id) {
+      alert("اليوم ده لسه ما اتحفظش في الخطة. افتح الداشبورد تاني وحاول.");
+      return;
+    }
+    if (unlockingDayRef.current) return;
+
+    unlockingDayRef.current = true;
+    try {
+      const result = await unlockStudyDay(targetDay.id);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+
+      setXp(result.xpRemaining);
+      setEarlyUnlockedDays((prev) =>
+        prev.includes(nextLockedDay) ? prev : [...prev, nextLockedDay]
+      );
+      alert(`تم فتح ${uiText.stepPrefix} ${nextLockedDay} بدري! 🎉 تقدر دلوقتي تشوفه وتفتحه.`);
+      setShowShopModal(false);
+    } catch (error) {
+      console.error("unlockStudyDay failed:", error);
+      alert("مقدرناش نفتح الدرس دلوقتي. حاول تاني.");
+    } finally {
+      unlockingDayRef.current = false;
+    }
   };
 
   const sortedActivityDates = Object.keys(activityLog).sort();

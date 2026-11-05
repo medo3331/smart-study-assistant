@@ -25,13 +25,19 @@ import {
   STUDENT_LEVELS,
   buildPersonaContext,
   clearPendingChoice,
-  getStepPrefix,
   getTracks,
   isPersona,
   readPendingChoice,
 } from "@/lib/user-persona";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
-import { setActiveCourse } from "@/lib/pages-data";
+import {
+  CURRICULUM_MAX_FOCUS_TOPIC_CHARS,
+  CURRICULUM_MAX_FOCUS_TOPICS,
+  CURRICULUM_MAX_LESSONS,
+  CURRICULUM_MIN_LESSONS,
+  type CurriculumGenerationResult,
+  type CurriculumLevel,
+} from "@/lib/curriculum/types";
 type LearningStyle = "practical" | "visual" | "academic";
 type SkillLevel = "beginner" | "intermediate" | "advanced";
 type Pace = "relaxed" | "standard" | "intensive";
@@ -57,14 +63,6 @@ const CATEGORIES: { id: CategoryType }[] = [
 ];
 
 const QUESTIONS: QuizQuestion[] = [
-  {
-    question: "قد إيه خبرتك الحالية في الموضوع ده؟",
-    options: [
-      { label: "لسه بادئ من الصفر", level: 1 },
-      { label: "عندي أساسيات بسيطة", level: 2 },
-      { label: "عندي خبرة كويسة وعايز أتعمق", level: 3 },
-    ],
-  },
   {
     question: "لما تتعلم حاجة جديدة، بتفهم أسرع لو...",
     options: [
@@ -95,19 +93,37 @@ const STYLE_LABEL: Record<LearningStyle, string> = {
   academic: "أكاديمي",
 };
 
+/** اختيارات سريعة لعدد الدروس. الإدخال المخصص بيسمح من 3 لـ 50. */
+const LESSON_PRESETS = [5, 10, 20, 30] as const;
 
-interface GeneratedDay {
-  title: string;
-  topic: string;
-  description: string;
-}
+/** كروت العمق — كل واحد فيه وصف يوضح الفرق مش مجرد اسم. */
+const DEPTH_OPTIONS: { id: CurriculumLevel; label: string; description: string }[] = [
+  {
+    id: "beginner",
+    label: "مبتدئ",
+    description: "تعريفات وأمثلة بسيطة، بدون رياضيات أو تفاصيل معمارية متقدمة.",
+  },
+  {
+    id: "intermediate",
+    label: "متوسط",
+    description: "مقارنات وحالات استخدام وتمارين تطبيقية بعد كل مفهوم.",
+  },
+  {
+    id: "advanced",
+    label: "متقدم",
+    description: "تفاصيل معمارية، أداء، edge cases، وقرارات تصميم.",
+  },
+];
+
 
 export default function AssessmentPage() {
   const router = useRouter();
   const { t, locale } = useLanguage();
   const [supabase] = useState(() => createClient());
 
-  const [step, setStep] = useState<"identity" | "subject" | "quiz" | "building" | "result">("identity");
+  const [step, setStep] = useState<
+    "identity" | "subject" | "curriculum" | "quiz" | "building" | "preview" | "result"
+  >("identity");
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState<CategoryType>("دراسة أكاديمية");
   const [persona, setPersona] = useState<Persona>(DEFAULT_PERSONA);
@@ -115,8 +131,20 @@ export default function AssessmentPage() {
   const [field, setField] = useState<FieldId>(DEFAULT_FIELD);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<QuizOption[]>([]);
-  const [startingSteps, setStartingSteps] = useState<1 | 3 | 5>(3);
-  const [buildError, setBuildError] = useState<string | null>(null);
+
+  // ---- Curriculum Builder ----
+  const [lessonCount, setLessonCount] = useState(10);
+  const [curriculumLevel, setCurriculumLevel] = useState<CurriculumLevel>("intermediate");
+  const [focusTopics, setFocusTopics] = useState<string[]>([]);
+  const [topicDraft, setTopicDraft] = useState("");
+  const [preview, setPreview] = useState<CurriculumGenerationResult | null>(null);
+  const [creditsCharged, setCreditsCharged] = useState<number | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const generatingRef = React.useRef(false);
+  const savingRef = React.useRef(false);
+
   const [result, setResult] = useState<{ level: SkillLevel; style: LearningStyle; days: number } | null>(null);
   // Education context (student only) — minimal addition to existing Assessment
   // SSR visible education stage selection (fallback for hydration delay)
@@ -277,13 +305,13 @@ export default function AssessmentPage() {
     if (questionIndex < QUESTIONS.length - 1) {
       setQuestionIndex(questionIndex + 1);
     } else {
-      buildPlan(newAnswers);
+      void generatePreview(newAnswers);
     }
   };
 
   const handleGoBack = () => {
     if (questionIndex === 0) {
-      setStep("subject");
+      setStep("curriculum");
       return;
     }
     setAnswers(answers.slice(0, -1));
@@ -291,10 +319,6 @@ export default function AssessmentPage() {
   };
 
   function computeProfile(finalAnswers: QuizOption[]) {
-    const levels = finalAnswers.map((a) => a.level).filter((v): v is 1 | 2 | 3 => !!v);
-    const avgLevel = levels.reduce((s, v) => s + v, 0) / (levels.length || 1);
-    const level: SkillLevel = avgLevel < 1.7 ? "beginner" : avgLevel < 2.4 ? "intermediate" : "advanced";
-
     const paceCount: Record<Pace, number> = { relaxed: 0, standard: 0, intensive: 0 };
     finalAnswers.forEach((a) => a.pace && paceCount[a.pace]++);
     const pace = (Object.keys(paceCount) as Pace[]).sort((a, b) => paceCount[b] - paceCount[a])[0];
@@ -303,176 +327,223 @@ export default function AssessmentPage() {
     finalAnswers.forEach((a) => a.style && styleCount[a.style]++);
     const style = (Object.keys(styleCount) as LearningStyle[]).sort((a, b) => styleCount[b] - styleCount[a])[0];
 
-    return { level, pace, style, days: startingSteps };
+    // العمق والعدد بقوا اختيار صريح من خطوة المنهج، مش استنتاج من الكويز.
+    return { level: curriculumLevel, pace, style, days: lessonCount };
   }
 
-  function fallbackDays(count: number): GeneratedDay[] {
-    const prefix = getStepPrefix(category, persona);
-    return Array.from({ length: count }, (_, i) => ({
-      title: `${prefix} ${i + 1}`,
-      topic: `${prefix} ${i + 1}: في ${subject}`,
-      description: `شرح وتطبيقات عملية لـ ${subject}.`,
-    }));
+  function addFocusTopic() {
+    const raw = topicDraft.trim().replace(/[,،]+$/g, "").trim();
+    if (!raw) return;
+    if (focusTopics.length >= CURRICULUM_MAX_FOCUS_TOPICS) return;
+
+    const topic = raw.slice(0, CURRICULUM_MAX_FOCUS_TOPIC_CHARS);
+    if (focusTopics.some((item) => item.toLowerCase() === topic.toLowerCase())) {
+      setTopicDraft("");
+      return;
+    }
+
+    setFocusTopics((prev) => [...prev, topic]);
+    setTopicDraft("");
   }
 
-  async function buildPlan(finalAnswers: QuizOption[]) {
+  function removeFocusTopic(topic: string) {
+    setFocusTopics((prev) => prev.filter((item) => item !== topic));
+  }
+
+  function clampLessonCount(value: number): number {
+    if (!Number.isFinite(value)) return CURRICULUM_MIN_LESSONS;
+    return Math.min(
+      CURRICULUM_MAX_LESSONS,
+      Math.max(CURRICULUM_MIN_LESSONS, Math.round(value))
+    );
+  }
+
+  async function resolveCurrentUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) return user;
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.user) return session.user;
+
+    const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+    if (anonError || !anonData.user) throw anonError || new Error("تعذر إنشاء جلسة");
+    return anonData.user;
+  }
+
+  async function saveProfile(userId: string) {
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    // 👤 الشخصية والمجال صفات المستخدم مش صفات الدرس، فمكانهم profiles.
+    // upsert مش insert: اليوزر الموجود بالفعل لازم ياخد الاختيار الجديد كمان.
+    const isUni = persona === "student" && stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY";
+    const personaFields: Record<string, unknown> = {
+      persona,
+      student_level: persona === "student" ? studentLevel : null,
+      field,
+      subject,
+      education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
+      education_grade_id: persona === "student" && !isUni ? (eduGradeId ?? null) : null,
+      education_track_id: persona === "student" && !isUni ? (eduTrackId ?? null) : null,
+      faculty_name: isUni ? ((uniFaculty || uniFacultyFree.trim()) || null) : null,
+      edu_year: isUni ? (uniYear ?? null) : null,
+    };
+
+    if (existingProfile) {
+      const { error } = await supabase.from("profiles").update(personaFields).eq("id", userId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("profiles")
+        .insert({ id: userId, xp: 0, streak: 1, theme: "amber", ...personaFields });
+      if (error) throw error;
+    }
+  }
+
+  async function generatePreview(finalAnswers: QuizOption[]) {
+    if (!subject.trim()) {
+      setGenerationError("اكتب اسم المادة الأول.");
+      setStep("curriculum");
+      return;
+    }
+    if (
+      !Number.isInteger(lessonCount) ||
+      lessonCount < CURRICULUM_MIN_LESSONS ||
+      lessonCount > CURRICULUM_MAX_LESSONS
+    ) {
+      setGenerationError(
+        `عدد الدروس لازم يكون رقم صحيح بين ${CURRICULUM_MIN_LESSONS} و ${CURRICULUM_MAX_LESSONS}.`
+      );
+      setStep("curriculum");
+      return;
+    }
+
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+
+    // الزائر يقدر يجرّب المنهج — بنعمل جلسة مجهولة قبل النداء (نفس منطق
+    // الحفظ القديم)، والـ API بيطبّق حد الزوار الخاص بيه.
+    try {
+      await resolveCurrentUser();
+    } catch (error) {
+      console.error("Could not create a session for curriculum preview:", error);
+      setGenerationError("تعذّر إنشاء جلسة. سجّل دخول وحاول تاني.");
+      setStep("preview");
+      generatingRef.current = false;
+      return;
+    }
+
     setStep("building");
-    setBuildError(null);
-    const profile = computeProfile(finalAnswers);
-    setResult({ level: profile.level, style: profile.style, days: profile.days });
+    setGenerationError(null);
+    setSaveError(null);
+    setPreview(null);
 
-    let generatedDays: GeneratedDay[] = fallbackDays(profile.days);
+    const profile = computeProfile(finalAnswers);
+    setResult({ level: profile.level, style: profile.style, days: lessonCount });
 
     try {
-      // سطور بتتحقن من طبقة المحورين (شخصية + مستوى + مجال) — مش مسار كود منفصل
-      const systemInstruction = `أنت مصمم خطط دراسية خبير. ${buildPersonaContext(persona, studentLevel, field)} هتصمم خطة من ${profile.days} خطوات بالظبط لموضوع "${subject}" في مجال "${category}"، لشخص مستواه "${LEVEL_LABEL[profile.level]}" وأسلوب تعلمه المفضل "${STYLE_LABEL[profile.style]}". رتب الخطوات من الأساسيات للأصعب تدريجيًا. رد بصيغة JSON فقط بدون أي نص إضافي أو Markdown، على شكل array بالظبط كده: [{"title":"...", "topic":"...", "description":"..."}]. الحقل title يكون قصير زي "الدرس 1"، topic عنوان الموضوع نفسه، description جملة أو اتنين شرح مختصر للمحتوى.`;
-
-      const response = await fetch("/api/ai/generate", {
+      const response = await fetch("/api/curriculum/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction,
-          messages: [{ role: "user", content: "ابني الخطة دلوقتي." }],
+          subject: subject.trim(),
+          category,
+          level: curriculumLevel,
+          lessonCount,
+          focusTopics,
+          personaContext: buildPersonaContext(persona, studentLevel, field),
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const msg =
-          (data?.reasonAr as string | undefined) ||
-          (data?.message as string | undefined) ||
-          (data?.error?.message as string | undefined) ||
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.data?.days?.length) {
+        const message =
+          (payload?.error as string | undefined) ||
           (response.status === 429
-            ? "وصلت للحد الأقصى للرسائل المسموح بها في خطتك الحالية. يرجى الانتظار أو ترقية خطتك."
-            : "فشل الاتصال بالـ AI");
-        throw new Error(msg);
+            ? "الخدمة مشغولة دلوقتي. استنى شوية وحاول تاني."
+            : "مقدرناش نبني المنهج. حاول تاني.");
+        throw new Error(message);
       }
 
-      const raw = data?.choices?.[0]?.message?.content || "";
-      const cleaned = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        generatedDays = parsed
-          .slice(0, profile.days)
-          .map((d: unknown, i: number) => {
-            const item = d as Record<string, unknown>;
-            return {
-              title: (item.title as string) || `${getStepPrefix(category, persona)} ${i + 1}`,
-              topic: (item.topic as string) || subject,
-              description: (item.description as string) || "",
-            };
-          });
+      const generated = payload.data as CurriculumGenerationResult;
+      if (generated.days.length !== lessonCount) {
+        throw new Error("عدد الدروس الراجع مختلف عن المطلوب. جرّب توليد تاني.");
       }
-    } catch (err) {
-      console.error("AI plan generation failed, using fallback:", err);
+
+      setPreview(generated);
+      setResult({
+        level: profile.level,
+        style: profile.style,
+        days: generated.days.length,
+      });
+      setCreditsCharged(
+        typeof payload.creditsCharged === "number" ? payload.creditsCharged : null
+      );
+      setStep("preview");
+    } catch (error) {
+      console.error("Curriculum generation failed:", error);
+      setGenerationError(
+        error instanceof Error ? error.message : "مقدرناش نبني المنهج. حاول تاني."
+      );
+      setStep("preview");
+    } finally {
+      generatingRef.current = false;
     }
-
-    await saveEverything(profile, generatedDays);
   }
 
-  async function saveEverything(
-    profile: { level: SkillLevel; style: LearningStyle; days: number },
-    generatedDays: GeneratedDay[]
-  ) {
+  async function saveCurriculum() {
+    if (!preview || savingRef.current) return;
+    savingRef.current = true;
+
+    setSaving(true);
+    setSaveError(null);
+
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const currentUser = await resolveCurrentUser();
+      await saveProfile(currentUser.id);
 
-      let currentUser = user;
-      if (!currentUser) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (session?.user) {
-          currentUser = session.user;
-        } else {
-          const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-          if (anonError || !anonData.user) throw anonError || new Error("تعذر إنشاء جلسة");
-          currentUser = anonData.user;
-        }
-      }
+      const { data, error } = await supabase.rpc("create_curriculum", {
+        p_subject: subject.trim(),
+        p_category: category,
+        p_level: curriculumLevel,
+        p_focus_topics: focusTopics,
+        p_learning_style: result?.style ?? "practical",
+        p_days: preview.days.map((day) => ({
+          day: day.day,
+          title: day.title,
+          topic: day.topic,
+          description: day.description,
+        })),
+      });
 
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", currentUser.id)
-        .maybeSingle();
+      if (error) throw error;
 
-      // 👤 الشخصية والمجال صفات المستخدم مش صفات الدرس، فمكانهم profiles.
-      // upsert مش insert: اليوزر الموجود بالفعل لازم ياخد الاختيار الجديد كمان.
-      const isUni = persona === "student" && stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY";
-      const personaFields: Record<string, unknown> = {
-        persona,
-        student_level: persona === "student" ? studentLevel : null,
-        field,
-        subject,
-        education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
-        education_grade_id: persona === "student" && !isUni ? (eduGradeId ?? null) : null,
-        education_track_id: persona === "student" && !isUni ? (eduTrackId ?? null) : null,
-        faculty_name: isUni ? ((uniFaculty || uniFacultyFree.trim()) || null) : null,
-        edu_year: isUni ? (uniYear ?? null) : null,
-      };
-      if (existingProfile) {
-        const { error: profileError } = await supabase.from("profiles").update(personaFields).eq("id", currentUser.id);
-        if (profileError) throw profileError;
-      } else {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .insert({ id: currentUser.id, xp: 0, streak: 1, theme: "amber", ...personaFields });
-        if (profileError) throw profileError;
-      }
-
-      const { data: newConfig, error: configError } = await supabase
-        .from("study_configs")
-        .insert({
-          user_id: currentUser.id,
-          subject,
-          category,
-          days_count: generatedDays.length,
-        })
-        .select()
-        .single();
-
-      if (configError || !newConfig) throw configError || new Error("فشل إنشاء الخطة");
-
-      const rows = generatedDays.map((d, i) => ({
-        config_id: newConfig.id,
-        user_id: currentUser!.id,
-        day_number: i + 1,
-        title: d.title,
-        topic: d.topic,
-        description: d.description,
-        is_completed: false,
-        xp_reward: 100,
-        learning_style: profile.style,
-      }));
-
-      const { error: daysError } = await supabase.from("study_days").insert(rows);
-      if (daysError) throw daysError;
-
-      // 📚 التراك الجديد هو اللي المفروض يفتح. من غير السطر ده، لو المستخدم
-      // كان مختار تراك قديم من صفحة الكورسات، الداشبورد هتفضل تفتحه هو —
-      // فالمستخدم يعمل خطة جديدة وما يشوفهاش.
-      //
-      // الاختيار بيتكتب في الحساب (profiles.active_config_id) مش على الجهاز.
-      // فشله مش سبب نرمي: الخطة اتحفظت خلاص، ولو العمود ناقص الداشبورد
-      // بترجع لأحدث تراك — وهو التراك ده بالظبط. فالنتيجة نفسها.
-      const { error: activeError } = await setActiveCourse(supabase, currentUser.id, newConfig.id);
-      if (activeError) {
-        console.warn("ما قدرناش نحفظ التراك المفتوح في الحساب:", activeError.message);
-      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row?.config_id) throw new Error("لم يتم إنشاء المادة.");
 
       // الخطة اتحفظت، فالاختيار المعلّق خلص دوره. لو مسحناه قبل كده وحصل
       // خطأ، كان المستخدم هيفقد اختياره ويبدأ من الأول.
       clearPendingChoice();
-
       setStep("result");
-    } catch (err) {
-      console.error("Failed to save assessment plan:", err);
-      setBuildError("حصل خطأ أثناء حفظ خطتك. حاول تاني.");
-      setStep("result");
+    } catch (error) {
+      console.error("Failed to save curriculum:", error);
+      const message = error instanceof Error ? error.message : "";
+      setSaveError(
+        /create_curriculum|function/i.test(message)
+          ? "دالة الحفظ غير موجودة. شغّل db/33-create-curriculum-function.sql في Supabase وبعدها حاول تاني."
+          : "حصل خطأ أثناء حفظ المنهج. حاول تاني."
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -758,7 +829,7 @@ export default function AssessmentPage() {
                   <span className="mark mark-tilt">هنبني خطتك على مستواك</span>
                 </h1>
                 <p className="text-sm text-ink-soft mt-2">
-                  ٣ أسئلة سريعة، وبعدها نبدأ بخطة تقدر تمدّها في أي وقت.
+                  سؤالان سريعان بعد اختيار المنهج، وبعدها نبني لك خطة تقدر تمدّها في أي وقت.
                 </p>
               </div>
 
@@ -839,30 +910,206 @@ export default function AssessmentPage() {
                 </div>
               </div>
 
-              <div>
-                <p className="field-label">نبدأ بكام خطوة؟</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {([1, 3, 5] as const).map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      onClick={() => setStartingSteps(count)}
-                      aria-pressed={startingSteps === count}
-                      className={`mono p-3 rounded-[var(--r-sm)] border transition ${startingSteps === count ? "bg-ink border-ink text-paper-2" : "bg-paper border-rule text-ink-soft hover:text-ink"}`}
-                    >
-                      {count} {count === 1 ? "خطوة" : "خطوات"}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-ink-soft">مش مدة ثابتة — تقدر تضيف خطوات جديدة بعد كده وقت ما تحتاج.</p>
-              </div>
-
               <button
-                onClick={() => subject.trim() && setStep("quiz")}
+                onClick={() => subject.trim() && setStep("curriculum")}
                 disabled={!subject.trim()}
                 className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                يلا نبدأ الأسئلة
+                كمّل لتحديد المنهج
+              </button>
+            </motion.div>
+          )}
+
+          {/* خطوة المنهج: العدد والعمق والموضوعات — قبل الكويز. */}
+          {step === "curriculum" && (
+            <motion.div
+              key="curriculum"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-5"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="eyebrow eyebrow-flush mb-1.5">المنهج</p>
+                  <button
+                    type="button"
+                    onClick={() => setStep("subject")}
+                    className="mono text-xs text-ink-soft hover:text-ink"
+                  >
+                    رجوع
+                  </button>
+                </div>
+                <h1 className="h2">
+                  <span className="mark mark-tilt">صمّم منهجك بنفسك</span>
+                </h1>
+                <p className="text-sm text-ink-soft mt-2">
+                  اختار عدد الدروس ومستوى العمق، وزوّد الموضوعات اللي عايز تركز عليها.
+                </p>
+              </div>
+
+              <div>
+                <p className="field-label">عدد الدروس</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {LESSON_PRESETS.map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setLessonCount(count)}
+                      aria-pressed={lessonCount === count}
+                      className={`mono p-3 rounded-[var(--r-sm)] border transition ${
+                        lessonCount === count
+                          ? "bg-ink border-ink text-paper-2"
+                          : "bg-paper border-rule text-ink-soft hover:text-ink hover:border-ink-soft"
+                      }`}
+                    >
+                      {count} دروس
+                    </button>
+                  ))}
+                </div>
+
+                <label htmlFor="lesson-count-input" className="field-label mt-3 block">
+                  أو اكتب عدد مخصص ({CURRICULUM_MIN_LESSONS}–{CURRICULUM_MAX_LESSONS})
+                </label>
+                <input
+                  id="lesson-count-input"
+                  type="number"
+                  min={CURRICULUM_MIN_LESSONS}
+                  max={CURRICULUM_MAX_LESSONS}
+                  value={lessonCount || ""}
+                  onChange={(e) => {
+                    if (e.target.value === "") {
+                      setLessonCount(0);
+                      return;
+                    }
+                    const next = Number(e.target.value);
+                    setLessonCount(Number.isFinite(next) ? next : 0);
+                  }}
+                  onBlur={() => setLessonCount((count) => clampLessonCount(count))}
+                  className="field text-sm w-full"
+                  aria-describedby="lesson-count-hint"
+                />
+                <p id="lesson-count-hint" className="mt-1.5 text-[11px] text-ink-soft">
+                  المنهج بيتبني على عدد الدروس ده، وتقدر توسّعه بعد ما تخلّصه.
+                </p>
+              </div>
+
+              <div>
+                <p className="field-label">مستوى العمق</p>
+                <div className="space-y-2">
+                  {DEPTH_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setCurriculumLevel(option.id)}
+                      aria-pressed={curriculumLevel === option.id}
+                      className={`w-full text-right border p-4 rounded-[var(--r-sm)] transition ${
+                        curriculumLevel === option.id
+                          ? "bg-ink border-ink text-paper-2"
+                          : "bg-paper border-rule text-ink hover:border-ink-soft hover:bg-paper-3"
+                      }`}
+                    >
+                      <span className="font-bold text-sm">{option.label}</span>
+                      <span
+                        className={`block text-xs mt-1 ${
+                          curriculumLevel === option.id ? "text-paper-2/75" : "text-ink-soft"
+                        }`}
+                      >
+                        {option.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="focus-topic-input" className="field-label block">
+                  موضوعات عايز تركز عليها (اختياري)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="focus-topic-input"
+                    value={topicDraft}
+                    maxLength={CURRICULUM_MAX_FOCUS_TOPIC_CHARS}
+                    onChange={(e) => setTopicDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "," || e.key === "،") {
+                        e.preventDefault();
+                        addFocusTopic();
+                      }
+                    }}
+                    placeholder="مثال: OSI Model ثم TCP/IP"
+                    className="field flex-1 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={addFocusTopic}
+                    disabled={
+                      !topicDraft.trim() ||
+                      focusTopics.length >= CURRICULUM_MAX_FOCUS_TOPICS
+                    }
+                    className="btn btn-quiet text-sm px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    إضافة
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[11px] text-ink-soft">
+                  اضغط Enter بعد كل موضوع · الحد الأقصى {CURRICULUM_MAX_FOCUS_TOPICS} موضوعات.
+                </p>
+
+                {focusTopics.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {focusTopics.map((topic) => (
+                      <span
+                        key={topic}
+                        className="inline-flex items-center gap-1.5 text-xs bg-paper-3 border border-rule rounded-full px-2.5 py-1"
+                      >
+                        {topic}
+                        <button
+                          type="button"
+                          onClick={() => removeFocusTopic(topic)}
+                          aria-label={`شيل ${topic}`}
+                          className="mono text-ink-soft hover:text-redpen leading-none"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-paper border border-rule rounded-[var(--r-sm)] p-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="tag">ملخص المنهج</span>
+                <span className="text-sm font-bold text-ink">
+                  {lessonCount || 0} دروس · مستوى {LEVEL_LABEL[curriculumLevel]} ·{" "}
+                  {focusTopics.length} موضوعات
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    subject.trim() &&
+                    Number.isInteger(lessonCount) &&
+                    lessonCount >= CURRICULUM_MIN_LESSONS &&
+                    lessonCount <= CURRICULUM_MAX_LESSONS
+                  ) {
+                    setQuestionIndex(0);
+                    setAnswers([]);
+                    setStep("quiz");
+                  }
+                }}
+                disabled={
+                  !subject.trim() ||
+                  !Number.isInteger(lessonCount) ||
+                  lessonCount < CURRICULUM_MIN_LESSONS ||
+                  lessonCount > CURRICULUM_MAX_LESSONS
+                }
+                className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                كمّل للأسئلة
               </button>
             </motion.div>
           )}
@@ -925,10 +1172,138 @@ export default function AssessmentPage() {
             >
               <div className="w-11 h-11 border-2 border-rule border-t-ink rounded-full animate-spin mx-auto" />
               <p className="tag justify-center">بيتم التجهيز</p>
-              <h2 className="h3">بنجهّز بداية خطتك</h2>
+              <h2 className="h3">بنبني منهجك</h2>
               <p className="text-xs text-ink-soft leading-relaxed">
-                على أساس إجاباتك، بنرتب خطوات مخصصة ليك في {subject}.
+                بنكتب عناوين {lessonCount} دروس في {subject}، وبعدها نضيف وصف كل درس.
+                <br />
+                العملية دي ممكن تاخد لحظات — من فضلك ماتقفلش الصفحة.
               </p>
+            </motion.div>
+          )}
+
+          {/* المعاينة — قبل أي حفظ */}
+          {step === "preview" && (
+            <motion.div
+              key="preview"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-5"
+            >
+              {!preview ? (
+                <>
+                  <div>
+                    <p className="eyebrow eyebrow-flush mb-1.5">المنهج</p>
+                    <h2 className="h3">مقدرناش نبني المنهج</h2>
+                  </div>
+                  <div className="notice notice-error">
+                    <p className="m-0">{generationError ?? "حصل خطأ غير متوقع. حاول تاني."}</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void generatePreview(answers)}
+                      className="btn btn-marker text-sm flex-1"
+                    >
+                      حاول تاني
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep("curriculum")}
+                      className="btn btn-quiet text-sm flex-1"
+                    >
+                      رجوع لتعديل الإعدادات
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="eyebrow eyebrow-flush mb-1.5">معاينة</p>
+                      <h2 className="h2" style={{ textWrap: "balance", overflowWrap: "break-word" }}>
+                        راجع منهجك قبل الحفظ
+                      </h2>
+                      <p className="text-sm text-ink-soft mt-2">
+                        {preview.days.length} دروس · مستوى {LEVEL_LABEL[curriculumLevel]} ·{" "}
+                        {focusTopics.length} موضوعات
+                        {creditsCharged !== null ? ` · ${creditsCharged} كريدت` : ""}
+                      </p>
+                    </div>
+                    <span className="stamp bg-emerald-500 text-onmarker" aria-hidden="true">
+                      <span className="text-lg leading-none font-bold">✓</span>
+                      <span className="mono text-[9px]">جاهز</span>
+                    </span>
+                  </div>
+
+                  <ol className="space-y-2 list-none m-0 p-0 max-h-[55vh] overflow-y-auto pe-1">
+                    {preview.days.map((day) => {
+                      const isReview = day.day === preview.meta.reviewDay;
+                      return (
+                        <li
+                          key={day.day}
+                          className={`bg-paper border rounded-[var(--r-sm)] p-4 space-y-1.5 ${
+                            isReview ? "border-rule-strong" : "border-rule"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="mono ltr-num shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-paper-3 border border-rule text-[11px] font-bold">
+                              {day.day}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-sm font-bold text-ink m-0 break-words">
+                                  {day.topic}
+                                </h3>
+                                {isReview && (
+                                  <span className="tag tag-box border border-rule-strong text-ink-soft shrink-0">
+                                    مراجعة نهائية
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-ink-soft mt-1 mb-0">{day.title}</p>
+                              <p className="text-xs text-ink-soft leading-relaxed mt-2 mb-0">
+                                {day.description}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+
+                  {saveError && <div className="notice notice-error"><p className="m-0">{saveError}</p></div>}
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void saveCurriculum()}
+                      disabled={saving}
+                      className="btn btn-marker text-sm flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {saving ? "بيحفظ…" : "تأكيد وحفظ"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void generatePreview(answers)}
+                      disabled={saving}
+                      className="btn btn-quiet text-sm flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      إعادة التوليد
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep("curriculum")}
+                      disabled={saving}
+                      className="btn btn-quiet text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      تعديل الإعدادات
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-ink-soft text-center m-0">
+                    إعادة التوليد بتستهلك كريدت جديد. الحفظ مش بيخصم كريدت إضافي.
+                  </p>
+                </>
+              )}
             </motion.div>
           )}
 
@@ -940,63 +1315,43 @@ export default function AssessmentPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="sheet-card sheet-card-live card-lift p-4 sm:p-6 md:p-8 space-y-4"
             >
-              {buildError ? (
-                <>
-                  <div>
-                    <p className="eyebrow eyebrow-flush mb-1.5">التقييم المبدئي</p>
-                    <h2 className="h3">الخطة مش اتحفظت</h2>
-                  </div>
-                  <div className="notice notice-error">
-                    <p className="m-0">{buildError}</p>
-                  </div>
-                  <button
-                    onClick={() => result && buildPlan(answers)}
-                    className="btn btn-quiet btn-block text-sm"
-                  >
-                    حاول تاني
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="eyebrow eyebrow-flush mb-1.5">التقييم المبدئي</p>
-                      <h2 className="h2" style={{ textWrap: "balance", overflowWrap: "break-word" }}>خطتك جاهزة</h2>
-                    </div>
-                    {/* ختم مضروب على الورقة بدل إيموجي احتفال */}
-                    <span className="stamp bg-emerald-500 text-onmarker" aria-hidden="true">
-                      <span className="text-lg leading-none font-bold">✓</span>
-                      <span className="mono text-[9px]">تم</span>
-                    </span>
-                  </div>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="eyebrow eyebrow-flush mb-1.5">تم الحفظ</p>
+                  <h2 className="h2" style={{ textWrap: "balance", overflowWrap: "break-word" }}>منهجك جاهز</h2>
+                </div>
+                {/* ختم مضروب على الورقة بدل إيموجي احتفال */}
+                <span className="stamp bg-emerald-500 text-onmarker" aria-hidden="true">
+                  <span className="text-lg leading-none font-bold">✓</span>
+                  <span className="mono text-[9px]">تم</span>
+                </span>
+              </div>
 
-                  {result && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-paper rounded-[var(--r-sm)] p-3">
-                        <p className="tag mb-1.5">مستواك</p>
-                        <p className="text-sm font-bold text-ink m-0">{LEVEL_LABEL[result.level]}</p>
-                      </div>
-                      <div className="bg-paper rounded-[var(--r-sm)] p-3">
-                        <p className="tag mb-1.5">أسلوبك</p>
-                        <p className="text-sm font-bold text-ink m-0">{STYLE_LABEL[result.style]}</p>
-                      </div>
-                      <div className="bg-paper rounded-[var(--r-sm)] p-3">
-                        <p className="tag mb-1.5">بداية الخطة</p>
-                        <p className="font-display font-extrabold text-xl text-ink tnum leading-none m-0">
-                          {result.days}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="btn btn-marker btn-block text-sm"
-                  >
-                    يلا نبدأ
-                  </button>
-                </>
+              {result && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-paper rounded-[var(--r-sm)] p-3">
+                    <p className="tag mb-1.5">المستوى</p>
+                    <p className="text-sm font-bold text-ink m-0">{LEVEL_LABEL[result.level]}</p>
+                  </div>
+                  <div className="bg-paper rounded-[var(--r-sm)] p-3">
+                    <p className="tag mb-1.5">أسلوبك</p>
+                    <p className="text-sm font-bold text-ink m-0">{STYLE_LABEL[result.style]}</p>
+                  </div>
+                  <div className="bg-paper rounded-[var(--r-sm)] p-3">
+                    <p className="tag mb-1.5">عدد الدروس</p>
+                    <p className="font-display font-extrabold text-xl text-ink tnum leading-none m-0">
+                      {result.days}
+                    </p>
+                  </div>
+                </div>
               )}
+
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="btn btn-marker btn-block text-sm"
+              >
+                يلا نبدأ
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
