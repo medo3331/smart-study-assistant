@@ -1,23 +1,59 @@
-import { Layers } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
+import { createServiceClient, isServiceKeyConfigured } from "@/lib/supabase/admin";
 import PlanAdminCard from "@/app/admin/components/PlanAdminCard";
 import PlansCrudPanel from "@/app/admin/components/PlansCrudPanel";
 import { readBillingSettings } from "@/app/plans/actions";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
 
-export default async function AdminPlansPage() {
-  const { supabase } = await requireAdminPermission("plans.manage");
+const PLAN_COLUMNS =
+  "plan_key, name, display_name_ar, price, original_price, discount_percentage, credits_monthly, profile_limit, messages_per_2h, messages_daily, messages_monthly, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, is_active, is_popular, features";
 
-  const [billing, plansRes] = await Promise.all([
-    readBillingSettings(),
-    supabase
+/**
+ * ═══ قراءة الخطط بـ service role — بعد ما الصلاحية اتأكدت ═══
+ *
+ * `subscription_plans` عليها RLS (relrowsecurity=true)، والعميل اللي
+ * بيرجّعه `requireAdminPermission` عميل anon + الكوكيز، فكانت القراءة
+ * بترجع 0 صفوف **من غير خطأ** → جدول فاضي بصمت.
+ *
+ * الحل: حرّاس الصفحة الأول (redirect لو ممنوع)، وبعدها القراءة بعميل
+ * service role اللي بيتخطى RLS. مفيش تسريب صلاحيات هنا لأن ده سيرفر
+ * component والحراسة حصلت قبله.
+ *
+ * ⚠️ لو المفتاح مش مضبوط في البيئة، `createServiceClient()` بيرمي —
+ * فبنفحص الأول ونرجّع رسالة واضحة بدل ما الصفحة تقع.
+ */
+async function readPlans(): Promise<{ plans: any[]; error: string | null }> {
+  if (!isServiceKeyConfigured()) {
+    return {
+      plans: [],
+      error:
+        "مفتاح service role غير مضبوط على السيرفر (SUPABASE_SECRET_KEY أو SUPABASE_SERVICE_ROLE_KEY) — القراءة محجوبة بـ RLS.",
+    };
+  }
+
+  try {
+    const service = createServiceClient();
+    const { data, error } = await service
       .from("subscription_plans")
-      .select("plan_key, name, display_name_ar, price, original_price, discount_percentage, credits_monthly, profile_limit, messages_per_2h, messages_daily, messages_monthly, uploads_daily, max_file_size_mb, file_types, video_audio_exclusive, trial_days, is_active, is_popular, features")
-      .order("plan_key", { ascending: true }),
-  ]);
+      .select(PLAN_COLUMNS)
+      .order("plan_key", { ascending: true });
 
-  const plans = (plansRes.data ?? []) as any[];
-  const plansError = plansRes.error?.message ?? null;
+    if (error) return { plans: [], error: error.message };
+    return { plans: (data ?? []) as any[], error: null };
+  } catch (e) {
+    return { plans: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export default async function AdminPlansPage() {
+  // 1) حراسة الصلاحية (auth gate) — الأول وبشكل مستقل عن قراءة الداتا.
+  await requireAdminPermission("plans.manage");
+
+  // 2) القراءة بعميل service role (بيتخطى RLS — الصلاحية اتأكدت فوق).
+  const [billing, { plans, error: plansError }] = await Promise.all([
+    readBillingSettings(),
+    readPlans(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -33,6 +69,11 @@ export default async function AdminPlansPage() {
       {plansError ? (
         <AdminNotice tone="rose">
           تعذّر قراءة <code>subscription_plans</code>: {plansError}
+        </AdminNotice>
+      ) : plans.length === 0 ? (
+        <AdminNotice tone="amber" title="مفيش خطط في القاعدة">
+          القراءة نجحت بعميل service role لكن رجّعت 0 صفوف — راجع seed/migrations
+          الخاصة بـ <code>subscription_plans</code>.
         </AdminNotice>
       ) : (
         <PlansCrudPanel plans={plans} />
