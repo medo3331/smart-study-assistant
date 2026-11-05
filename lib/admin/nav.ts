@@ -47,6 +47,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "Layers",
   },
   {
+    href: "/admin/grants",
+    label: "منح الكريدت",
+    description: "التزامات الكريدت: منح يدوي، فلاتر، وما ينتهي خلال 7 أيام",
+    permission: "credits.manage",
+    icon: "CreditCard",
+  },
+  {
     href: "/admin/models",
     label: "نماذج الذكاء الاصطناعي",
     description: "تفعيل/تعطيل النماذج، الأولوية، حدود الاستخدام، حالة المزوّدين",
