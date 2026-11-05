@@ -552,15 +552,10 @@ export async function POST(req: Request) {
         }
         return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
       }
-      if (intentResult.intent === "RECORDED_LECTURES_SEARCH") {
-        const answer = "البحث في المحاضرات المسجلة will be available in a later phase. حالياً، حدد ملف Workspace أو اشرح سؤالك مباشرة.";
-        if (reserveRef) {
-          try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
-        }
-        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
-      }
+      // RECORDED_LECTURES_SEARCH now flows through WORKSPACE_SEARCH path below
+      // (buildWorkspaceSourceContext supports lecture family — transcript_text)
     }
-    if (userId && supabase && !isAnonymous && intentResult.intent === "WORKSPACE_SEARCH") {
+    if (userId && supabase && !isAnonymous && (intentResult.intent === "WORKSPACE_SEARCH" || intentResult.intent === "RECORDED_LECTURES_SEARCH")) {
       try {
         const ws = await buildWorkspaceSourceContext({ supabase, userId, message: prompt });
         if (ws.ok) {
