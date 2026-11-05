@@ -53,7 +53,7 @@ export async function getWorkspaceOverview(
   // 2. Recent materials (10)
   const { data: materials } = await supabase
     .from("materials")
-    .select("id, title, file_type, file_size, content, summary, note, created_at")
+    .select("id, title, file_type, file_size, summary, note, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -110,7 +110,7 @@ export async function getWorkspaceOverview(
       createdAt: m.created_at,
       hasSummary: !!m.summary,
       hasNote: !!m.note,
-      contentLength: m.content?.length ?? 0,
+      contentLength: 0,
     })),
     recentLectures: (lectures ?? []).map((l) => ({
       id: l.id,
