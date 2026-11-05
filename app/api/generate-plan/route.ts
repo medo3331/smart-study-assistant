@@ -6,6 +6,7 @@ import Groq from "groq-sdk";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { getCreditCost } from "@/lib/ai/credit-pricing";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 
@@ -48,8 +49,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Phase H: 1 credit gate (free model, but still costs 1 credit)
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    // Phase H: credit gate — التكلفة من CREDIT_COSTS مش رقم ثابت هنا.
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", {
+      cost: getCreditCost("generate-plan"),
+    });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);

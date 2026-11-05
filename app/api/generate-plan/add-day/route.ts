@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { checkRateLimit, clampText, requireUser } from "@/lib/api-guard";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { getCreditCost } from "@/lib/ai/credit-pricing";
 import { GROQ_MODELS } from "@/lib/ai-config";
 
 const MAX_TEXT = 220;
@@ -20,8 +21,10 @@ export async function POST(req: Request) {
 
     const limited = checkRateLimit(`add-day:${user.id}`, 10, 60_000, "success");
     if (limited) return limited;
-    // Phase H: 1 credit
-    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
+    // Phase H: credit gate — التكلفة من CREDIT_COSTS.
+    guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", {
+      cost: getCreditCost("add-day"),
+    });
     if (!guard.ok) return guard.response;
 
     const body = await req.json().catch(() => null);
