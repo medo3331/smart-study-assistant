@@ -10,6 +10,7 @@
    ========================================================================== */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CURRICULUM_LEVELS, type CurriculumLevel } from "@/lib/curriculum/types";
 
 /* --------------------------------------------------------------------------
    الأخطاء
@@ -287,6 +288,128 @@ export async function fetchActiveCourseId(supabase: SupabaseClient, userId: stri
   const { data, error } = await supabase.from("profiles").select("active_config_id").eq("id", userId).maybeSingle();
   if (error) return fail(error);
   return ok((data as { active_config_id: string | null } | null)?.active_config_id ?? null);
+}
+
+/* --------------------------------------------------------------------------
+   دروس مادة واحدة — لصفحة /lessons/[configId]
+
+   بنجيب المادة وأيامها في استعلامين (نفس أسلوب fetchCourses) بدل join
+   لأن PostgREST محتاج علاقة معرّفة، ولأن عدد الأيام صغير.
+   -------------------------------------------------------------------------- */
+
+export interface CourseLesson {
+  id: string;
+  dayNumber: number;
+  title: string;
+  topic: string;
+  description: string;
+  isCompleted: boolean;
+  xpReward: number;
+  learningStyle: string;
+}
+
+export interface CourseLessonsData {
+  id: string;
+  subject: string;
+  category: string | null;
+  curriculumLevel: CurriculumLevel | null;
+  focusTopics: string[];
+  lessons: CourseLesson[];
+  /** المادة دي هي active_config_id بتاع الحساب؟ */
+  isActive: boolean;
+}
+
+interface CourseRow {
+  id: string;
+  subject: string;
+  category: string | null;
+  curriculum_level: string | null;
+  focus_topics: unknown;
+}
+
+interface CourseLessonRow {
+  id: string;
+  day_number: number;
+  title: string | null;
+  topic: string | null;
+  description: string | null;
+  is_completed: boolean | null;
+  xp_reward: number | null;
+  learning_style: string | null;
+}
+
+function asCurriculumLevel(value: string | null): CurriculumLevel | null {
+  return value && (CURRICULUM_LEVELS as readonly string[]).includes(value)
+    ? (value as CurriculumLevel)
+    : null;
+}
+
+function asFocusTopics(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+}
+
+export async function fetchCourseLessons(
+  supabase: SupabaseClient,
+  userId: string,
+  configId: string
+): Promise<Result<CourseLessonsData | null>> {
+  const { data: config, error: configError } = await supabase
+    .from("study_configs")
+    .select("id, subject, category, curriculum_level, focus_topics")
+    .eq("id", configId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (configError) return fail(configError);
+  if (!config) return ok(null);
+
+  const row = config as CourseRow;
+
+  const { data: dayRows, error: daysError } = await supabase
+    .from("study_days")
+    .select("id, day_number, title, topic, description, is_completed, xp_reward, learning_style")
+    .eq("config_id", configId)
+    .eq("user_id", userId)
+    .order("day_number", { ascending: true });
+
+  if (daysError) return fail(daysError);
+
+  // المادة النشطة اختيارية: فشل الاستعلام ما يفشّلش الصفحة.
+  let activeConfigId: string | null = null;
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("active_config_id")
+      .eq("id", userId)
+      .maybeSingle();
+    activeConfigId = (profile as { active_config_id: string | null } | null)?.active_config_id ?? null;
+  } catch {
+    activeConfigId = null;
+  }
+
+  const lessons: CourseLesson[] = ((dayRows ?? []) as CourseLessonRow[]).map((day) => ({
+    id: day.id,
+    dayNumber: day.day_number,
+    title: day.title ?? "",
+    topic: day.topic ?? day.title ?? "درس",
+    description: day.description ?? "",
+    isCompleted: Boolean(day.is_completed),
+    xpReward: day.xp_reward ?? 100,
+    learningStyle: day.learning_style ?? "practical",
+  }));
+
+  return ok({
+    id: row.id,
+    subject: row.subject,
+    category: row.category,
+    curriculumLevel: asCurriculumLevel(row.curriculum_level),
+    focusTopics: asFocusTopics(row.focus_topics),
+    lessons,
+    isActive: activeConfigId === row.id,
+  });
 }
 
 /* ==========================================================================

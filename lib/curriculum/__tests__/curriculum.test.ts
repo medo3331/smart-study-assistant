@@ -92,6 +92,29 @@ describe("curriculum outline validation", () => {
   });
 });
 
+describe("curriculum expansion", () => {
+  it("starts new lessons at the requested day and keeps the final review", () => {
+    const parsed = parseOutline(outlineJson(3), {
+      ...input(3),
+      startDay: 4,
+      existingTopics: ["OSI Model", "Routing"],
+    });
+    expect(parsed.map((lesson) => lesson.day)).toEqual([4, 5, 6]);
+    expect(parsed[2].kind).toBe("review");
+    expect(parsed[2].topic).toContain("مراجعة");
+  });
+
+  it("rejects a topic that already exists in the previous curriculum", () => {
+    expect(() =>
+      parseOutline(outlineJson(3, ["Routing", "TCP", "DNS"]), {
+        ...input(3),
+        startDay: 4,
+        existingTopics: ["OSI Model", "Routing"],
+      })
+    ).toThrow(CurriculumGenerationError);
+  });
+});
+
 describe("curriculum enrichment validation", () => {
   it("maps descriptions by day and requires every day", () => {
     const outline = parseOutline(outlineJson(2), { ...input(2) });

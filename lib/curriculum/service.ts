@@ -110,10 +110,11 @@ export async function generateCurriculum(
   }
 
   const days = buildCurriculumDays(outline, descriptions);
+  const startDay = input.startDay ?? 1;
 
-  // تحقق أخير: الترتيب 1..N بدون فجوات أو تكرار.
+  // تحقق أخير: الترتيب startDay..endDay بدون فجوات أو تكرار.
   for (let index = 0; index < days.length; index++) {
-    if (days[index].day !== index + 1) {
+    if (days[index].day !== startDay + index) {
       throw new CurriculumGenerationError("ترتيب الدروس الناتج غير متصل.", {
         retryable: false,
         code: "INVALID_SEQUENCE",
@@ -134,7 +135,7 @@ export async function generateCurriculum(
       level: input.level,
       focusTopics: input.focusTopics,
       batches: batches.length,
-      reviewDay: input.lessonCount,
+      reviewDay: startDay + input.lessonCount - 1,
     },
   };
 }

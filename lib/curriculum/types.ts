@@ -42,6 +42,10 @@ export interface CurriculumGenerationInput {
   lessonCount: number;
   focusTopics: string[];
   personaContext: string;
+  /** رقم أول درس — 1 للتوليد الجديد، و max(day_number)+1 للتوسيع. */
+  startDay?: number;
+  /** موضوعات موجودة مسبقاً — التوسيع ما يكرّرهاش. */
+  existingTopics?: string[];
 }
 
 export interface CurriculumGenerationMeta {

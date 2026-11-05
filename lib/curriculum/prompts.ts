@@ -86,6 +86,11 @@ function readObject(value: unknown): Record<string, unknown> {
    -------------------------------------------------------------------------- */
 
 export function buildOutlineMessages(input: CurriculumGenerationInput): AiChatMessage[] {
+  const startDay = input.startDay ?? 1;
+  const endDay = startDay + input.lessonCount - 1;
+  const existingTopics = input.existingTopics ?? [];
+  const isExpansion = existingTopics.length > 0;
+
   const focusLine = input.focusTopics.length
     ? input.focusTopics.map((topic, index) => `${index + 1}. ${topic}`).join("\n")
     : "لا يوجد — غطّي المنهج الأساسي للمادة بشكل منطقي.";
@@ -94,6 +99,14 @@ export function buildOutlineMessages(input: CurriculumGenerationInput): AiChatMe
     ? `سياق المتعلم: ${input.personaContext}`
     : "سياق المتعلم: غير محدد.";
 
+  const expansionSection = isExpansion
+    ? `\n\n⚠️ ده توسيع لمنهج قائم، مش منهج جديد:
+- الدروس الجديدة تبدأ من day = ${startDay} وتنتهي عند ${endDay}.
+- الموضوعات اللي اتغطّت قبل كده (ممنوع تكرارها):
+${existingTopics.map((topic) => `  • ${topic}`).join("\n")}
+- الدروس الجديدة لازم تكمّل من حيث انتهى المنهج، بنفس المستوى ونفس أسلوب التدرج.`
+    : "";
+
   const system = `أنت مصمم مناهج تعليمية خبير. مهمتك بناء هيكل منهج متدرج لمادة واحدة، بالعربي المصري الواضح مع إبقاء المصطلحات التقنية بالإنجليزية.
 
 المدخلات:
@@ -101,7 +114,7 @@ export function buildOutlineMessages(input: CurriculumGenerationInput): AiChatMe
 - المجال: "${input.category}"
 - مستوى العمق: ${LEVEL_LABEL[input.level]}
 - عدد الدروس المطلوب: ${input.lessonCount}
-- ${personaLine}
+- ${personaLine}${expansionSection}
 
 قواعد صارمة:
 1. أرجع ${input.lessonCount} عنصر في "outline" بالظبط. لا أكثر ولا أقل.
@@ -110,7 +123,7 @@ export function buildOutlineMessages(input: CurriculumGenerationInput): AiChatMe
 4. ممنوع تكرار نفس الموضوع أو إعادة صياغته. كل topic لازم يكون مختلف فعلياً.
 5. ممنوع دروس حشو عامة زي "مقدمة" أو "مراجعة" أكثر من مرة واحدة.
 6. العمق المطلوب: ${LEVEL_RULES[input.level]}
-7. آخر عنصر في القائمة (day = ${input.lessonCount}) لازم يكون مراجعة شاملة واختبار نهائي، وkind = "review". باقي العناصر kind = "content".
+7. آخر عنصر في القائمة (day = ${endDay}) لازم يكون مراجعة شاملة واختبار نهائي للمنهج كله، وkind = "review". باقي العناصر kind = "content".
 8. title قصير معنوي (٢–٥ كلمات) — مش "الدرس ١". وtopic هو عنوان المحتوى الحقيقي.
 9. اكتب JSON فقط بدون Markdown وبدون أي نص خارجه.
 10. لا تختصر القائمة بـ "..." ولا ترجع عناصر ناقصة.
@@ -119,7 +132,7 @@ export function buildOutlineMessages(input: CurriculumGenerationInput): AiChatMe
 {
   "isValid": true,
   "outline": [
-    { "day": 1, "title": "عنوان قصير", "topic": "عنوان المحتوى", "kind": "content" }
+    { "day": ${startDay}, "title": "عنوان قصير", "topic": "عنوان المحتوى", "kind": "content" }
   ]
 }
 
@@ -131,9 +144,9 @@ export function buildOutlineMessages(input: CurriculumGenerationInput): AiChatMe
 المستوى: ${LEVEL_LABEL[input.level]}
 عدد الدروس: ${input.lessonCount}
 موضوعات إلزامية من الطالب:
-${focusLine}
+${focusLine}${isExpansion ? `\n\nالموضوعات السابقة (لا تكررها):\n${existingTopics.map((topic) => `- ${topic}`).join("\n")}` : ""}
 
-ارجع ${input.lessonCount} عنصر بالظبط، وآخر عنصر مراجعة نهائية (kind="review").`;
+ارجع ${input.lessonCount} عنصر بالظبط، أول عنصر day = ${startDay}، وآخر عنصر مراجعة نهائية (kind="review") عند day = ${endDay}.`;
 
   return [
     { role: "system", content: system },
@@ -181,22 +194,33 @@ export function parseOutline(raw: string, input: CurriculumGenerationInput): Out
 
   // لو رجّع أكتر، بناخد أول N — العدد النهائي مسؤولية الكود مش الموديل.
   const rows = object.outline.slice(0, input.lessonCount);
-  const seen = new Set<string>();
+  const startDay = input.startDay ?? 1;
+
+  /* موضوعات المنهج السابق جزء من "الممنوع" — إلا موضوعات المراجعة، لأن
+     التوسيع لازم ينتهي بمراجعة جديدة للمنهج الموسّع. */
+  const seen = new Set<string>(
+    (input.existingTopics ?? [])
+      .filter((topic) => !isReviewText(topic))
+      .map(normalizeTopic)
+  );
+
   const outline: OutlineLesson[] = rows.map((row, index) => {
     const item = readObject(row);
     const title = readString(item.title, "title", 120);
     const topic = readString(item.topic, "topic", 220);
 
     if (seen.has(normalizeTopic(topic))) {
-      throw new CurriculumGenerationError("رد الموديل فيه موضوعات مكررة.", {
-        retryable: true,
-        code: "DUPLICATE_TOPICS",
-      });
+      throw new CurriculumGenerationError(
+        input.existingTopics?.length
+          ? "رد الموديل كرّر موضوعاً من المنهج السابق."
+          : "رد الموديل فيه موضوعات مكررة.",
+        { retryable: true, code: "DUPLICATE_TOPICS" }
+      );
     }
     seen.add(normalizeTopic(topic));
 
     return {
-      day: index + 1,
+      day: startDay + index,
       title,
       topic,
       kind: item.kind === "review" ? "review" : "content",

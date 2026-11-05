@@ -83,7 +83,7 @@ export default function CoursesPage() {
     })();
   }, [session, supabase, router]);
 
-  /* ---- افتح تراك: اكتب الاختيار في الحساب وارجع للداشبورد ---- */
+  /* ---- افتح دروس التراك: ثبّته كتراك نشط وانتقل لصفحة دروسه ---- */
   const handleOpen = async (course: CourseSummary) => {
     if (session.status !== "ready") return;
 
@@ -94,7 +94,7 @@ export default function CoursesPage() {
     }
 
     setActiveId(course.id);
-    router.push("/dashboard");
+    router.push(`/lessons/${course.id}`);
   };
 
   /* ---- شيل تراك ---- */
@@ -143,7 +143,7 @@ export default function CoursesPage() {
     <PageShell
       eyebrow="الكورسات"
       title="تراكاتك"
-      lede="كل خطة مذاكرة عملتها موجودة هنا. اختار اللي عايز تكمّل فيه والداشبورد بتفتح عليه، أو ابدأ تراك جديد لموضوع تاني."
+      lede="كل خطة مذاكرة عملتها موجودة هنا. اختار اللي عايز تكمّل فيه وهتفتح دروسه على طول، أو ابدأ تراك جديد لموضوع تاني."
       action={newCourseButton}
       feedbackPage="courses"
       feedbackLabel="صفحة الكورسات"
@@ -190,11 +190,9 @@ export default function CoursesPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {!isActive && (
-                      <Button variant="primary" onClick={() => handleOpen(course)}>
-                        افتحه
-                      </Button>
-                    )}
+                    <Button variant="primary" onClick={() => handleOpen(course)}>
+                      {isActive ? "الدروس" : "افتح الدروس"}
+                    </Button>
                     <Button
                       variant="danger"
                       disabled={busyId === course.id}
