@@ -4,6 +4,8 @@ import FoundationRewardsBootstrap from './components/FoundationRewardsBootstrap'
 import RewardToastHost from './components/RewardToastHost';
 import AnnouncementBanner from '@/components/AnnouncementBanner';
 import NotificationBell from '@/components/NotificationBell';
+import { LowCreditsBanner } from '@/components/upsell/LowCreditsBanner';
+import { ExhaustedGuard } from '@/components/upsell/ExhaustedGuard';
 export const metadata: Metadata = pageMeta({
   title: 'مساحتك',
   description: 'خطتك وتقدّمك وملفاتك في مكان واحد.',
@@ -31,7 +33,9 @@ export default async function DashboardLayout({
       </header>
       <div className="mx-auto max-w-6xl px-4 pt-6">
         <AnnouncementBanner />
+        <LowCreditsBanner />
       </div>
+      <ExhaustedGuard />
       {children}
     </>
   );
