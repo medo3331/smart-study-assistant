@@ -184,6 +184,8 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     enabled: true,
   },
   {
+    // B4.0.2g-e: اتشال من كتالوج OpenRouter الفعلي (تحقق 2026-11-06 عبر
+    // /api/v1/models — "دوميد" [-] ميت) — 404 وقت ما يُنادى. متعطّل.
     id: "qwen/qwen-2.5-vl-7b-instruct:free",
     provider: "openrouter",
     displayName: "Qwen 2.5 VL 7B (OpenRouter Free)",
@@ -192,7 +194,7 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     tier: "free",
     fallbackPriority: 4,
     freeEndpoint: true,
-    enabled: true,
+    enabled: false, // ← مش موجود في الكتالوج الحي (2026-11-06)
   },
   {
     // مجاني مؤكد من التسعير لكن البروب الحي رجّع 403 على هذا الحساب
@@ -237,6 +239,22 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
   },
   /* ---------------- OpenRouter (مجاني — Nemotron Vision) ---------------- */
   {
+    // بديل nemotron-nano-12b-v2-vl:free المَيت — متحقق منه حيًا في كتالوج
+    // OpenRouter (vision عبر architecture.input_modalities، 2026-11-06).
+    id: "nvidia/nemotron-3.5-super-vl:free",
+    provider: "openrouter",
+    displayName: "Nemotron 3.5 Super VL (OpenRouter, Free)",
+    capabilities: ["text", "vision", "streaming"],
+    contextWindow: 1_000_000,
+    priority: 1,
+    tier: "free",
+    fallbackPriority: 1,
+    freeEndpoint: true,
+    enabled: true,
+  },
+  {
+    // B4.0.2g-e: اتشال من كتالوج OpenRouter (تحقق 2026-11-06) — كان مصدر
+    // 404 أعلى سلاسل fallback. متعطّل؛ البديل nemotron-3.5-super-vl فوق.
     id: "nvidia/nemotron-nano-12b-v2-vl:free",
     provider: "openrouter",
     displayName: "Nemotron Nano 12B v2 VL (OpenRouter, Free)",
@@ -246,7 +264,7 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     tier: "free",
     fallbackPriority: 1,
     freeEndpoint: true,
-    enabled: true,
+    enabled: false, // ← مش موجود في الكتالوج الحي (2026-11-06)
   },
 ];
 

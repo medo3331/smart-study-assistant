@@ -4,8 +4,8 @@ export interface ModelCapability { modelId: string; provider: ProviderName; envV
 export const MODEL_CAPABILITIES: ModelCapability[] = [
   { modelId: "openai/gpt-oss-20b", provider: "groq", envVar: "GROQ_API_KEY", textInput: true, imageInput: false, freeTierStatus: "free", verifiedAccess: "verified", rateLimit: "Provider-enforced", failureBehavior: "Return controlled error", notes: "Default text model." },
   { modelId: "gemini-3.6-flash", provider: "gemini", envVar: "GEMINI_API_KEY", textInput: true, imageInput: true, freeTierStatus: "unknown", verifiedAccess: "unverified", rateLimit: "Unknown", failureBehavior: "Fall back to OCR + Groq", fallbackModelId: "openai/gpt-oss-20b", notes: "Vision only when key exists." },
-  { modelId: "llama-3.2-11b-vision-preview", provider: "groq", envVar: "GROQ_API_KEY", textInput: true, imageInput: true, freeTierStatus: "free", verifiedAccess: "verified", rateLimit: "Provider-enforced", failureBehavior: "Fall back to next vision provider", fallbackModelId: "nvidia/nemotron-nano-12b-v2-vl:free", notes: "Groq vision model (verified in MODEL_REGISTRY)." },
-  { modelId: "nvidia/nemotron-nano-12b-v2-vl:free", provider: "openrouter", envVar: "OPENROUTER_API_KEY", textInput: true, imageInput: true, freeTierStatus: "free", verifiedAccess: "verified", rateLimit: "Provider-enforced", failureBehavior: "Fall back to OCR", notes: "OpenRouter vision model (verified in MODEL_REGISTRY)." },
+  { modelId: "llama-3.2-11b-vision-preview", provider: "groq", envVar: "GROQ_API_KEY", textInput: true, imageInput: true, freeTierStatus: "free", verifiedAccess: "verified", rateLimit: "Provider-enforced", failureBehavior: "Fall back to next vision provider", fallbackModelId: "nvidia/nemotron-3.5-super-vl:free", notes: "Groq vision model (verified in MODEL_REGISTRY)." },
+  { modelId: "nvidia/nemotron-3.5-super-vl:free", provider: "openrouter", envVar: "OPENROUTER_API_KEY", textInput: true, imageInput: true, freeTierStatus: "free", verifiedAccess: "verified", rateLimit: "Provider-enforced", failureBehavior: "Fall back to OCR", notes: "OpenRouter vision model — بديل nano-12b-v2-vl المَيت (B4.0.2g-e)." },
 ];
 export function getModelCapability(modelId: string) { return MODEL_CAPABILITIES.find((m) => m.modelId === modelId); }
 export function modelSupports(modelId: string, capability: "text" | "image") { const c = getModelCapability(modelId); if (!c) return false; return capability === "text" ? c.textInput : c.imageInput; }
@@ -16,7 +16,7 @@ export function selectModelForTask(task: TaskType, env: Record<string, string | 
   if (task === "image_understanding") {
     if (hasGemini) return "gemini-3.6-flash";
     if (hasGroq) return "llama-3.2-11b-vision-preview";
-    if (hasOpenRouter) return "nvidia/nemotron-nano-12b-v2-vl:free";
+    if (hasOpenRouter) return "nvidia/nemotron-3.5-super-vl:free";
     return null;
   }
   return hasGroq ? "openai/gpt-oss-20b" : null;

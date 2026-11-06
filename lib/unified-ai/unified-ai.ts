@@ -213,7 +213,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         const candidates = [
           { modelId: "gemini-3.6-flash", available: !!process.env.GEMINI_API_KEY?.trim(), create: () => new GeminiProvider() },
           { modelId: "llama-3.2-11b-vision-preview", available: !!process.env.GROQ_API_KEY?.trim(), create: () => new GroqProvider() },
-          { modelId: "nvidia/nemotron-nano-12b-v2-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
+          { modelId: "nvidia/nemotron-3.5-super-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
         ].filter((c) => c.available);
         // Prefer the selected model first, then the rest as fallback chain.
         const ordered = [
