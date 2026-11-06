@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { curriculumCreditCost } from "../../ai/credit-pricing";
 import {
   buildCurriculumDays,
+  buildEducationalContext,
+  buildEnrichmentMessages,
+  buildOutlineMessages,
   chunkOutline,
   parseEnrichment,
   parseOutline,
@@ -144,6 +147,39 @@ describe("curriculum enrichment validation", () => {
     expect(() => buildCurriculumDays(outline, descriptions)).toThrow(
       CurriculumGenerationError
     );
+  });
+});
+
+describe("educational context injection (B4.0.2g-f)", () => {
+  it("buildEducationalContext handles nulls (empty → no injection)", () => {
+    expect(buildEducationalContext({})).toBe("");
+    expect(buildEducationalContext({ stage: null, grade: null, track: null })).toBe("");
+  });
+
+  it("buildEducationalContext includes only the available parts", () => {
+    const onlyTrack = buildEducationalContext({ track: "الفنون" });
+    expect(onlyTrack).toContain("المسار: الفنون");
+    expect(onlyTrack).not.toContain("المرحلة");
+
+    const full = buildEducationalContext({ stage: "ثانوية عامة", grade: "أولى ثانوي", track: "الفنون" });
+    expect(full).toContain("المرحلة: ثانوية عامة");
+    expect(full).toContain("الصف: أولى ثانوي");
+    expect(full).toContain("المسار: الفنون");
+  });
+
+  it("outline system prompt carries the strict subject constraint + learner context", () => {
+    const messages = buildOutlineMessages(input(3));
+    const system = messages[0].content as string;
+    expect(system).toContain('مادة "Computer Networks"');
+    expect(system).toContain("ممنوع تماماً دروس برمجة");
+    expect(system).toContain("سياق المتعلم: طالب جامعي");
+  });
+
+  it("enrichment prompt carries the subject-bound guarantee", () => {
+    const outline = parseOutline(outlineJson(2), input(2));
+    const messages = buildEnrichmentMessages(input(2), outline);
+    const system = messages[0].content as string;
+    expect(system).toContain("ممنوع إدخال مفاهيم خارج المادة");
   });
 });
 

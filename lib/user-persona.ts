@@ -191,7 +191,7 @@ export const FIELDS: FieldMeta[] = [
   },
 ];
 
-export const DEFAULT_FIELD: FieldId = "programming";
+export const DEFAULT_FIELD: FieldId | null = null; // B4.0.2g-f: مفيش افتراض صامت — null = الموديل يتلقى سياق تعليمي بتاع الطالب من ملفه، مش "برمجة".
 
 export function isField(value: unknown): value is FieldId {
   return FIELDS.some((f) => f.id === value);
@@ -381,7 +381,8 @@ export function getFieldResources(field?: FieldId | null): PersonaResource[] {
 export interface PendingChoice {
   persona: Persona;
   studentLevel: StudentLevel | null;
-  field: FieldId;
+  /** B4.0.2g-f: field اختياري — مفيش ديلاولت صامت لـ "programming". */
+  field: FieldId | null;
   subject: string;
 }
 
@@ -417,7 +418,7 @@ export function readPendingChoice(): PendingChoice | null {
     const level = isStudentLevel(obj.studentLevel) ? obj.studentLevel : null;
     if (obj.persona === "student" && !level) return null;
     // اختيار متخزّن من قبل ما محور المجال يتعمل مش هيبقى فيه field. مش سبب
-    // نرمي الاختيار كله — الليستة القديمة كانت برمجة بالكامل، فالديفولت صح ليه.
+    // نرمي الاختيار كله — B4.0.2g-f: null بدل ديفولت "برمجة" الصامت.
     const field = isField(obj.field) ? obj.field : DEFAULT_FIELD;
     return { persona: obj.persona, studentLevel: level, field, subject: obj.subject };
   } catch {
