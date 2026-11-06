@@ -36,7 +36,7 @@ const USER = "user-1";
 const OTHER = "user-2";
 
 describe("resolveWorkspaceSource — lectures", () => {
-  it("resolves lecture ordinal 1 to oldest eligible lecture", async () => {
+  it("resolves lecture ordinal 1 to newest eligible lecture", async () => {
     const supabase = makeSupabase({
       lectures: [
         { id: "l2", user_id: USER, title: "L2", status: "completed", transcript_text: "t2", created_at: "2024-02-01T00:00:00Z" },
@@ -48,9 +48,22 @@ describe("resolveWorkspaceSource — lectures", () => {
     const res = await resolveWorkspaceSource({ supabase, userId: USER, message: "اشرح المحاضرة رقم 1" });
     expect(res.status).toBe("resolved");
     if (res.status === "resolved") {
-      expect(res.source.id).toBe("l1");
+      // B4.0.2g-c: الترتيب تنازلي (مطابق للـ UI — الأحدث أولاً)، فـ «رقم 1» = الأحدث.
+      expect(res.source.id).toBe("l2");
       expect(res.source.family).toBe("lecture");
     }
+  });
+
+  it("resolves 'last lecture' to the newest lecture (B4.0.2g-c)", async () => {
+    const supabase = makeSupabase({
+      lectures: [
+        { id: "l2", user_id: USER, title: "L2", status: "completed", transcript_text: "t2", created_at: "2024-02-01T00:00:00Z" },
+        { id: "l1", user_id: USER, title: "L1", status: "completed", transcript_text: "t1", created_at: "2024-01-01T00:00:00Z" },
+      ],
+    });
+    const res = await resolveWorkspaceSource({ supabase, userId: USER, message: "اشرحلي آخر محاضرة" });
+    expect(res.status).toBe("resolved");
+    if (res.status === "resolved") expect(res.source.id).toBe("l2");
   });
 
   it("returns not_found for out-of-range ordinal", async () => {
@@ -82,7 +95,7 @@ describe("resolveWorkspaceSource — lectures", () => {
 });
 
 describe("resolveWorkspaceSource — materials", () => {
-  it("resolves material ordinal 1 from materials only", async () => {
+  it("resolves material ordinal 1 to newest material", async () => {
     const supabase = makeSupabase({
       materials: [
         { id: "m2", user_id: USER, title: "M2", content: "c2", created_at: "2024-02-01T00:00:00Z" },
@@ -92,7 +105,8 @@ describe("resolveWorkspaceSource — materials", () => {
     const res = await resolveWorkspaceSource({ supabase, userId: USER, message: "افتح الملف رقم 1" });
     expect(res.status).toBe("resolved");
     if (res.status === "resolved") {
-      expect(res.source.id).toBe("m1");
+      // B4.0.2g-c: «رقم 1» = الأحدث (مطابق للـ UI).
+      expect(res.source.id).toBe("m2");
       expect(res.source.family).toBe("material");
     }
   });

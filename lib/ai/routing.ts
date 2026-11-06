@@ -21,6 +21,7 @@ import {
   isModelSelectable,
   paidModelsAllowed,
 } from "./models";
+import { isFallbackEligibleError } from "./errors";
 import { withConcurrencyLimit } from "./queue";
 import { getRuntimePriority, isModelRuntimeEnabled } from "./model-state";
 import type { AiUsageContext } from "./usage-context";
@@ -69,18 +70,30 @@ export const AI_PROVIDER_BY_TASK: Readonly<Record<AiTaskType, AiProviderName>> =
   agent: "nvidia",
   coding: "nvidia",
   quiz: "groq",
-  flashcards: "gemini",
-  study_plan: "gemini",
-  lesson_analysis: "gemini",
-  mind_map: "gemini",
+  // B4.0.2g-d1 (2026-11-06): كل مهام النصوص منتقلة من gemini إلى groq —
+  // مفتاح Gemini باطل، و400 بتاعه مش retryable (شوف B4.0.2g-d2).
+  flashcards: "groq",
+  study_plan: "groq",
+  lesson_analysis: "groq",
+  mind_map: "groq",
+  data_analysis: "groq",
+  planning: "groq",
+  business_plan: "groq",
+  marketing_plan: "groq",
+  roadmap: "groq",
+  /**
+   * TODO(B4.0.3): file_analysis exclusive to Gemini (القدرة الوحيدة في
+   * MODEL_REGISTRY). Fallback (OCR + Groq) pending — capabilities.ts:6.
+   * المستخدم الوحيد: /dashboard/workspace زرار «تحليل بـ Gemini».
+   * لو المفتاح باطل → فشل نظيف بعد B4.0.2g-d2، بدون fallback. مؤجَّل عمداً.
+   */
   file_analysis: "gemini",
-  image_analysis: "gemini",
-  data_analysis: "gemini",
-  planning: "gemini",
-  business_plan: "gemini",
-  marketing_plan: "gemini",
-  roadmap: "gemini",
-  image_generation: "gemini",
+  image_analysis: "gemini",  image_generation: "gemini",
+  /**
+   * TODO(B4.0.3): image_generation حصري لـ gemini-3.1-flash-image (مفيش بديل
+   * مسجّل) — مكسورة أصلاً من يوم ما المفتاح باطل. مجمدة بالقرار (2026-11-06):
+   * لا Pollinations ولا Flux في الإصدار ده. الزرار في /dashboard/create.
+   */
   // مهام الوسائط الجديدة — التنفيذ الفعلي بيمشي عبر Media Router المشدود
   // بالقدرات، والقيمة دي مرجعية فقط لو اتحقق من موديل مجاني مستقبلًا.
   image_edit: "gemini",
@@ -147,11 +160,46 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
     "deepseek-ai/deepseek-v4-flash-0731",
     "openai/gpt-oss-120b",
   ],
-  planning: [
-    "nvidia/nemotron-3-super-120b-a12b", // تم التحقق أنه free endpoint فعليًا
+  // B4.0.2g-d1: تفضيلات المهام المنتقلة من gemini — مفيش أي موديل Gemini هنا.
+  // تجميعة structured_output: gpt-oss-20b أولًا (20b عنده structured_output،
+  // 120b لأ) — fusion: flashcards/mind_map/data_analysis نصوص JSON مُتحقَّقة.
+  flashcards: [
+    "openai/gpt-oss-20b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+  ],
+  mind_map: [
+    "openai/gpt-oss-20b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+  ],
+  data_analysis: [
+    "openai/gpt-oss-20b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+  ],
+  // تجميعة reasoning: gpt-oss-120b أولًا (نصوص + استدلال — curriculum وخطط).
+  study_plan: [
+    "openai/gpt-oss-120b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "deepseek-ai/deepseek-v4-flash-0731",
-    "gemini-3.6-flash",
+  ],
+  lesson_analysis: [
+    "openai/gpt-oss-120b",
+    "nvidia/nemotron-3-super-120b-a12b",
+  ],
+  planning: [
+    "nvidia/nemotron-3.5-lightning-30b-a3b", // nvidia أولًا — زي المصفوفة الأصلية
+    "openai/gpt-oss-120b",
+  ],
+  business_plan: [
+    "openai/gpt-oss-120b",
+    "nvidia/nemotron-3-super-120b-a12b",
+  ],
+  marketing_plan: [
+    "openai/gpt-oss-120b",
+    "nvidia/nemotron-3-super-120b-a12b",
+  ],
+  roadmap: [
+    "openai/gpt-oss-120b",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   tutor: [
     "nvidia/nemotron-3.5-lightning-30b-a3b",
@@ -205,14 +253,15 @@ export class AiRouteError extends Error {
 }
 
 /**
- * هل الخطأ ده يستحق تجربة مرشّح تاني؟
+ * هل الخطأ ده يستحق تجربة مرشّح تاني؟ (المنطق في errors.ts — B4.0.2g-d2):
  * - 400/413/422: طلبنا نفسه باين غلط — تكراره على مزوّد تاني مضيعة وضوضاء.
+ *   استثناء واحد: 400 «API key not valid» = مفتاح باطل، يستاهل مزوّد تاني.
  * - 401/403/503: خطأ تهيئة لهذا المزوّد بالتحديد — نسيبه ونجرّب
  *   مزوّد مختلف لو متاح، بس مش نفس المزوّد تاني.
  * - 408/429/5xx: أعطال مؤقتة — تستاهل fallback.
  */
-function shouldTryNextCandidate(status: number): boolean {
-  return ![400, 422].includes(status);
+function shouldTryNextCandidate(error: { status: number; message?: string }): boolean {
+  return isFallbackEligibleError(error.status, error.message);
 }
 
 /**
@@ -548,7 +597,7 @@ export class AiRouter {
         }
 
         if (!(error instanceof AiProviderError)) throw error;
-        if (!shouldTryNextCandidate(error.status)) break;
+        if (!shouldTryNextCandidate(error)) break;
         // 401/403/503 = مشكلة التهيئة لهذا المزوّد بالذات —
         // نستبعده بالكامل فورًا ونكمّل على مزوّد مختلف فقط، بدون إعادة محاولة.
         if ([401, 403, 503].includes(error.status)) {

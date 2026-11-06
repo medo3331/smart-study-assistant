@@ -113,7 +113,16 @@ async function callGroqWithModel(
       const detail = await res.text().catch(() => "");
       console.error("Groq error", res.status, detail.slice(0, 200));
       await recordAttempt("failed_no_response");
-      return { ok: false, error: "AI provider temporarily unavailable. Please try again." };
+      // تمييز رفض استدعاء أداة مُحَال (tool_use_failed) — السبب الأشهر: مستوى
+      // في الـ system prompt بيحرّض على أداة مش مسجّلة، فالموديل بتخيّل تدعية.
+      // الرسالة للعميل تفضل عامة بدون حقن رد المزوّد الخام (تجنّب تسريب).
+      const toolHallucination = res.status === 400 && /tool[_ ]choice|tool_use_failed|called a tool/i.test(detail);
+      return {
+        ok: false,
+        error: toolHallucination
+          ? "AI provider rejected an invalid tool call. Please try again."
+          : "AI provider temporarily unavailable. Please try again.",
+      };
     }
     const data = await res.json().catch(() => null);
     const content = data?.choices?.[0]?.message?.content;
@@ -204,7 +213,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         const candidates = [
           { modelId: "gemini-3.6-flash", available: !!process.env.GEMINI_API_KEY?.trim(), create: () => new GeminiProvider() },
           { modelId: "llama-3.2-11b-vision-preview", available: !!process.env.GROQ_API_KEY?.trim(), create: () => new GroqProvider() },
-          { modelId: "nvidia/nemotron-nano-12b-v2-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
+          { modelId: "nvidia/nemotron-3.5-super-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
         ].filter((c) => c.available);
         // Prefer the selected model first, then the rest as fallback chain.
         const ordered = [

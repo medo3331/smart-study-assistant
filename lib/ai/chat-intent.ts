@@ -127,6 +127,17 @@ export function classifyChatIntent(message: string, context: ChatIntentContext =
     return { intent: "GENERAL_CHAT", reason: "workspace overview question" };
   }
 
+  // طلب محتوى من مصدر صريح: «اشرحلي محاضرة X» / «لخص ملف Y» / «وضح الدرس الثالث».
+  // ⚠️ لازم اسم مصدر — «اشرحلي SQL Joins» تفضل GENERAL_CHAT (اختبار قائم).
+  // ⚠️ الـ regex بيقبل الصيغة الملتصقة «اشرحلي» (بدون مسافة) — لا \s+ بعد الفعل.
+  // ⚠️ RECORDED_LECTURES_SEARCH بتُلتقط فوق قبلها؛ هنا بنستخدم WORKSPACE_SEARCH
+  //    لأن route.ts:529 بيفعّل allowFileSearch مع WORKSPACE_SEARCH فقط.
+  const CONTENT_VERB = /(اشرح|لخّ?ص|وضّ?ح|فسّ?ر|حلّ?ل|استخرج|اقتبس|explain|summari[sz]e|describe)/;
+  const SOURCE_NOUN = /(محاضر|ملف|مستند|درس|lecture|material|file|document)/;
+  if (CONTENT_VERB.test(text) && SOURCE_NOUN.test(text) && !hasRecorded) {
+    return { intent: "WORKSPACE_SEARCH", reason: "content request targeting a workspace source" };
+  }
+
   // Explicit workspace/source requests.
   if (hasWorkspace && hasSearchVerb) {
     // ⚠️ ممنوع `\b` هنا: JS يعرّف \w بـ ASCII، فحدّ الكلمة لا يُطابق العربية أبدًا

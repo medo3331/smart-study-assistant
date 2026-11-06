@@ -24,6 +24,10 @@ describe("parseOrdinal", () => {
     expect(parseOrdinal("الأخيرة")).toBe("last");
     expect(parseOrdinal("last")).toBe("last");
   });
+  it("parses bare 'آخر' / 'أحدث' as last (B4.0.2g-c)", () => {
+    expect(parseOrdinal("اشرحلي آخر محاضرة")).toBe("last");
+    expect(parseOrdinal("أحدث ملف")).toBe("last");
+  });
   it("returns null for previous", () => {
     expect(parseOrdinal("السابقة")).toBeNull();
   });

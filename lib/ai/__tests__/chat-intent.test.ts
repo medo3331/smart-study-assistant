@@ -53,4 +53,24 @@ describe("chat-intent classifier", () => {
   it("recorded transcript request is recorded", () => {
     expect(intent("search the transcript of yesterday's lecture")).toBe("RECORDED_LECTURES_SEARCH");
   });
+
+  // B4.0.2g-a — طلب محتوى من مصدر صريح
+  it("content request targeting a lecture is workspace search", () => {
+    expect(intent("اشرحلي محاضرة Network Types")).toBe("WORKSPACE_SEARCH");
+  });
+  it("content request targeting the last lecture is workspace search", () => {
+    expect(intent("اشرحلي آخر محاضرة")).toBe("WORKSPACE_SEARCH");
+  });
+  it("content request attached form 'اشرحلي' is workspace search", () => {
+    expect(intent("اشرحلي المحاضرة المسجلة للشبكات")).toBe("WORKSPACE_SEARCH");
+  });
+  it("general explanation without source noun stays general", () => {
+    expect(intent("اشرحلي SQL Joins")).toBe("GENERAL_CHAT");
+  });
+  it("numeric ordinal request stays workspace", () => {
+    expect(intent("هات محاضرة رقم 3")).toBe("WORKSPACE_SEARCH");
+  });
+  it("workspace overview stays general", () => {
+    expect(intent("عندي إيه في مساحة العمل؟")).toBe("GENERAL_CHAT");
+  });
 });

@@ -153,7 +153,9 @@ export class OpenRouterProvider implements AiTextProvider, AiMediaProvider {
     const apiKey = openrouterApiKey();
     if (!apiKey) throw new AiProviderError("OpenRouter is not configured", 503, this.name);
     const dataUrl = `data:${input.mimeType};base64,${input.data}`;
-    const model = "nvidia/nemotron-nano-12b-v2-vl:free";
+    // B4.0.2g-e: nemotron-nano-12b-v2-vl:free محذوف من كتالوج OpenRouter
+    // (كان مصدر 404 دائم) — البديل المُتحقق منه في الكتالوج الحي.
+    const model = "nvidia/nemotron-3.5-super-vl:free";
     let response: Response;
     try {
       response = await fetch(OPENROUTER_CHAT_URL, {
