@@ -79,7 +79,7 @@ export function parseOrdinal(text: string): number | "last" | null {
   const t = normalize(text);
   // ⚠️ ممنوع `\b` مع العربية: JS يعرّف \w بـ ASCII، فلا يوجد حدّ كلمة عربي.
   // الحدود أدناه تقيّد الحروف اللاتينية فقط، فتعمل للعربية والإنجليزية معًا.
-  if (/(?<![a-z])(last|الأخيرة|الاخيره|الاخير|الأخير|latest)(?![a-z])/.test(t)) {
+  if (/(?<![a-z])(last|الأخيرة|الاخيره|الاخير|الأخير|آخر|أحدث|الاحدث|latest)(?![a-z])/.test(t)) {
     if (/(?<![a-z])(previous|السابقة|السابق)(?![a-z])/.test(t)) return null;
     return "last";
   }
@@ -190,7 +190,7 @@ async function fetchLectures(supabase: SupabaseClient, userId: string): Promise<
       .from("lectures")
       .select("id, title, original_filename, status, transcript_text, created_at")
       .eq("user_id", userId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .order("id", { ascending: true });
     if (error) throw error;
     return (data ?? []) as LectureRow[];
@@ -200,7 +200,7 @@ async function fetchLectures(supabase: SupabaseClient, userId: string): Promise<
       .from("lectures")
       .select("id, title, original_filename, status, created_at")
       .eq("user_id", userId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .order("id", { ascending: true });
     if (error) throw error;
     return (data ?? []).map((r) => ({ ...r, transcript_text: null })) as LectureRow[];
@@ -213,7 +213,7 @@ async function fetchMaterials(supabase: SupabaseClient, userId: string): Promise
       .from("materials")
       .select("id, title, content, created_at")
       .eq("user_id", userId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .order("id", { ascending: true });
     if (error) throw error;
     return (data ?? []) as MaterialRow[];
@@ -223,7 +223,7 @@ async function fetchMaterials(supabase: SupabaseClient, userId: string): Promise
       .from("materials")
       .select("id, title, created_at")
       .eq("user_id", userId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .order("id", { ascending: true });
     if (error) throw error;
     return (data ?? []).map((r) => ({ ...r, content: null })) as MaterialRow[];
@@ -327,11 +327,13 @@ export async function resolveWorkspaceSource(
     const scopedSorted = [
       ...scopedLectures.map((r) => ({ family: "lecture" as const, row: r, created: r.created_at, id: r.id })),
       ...scopedMaterials.map((r) => ({ family: "material" as const, row: r, created: r.created_at, id: r.id })),
-    ].sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : a.id < b.id ? -1 : 1));
+    ].sort((a, b) => (a.created > b.created ? -1 : a.created < b.created ? 1 : a.id < b.id ? -1 : 1));
 
     let idx: number;
     if (parsed.ordinal === "last") {
-      idx = scopedSorted.length - 1;
+      // «آخر محاضرة» = الأحدث = أول عنصر بعد الترتيب التنازلي (B4.0.2g-c).
+      // مطابق لترتيب الـ UI والـ digest (الأحدث أولاً).
+      idx = 0;
     } else {
       idx = parsed.ordinal - 1;
     }
