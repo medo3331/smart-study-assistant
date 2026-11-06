@@ -113,7 +113,16 @@ async function callGroqWithModel(
       const detail = await res.text().catch(() => "");
       console.error("Groq error", res.status, detail.slice(0, 200));
       await recordAttempt("failed_no_response");
-      return { ok: false, error: "AI provider temporarily unavailable. Please try again." };
+      // تمييز رفض استدعاء أداة مُحَال (tool_use_failed) — السبب الأشهر: مستوى
+      // في الـ system prompt بيحرّض على أداة مش مسجّلة، فالموديل بتخيّل تدعية.
+      // الرسالة للعميل تفضل عامة بدون حقن رد المزوّد الخام (تجنّب تسريب).
+      const toolHallucination = res.status === 400 && /tool[_ ]choice|tool_use_failed|called a tool/i.test(detail);
+      return {
+        ok: false,
+        error: toolHallucination
+          ? "AI provider rejected an invalid tool call. Please try again."
+          : "AI provider temporarily unavailable. Please try again.",
+      };
     }
     const data = await res.json().catch(() => null);
     const content = data?.choices?.[0]?.message?.content;
