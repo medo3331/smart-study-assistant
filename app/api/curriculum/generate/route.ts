@@ -18,6 +18,7 @@ import { curriculumCreditCost } from "@/lib/ai/credit-pricing";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import { generateCurriculum } from "@/lib/curriculum/service";
+import { buildEducationalContext } from "@/lib/curriculum/prompts";
 import {
   CURRICULUM_LEVELS,
   CURRICULUM_MAX_FOCUS_TOPIC_CHARS,
@@ -36,6 +37,43 @@ export const maxDuration = 60;
 
 function errorResponse(message: string, status: number, code: string) {
   return NextResponse.json({ success: false, error: message, code }, { status });
+}
+
+/**
+ * B4.0.2g-f: مصدر الحقيقة هو السيرفر — بيجيب سياق الطالب التعليمي من
+ * ملفه (المرحلة/الصف/المسار بأسمائها) عشان الموديل ما يعتمدش على
+ * الكلينت في تحديد المسار. الفشل هنا مش حرج — الإحقнамتخطى.
+ */
+async function loadEducationalContext(
+  db: SupabaseClient,
+  userId: string
+): Promise<string> {
+  try {
+    const { data: profile } = await db
+      .from("profiles")
+      .select("education_stage_id, education_grade_id, education_track_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!profile) return "";
+
+    const lookupName = async (
+      table: "education_stages" | "education_grades" | "education_tracks",
+      id: unknown
+    ): Promise<string | null> => {
+      if (!id || typeof id !== "string") return null;
+      const { data } = await db.from(table).select("name").eq("id", id).maybeSingle();
+      return typeof data?.name === "string" ? data.name : null;
+    };
+
+    return buildEducationalContext({
+      stage: await lookupName("education_stages", profile.education_stage_id),
+      grade: await lookupName("education_grades", profile.education_grade_id),
+      track: await lookupName("education_tracks", profile.education_track_id),
+    });
+  } catch (error) {
+    console.error("curriculum/generate: educational context lookup failed", error);
+    return "";
+  }
 }
 
 function parseRequest(body: Record<string, unknown>):
@@ -131,6 +169,16 @@ export async function POST(req: Request) {
     }
 
     const { input } = parsed;
+
+    // B4.0.2g-f: السياق التعليمي من الـ DB — يتعامل قبل أي خصم كريدت،
+    // ومُحقن في بداية personaContext (مساحة 1200 بتستوعب السطرين).
+    const educationalContext = await loadEducationalContext(db, userId);
+    if (educationalContext) {
+      input.personaContext = [educationalContext, input.personaContext]
+        .filter(Boolean)
+        .join(" ")
+        .slice(0, CURRICULUM_MAX_PERSONA_CONTEXT_CHARS);
+    }
 
     // السيرفر هو مصدر التكلفة: كريدت لكل 10 دروس.
     const cost = curriculumCreditCost(input.lessonCount);

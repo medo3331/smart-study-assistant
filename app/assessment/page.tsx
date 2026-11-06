@@ -128,7 +128,7 @@ export default function AssessmentPage() {
   const [category, setCategory] = useState<CategoryType>("دراسة أكاديمية");
   const [persona, setPersona] = useState<Persona>(DEFAULT_PERSONA);
   const [studentLevel, setStudentLevel] = useState<StudentLevel | null>(null);
-  const [field, setField] = useState<FieldId>(DEFAULT_FIELD);
+  const [field, setField] = useState<FieldId | null>(DEFAULT_FIELD); // B4.0.2g-f: مفيش ديفولت صامت — null لحد ما الطالب يختار فعلاً.
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<QuizOption[]>([]);
 

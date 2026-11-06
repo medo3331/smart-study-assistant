@@ -49,6 +49,31 @@ function clamp(value: string, max: number): string {
   return value.trim().slice(0, max);
 }
 
+/** أجزاء السياق التعليمي من ملف الطالب (ACOUNT) — الأسماء جايه من جداول التعليم. */
+export interface EducationalContextParts {
+  stage?: string | null;
+  grade?: string | null;
+  track?: string | null;
+}
+
+/**
+ * B4.0.2g-f: سطر السياق التعليمي اللي السيرفر بيحقنه في بداية
+ * personaContext — المسار/الصف/المرحلة ما يبقوش افتراضات للموديل.
+ * مفيش أي جزء متاح → نص فاضي (الراوت بيتخطى الإحقن).
+ */
+export function buildEducationalContext(parts: EducationalContextParts): string {
+  const stage = parts.stage?.trim() || null;
+  const grade = parts.grade?.trim() || null;
+  const track = parts.track?.trim() || null;
+  if (!stage && !grade && !track) return "";
+  const segments = [
+    stage ? `المرحلة: ${stage}` : null,
+    grade ? `الصف: ${grade}` : null,
+    track ? `المسار: ${track}` : null,
+  ].filter(Boolean) as string[];
+  return `السياق التعليمي المعتمد من ملف الطالب — ${segments.join("، ")}.`;
+}
+
 function normalizeTopic(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -115,6 +140,13 @@ ${existingTopics.map((topic) => `  • ${topic}`).join("\n")}
 - مستوى العمق: ${LEVEL_LABEL[input.level]}
 - عدد الدروس المطلوب: ${input.lessonCount}
 - ${personaLine}${expansionSection}
+
+الالتزام المنهجي الصارم — لا تجاوز:
+- كل درس لازم يخدم مادة "${input.subject}" والسياق التعليمي المعرّف في "سياق المتعلم" فقط.
+- لو السياق بيحدد مرحلة/صف/مسار، المنهج يلتزم بها بالكامل — ممنوع الخروج عنها أو الافتراض بمسار تاني.
+- ممنوع تماماً دروس برمجة أو كمبيوتر أو تقنية، إلا لو المادة نفسها من ضمن المواد دي أو المسار الرسمي بيفرضها.
+- ممنوع افتراض إن الطالب مبرمج أو تقني إلا لو السياق قالها صراحة.
+- لو المادة مش متوافقة مع المسار أو مش واضحة، رجّع isValid=false مع سبب قصير بدل التخمين.
 
 قواعد صارمة:
 1. أرجع ${input.lessonCount} عنصر في "outline" بالظبط. لا أكثر ولا أقل.
@@ -264,9 +296,10 @@ export function buildEnrichmentMessages(
 1. أرجع وصفاً واحداً لكل درس في القائمة، بنفس أرقام day.
 2. الوصف سطر واحد عملي (حد أقصى ${CURRICULUM_MAX_DESCRIPTION_CHARS} حرف) يقول الطالب هيتعلم إيه بالظبط.
 3. ممنوع وصف عام زي "شرح الدرس" — اذكر المفاهيم أو المهارات الحقيقية.
-4. للمراجعة النهائية: اكتب إنها مراجعة شاملة واختبار على المادة كلها.
-5. اكتب بالعربي مع إبقاء المصطلحات التقنية بالإنجليزية.
-6. JSON فقط بدون Markdown وبدون نص خارجه.
+4. الوصف يلتزم بالمادة والسياق التعليمي في الطلب — ممنوع إدخال مفاهيم خارج المادة (برمجة/تقنية) إلا لو المادة نفسها بتطلبها.
+5. للمراجعة النهائية: اكتب إنها مراجعة شاملة واختبار على المادة كلها.
+6. اكتب بالعربي مع إبقاء المصطلحات التقنية بالإنجليزية.
+7. JSON فقط بدون Markdown وبدون نص خارجه.
 
 الشكل:
 {
