@@ -39,6 +39,14 @@ function toUsage(response: { usageMetadata?: { promptTokenCount?: number; candid
 }
 
 /**
+ * @deprecated — بدون تحديد تاريخ إزالة (تقرير 2026-11-06): مفتاح `GEMINI_API_KEY`
+ * باطل، ومهام النصوص artifact كلها منتقلة إلى Groq/NVIDIA عبر راوتر المهام
+ * (`AI_PROVIDER_BY_TASK` في `lib/ai/routing.ts` — B4.0.2g-d1).
+ *
+ * الاستخدام الراهن الوحيد المتبقي: `file_analysis` (حصري — TODO/B4.0.3) و
+ * مهام الصور (image_generation مجمدة — TODO/B4.0.3 ملف `app/api/ai/image-gen`,
+ * `app/api/ai/image-analysis`). ممنوع إضافة استخدامات جديدة هنا.
+ *
  * Server-side adapter for the current Google Gen AI SDK. It deliberately
  * exposes only the provider-neutral text contract; file/image payloads and
  * image generation are introduced with their dedicated flows in later phases.
