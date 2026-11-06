@@ -92,8 +92,11 @@ export class GeminiProvider implements AiMediaProvider, AiImageProvider {
     } catch (error) {
       if (error instanceof AiProviderError) throw error;
       const status = error instanceof ApiError ? error.status : 502;
-      console.error("ai/gemini: API error", status, error);
-      throw new AiProviderError("Gemini request failed", status, this.name);
+      // B4.0.2g-d2: بنرشّ تفاصيل الخطأ الأصلي (زي «API key not valid») جوه
+      // الرسالة — الراوتر بيعتمد عليها يفرّق مفتاح باطل عن طلب باطل.
+      const detail = (error instanceof Error ? error.message : String(error)).slice(0, 200);
+      console.error("ai/gemini: API error", status, detail);
+      throw new AiProviderError(`Gemini request failed: ${detail}`, status, this.name);
     }
   }
 
@@ -111,8 +114,8 @@ export class GeminiProvider implements AiMediaProvider, AiImageProvider {
       return { provider: this.name, model: response.modelVersion ?? GEMINI_MODELS.analysis, content, payload: { choices: [{ message: { content } }] }, usage: toUsage(response) };
     } catch (error) {
       if (error instanceof AiProviderError) throw error;
-      throw new AiProviderError("Gemini media request failed", error instanceof ApiError ? error.status : 502, this.name);
-    }
+      const detail = (error instanceof Error ? error.message : String(error)).slice(0, 200);
+      throw new AiProviderError(`Gemini media request failed: ${detail}`, error instanceof ApiError ? error.status : 502, this.name);    }
   }
 
   /**
@@ -155,7 +158,8 @@ export class GeminiProvider implements AiMediaProvider, AiImageProvider {
       return { provider: this.name, model: response.modelVersion ?? GEMINI_MODELS.image, data: inline.data, mimeType: inline.mimeType || "image/png" };
     } catch (error) {
       if (error instanceof AiProviderError) throw error;
-      throw new AiProviderError("Gemini image generation failed", error instanceof ApiError ? error.status : 502, this.name);
+      const detail = (error instanceof Error ? error.message : String(error)).slice(0, 200);
+      throw new AiProviderError(`Gemini image generation failed: ${detail}`, error instanceof ApiError ? error.status : 502, this.name);
     }
   }
 }

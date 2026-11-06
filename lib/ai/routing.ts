@@ -21,6 +21,7 @@ import {
   isModelSelectable,
   paidModelsAllowed,
 } from "./models";
+import { isFallbackEligibleError } from "./errors";
 import { withConcurrencyLimit } from "./queue";
 import { getRuntimePriority, isModelRuntimeEnabled } from "./model-state";
 import type { AiUsageContext } from "./usage-context";
@@ -252,14 +253,15 @@ export class AiRouteError extends Error {
 }
 
 /**
- * هل الخطأ ده يستحق تجربة مرشّح تاني؟
+ * هل الخطأ ده يستحق تجربة مرشّح تاني؟ (المنطق في errors.ts — B4.0.2g-d2):
  * - 400/413/422: طلبنا نفسه باين غلط — تكراره على مزوّد تاني مضيعة وضوضاء.
+ *   استثناء واحد: 400 «API key not valid» = مفتاح باطل، يستاهل مزوّد تاني.
  * - 401/403/503: خطأ تهيئة لهذا المزوّد بالتحديد — نسيبه ونجرّب
  *   مزوّد مختلف لو متاح، بس مش نفس المزوّد تاني.
  * - 408/429/5xx: أعطال مؤقتة — تستاهل fallback.
  */
-function shouldTryNextCandidate(status: number): boolean {
-  return ![400, 422].includes(status);
+function shouldTryNextCandidate(error: { status: number; message?: string }): boolean {
+  return isFallbackEligibleError(error.status, error.message);
 }
 
 /**
@@ -595,7 +597,7 @@ export class AiRouter {
         }
 
         if (!(error instanceof AiProviderError)) throw error;
-        if (!shouldTryNextCandidate(error.status)) break;
+        if (!shouldTryNextCandidate(error)) break;
         // 401/403/503 = مشكلة التهيئة لهذا المزوّد بالذات —
         // نستبعده بالكامل فورًا ونكمّل على مزوّد مختلف فقط، بدون إعادة محاولة.
         if ([401, 403, 503].includes(error.status)) {

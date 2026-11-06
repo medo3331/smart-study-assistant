@@ -167,7 +167,34 @@ export function classifyStatusCode(status: number): AiErrorCode {
   return "UNKNOWN";
 }
 
+/**
+ * رسالة مفتاح باطل؟ جوجل بيرجّع `API key not valid` برمز **400** (مش 401)
+ * — فلو عدّيناها INVALID_REQUEST مش retryable (زي ما كان)، هتفشل السلسلة
+ * كاملة عند أول مفتاح باطل بدل ما تكمّل على المزوّد التالي.
+ */
+export function isInvalidApiKeyMessage(message?: string): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("api_key_invalid") ||
+    normalized.includes("api key not valid") ||
+    normalized.includes("invalid api key")
+  );
+}
+
 /** هل الحالة دي تستحق تجربة مرشّح تاني في الـ fallback؟ (سياسة الراوتر نفسها). */
 export function isFallbackEligibleStatus(status: number): boolean {
   return status !== 400 && status !== 413 && status !== 422;
+}
+
+/**
+ * B4.0.2g-d2: نفس سياسة isFallbackEligibleStatus + استثناء واحد بس:
+ * 400 مرفوق برسالة مفتاح باطل = خطأ تهيئة للمزوّد ده (زي 401/403) —
+ * يستاهل fallback لمزوّد مختلف، مش وقف للسلسلة. 413/422 لسه بتقف فورًا
+ * (الطلب نفسه باطل — تكراره مفيش فايدة).
+ */
+export function isFallbackEligibleError(status: number, message?: string): boolean {
+  if (status === 413 || status === 422) return false;
+  if (status === 400) return isInvalidApiKeyMessage(message);
+  return true;
 }

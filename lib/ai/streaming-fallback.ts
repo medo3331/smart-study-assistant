@@ -3,6 +3,7 @@ import { scheduleUsageRecording } from "./usage-scheduler";
 import type { AiUsageContext } from "./usage-context";
 import type { AiChatRequest, AiProviderName, AiTaskType } from "./types";
 import { AiProviderError } from "./types";
+import { isFallbackEligibleError } from "./errors";
 import { streamingAdapterFor, type AiStreamChunk, type AiStreamingProvider } from "./streaming";
 import { routeCandidates } from "./routing";
 
@@ -94,7 +95,9 @@ export async function* streamWithFallback(
       );
       lastError = err as Error;
       const status = err instanceof AiProviderError ? err.status : 0;
-      if (status === 400 || status === 422) throw err;
+      // B4.0.2g-d2: 400 «API key not valid» بيتعدى retryable — السلسلة تكمل
+      // على مزوّد تاني بدل ما تقف. سياسة واحدة مشتركة مع راوتر النصوص.
+      if (!isFallbackEligibleError(status, err instanceof Error ? err.message : undefined)) throw err;
       const safeMsg = lastError.message.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 80);
       console.warn(`[Stream Fallback] ${provider} failed (${status || safeMsg}), trying next…`);
     }
