@@ -368,7 +368,18 @@ export function UnifiedChat({
           {!loadingConversations && conversations.length === 0 && <p className="text-xs text-ink-soft">لا توجد محادثات سابقة.</p>}
         </div>
       </aside>
-      <div className="flex-1 overflow-y-auto">
+      {/* ⚠️ عمود المحتوى: صفّان في CSS grid —
+          (1) `minmax(0,1fr)` = منطقة الرسائل (اللي بتسكرول)
+          (2) `auto`            = شريط الكتابة (مثبّت، بيتحسب على مقاسه)
+
+          الـ `minmax(0,…)` ضرورية: من غيرها الـ row بيكبر على محتوى
+          الرسائل والـ composer بينزل تحت الـ fold.
+
+          الـ composer **مش** جوه الـ scroller: لو كان جواها كان لازم
+          تعمل scroll لحد ما توصله، فكان بيختفي تحت الـ fold. */}
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto]">
+        {/* منطقة الرسائل — هي اللي بتسكرول */}
+        <div className="min-h-0 overflow-y-auto">
         <button onClick={() => setSidebarOpen((v) => !v)} className="m-2 px-2 py-1 border rounded" aria-label="إظهار/إخفاء المحادثات">☰</button>
         <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
       {/* 📌 دليل الاستخدام — أول حاجة في العمود، قبل المحادثة نفسها.
@@ -442,6 +453,22 @@ export function UnifiedChat({
           </div>
         )}
       </div>
+        </div>{/* ← قفل max-w-3xl (نهاية منطقة الرسائل) */}
+      </div>{/* ← قفل الـ scroller */}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          شريط الكتابة (composer) — **مثبّت** تحت منطقة الرسائل.
+
+          ⚠️ كان جوه الـ scroller، فكان بيختفي تحت الـ fold والصفحة
+             بتعمل scrollbar مزدوج (الصفحة + الـ scroller). دلوقتي هو
+             sibling للـ scroller جوّه grid، فبيفضل ظاهر مهما
+             الـ messages scroll.
+
+             الخلفية `bg-paper` ضرورية: من غيرها الـ messages بتظهر
+             من ورا الشريط لما بتسكرول.
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="border-t border-rule bg-paper">
+        <div className="mx-auto max-w-3xl px-4 py-3" dir="rtl">
 
       {/* Attachment preview (visible, user controls) */}
       {attachment && (
@@ -577,8 +604,9 @@ export function UnifiedChat({
           </div>
         </div>
       )}
-    </div>
-      </div>
-    </div>
+        </div>{/* ← قفل inner composer (max-w-3xl) */}
+      </div>{/* ← قفل شريط الكتابة */}
+    </div>{/* ← قفل عمود grid (scroller + composer) */}
+  </div>
   );
 }
