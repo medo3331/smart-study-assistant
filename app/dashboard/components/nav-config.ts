@@ -226,6 +226,54 @@ export const NAV_GROUPS: NavGroupDef[] = [
 export const NAV_ITEMS: NavItemDef[] = NAV_GROUPS.flatMap((g) => g.items);
 
 /* --------------------------------------------------------------------------
+   مجموعات الشريط العلوي
+
+   الشريط الجانبي (`NavRail`) بياخد **كل** المجموعات التسعة. الشريط العلوي
+   (`SiteNavbar`) شريط أفقي — تسع قوائم جنب بعض هياخدوا عرض كبير، فبقت
+   ست مجموعات في الشريط والباقي في قائمة «المزيد».
+
+   ⚠️ مجموعات الشريط العلوي مش نسخة جديدة من البيانات — هي **تحديد**
+   للمجموعات الموجودة فوق. أي بند جديد بيتزاد في `NAV_GROUPS` بيظهر
+   تلقائي: في الشريط لو مجموعته من `NAVBAR_GROUP_IDS`، أو في «المزيد» لو لا.
+
+   ⚠️ بند الأدمن (`ownerOnly`) بيختفي لغير صاحب المنصة. الفلترة نفسها
+   اللي في `NavRail` — مفيش fetch جديد، في `useIsOwner` واحدة مشتركة.
+   -------------------------------------------------------------------------- */
+
+/** المجموعات اللي بتظهر كقوائم منسدلة جنب بعض في الشريط العلوي. */
+export const NAVBAR_GROUP_IDS = [
+  "learning",
+  "ai",
+  "planning",
+  "progress",
+  "community",
+  "account",
+] as const;
+
+export const NAVBAR_GROUPS: NavGroupDef[] = NAV_GROUPS.filter((g) =>
+  (NAVBAR_GROUP_IDS as readonly string[]).includes(g.id),
+);
+
+/**
+ * المجموعات اللي مش بتظهر في الشريط العلوي مباشرة — بتتجمّع في قائمة
+ * «المزيد». أي مجموعة مش في `NAVBAR_GROUP_IDS` بتروح هنا.
+ */
+export const NAVBAR_MORE_GROUPS: NavGroupDef[] = NAV_GROUPS.filter(
+  (g) => !(NAVBAR_GROUP_IDS as readonly string[]).includes(g.id) && g.id !== "main",
+);
+
+/**
+ * مسار البند لو كان صفحة كاملة — أو `null` لو مودال أو قسم.
+ *
+ * ليها دالة أصلاً؟ لأن `<Link>` بيتعامل مع المسار بس، والبند اللي
+ * مالهوش مسار محتاج `<button>` + `performNavAction`. فالكود اللي
+ * بيرسم لازم يعرف: رابط ولا زرار؟
+ */
+export function resolveNavHref(item: NavItemDef): string | null {
+  return item.href ?? null;
+}
+
+/* --------------------------------------------------------------------------
    نية التنقل
 
    المشكلة: بنود زي «المساعد الذكي» و«الملاحظات» جوه صفحة الداشبورد —

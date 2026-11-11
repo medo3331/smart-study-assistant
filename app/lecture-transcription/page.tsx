@@ -3,6 +3,8 @@ import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { SubPageShell } from "@/components/SubPageShell";
 import { LectureTranscriber } from "@/components/lecture-transcription/LectureTranscriber";
+import { FeatureGuide } from "@/components/FeatureGuide";
+import { guides } from "@/lib/guides";
 import { breadcrumbLd, pageMeta } from "@/lib/seo";
 import { JsonLd } from "@/components/JsonLd";
 
@@ -64,6 +66,7 @@ export default function LectureTranscriptionPage() {
 
       <section className="band">
         <div className="mx-auto max-w-2xl">
+          <FeatureGuide {...guides["lecture-transcription"]} storageKey="guide:lecture-transcription" />
           <LectureTranscriber />
         </div>
       </section>

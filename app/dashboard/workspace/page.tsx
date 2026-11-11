@@ -18,6 +18,8 @@ import {
 import { PageShell, EmptyState, LoadingSheets, DataNotice } from "../components/PageShell";
 import { useAuthUser, formatArabicDate, formatFileSize } from "../components/use-page-data";
 import { setAiSeed, railAccountFromUser } from "../components/nav-config";
+import { FeatureGuide } from "@/components/FeatureGuide";
+import { guides } from "@/lib/guides";
 import {
   fetchMaterials,
   insertMaterial,
@@ -593,6 +595,9 @@ export default function WorkspacePage() {
         lede="بنحمّل ملفاتك ومحاضراتك ومحادثاتك…"
         action={headerActions}
       >
+        {/* الدليل بيظهر في حالة التحميل كمان — عشان يظهر فورًا أول ما
+            المستخدم يفتح الصفحة، مش بعد ما البيانات تخلص. */}
+        <FeatureGuide {...guides.workspace} storageKey="guide:workspace" />
         <LoadingSheets count={4} />
       </PageShell>
     );
@@ -607,6 +612,8 @@ export default function WorkspacePage() {
       feedbackPage="workspace"
       feedbackLabel="مساحة العمل"
     >
+      <FeatureGuide {...guides.workspace} storageKey="guide:workspace" />
+
       {notice && <DataNotice message={notice} />}
 
       {/* ملخص سريع */}

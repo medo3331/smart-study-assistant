@@ -6,6 +6,8 @@ import { PageShell, DataNotice, usePenTheme } from "../components/PageShell";
 import { THEME_STYLES } from "../components/theme-helpers";
 import { takeSlidesSeed } from "../components/nav-config";
 import { ReadAloud } from "@/components/ReadAloud";
+import { FeatureGuide } from "@/components/FeatureGuide";
+import { guides } from "@/lib/guides";
 
 /* ==========================================================================
    مولّد العروض — من موضوع لعرض شرائح
@@ -376,6 +378,8 @@ export default function SlidesPage() {
       feedbackPage="slides"
       feedbackLabel="مولّد العروض"
     >
+      <FeatureGuide {...guides.slides} storageKey="guide:slides" />
+
       <div className="space-y-5">
         {error && <DataNotice message={error} />}
 

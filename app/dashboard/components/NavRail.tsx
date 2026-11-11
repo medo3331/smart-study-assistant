@@ -3,111 +3,29 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  BookMarked,
-  BookOpen,
-  Bot,
-  BrainCircuit,
-  Briefcase,
-  CalendarDays,
-  ChartNoAxesColumn,
-  ChevronDown,
-  ClipboardList,
-  Coffee,
-  Coins,
-  CreditCard,
-  FileText,
-  FolderOpen,
-  Gift,
-  GraduationCap,
-  Layers,
-  LayoutDashboard,
-  LifeBuoy,
-  ListChecks,
-  Medal,
-  Mic,
-  Moon,
-  NotebookPen,
-  Package,
-  Presentation,
-  Puzzle,
-  Settings,
-  ShieldCheck,
-  ShoppingBag,
-  Sparkles,
-  Target,
-  TrendingUp,
-  Trophy,
-  User,
-  Users,
-  Wallet,
-  Wand2,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { BrandGlyph } from "@/components/BrandLogo";
 import { SITE_NAME, SITE_NAME_EN } from "@/lib/seo";
+import { performNavAction } from "@/lib/nav-actions";
+import { useIsOwner } from "./use-is-owner";
 import type { ThemeStyles } from "./types";
 import {
   NAV_GROUPS,
   activeNavId,
   railAccountFromUser,
-  setNavIntent,
-  type NavIconName,
   type NavItemDef,
   type NavSignal,
   type RailAccount,
 } from "./nav-config";
+import { NAV_ICONS } from "./nav-icons";
 
 /* --------------------------------------------------------------------------
    أيقونات الأقسام والبنود
 
-   ⚠️ كل اسم في NavIconName لازم يكون له مفتاح هنا — الـ Record بيفرض ده
-   وقت الـ typecheck، فأي أيقونة تتضاف هناك وما تتضافش هنا البناء يفشل
-   بدل ما تظهر مربع فاضي. الخريطة top-level عشان ما تتعملش كل render.
+   ⚠️ الخريطة نفسها في `nav-icons.ts` — منفصلة عشان الشريط العلوي
+      (`SiteNavbar`) بيستخدمها كمان من غير ما يسحب `framer-motion`.
    -------------------------------------------------------------------------- */
-const NAV_ICONS: Record<NavIconName, LucideIcon> = {
-  dashboard: LayoutDashboard,
-  subjects: BookOpen,
-  lessons: GraduationCap,
-  workspace: FolderOpen,
-  lectures: Mic,
-  exams: ClipboardList,
-  slides: Presentation,
-  aiMentor: Bot,
-  agents: BrainCircuit,
-  assistant: Sparkles,
-  create: Wand2,
-  planner: Target,
-  calendar: CalendarDays,
-  missions: ListChecks,
-  notes: NotebookPen,
-  emergency: AlertTriangle,
-  quran: BookMarked,
-  worship: Moon,
-  break: Coffee,
-  escape: Puzzle,
-  progress: TrendingUp,
-  achievements: Trophy,
-  analytics: ChartNoAxesColumn,
-  leaderboard: Medal,
-  xpShop: Sparkles,
-  inventory: Package,
-  community: Users,
-  referrals: Gift,
-  shop: ShoppingBag,
-  rewards: Coins,
-  pricing: CreditCard,
-  balance: Wallet,
-  plans: Layers,
-  profile: User,
-  settings: Settings,
-  career: Briefcase,
-  report: FileText,
-  support: LifeBuoy,
-  admin: ShieldCheck,
-};
 
 /** كل الأقسام مفتوحة أول مرة — المستخدم يشوف كل حاجة قبل ما يقرر يقفل. */
 const DEFAULT_OPEN_GROUPS: string[] = NAV_GROUPS.map((group) => group.id);
@@ -179,23 +97,9 @@ function useSelfAccount(enabled: boolean): RailAccount | null {
   return account;
 }
 
-/** هل يظهر لينك لوحة الأدمن؟ Owner (env) أو أي دور في site_admins — Server-only check وبدون تسريب Email */
-function useIsOwner(): boolean {
-  const [isOwner, setIsOwner] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/admin/is-owner", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { isOwner: false, canAccessAdmin: false }))
-      .then((j) => {
-        if (alive) setIsOwner(Boolean(j?.isOwner || j?.canAccessAdmin));
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return isOwner;
-}
+/* ⚠️ فلترة بند لوحة الأدمن (`ownerOnly`) بتستخدم `useIsOwner` من
+   `use-is-owner.ts` — نفس الـ Hook ونفس الـ endpoint اللي بيستخدمهم
+   الشريط العلوي (`SiteNavbar`). مافيش fetch تاني. */
 
 export function NavRail({
   themeStyles,
@@ -293,40 +197,16 @@ export function NavRail({
 
   const handleClick = (item: NavItemDef) => {
     if (isDim(item)) return;
-    setIsMenuOpen(false);
 
-    // بند بمسار: تنقّل عادي. لو إحنا واقفين عليه خلاص، رجّعه لفوق.
-    if (item.href) {
-      setClickedId(null);
-      if (pathname === item.href) {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        return;
-      }
-      router.push(item.href);
-      return;
-    }
-
-    // بند قسم: سكرول لو إحنا في الداشبورد، وإلا اكتب النية وانقل
-    if (item.scrollTo) {
-      if (onDashboard) {
-        setClickedId(item.id);
-        document.getElementById(item.scrollTo)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      } else {
-        setNavIntent({ kind: "scroll", target: item.scrollTo });
-        router.push("/dashboard");
-      }
-      return;
-    }
-
-    // بند مودال: الداشبورد بتفتحه بنفسها، والباقي بينقل ليها
-    if (item.signal) {
-      if (onSignal) {
-        onSignal(item.signal);
-      } else {
-        setNavIntent({ kind: "modal", target: item.signal });
-        router.push("/dashboard");
-      }
-    }
+    // ⚠️ السلوك نفسه (صفحة / قسم / مودال) في `lib/nav-actions.ts` — الشريط
+    //    العلوي بيستدعي نفس الدالة، فمافيش نسختين تختلف من أول تعديل.
+    performNavAction(item, {
+      pathname: pathname ?? "",
+      navigate: (href) => router.push(href),
+      onSignal,
+      onActiveChange: (id) => setClickedId(id),
+      onNavigate: () => setIsMenuOpen(false),
+    });
   };
 
   async function handleSignOut(): Promise<void> {

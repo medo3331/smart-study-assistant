@@ -3,6 +3,8 @@
 import React, { useRef, useState } from "react";
 import { DataNotice, PageShell } from "../components/PageShell";
 import { useAuthUser } from "../components/use-page-data";
+import { FeatureGuide } from "@/components/FeatureGuide";
+import { guides } from "@/lib/guides";
 
 const TYPES = [
   ["marketing_plan", "خطة تسويقية"],
@@ -106,6 +108,7 @@ export default function CreatePlanPage() {
   };
 
   return <PageShell eyebrow="Create" title="أنشئ" lede="خطط بالـ Gemini، صور وتحليل صور، وتحويل الخطة لمحتوى جاهز بالـ Groq." feedbackPage="agents">
+    <FeatureGuide {...guides.create} storageKey="guide:create" />
     {session.status !== "ready" ? <DataNotice message="لازم تسجّل دخول عشان تستخدم أدوات الإنشاء." /> : <>
       {notice && <DataNotice message={notice} />}
       <div className="flex flex-wrap gap-2">{MODES.map(([id, label]) => <button key={id} onClick={() => { setMode(id); setNotice(null); setResult(""); }} className={`btn text-sm ${mode === id ? "btn-marker" : "btn-quiet"}`}>{label}</button>)}</div>
