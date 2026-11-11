@@ -529,6 +529,11 @@ export function UnifiedChat({
         <textarea
           dir="rtl"
           rows={1}
+          /* ⚠️ الـ hook ده لسكربت الفحص (`npm run check:navbar`) — بيختار
+             شريط الكتابة **بالاسم** مش «أول textarea في الصفحة». من غيره
+             السكربت كان بيلقط textarea محرّر التفريغ في صفحة المحاضرات
+             وبيحسب ارتفاع غلط. */
+          data-navsmoke="chat-composer"
           className="flex-1 bg-transparent text-sm font-body resize-none outline-none py-2 min-h-[36px] max-h-[120px]"
           placeholder="           .. (                            OCR)"
           value={input}

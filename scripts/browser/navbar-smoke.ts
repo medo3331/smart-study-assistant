@@ -396,7 +396,10 @@ async function checkPage(
     ).length;
 
     // الـ composer في الشات
-    const composer = document.querySelector("textarea");
+    // ⚠️ **بالـ hook بس** — من غير fallback لـ «أول textarea»: صفحة
+    //    المحاضرات فيها textarea تاني (محرّر التفريغ) ولو خدنا الأول
+    //    هنحسب ارتفاع غلط ونقول إن الـ composer تحت الـ fold وهو فوقه.
+    const composer = document.querySelector('textarea[data-navsmoke="chat-composer"]');
     const composerRect = composer ? composer.getBoundingClientRect() : null;
 
     // حاوية الشات (flex + h-[calc(100dvh - var(--nav-h))])
