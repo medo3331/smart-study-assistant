@@ -19,11 +19,12 @@ import { describe, it, expect } from "vitest";
 import {
   extractSegments,
   chunkSegments,
+  planParts,
   quoteOverlap,
+  reconcileExplanation,
   validateIntensiveOutput,
   parseJsonPayload,
-  generateIntensiveExplanation,
-  IntensiveError,
+  generateIntensivePart,
 } from "../lecture-intensive";
 import { QUOTE_OVERLAP_THRESHOLD } from "../lecture-intensive";
 import type { TimedSegment } from "../lecture-intensive-prompts";
@@ -293,8 +294,16 @@ describe("parseJsonPayload — استخراج JSON من رد الموديل", ()
     expect(parseJsonPayload('{"sections":[]}')).toEqual({ sections: [] });
   });
 
-  it("⚠️ رد فيه كلام قبل JSON ⇒ مرفوض (مش بندوّر على أول { })", () => {
-    expect(() => parseJsonPayload('ده شرح: {"sections":[]}')).toThrow();
+  it("✅ رد داخل ```json fence بيتقرا (الموديل أحياناً بيعمل كده)", () => {
+    expect(parseJsonPayload('```json\n{"sections":[]}\n```')).toEqual({ sections: [] });
+  });
+
+  it("✅ رد فيه كلام قبل JSON بيتقرا (المستخرِج المتسامح بيلاقي الكائن)", () => {
+    expect(parseJsonPayload('ده شرح: {"sections":[]}')).toEqual({ sections: [] });
+  });
+
+  it("⚠️ مافيش JSON خالص ⇒ مرفوض", () => {
+    expect(() => parseJsonPayload("مفيش JSON هنا")).toThrow();
   });
 
   it("⚠️ JSON مش صالح ⇒ مرفوض", () => {
@@ -302,19 +311,130 @@ describe("parseJsonPayload — استخراج JSON من رد الموديل", ()
   });
 });
 
-/* ═══════════════════════════ generateIntensiveExplanation ═══════════════════════════ */
+/* ═══════════════════════ planParts ═══════════════════════ */
 
-describe("generateIntensiveExplanation — التوليد", () => {
+describe("planParts — خطة الأجزاء", () => {
+  it("محاضرة قصيرة ⇒ جزء واحد", () => {
+    const plan = planParts(makeSegments(3, 20), 6_000);
+    expect(plan).toHaveLength(1);
+    expect(plan[0].index).toBe(0);
+  });
+
+  it("⚠️ التوقيتات بتاعت كل جزء محسوبة", () => {
+    const segments = makeSegments(20, 100);
+    const plan = planParts(segments, 250);
+    expect(plan.length).toBeGreaterThan(1);
+    for (const p of plan) {
+      expect(p.start).toBe(p.segments[0].start);
+      expect(p.end).toBe(p.segments[p.segments.length - 1].end);
+    }
+  });
+
+  it("⚠️ أرقام المقاطع العامة محفوظة (مفيش إعادة ترقيم)", () => {
+    const segments = makeSegments(40, 50);
+    const plan = planParts(segments, 400);
+    const all = plan.flatMap((p) => p.segments.map((s) => s.index));
+    expect(all).toEqual(segments.map((s) => s.index));
+  });
+
+  it("⚠️ مقطع أكبر من الميزانية بيتكسّر — ونفس الـ anchor محفوظ", () => {
+    // ⚠️ ده كان السبب في رفض المزوّد (413): مقطع واحد ١٣٢٩٦ حرف كان
+    //    بيطلع part بـ ٤٢٠٠ حرف ⇒ مدخل ~٤٢٠٠ توكن ⇒ «Request too large».
+    const big: TimedSegment = {
+      index: 7,
+      start: 100,
+      end: 200,
+      text: Array.from({ length: 400 }, (_, i) => `كلمة${i}`).join(" "),
+    };
+    const plan = planParts([big], 400);
+
+    expect(plan.length).toBeGreaterThan(1);
+    for (const p of plan) {
+      // ⚠️ مفيش piece واحدة عدّت الميزانية.
+      expect(p.segments[0].text.length).toBeLessThanOrEqual(400);
+      // ⚠️ وكل القطع محتفظة بنفس الـ anchor (المقطع الأصلي واحد).
+      expect(p.segments[0].index).toBe(7);
+    }
+  });
+});
+
+/* ═══════════════════════ reconcileExplanation ═══════════════════════ */
+
+describe("reconcileExplanation — مطابقة الحالة المحفوظة مع الخطة", () => {
   const segments = makeSegments(6, 40);
+  const plan = planParts(segments, 6_000);
+
+  it("حالة فاضية ⇒ كل الأجزاء pending", () => {
+    const state = reconcileExplanation(null, plan);
+    expect(state.version).toBe(2);
+    expect(state.parts).toHaveLength(plan.length);
+    expect(state.parts.every((p) => p.status === "pending")).toBe(true);
+  });
+
+  it("⚠️ الشكل القديم (v1) ⇒ نبدأ من جديد", () => {
+    const state = reconcileExplanation({ version: 1, sections: [] }, plan);
+    expect(state.parts.every((p) => p.status === "pending")).toBe(true);
+  });
+
+  it("⚠️ لو مقاطع الجزء اتغيّرت ⇒ الجزء بيرجع pending (مراجعه القديمة بقت لغيره)", () => {
+    const stored = {
+      version: 2,
+      generated_at: "2026-01-01T00:00:00.000Z",
+      model: "m",
+      total_parts: plan.length,
+      parts: plan.map((p) => ({
+        index: p.index,
+        status: "ready" as const,
+        start: p.start,
+        end: p.end,
+        segments: [999], // ← أرقام مقاطع غلط
+        generated_at: "2026-01-01T00:00:00.000Z",
+        error: null,
+        sections: [],
+      })),
+    };
+    const state = reconcileExplanation(stored, plan);
+    expect(state.parts.every((p) => p.status === "pending")).toBe(true);
+  });
+
+  it("✅ جزء سليم بيفضل ready", () => {
+    const stored = {
+      version: 2,
+      generated_at: "2026-01-01T00:00:00.000Z",
+      model: "m",
+      total_parts: plan.length,
+      parts: plan.map((p) => ({
+        index: p.index,
+        status: "ready" as const,
+        start: p.start,
+        end: p.end,
+        segments: p.segments.map((s) => s.index),
+        generated_at: "2026-01-01T00:00:00.000Z",
+        error: null,
+        sections: [],
+      })),
+    };
+    const state = reconcileExplanation(stored, plan);
+    expect(state.parts.every((p) => p.status === "ready")).toBe(true);
+  });
+});
+
+/* ═══════════════════════ generateIntensivePart ═══════════════════════ */
+
+describe("generateIntensivePart — توليد جزء واحد", () => {
+  const segments = makeSegments(6, 40);
+  const plan = planParts(segments, 6_000);
 
   it("✅ الموديل بيرجّع JSON صالح ⇒ أقسام بمراجع", async () => {
     const calls: string[] = [];
-    const result = await generateIntensiveExplanation({
+    const result = await generateIntensivePart({
+      part: plan[0],
       segments,
       durationSeconds: 60,
+      totalParts: plan.length,
       deps: {
         chunkChars: 6_000,
-        runTask: async (_task, input) => {
+        runTask: async (_task: "chat", input) => {
           calls.push(String(input.messages[1].content));
           return {
             content: JSON.stringify({
@@ -333,36 +453,50 @@ describe("generateIntensiveExplanation — التوليد", () => {
       },
     });
 
-    expect(result.explanation.sections).toHaveLength(1);
-    expect(result.explanation.chunks).toEqual({ ok: 1, failed: 0 });
-    expect(result.explanation.model).toBe("openai/gpt-oss-120b");
+    expect(result.sections).toHaveLength(1);
+    expect(result.model).toBe("openai/gpt-oss-120b");
+    expect(result.aiCalls).toBe(1);
     // ⚠️ البرومبت لازم يبعت رقم المقطع (S<n>) — ده الـ anchor.
     expect(calls[0]).toContain("[S0]");
   });
 
-  it("⚠️ مفيش مقاطع ⇒ خطأ صريح (مش رد فاضي)", async () => {
-    await expect(
-      generateIntensiveExplanation({
-        segments: [],
-        durationSeconds: null,
-        deps: {
-          chunkChars: 6_000,
-          runTask: async () => ({ content: "{}" }),
+  it("⚠️ ⚡ نداء واحد بس — وده اللي بيحمي من حدّ الـ TPM", async () => {
+    let callCount = 0;
+    await generateIntensivePart({
+      part: plan[0],
+      segments,
+      durationSeconds: 60,
+      totalParts: plan.length,
+      deps: {
+        chunkChars: 6_000,
+        runTask: async () => {
+          callCount += 1;
+          return {
+            content: JSON.stringify({
+              sections: [
+                { heading: "ع", claims: [{ text: "ج", seg: 0, quote: segments[0].text.slice(0, 25) }] },
+              ],
+            }),
+            model: "m",
+          };
         },
-      }),
-    ).rejects.toBeInstanceOf(IntensiveError);
+      },
+    });
+    expect(callCount).toBe(1);
   });
 
-  it("⚠️ القطعة كلها مرفوضة ⇒ الخطأ بيقول كود واضح", async () => {
+  it("⚠️ الجزء كله مرفوض ⇒ الخطأ بيقول كود واضح", async () => {
     await expect(
-      generateIntensiveExplanation({
+      generateIntensivePart({
+        part: plan[0],
         segments,
         durationSeconds: 60,
+        totalParts: plan.length,
         deps: {
           chunkChars: 6_000,
           runTask: async () => ({ content: JSON.stringify({ sections: [] }) }),
         },
       }),
-    ).rejects.toMatchObject({ code: "NO_VALID_SECTIONS" });
+    ).rejects.toMatchObject({ code: "PART_INVALID" });
   });
 });

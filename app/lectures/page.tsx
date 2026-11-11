@@ -32,7 +32,8 @@ import { LectureTranscriptEditor } from "@/components/lectures/LectureTranscript
 import { LectureTranscriptViewer } from "@/components/lectures/LectureTranscriptViewer";
 import { LectureIntensive } from "@/components/lectures/LectureIntensive";
 import { LectureCitationProvider } from "@/components/lectures/lecture-citation-context";
-import { extractSegments } from "@/lib/ai/lecture-intensive";
+import { extractSegments, planParts, reconcileExplanation } from "@/lib/ai/lecture-intensive";
+import { INTENSIVE_CHUNK_CHARS } from "@/lib/ai/lecture-intensive-prompts";
 import { FeatureGuide } from "@/components/FeatureGuide";
 import { guides } from "@/lib/guides";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
@@ -174,6 +175,15 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                وهي أصلاً المصدر اللي الـ citations بتشير ليه. */
             const segments: TimedSegment[] = extractSegments(lecture.transcript_data);
 
+            /* ⚠️ حالة الشرح المكثف بتتخطّع عبر `reconcileExplanation`:
+               الشكل المخزَّن (v2) بيتطابق مع خطة الأجزاء الحالية. لو
+               الشكل قديم (v1) أو المقاطع اتغيّرت ⇒ الأجزاء بترجع
+               "pending" والواجهة بتعرض الأرقام الصح. */
+            const intensiveState = reconcileExplanation(
+              lecture.intensive_explanation,
+              planParts(segments, INTENSIVE_CHUNK_CHARS),
+            );
+
             return (
             /* ⚠️ الـ provider بلفّ المحاضرة كلها — هو اللي بيربط
                «الشرح المكثف» (في قسم) بـ «التفريغ» (في قسم تاني).
@@ -249,14 +259,17 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                     {/* ⚡ الشرح المكثف — كل جملة فيه ليها مصدر بتوقيتها.
                         ⚠️ القسم بيتبان لو فيه شرح متولّد؛ لو لأ، الطالب
                         بيضغط «شرح مكثف مع المصادر» من فوق. */}
-                    {lecture.intensive_explanation && (
+                    {intensiveState.parts.length > 0 && (
                       <LectureSection
                         id="intensive"
                         icon="🎯"
                         title="شرح مكثف مع المصادر"
                         lede="شرح مفصّل، وكل معلومة فيه ليها توقيتها في المحاضرة."
                       >
-                        <LectureIntensive explanation={lecture.intensive_explanation} />
+                        <LectureIntensive
+                          lectureId={lecture.id}
+                          explanation={intensiveState}
+                        />
                       </LectureSection>
                     )}
 

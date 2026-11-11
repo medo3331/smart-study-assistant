@@ -106,6 +106,9 @@ export class OpenRouterProvider implements AiTextProvider, AiMediaProvider {
           model: input.model ?? "nvidia/nemotron-3.5-lightning:free",
           messages,
           temperature: input.temperature ?? 0.7,
+          // ⚠️ السقف اختياري — من غيره موديلات الاستدلال بتصرف كل
+          //    الميزانية على التفكير وتطلع `content` فاضية.
+          ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
         }),
         signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
       });

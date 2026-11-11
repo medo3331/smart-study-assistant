@@ -4,56 +4,63 @@
 
    **سيرفر بس.** الدخول من الراوت بس.
 
-   ═══ ليه مسار مستقل ═══
-   مسار الملخص/الشرح القديم (`lib/ai/lecture-analysis.ts`) بيبعت النص
-   **مسطّح** — `transcript_text` — للموديل. النص المسطّح مالوش توقيتات،
-   فالـ citations مستحيلة عليه. فالمسار ده بياخد **`transcript_data`**:
-   المقاطع وكل واحد بتوقيته.
+   ═══ ⚠️ ليه التوليد جزء-جزء (on-demand) ═══
+   أول نسخة كانت بتولّد كل القطع **بالتوازي** (`Promise.allSettled`).
+   ده كان غلط، والسبب مش «النص كبير»:
 
-   ═══ سلسلة941 التحقق (٤ طبقات) ═══
+   مزوّد Groq عليه **حدّ ٨٠٠٠ توكن في الدقيقة** (TPM) للموديل
+   `openai/gpt-oss-120b`. والقطعة الواحدة ≈ ٦٠٠٠ حرف (≈ ٢٥٠٠ توكن
+   مدخل) + مخرج JSON (≈ ١٠٠٠ توكن) ⇒ **≈ ٣٥٠٠ توكن للنداء الواحد**.
+   سبع قطع بالتوازي = ~٢٤٥٠٠ توكن/دقيقة ≫ ٨٠٠٠ ⇒ كل النداءات
+   الباقية رجعت **429**، ونتج عنها نوعين من الفشل:
+     - `AiRouteError: All AI candidates failed` (الثلاثة مرشّحين 429)
+     - `AiStructuredOutputError: malformed JSON` (ردود مقطوعة)
+
+   ⇒ **نداء واحد لكل طلب**. spatio-temporal: الطلب الواحد بيمثّل
+   جزء واحد بس، فالاستهلاك داخل حدّ الـ TPM، والطلب سريع (مش timeout)،
+   والطالب يتحكم في السرعة ⇒ والـ credits بتتصرف على اللي بيقراه فعلاً.
+
+   ═══ سلسلة التحقق (٤ طبقات) ═══
    أي JSON جاي من موديل = بيانات غير موثوقة. فلازم نشوف إن المرجع
    ده **حقيقي** قبل ما نعرضه للطالب:
 
      ١) الشكل       — `expectObject`/`expectArray`/`expectString` + رفض أي
                       مفتاح مش متوقّع (`lib/ai/structured.ts`).
-     ٢) وجود المقطع — `seg` لازم يكون رقم صحيح جوه مدى القطعة دي بالظبط.
+     ٢) وجود المقطع — `seg` لازم يكون رقم صحيح جوه مدى **القطعة دي**.
                       تشيك set-membership: مش fuzzy، مش مفيش مجال للاختراع.
      ٣) أمانة المقطع — الاقتباس `quote` لازم يكون فعلاً من نص المقطع
-                      المشار إليه. بُقارَن بعد التطبيع (نفس دالة تطبيع
-                      العربية في `lecture-study.ts`).
+                      المشار إليه. بُقارَن بعد التطبيع (تطبيع عربي).
      ٤) sanity الوقت — `start` لازم يكون جوه `[0, duration]`.
 
    طبقة ٣ هي اللي بتمنع «الموديل قعد في القطعة ٥ وقال كلام القطعة ٤٠».
    وطبقة ٢ هي اللي بتمنع «الموديل اخترع رقم». **التوقيت نفسه مش جاي
    من الموديل خالص** — إحنا بنقراه من `segments[seg].start`.
-
-   ═══ ليه عزل القطع (per-chunk isolation) ═══
-   مسار الشرح القديم رامي لو أي قطعة فشلت (مفيش partial — `lecture-analysis.ts:98`).
-   هنا القرار مختلف: محاضرة ساعة فيها ٣ قطع، لو واحدة فشلت، الطالب
-   يستفيد بالاتنين التانيين. فالتجزئة معزولة، والرد بيرجع `chunks.failed`
-   والواجهة بتقوله «تمّ توليد ٢ من ٣ أجزاء».
    ========================================================================== */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AiTaskInput } from "./tasks/types";
+import type { AiUsageContext } from "./usage-context";
 import {
   AiStructuredOutputError,
   expectArray,
   expectObject,
   expectString,
+  extractJson,
   rejectUnknownKeys,
 } from "./structured";
 import {
   buildIntensiveMessages,
+  INTENSIVE_CHUNK_CHARS,
+  INTENSIVE_MAX_TOKENS,
   MAX_CLAIMS_PER_SECTION,
   MAX_CLAIM_CHARS,
   MAX_HEADING_CHARS,
-  MAX_INTENSIVE_CHUNKS,
   MAX_QUOTE_CHARS,
   MAX_SECTIONS,
   type TimedSegment,
 } from "./lecture-intensive-prompts";
+
 /* ═══════════════════════════ الأنواع ═══════════════════════════ */
 
 /** جملة واحدة في الشرح المكثف — ومعها مرجعها. */
@@ -82,13 +89,38 @@ export type IntensiveSection = {
   claims: IntensiveClaim[];
 };
 
-/** الشكل المخزَّن في `lectures.intensive_explanation`. */
+/**
+ * ⚠️ **الشكل المخزَّن — version 2.**
+ *
+ * v1 كان `{ version: 1, sections: [...] }` (كل الأجزاء مع بعض).
+ * v2 بيخزّن **أجزاء** كل واحد بحالته — عشان التوليد يبقى on-demand
+ * والطالب مايخسرش تقدمه لو عمل refresh.
+ *
+ * `parts[i].claims[].seg` لسه **فهرس عام** في `transcript_data.segments`
+ * (مش فهرس جوّه القطعة) — عشان الإبراز في الـ UI يبقى فوري.
+ */
+export type IntensivePart = {
+  index: number;
+  /** ready = اتولّد | pending = لسه | failed = فشل وعادي نعيده. */
+  status: "ready" | "pending" | "failed";
+  /** أول توقيت في القطعة (ثواني). */
+  start: number;
+  /** آخر توقيت في القطعة (ثواني). */
+  end: number;
+  /** أرقام المقاطع العامة اللي في القطعة دي. */
+  segments: number[];
+  generated_at: string | null;
+  /** رسالة الخطأ (لو فشل) — قصيرة وآمنة. */
+  error: string | null;
+  sections: IntensiveSection[];
+};
+
 export type IntensiveExplanation = {
-  version: 1;
+  version: 2;
   generated_at: string;
   model: string;
-  chunks: { ok: number; failed: number };
-  sections: IntensiveSection[];
+  total_parts: number;
+  parts: IntensivePart[];
 };
 
 /* ═══════════════════════════ الأخطاء ═══════════════════════════ */
@@ -97,12 +129,20 @@ export type IntensiveExplanation = {
 export class IntensiveError extends Error {
   readonly code: string;
   readonly status: number;
+  /** ثواني لازم الطالب يستنى قبل ما يعيد (لو الرمي كان rate limit). */
+  readonly retryAfter: number | undefined;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    retryAfter?: number,
+  ) {
     super(message);
     this.name = "IntensiveError";
     this.code = code;
     this.status = status;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -112,7 +152,7 @@ export class IntensiveError extends Error {
  * يقرأ المقاطع من `transcript_data` بترتيبها الزمني.
  *
  * ⚠️ **ليه بنقرأ `transcript_data` مش `transcript_text`**: النص المسطّح
- *    مالوش حدود مقاطع، فمفيش حاجة ن-highlight عليها. المقاطع هي
+ *    مالوش حدود مقاطع، فمفيش حاجة نـ highlight عليها. المقاطع هي
  *    الوحدة اللي فيها التوقيت.
  *
  * ⚠️ **ليه بنقبل الحقول الناقصة**: الـ segments الحقيقية شكلها
@@ -149,19 +189,71 @@ export function extractSegments(transcriptData: unknown): TimedSegment[] {
   return segments;
 }
 
-/* ═══════════════════════════ التقسيم ═══════════════════════════ */
+/* ═══════════════════════════ تقسيم المحاضرة لأجزاء ═══════════════════════════ */
 
 /**
- * يقسّم المقاطع لقطع — **على حدود المقاطع فقط**.
+ * ⚠️ **الشكل المخزَّن — بخطوات.**
+ *
+ * كل جزء = قطعة من المقاطع (٥..١٠ دقايق محتوى ≈ ٦٠٠٠ حرف) + حالة.
+ * `status` بتتحكم في إعادة التوليد والعرض.
+ */
+export type IntensivePartPlan = {
+  index: number;
+  segments: TimedSegment[];
+  start: number;
+  end: number;
+};
+
+/**
+ * ⚠️ **مقطع أكبر من ميزانية القطعة** ⇒ نقسّمه لقطع، **كلها بنفس الـ
+ * `index`**.
+ *
+ * ⚠️ **ليه ده لازم**: مقاطع الـ STT مش متساوية — في محاضرات عندنا
+ *    مقطع وحده ١٣٢٩٦ حرف (متوسط ٣٠٥١). والـ chunker ما بيقسمش مقطع
+ *    (عشان الـ anchor ما يتكسرش)، فكان بيطلع part بـ ٤٢٠٠ حرف ⇒ مدخل
+ *    ~٤٢٠٠ توكن ⇒ **المزوّد رفضه بـ 413** («Request too large») لأن
+ *    المدخل + سقف المخرج عدّى حدّ الـ TPM (٨٠٠٠/دقيقة).
+ *
+ * ⚠️ **ليه نفس الـ index**: المقطع في البيانات واحد — لو قسّمناه في
+ *    البريزنر، الـ anchor يفضل واحد (المرجع بيفضل يشير لنفس المقطع
+ *    الأصلي)، والاقتباس بيتحقّق من نص المقطع **الكامل** (مش الجزء
+ *    المقسَّم). فالمزايا كلها بتفضل شغالة.
+ */
+function splitOversizedSegment(
+  segment: TimedSegment,
+  maxChars: number,
+): TimedSegment[] {
+  if (segment.text.length <= maxChars) return [segment];
+
+  const words = segment.text.split(/\s+/).filter(Boolean);
+  const pieces: TimedSegment[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current === "" ? word : `${current} ${word}`;
+    if (current !== "" && candidate.length > maxChars) {
+      pieces.push({ ...segment, text: current });
+      current = word;
+      continue;
+    }
+    current = candidate;
+  }
+  if (current !== "") pieces.push({ ...segment, text: current });
+
+  return pieces.length > 0 ? pieces : [segment];
+}
+
+/**
+ * يقسّم المقاطع لأجزاء — **على حدود المقاطع فقط**.
  *
  * ⚠️ **ليه مش على حدود الجمل زي `chunkTranscript`**: هناك المقطع وحدة
  *    نص (نص مسطّح). هنا المقطع هو **الـ anchor** — لو قسّينا جوّه
- *    المقطع، النص بينقسم على قطعتين والـ anchor يبقى في واحدة بس،
+ *    المقطع، النص بينقسم على جزئين والـ anchor يبقى في واحد بس،
  *    فالموجز يبقى ناقص.
  *
  * ⚠️ **الفهرس عام**: `segment.index` هو الفهرس في المحاضرة كلها (مش
- *    في القطعة). ده اللي يخلي أرقام `S<n>` مستقرة عبر القطع، فالـ
- *    validation يقدر يشيك على مدى القطعة بالظبط.
+ *    في الجزء). ده اللي يخلي أرقام `S<n>` مستقرة، فالـ validation
+ *    يقدر يشيك على مدى الجزء بالظبط.
  */
 export function chunkSegments(
   segments: TimedSegment[],
@@ -174,20 +266,37 @@ export function chunkSegments(
   let current: TimedSegment[] = [];
   let currentChars = 0;
 
-  for (const segment of segments) {
-    const cost = segment.text.length + 1;
-    if (current.length > 0 && currentChars + cost > limit) {
-      chunks.push(current);
-      current = [segment];
-      currentChars = cost;
-      continue;
+  for (const raw of segments) {
+    // ⚠️ المقطع الكبير بيتكسّر لقطع بنفس الـ index (شوف
+    //    `splitOversizedSegment`).
+    for (const segment of splitOversizedSegment(raw, limit)) {
+      const cost = segment.text.length + 1;
+      if (current.length > 0 && currentChars + cost > limit) {
+        chunks.push(current);
+        current = [segment];
+        currentChars = cost;
+        continue;
+      }
+      current.push(segment);
+      currentChars += cost;
     }
-    current.push(segment);
-    currentChars += cost;
   }
   if (current.length > 0) chunks.push(current);
 
   return chunks;
+}
+
+/** بيحوّل القطع لـ خطة أجزاء (مع التوقيتات). */
+export function planParts(
+  segments: TimedSegment[],
+  maxCharsPerChunk: number = INTENSIVE_CHUNK_CHARS,
+): IntensivePartPlan[] {
+  return chunkSegments(segments, maxCharsPerChunk).map((chunk, index) => ({
+    index,
+    segments: chunk,
+    start: chunk[0]?.start ?? 0,
+    end: chunk[chunk.length - 1]?.end ?? 0,
+  }));
 }
 
 /* ═══════════════════════════ التحقق ═══════════════════════════ */
@@ -196,11 +305,10 @@ export function chunkSegments(
  * تطبيع عربي للمطابقة بين الاقتباس ونص المقطع.
  *
  * ⚠️ **ليه مش `normalizeForCompare` من `lecture-study.ts`**: الدالة دي
- *    بتشيّل **كل** المسافات (بـ regex بيشيل أي مسافة حوالين أي حرف)
- *    عشان تقارن أسماء قصيرة زي «الـ LP» و«الLP». ده ممتاز للمقارنة
- *    الكاملة، بس هنا بنقارن **كلمات** — فلو شِلنا المسافات بقى كل نص
- *    كلمة واحدة، والمقارنة ماهتشتغلش خالص. فبنكتب تطبيع خاص: نفس قواعد
- *    الحروف، بس **المسافات بتتبقى**.
+ *    بتشيّل **كل** المسافات (عشان تقارن أسماء قصيرة زي «الـ LP»
+ *    و«الLP»). ده ممتاز للمقارنة الكاملة، بس هنا بنقارن **كلمات** — فلو
+ *    شِلنا المسافات بقى كل نص كلمة واحدة، والمقارنة ماهتشتغلش خالص.
+ *    فبنكتب تطبيع خاص: نفس قواعد الحروف، بس **المسافات بتتبقى**.
  *
  * القواعد: توحيد الهمزات (أ/إ/آ/ٱ → ا)، وتوحيد التاء المربوطة
  * (ة → ه) والألف المقصورة (ى → ي)، وشيل التشكيل والتطويل
@@ -258,11 +366,10 @@ export type CitationRejection = "BAD_SHAPE" | "NO_SEGMENT" | "SEG_OUT_OF_RANGE" 
  * ⚠️ **ليه بنرجّع الجملة لو فشل التحقق**: الجملة نفسها ممكن تكون
  *    سليمة حتى لو المرجع غلط. الطالب بيستفيد من الشرح، واللي ناقصه
  *    هو *الثقة* في المصدر. فبنرمي **المرجع** ونسيب الجملة بدون chip.
- *    لو الغالبية بتفشل ⇒ الموديل ضاع منه الربط ⇒ القطعة كلها فاشلة.
  */
 function validateClaim(
   value: unknown,
-  chunk: TimedSegment[],
+  part: TimedSegment[],
   segmentsByIndex: Map<number, TimedSegment>,
   durationSeconds: number | null,
 ): { ok: true; claim: IntensiveClaim } | { ok: false; reason: CitationRejection } {
@@ -280,10 +387,10 @@ function validateClaim(
   }
   const seg = obj.seg;
 
-  // ٢) المقطع لازم يكون **جوّه القطعة دي** — تشيك set-membership صارم.
-  //    الموديل مالوش أي سبب يذكر رقم برّه القطعة اللي قدامه.
-  const inChunk = chunk.some((segment) => segment.index === seg);
-  if (!inChunk) return { ok: false, reason: "SEG_OUT_OF_RANGE" };
+  // ٢) المقطع لازم يكون **جوّه الجزء ده** — تشيك set-membership صارم.
+  //    الموديل مالوش أي سبب يذكر رقم برّه الجزء اللي قدامه.
+  const inPart = part.some((segment) => segment.index === seg);
+  if (!inPart) return { ok: false, reason: "SEG_OUT_OF_RANGE" };
 
   const target = segmentsByIndex.get(seg);
   if (!target) return { ok: false, reason: "NO_SEGMENT" };
@@ -310,28 +417,15 @@ function validateClaim(
 }
 
 /**
- * يقرأ نص الجملة من شكل خام — لل(use) في الحالة اللي التحقق فشل.
- *
- * ⚠️ **ليه دالة منفصلة**: `validateClaim` بترمي لو النص مش نص أصلاً
- *    (ده فشل شكل مش فشل مرجع). فلو وصلنا هنا، النص **سليم** — بس
- *    القراءة بتأمن ourselves من `expectString` اللي بترمي.
- */
-function readClaimText(value: unknown): string {
-  if (typeof value !== "object" || value === null) return "";
-  const text = (value as { text?: unknown }).text;
-  return typeof text === "string" ? text.trim().slice(0, MAX_CLAIM_CHARS) : "";
-}
-
-/**
  * يتحقق من رد الموديل كله (طبقة ١ + ٢ + ٣ + ٤) ويحوّله لأقسام.
  *
  * ⚠️ **ليه بنرمي throw مش بنرجّع error**: الشكل غلط (مش JSON، مفتاح
- *    مش متوقّع، نص طويل أوي) = الموديل مالوش الشغل — ده فشل القطعة.
+ *    مش متوقّع، نص طويل أوي) = الموديل مالوش الشغل — ده فشل الجزء.
  *    بس **المرجع** الغلط = جملة بتفقد الـ chip بس.
  */
 export function validateIntensiveOutput(
   value: unknown,
-  chunk: TimedSegment[],
+  part: TimedSegment[],
   segmentsByIndex: Map<number, TimedSegment>,
   durationSeconds: number | null,
 ): { sections: IntensiveSection[]; rejected: number; total: number } {
@@ -364,7 +458,7 @@ export function validateIntensiveOutput(
     const claims: IntensiveClaim[] = [];
     for (const rawClaim of rawClaims) {
       total += 1;
-      const result = validateClaim(rawClaim, chunk, segmentsByIndex, durationSeconds);
+      const result = validateClaim(rawClaim, part, segmentsByIndex, durationSeconds);
       if (result.ok) {
         claims.push(result.claim);
       } else {
@@ -385,6 +479,19 @@ export function validateIntensiveOutput(
   return { sections, rejected, total };
 }
 
+/**
+ * يقرأ نص الجملة من شكل خام — للحالة اللي التحقق فشل.
+ *
+ * ⚠️ **ليه دالة منفصلة**: `validateClaim` بترمي لو النص مش نص أصلاً
+ *    (ده فشل شكل مش فشل مرجع). فلو وصلنا هنا، النص **سليم** — بس
+ *    القراءة بتأمن نفسها من `expectString` اللي بترمي.
+ */
+function readClaimText(value: unknown): string {
+  if (typeof value !== "object" || value === null) return "";
+  const text = (value as { text?: unknown }).text;
+  return typeof text === "string" ? text.trim().slice(0, MAX_CLAIM_CHARS) : "";
+}
+
 /* ═══════════════════════════ التوليد ═══════════════════════════ */
 
 /** اعتمادات قابلة للحقن — في الاختبارات بنمرّر mock بدل المزوّد الحقيقي. */
@@ -394,159 +501,226 @@ export type IntensiveDeps = {
 };
 
 /**
- * ⚠️ **نسبة الرفض اللي بتعتبر القطعة فاشلة**: لو أكتر من 30% من
- *    مراجع القطعة اترفضت، فالموديل ضاع منه الربط بين الجملة والمقطع.
+ * ⚠️ **نسبة الرفض اللي بتعتبر الجزء فاشل**: لو أكتر من 30% من
+ *    مراجع الجزء اترفضت، فالموديل ضاع منه الربط بين الجملة والمقطع.
  *    عندها كل الجمل هتطلع بدون مصدر، وده أسوأ من فشل واضح.
  */
 export const CHUNK_REJECTION_LIMIT = 0.3;
 
-/** نتيجة توليد القطعة الواحدة. */
-type ChunkResult = {
-  sections: IntensiveSection[];
-  ok: boolean;
-};
-
 /**
- * يولّد الشرح المكثف من المقاطع.
+ * يولّد **جزء واحد بس** من المحاضرة.
  *
- * ⚠️ **ليه `Promise.all` مش loop**: القطع مستقلة عن بعض (كل واحدة
- *    نداء لوحدها) فالتنفيذ المتوازي بيخلي الزمن = أبطأ قطعة مش مجموع
- *    القطع. وميزانية الوقت (300 ثانية) بتتصرف أحرى بكتير.
- *
- * ⚠️ **ليه مفيش نداء دمج**: نداء الدمج بياخد نصوص وبيعيد صياغتها، فلو
- *    دمجنا الشرح المكثف كان الموديل لازم يعيد كتابة أرقام المقاطع من
- *    ذاكرته — وغالباً هيسقط منها. فبنرصّ الأقسام بالترتيب الزمني بس.
+ * ⚠️ **نداء واحد بالظبط** — وده هو سبب نجاح الميزة على المحاضرات
+ *    الطويلة: الـ TPM بتاع المزوّد (٨٠٠٠/دقيقة) بيتقاس على النداءات
+ *    المتزامنة، والجزء الواحد ≈ ٣٥٠٠ توكن فبيعدّي.
  */
-export async function generateIntensiveExplanation(input: {
+export async function generateIntensivePart(input: {
+  part: IntensivePartPlan;
   segments: TimedSegment[];
   durationSeconds: number | null;
   deps: IntensiveDeps;
-  usage?: { feature?: string };
-}): Promise<{ explanation: IntensiveExplanation; aiCalls: number }> {
-  const { segments, durationSeconds, deps } = input;
-
-  const chunks = chunkSegments(segments, deps.chunkChars);
-  if (chunks.length === 0) {
-    throw new IntensiveError(
-      "NO_TIMINGS",
-      "المحاضرة دي مفيهاش توقيتات، فمقدرناش نضيف مصادر. ارفعها من جديد أو راجعها.",
-      422,
-    );
-  }
-  if (chunks.length > MAX_INTENSIVE_CHUNKS) {
-    throw new IntensiveError(
-      "CHUNK_LIMIT_EXCEEDED",
-      "المحاضرة دي طويلة أوي على الشرح المكثف. جرّب محاضرة أقصر.",
-      422,
-    );
-  }
+  totalParts: number;
+  /** سياق الاستخدام — لازم يعدّي للنداء عشان يتسجّل صح. */
+  usage?: AiUsageContext;
+}): Promise<{ sections: IntensiveSection[]; model: string; aiCalls: number }> {
+  const { part, segments, durationSeconds, deps, totalParts, usage } = input;
 
   const segmentsByIndex = new Map(segments.map((segment) => [segment.index, segment]));
 
-  const runChunk = async (
-    chunk: TimedSegment[],
-    chunkIndex: number,
-  ): Promise<ChunkResult & { model: string }> => {
-    const response = await deps.runTask("chat", {
-      messages: buildIntensiveMessages({
-        chunk,
-        chunkIndex,
-        chunkCount: chunks.length,
-      }),
-      options: { temperature: 0.3 },
-    });
-
-    const parsed = parseJsonPayload(response.content);
-    const validated = validateIntensiveOutput(
-      parsed,
-      chunk,
-      segmentsByIndex,
-      durationSeconds,
-    );
-
-    // ⚠️ نسبة الرفض — لو الموديل فقد الربط، القطعة دي مالهاش لازمة.
-    const rejectionRate =
-      validated.total === 0 ? 1 : validated.rejected / validated.total;
-    if (rejectionRate > CHUNK_REJECTION_LIMIT) {
-      return { sections: [], ok: false, model: response.model ?? "" };
-    }
-    return { sections: validated.sections, ok: true, model: response.model ?? "" };
-  };
-
-  // ⚠️ `Promise.allSettled` مش `Promise.all`: قطعة واحدة فشلت (الموديل
-  //    رجّع JSON مش صالح مثلاً) ماينفعش تسقط الباقي. العزل ده مقصود.
-  const settled = await Promise.allSettled(
-    chunks.map((chunk, index) => runChunk(chunk, index)),
-  );
-
-  const sections: IntensiveSection[] = [];
-  let ok = 0;
-  let failed = 0;
-  let model = "";
-
-  settled.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      if (result.value.ok) {
-        ok += 1;
-        sections.push(...result.value.sections);
-        // ⚠️ الموديل بيتسجّل من أول قطعة نجحت — الراوتر بيختار نفس
-        //    الموديل لكل القطع في الطلب الواحد، فده كافي.
-        if (model === "") model = result.value.model;
-      } else {
-        failed += 1;
-      }
-      return;
-    }
-    failed += 1;
-    console.error(
-      `lecture-intensive: القطعة ${index + 1}/${chunks.length} فشلت — ${String(result.reason)}`,
-    );
+  const response = await deps.runTask("chat", {
+    usage,
+    messages: buildIntensiveMessages({
+      chunk: part.segments,
+      chunkIndex: part.index,
+      chunkCount: totalParts,
+    }),
+    // ⚠️ **السقف لازم** — موديل gpt-oss استدلال، ومن غير سقف صريح
+    //    المزوّد بيحط سقف افتراضي صغير فالموديل بيصرفه كله على التفكير
+    //    ويطلع `content` فاضي (الرد كان بيتقطع ⇒ «مفيش JSON صالح»).
+    options: { temperature: 0.3, maxTokens: INTENSIVE_MAX_TOKENS },
   });
 
-  if (sections.length === 0) {
+  const parsed = parseJsonPayload(response.content);
+  const validated = validateIntensiveOutput(
+    parsed,
+    part.segments,
+    segmentsByIndex,
+    durationSeconds,
+  );
+
+  const rejectionRate =
+    validated.total === 0 ? 1 : validated.rejected / validated.total;
+  if (rejectionRate > CHUNK_REJECTION_LIMIT) {
     throw new IntensiveError(
-      "NO_VALID_SECTIONS",
-      "مقدرناش نولّد شرح مصحوب بمصادر من المحاضرة دي. جرّب تاني.",
+      "PART_INVALID",
+      "الجزء ده اتولّد بس مراجعه مقدرناش نتحقق منها. جرّب تاني.",
       502,
     );
   }
 
   return {
-    explanation: {
-      version: 1,
-      generated_at: new Date().toISOString(),
-      model: model || "unknown",
-      chunks: { ok, failed },
-      sections,
-    },
-    aiCalls: chunks.length,
+    sections: validated.sections,
+    model: response.model ?? "",
+    aiCalls: 1,
   };
 }
 
 /**
  * يستخرج JSON من رد الموديل.
  *
- * ⚠️ **ليه مش `extractJson` من `structured.ts`**: دي بتدور على أول كائن
- *    متوازن في النص — وده ممكن يلتقط `{` جوّه نص الموديل التفسيري قبل
- *    الـ JSON الحقيقي. إحنا بنطلب JSON **بس**، فبنطلب النص يبدأ بـ `{`
- *    أو `[`، ولو مابدأش = الموديل مش ماشي في التعليمات ⇒ فشل واضح.
+ * ⚠️ **ليه `extractJson` من `structured.ts` مش parser صارم**: الردود
+ *    بتتحط في ```json fences، وأحياناً بيبقى فيها كلام قبل الـ JSON.
+ *    الـ parser الصارم (يشترط النص يبدأ بـ `{`) كان بيرفضها وهي
+ *    سليمة. `extractJson` بيلاقي أول كائن **متوازن** — وهو الآمن
+ *    (بيعدّي الـ strings صح).
  */
 export function parseJsonPayload(content: string): unknown {
   const trimmed = content.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-    throw new AiStructuredOutputError("Model did not return JSON");
+  if (trimmed === "") {
+    throw new AiStructuredOutputError("Empty model response");
   }
+  // بنستخدم المستخرِج المتسامح من المشروع (بيعدّي الـ fences ويلاقي
+  // أول كائن متوازن) — واللي بيرمي لو مافيش JSON خالص.
   try {
-    return JSON.parse(trimmed);
-  } catch {
-    throw new AiStructuredOutputError("Model returned malformed JSON");
+    return extractJson(trimmed);
+  } catch (error) {
+    // ⚠️ لوج تشخيصي **من غير محتوى**: الشكل بس (الطول + هل بدأ بـ
+    //    `{` + هل فيه fence). المحتوى نفسه (نص المحاضرة) ما بيتسجّلش.
+    console.error(
+      `lecture-intensive: رد الموديل مش JSON صالح — len=${trimmed.length} startsWithBrace=${trimmed.startsWith("{")} hasFence=${trimmed.includes("```")}`,
+    );
+    throw error;
   }
+}
+
+/* ═══════════════════════════ كشف حدّ الطلبات ═══════════════════════════ */
+
+/**
+ * هل الخطأ ده **حدّ طلبات المزوّد** (مش خطأ في الكود)؟
+ *
+ * ⚠️ **ليه مهم**: مزوّد Groq المجاني عليه ٨٠٠٠ توكن/دقيقة (TPM) لكل
+ * Org. نداء واحد ≈ ٥٠٠٠ توكن ⇒ **نداء ونص في الدقيقة**. فلما الطالب
+ * يضغط «الجزء التالي» بسرعة، بيجي 429 من المزوّد، والراوتر بيحاول
+ * المرشّحين كلهم فيفشلوا ⇒ بيرمي `AiRouteError`/`AiProviderError`.
+ *
+ * الـ 429 ده **مش خطأ** — هو إ.signal «استنى». فالواجهة لازم تعرض
+ * رسالة صالحة مع `Retry-After`، مش «حصل خطأ»Generic.
+ *
+ * ⚠️ **كيف بنعرفه**: الراوتر بيسجّل سبب كل محاولة في
+ *    `RouterAttempt.reason` — والـ 429 بيبقى `"HTTP 429"`. ولو كل
+ *    المرشّحين فشلوا من غير سبب واضح، الـ status بيبقى 503
+ *    (`AiProviderError("All AI providers failed")`).
+ */
+export function isProviderRateLimit(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+
+  // ١) الراوتر: سبب كل محاولة.
+  const reasons = (error as { reasons?: Array<{ reason?: unknown }> }).reasons;
+  if (Array.isArray(reasons) && reasons.length > 0) {
+    if (reasons.some((r) => /429/.test(String(r.reason ?? "")))) return true;
+  }
+
+  // ٢) المزوّد: 429 مباشر.
+  const status = (error as { status?: unknown }).status;
+  if (status === 429) return true;
+
+  // ٣) «كل المرشّحين فشلوا» (503) — في حالتنا ده حدّ الطلبات.
+  const message = (error as { message?: unknown }).message;
+  if (status === 503 && typeof message === "string") {
+    return /All AI providers failed|All AI candidates failed/i.test(message);
+  }
+  return false;
+}
+
+/* ═══════════════════════════ الحالة المخزَّنة ═══════════════════════════ */
+
+/** حالة فارغة (مفيش شرح متولّد بعد). */
+export function emptyExplanation(plan: IntensivePartPlan[]): IntensiveExplanation {
+  return {
+    version: 2,
+    generated_at: new Date().toISOString(),
+    model: "",
+    total_parts: plan.length,
+    parts: plan.map((p) => ({
+      index: p.index,
+      status: "pending" as const,
+      start: p.start,
+      end: p.end,
+      // ⚠️ **لازم**: أرقام مقاطع الجزء — من غيرها الـ UI مش هيعرف
+      //    يربط مرجع الجزء بالمقطع في التفريغ.
+      segments: p.segments.map((seg) => seg.index),
+      generated_at: null,
+      error: null,
+      sections: [],
+    })),
+  };
+}
+
+/**
+ * يقرأ الحالة المخزَّنة ويطابقها مع خطة الأجزاء الحالية.
+ *
+ * ⚠️ **ليه بنعيد التوليد**: لو عدد الأ_parts اتغيّر (لأن تفريغ اتعدّل
+ *    يدوياً ⇒ `segments` اتغيّرت ⇒ التقسيم اتغيّر)، الأجزاء القديمة
+ *    بتبقى بمراجع بتوقيتات قديمة ⇒ بنبدأ من جديد. ده آمن: الأجزاء
+ *    بتتولّد on-demand فلما غير المستخدم بيلاقي حالة parts جديدة.
+ */
+export function reconcileExplanation(
+  stored: unknown,
+  plan: IntensivePartPlan[],
+): IntensiveExplanation {
+  const base = emptyExplanation(plan);
+  if (typeof stored !== "object" || stored === null) return base;
+  const s = stored as Partial<IntensiveExplanation>;
+
+  // v1 (كل الأجزاء مع بعض) — مش متوافق مع التوليد on-demand ⇒ نبدأ من جديد.
+  if (s.version !== 2) return base;
+  if (!Array.isArray(s.parts) || s.parts.length !== plan.length) return base;
+
+  const parts: IntensivePart[] = plan.map((p) => {
+    const old = s.parts?.[p.index];
+    // ⚠️ لو مقاطع الجزء اتغيّرت ⇒ مراجعه القديمة بقت لغيره ⇒ نبدأ من جديد.
+    const sameSegments =
+      old &&
+      Array.isArray(old.segments) &&
+      old.segments.length === p.segments.length &&
+      old.segments.every((idx, i) => idx === p.segments[i]?.index);
+    if (!sameSegments) {
+      return {
+        index: p.index,
+        status: "pending" as const,
+        start: p.start,
+        end: p.end,
+        segments: p.segments.map((seg) => seg.index),
+        generated_at: null,
+        error: null,
+        sections: [],
+      };
+    }
+    return {
+      index: p.index,
+      status: old.status,
+      start: p.start,
+      end: p.end,
+      segments: p.segments.map((seg) => seg.index),
+      generated_at: old.generated_at ?? null,
+      error: old.error ?? null,
+      sections: old.sections ?? [],
+    };
+  });
+
+  return {
+    version: 2,
+    generated_at: s.generated_at ?? base.generated_at,
+    model: s.model ?? "",
+    total_parts: plan.length,
+    parts,
+  };
 }
 
 /* ═══════════════════════════ الحفظ ═══════════════════════════ */
 
 /**
- * يحفظ الشرح المكثف.
+ * يحفظ حالة الشرح المكثف.
  *
  * ⚠️ **ليه `intensive_explanation` بس**: عمود واحد محدّد بالحرف. ده
  *    بيضمن عملياً إن `summary` و`explanation` و`transcript_*` ميتمسوش
@@ -583,6 +757,7 @@ export async function saveIntensiveExplanation(input: {
 export {
   buildIntensiveMessages,
   INTENSIVE_CHUNK_CHARS,
+  INTENSIVE_MAX_TOKENS,
   MAX_INTENSIVE_CHUNKS,
   type TimedSegment,
 } from "./lecture-intensive-prompts";

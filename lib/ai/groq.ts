@@ -100,6 +100,9 @@ export class GroqProvider implements AiTextProvider, AiMediaProvider {
             model,
             messages: input.messages,
             temperature: input.temperature ?? 0.7,
+            // ⚠️ السقف اختياري — من غيره الموديلات اللي betعمل استدلال
+            //    (gpt-oss) بتصرف كل الميزانية على التفكير وتطلع فاضية.
+            ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
           }),
           signal: AbortSignal.timeout(GROQ_TIMEOUT_MS),
         });

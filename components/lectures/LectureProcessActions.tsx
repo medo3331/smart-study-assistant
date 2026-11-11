@@ -121,6 +121,8 @@ export function LectureProcessActions({
         if (payload.explanation) setExplanation(payload.explanation);
         if (payload.flashcards) setFlashcards(payload.flashcards);
         if (payload.mcqs) setMcqs(payload.mcqs);
+        // ⚠️ الشرح المكثف بيرجّع **الحالة الكاملة** (الأجزاء) — لأنها
+        //    بتتولّد on-demand، فالجزء الأول بس هو اللي اتولّد دلوقتي.
         if (payload.intensive) setIntensive(payload.intensive);
       } catch {
         setError(GENERIC_ERROR);
@@ -325,7 +327,13 @@ export function LectureProcessActions({
 
       {explanation && <LectureNote kind="explanation" content={explanation} />}
 
-      {intensive && <LectureIntensive explanation={intensive} />}
+      {intensive && (
+        <LectureIntensive
+          lectureId={lectureId}
+          explanation={intensive}
+          onChange={setIntensive}
+        />
+      )}
 
       {flashcards && <FlashcardsPanel cards={flashcards} />}
 

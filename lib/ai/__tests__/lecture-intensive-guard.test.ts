@@ -123,7 +123,7 @@ vi.mock("@/lib/ai/lecture-intensive", async () => {
   );
   return {
     ...actual,
-    generateIntensiveExplanation: (...args: unknown[]) => {
+    generateIntensivePart: (...args: unknown[]) => {
       callLog.push("ai:generate");
       return generateMock(...args);
     },
@@ -136,11 +136,12 @@ vi.mock("@/lib/ai/lecture-intensive", async () => {
 
 import { POST } from "@/app/api/lectures/[id]/intensive/route";
 
-function callIntensive(id = "lec-1") {
+function callIntensive(id = "lec-1", body: unknown = {}) {
   return POST(
     new Request("http://localhost/api/lectures/lec-1/intensive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id }) },
   );
@@ -154,13 +155,13 @@ beforeEach(() => {
   generateMock.mockImplementation(async () => {
     callLog.push("ai:result");
     return {
-      explanation: {
-        version: 1,
-        generated_at: "2026-01-01T00:00:00.000Z",
-        model: "openai/gpt-oss-120b",
-        chunks: { ok: 1, failed: 0 },
-        sections: [],
-      },
+      sections: [
+        {
+          heading: "عنوان",
+          claims: [{ text: "جملة", seg: 0, start: 0 }],
+        },
+      ],
+      model: "openai/gpt-oss-120b",
       aiCalls: 1,
     };
   });
@@ -179,7 +180,10 @@ describe("الشرح المكثف — المستخدم المسجّل", () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.lectureId).toBe("lec-1");
-    expect(body.intensive.chunks).toEqual({ ok: 1, failed: 0 });
+    // ⚠️ الرد بيرجّع **الحالة الكاملة** (الأجزاء) — عشان الكلاينت يبقى
+    //    عنده مصدر الحقيقة من غير re-fetch.
+    expect(body.explanation.parts).toBeDefined();
+    expect(body.total_parts).toBeGreaterThan(0);
   });
 
   it("الحارس بيتنادى **قبل** التوليد", async () => {
@@ -242,6 +246,46 @@ describe("الشرح المكثف — من غير توقيتات مفيش مصا
     const response = await callIntensive();
     expect(response.status).toBe(422);
     expect(guardMock).not.toHaveBeenCalled();
+  });
+});
+
+/* ═══════════════════════ اختيار الجزء ═══════════════════════ */
+
+describe("الشرح المكثف — اختيار الجزء", () => {
+  it("⛔ رقم جزء برّه المدى ⇒ 400 (مش crash)", async () => {
+    const response = await callIntensive("lec-1", { partIndex: 99 });
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("BAD_PART_INDEX");
+    // ⚠️ مفيش نداء موديل ولا حجز credit.
+    expect(callLog).not.toContain("ai:generate");
+    expect(guardMock).not.toHaveBeenCalled();
+  });
+
+  it("⛔ رقم جزء سالب ⇒ 400", async () => {
+    const response = await callIntensive("lec-1", { partIndex: -1 });
+    expect(response.status).toBe(400);
+    expect(guardMock).not.toHaveBeenCalled();
+  });
+
+  it("✅ جزء محدد ⇒ نداء واحد بس للجزء ده", async () => {
+    const response = await callIntensive("lec-1", { partIndex: 0 });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.part.index).toBe(0);
+    // ⚠️ **نداء واحد** — ده اللي بيحمي من حدّ الـ TPM بتاع المزوّد.
+    expect(callLog.filter((c) => c === "ai:generate")).toHaveLength(1);
+  });
+
+  it("✅ من غير partIndex ⇒ أول جزء مش متولّد", async () => {
+    const response = await callIntensive();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.part.index).toBe(0);
+    expect(body.part.status).toBe("ready");
   });
 });
 
