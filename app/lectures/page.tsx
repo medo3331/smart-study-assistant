@@ -29,9 +29,15 @@ import LectureChat from "@/components/lectures/LectureChat";
 import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
 import { McqQuiz } from "@/components/lectures/McqQuiz";
 import { LectureTranscriptEditor } from "@/components/lectures/LectureTranscriptEditor";
+import { LectureTranscriptViewer } from "@/components/lectures/LectureTranscriptViewer";
+import { LectureIntensive } from "@/components/lectures/LectureIntensive";
+import { LectureCitationProvider } from "@/components/lectures/lecture-citation-context";
+import { extractSegments } from "@/lib/ai/lecture-intensive";
 import { FeatureGuide } from "@/components/FeatureGuide";
 import { guides } from "@/lib/guides";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
+import type { IntensiveExplanation } from "@/lib/ai/lecture-intensive";
+import type { TimedSegment } from "@/lib/ai/lecture-intensive-prompts";
 
 export const metadata: Metadata = {
   title: "محاضراتي — Magicly",
@@ -84,6 +90,18 @@ type LectureListItem = {
   explanation: string | null;
   flashcards: Flashcard[] | null;
   mcqs: Mcq[] | null;
+  /** ⚡ الشرح المكثف (Phase 5) — JSON مش Markdown. */
+  intensive_explanation: IntensiveExplanation | null;
+  /**
+   * ⚠️ `transcript_data` jsonb — بيتقرا **على السيرفر** وبيتحوّل لـ
+   *    `TimedSegment[]` قبل ما يوصل الكلاينت.
+   *
+   *    السبب: الـ jsonb فيه `words[]` (آلاف الكلمات بتوقيتها) — حجمه
+   *    hundreds of KB. لو مرّرناه للكلاينت كان هيبقى payload تقيل جداً
+   *    من غير أي فايدة: الواجهة محتاجة المقاطع بس (هي اللي فيها
+   *    التوقيت granularity الكافي للإبراز).
+   */
+  transcript_data: unknown;
 };
 
 export default async function MyLecturesPage({ searchParams }: { searchParams: Promise<{ subject?: string }> }) {
@@ -104,7 +122,7 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
   const lecturesQuery = supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, review_status, transcript_reviewed_text, summary, explanation, flashcards, mcqs",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, review_status, transcript_reviewed_text, summary, explanation, flashcards, mcqs, intensive_explanation, transcript_data",
     )
     .eq("user_id", user.id);
   if (subjectFilter) lecturesQuery.eq("subject_id", subjectFilter);
@@ -149,7 +167,18 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
         />
       ) : (
         <section className="grid gap-4">
-          {lectures.map((lecture) => (
+          {lectures.map((lecture) => {
+            /* ⚠️ المقاطع بتتقصّ **على السيرفر** — الـ jsonb كله (فيه
+               `words[]` بآلاف الكلمات) مايوصلش للكلاينت. الواجهة محتاجة
+               المقاطع بس: دي اللي فيها دقة التوقيت الكافية للإبراز،
+               وهي أصلاً المصدر اللي الـ citations بتشير ليه. */
+            const segments: TimedSegment[] = extractSegments(lecture.transcript_data);
+
+            return (
+            /* ⚠️ الـ provider بلفّ المحاضرة كلها — هو اللي بيربط
+               «الشرح المكثف» (في قسم) بـ «التفريغ» (في قسم تاني).
+               من غيره مفيش طريقة الـ chips تعرف تفتح قسم وتبرز مقطع. */
+            <LectureCitationProvider key={lecture.id}>
             <article key={lecture.id} className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm transition hover:shadow-md">
               <details>
                 <summary className="cursor-pointer list-none">
@@ -188,6 +217,8 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                       lectureId={lecture.id}
                       hasSummary={Boolean(lecture.summary?.trim())}
                       hasExplanation={Boolean(lecture.explanation?.trim())}
+                      hasIntensive={Boolean(lecture.intensive_explanation)}
+                      hasTimings={segments.length > 0}
                     />
                   </div>
 
@@ -212,6 +243,20 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                         toolbar={<LectureToolbar lectureId={lecture.id} />}
                       >
                         <LectureNote kind="explanation" content={lecture.explanation} />
+                      </LectureSection>
+                    )}
+
+                    {/* ⚡ الشرح المكثف — كل جملة فيه ليها مصدر بتوقيتها.
+                        ⚠️ القسم بيتبان لو فيه شرح متولّد؛ لو لأ، الطالب
+                        بيضغط «شرح مكثف مع المصادر» من فوق. */}
+                    {lecture.intensive_explanation && (
+                      <LectureSection
+                        id="intensive"
+                        icon="🎯"
+                        title="شرح مكثف مع المصادر"
+                        lede="شرح مفصّل، وكل معلومة فيه ليها توقيتها في المحاضرة."
+                      >
+                        <LectureIntensive explanation={lecture.intensive_explanation} />
                       </LectureSection>
                     )}
 
@@ -243,19 +288,20 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                       title="التفريغ النصي"
                       lede="نص كلام الدكتور كامل — لمّا تحتاج تراجع الأصل."
                     >
-                      {/* ⚠️ التفريغ نص خام بصوته: تلميحه بـ Markdown بيبوّبه. */}
-                      {lecture.transcript_text ? (
-                        <>
-                          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10">
-                            {lecture.transcript_text}
-                          </pre>
-                          <div className="mt-3">
-                            <LectureTranscriptEditor lectureId={lecture.id} initialText={lecture.transcript_text} />
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-sm text-ink-soft">مفيش نص محفوظ لهذه المحاضرة.</p>
+                      {/* ⚠️ العارض الواعي بالمقاطع — هو اللي بيعرف يبرز
+                          المقطع لما الطالب يضغط على مرجع في «الشرح المكثف».
+                          من غير المقاطع مفيش حاجة تتبرز. */}
+                      <LectureTranscriptViewer
+                        segments={segments}
+                        reviewedText={lecture.transcript_reviewed_text}
+                      />
+
+                      {lecture.transcript_text && (
+                        <div className="mt-3">
+                          <LectureTranscriptEditor lectureId={lecture.id} initialText={lecture.transcript_text} />
+                        </div>
                       )}
+
                      <LectureChat
                        lectureId={lecture.id}
                        contextText={
@@ -270,7 +316,9 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                 </LectureWorkspace>
               </details>
             </article>
-          ))}
+            </LectureCitationProvider>
+            );
+          })}
         </section>
       )}
     </PageShell>
