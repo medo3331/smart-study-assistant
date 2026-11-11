@@ -62,14 +62,28 @@ function hasOwnChrome(pathname: string): boolean {
   return OWN_CHROME_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+/**
+ * هل الصفحة دي فيها الشريط العلوي العام؟
+ *
+ * ⚠️ الدالة دي **مرجع واحد** للحقيقة: `UnifiedNavbar` بيستخدمها عشان
+ *    يقرر يظهر ولا لا، و`NavRail` بيستخدمها عشان يزيح نفسه (هو `fixed`
+ *    بـ `inset-y-0` — يعني بيبقى تحت الشريط لو الشريط موجود).
+ *
+ *    ⚠️ لازم تفضل هنا. لو اتنسخت في مكان تاني، اتنين هيفترقوا
+ *       والـ rail بيرجع يتغطّى تاني.
+ */
+export function siteNavbarVisible(pathname: string): boolean {
+  // الداشبورد عندها ترويستتها — ماكرمناش شريطين فوق بعض.
+  if (pathname.startsWith("/dashboard")) return false;
+  // الصفحات اللي ليها ترويستتها الخاصة.
+  if (hasOwnChrome(pathname)) return false;
+  return true;
+}
+
 export function UnifiedNavbar() {
   const pathname = usePathname() || "/";
 
-  // الداشبورد عندها ترويستتها — ماكرمناش شريطين فوق بعض.
-  if (pathname.startsWith("/dashboard")) return null;
-
-  // الصفحات اللي ليها ترويستتها الخاصة.
-  if (hasOwnChrome(pathname)) return null;
+  if (!siteNavbarVisible(pathname)) return null;
 
   return <SiteNavbar />;
 }

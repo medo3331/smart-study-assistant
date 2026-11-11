@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BrandGlyph } from "@/components/BrandLogo";
 import { SITE_NAME, SITE_NAME_EN } from "@/lib/seo";
 import { performNavAction } from "@/lib/nav-actions";
+import { siteNavbarVisible } from "@/components/UnifiedNavbar";
 import { useIsOwner } from "./use-is-owner";
 import type { ThemeStyles } from "./types";
 import {
@@ -111,6 +112,10 @@ export function NavRail({
 }: NavRailProps) {
   const router = useRouter();
   const pathname = usePathname();
+
+  // هل الشريط العلوي العام موجود فوقRail في الصفحة دي؟ لو موجود،
+  // الـ rail لازم ينزل تحتّه (هو fixed — فمش هيزحّ لوحده).
+  const hasSiteNavbar = siteNavbarVisible(pathname ?? "/");
 
   // البند النشط: المسار هو الحقيقة. بنود القسم (الملاحظات/التحليلات)
   // مالهاش مسار، فبتتعلّم بالضغط — وده بيتصفّر أول ما تسيب الصفحة.
@@ -483,9 +488,20 @@ export function NavRail({
   return (
     <>
       {/* ================= الشريط الجانبي — lg وفوق ================= */}
+      {/* ⚠️ الشريط ده `fixed` — يعني مش بياخد مكان من الـ flow، فالـ
+          `inset-y-0` بيحطّه من الصفر. لو الشريط العلوي العام موجود
+          فوقه (56px = `--nav-h`)، أول بند في الفهرس بيختفي تحته.
+
+          عشان كده لما الشريط العلوي موجود بنزحّ Rail لتحت بيه
+          (`top-[var(--nav-h)]`) بدل ما نعدّيه. والداشبورد (مفيش
+          فيها شريط علوي) بيفضل `inset-y-0` زي ما كان.
+
+          ⚠️ الشرط في `siteNavbarVisible` — نفس مرجع `UnifiedNavbar`. */}
       <nav
         aria-label="أقسام لوحة التحكم"
-        className="hidden lg:flex fixed inset-y-0 z-30 w-56 xl:w-64 flex-col bg-paper-2"
+        className={`hidden lg:flex fixed z-30 w-56 xl:w-64 flex-col bg-paper-2 ${
+          hasSiteNavbar ? "top-[var(--nav-h)] bottom-0" : "inset-y-0"
+        }`}
         style={{
           insetInlineEnd: 0,
           // هامش الملزمة الأحمر: على الحد الداخلي المواجه للمحتوى
