@@ -29,6 +29,8 @@ import LectureChat from "@/components/lectures/LectureChat";
 import { FlashcardsPanel } from "@/components/lectures/FlashcardsPanel";
 import { McqQuiz } from "@/components/lectures/McqQuiz";
 import { LectureTranscriptEditor } from "@/components/lectures/LectureTranscriptEditor";
+import { FeatureGuide } from "@/components/FeatureGuide";
+import { guides } from "@/lib/guides";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
 
 export const metadata: Metadata = {
@@ -116,6 +118,8 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
       title="محاضراتي 📚"
       lede="كل محاضرة حفظتها في حسابك. افتح أي قسم للقراءة، وصدّر الشرح PDF أو Word."
     >
+      <FeatureGuide {...guides.lectures} storageKey="guide:lectures" />
+
       {/* 🎙️ زر «ابدأ محاضرة جديدة» — نظير الـ CTA اللي في الداشبورد.
        *
        * ⚠️ ليه موجود أصلاً: الصفحة دي للقائمة، الطالب يوصلها من الرابط

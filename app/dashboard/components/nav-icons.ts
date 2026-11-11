@@ -1,0 +1,96 @@
+import {
+  AlertTriangle,
+  BookMarked,
+  BookOpen,
+  Bot,
+  BrainCircuit,
+  Briefcase,
+  CalendarDays,
+  ChartNoAxesColumn,
+  ClipboardList,
+  Coffee,
+  Coins,
+  CreditCard,
+  FileText,
+  FolderOpen,
+  Gift,
+  GraduationCap,
+  Layers,
+  LayoutDashboard,
+  LifeBuoy,
+  ListChecks,
+  Medal,
+  Mic,
+  Moon,
+  NotebookPen,
+  Package,
+  Presentation,
+  Puzzle,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Trophy,
+  User,
+  Users,
+  Wallet,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
+import type { NavIconName } from "./nav-config";
+
+/* --------------------------------------------------------------------------
+   أيقونات الأقسام والبنود
+
+   ⚠️ كل اسم في NavIconName لازم يكون له مفتاح هنا — الـ Record بيفرض ده
+   وقت الـ typecheck، فأي أيقونة تتضاف هناك وما تتضافش هنا البناء يفشل
+   بدل ما تظهر مربع فاضي. الخريطة top-level عشان ما تتعملش كل render.
+
+   💡 الملف ده منفصل عن `NavRail.tsx` عن قصد: الخريطة دي مطلوبة كمان
+      في الشريط العلوي (`SiteNavbar`). لو فضلت جوه `NavRail` كان أي
+      استيراد ليها هيسحب معاه `framer-motion` و`supabase` — وده حِمل
+      مش محتاجه شريط علوي.
+   -------------------------------------------------------------------------- */
+export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  subjects: BookOpen,
+  lessons: GraduationCap,
+  workspace: FolderOpen,
+  lectures: Mic,
+  exams: ClipboardList,
+  slides: Presentation,
+  aiMentor: Bot,
+  agents: BrainCircuit,
+  assistant: Sparkles,
+  create: Wand2,
+  planner: Target,
+  calendar: CalendarDays,
+  missions: ListChecks,
+  notes: NotebookPen,
+  emergency: AlertTriangle,
+  quran: BookMarked,
+  worship: Moon,
+  break: Coffee,
+  escape: Puzzle,
+  progress: TrendingUp,
+  achievements: Trophy,
+  analytics: ChartNoAxesColumn,
+  leaderboard: Medal,
+  xpShop: Sparkles,
+  inventory: Package,
+  community: Users,
+  referrals: Gift,
+  shop: ShoppingBag,
+  rewards: Coins,
+  pricing: CreditCard,
+  balance: Wallet,
+  plans: Layers,
+  profile: User,
+  settings: Settings,
+  career: Briefcase,
+  report: FileText,
+  support: LifeBuoy,
+  admin: ShieldCheck,
+};

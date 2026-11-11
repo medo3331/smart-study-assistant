@@ -13,6 +13,8 @@ import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingB
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
+import { FeatureGuide } from "@/components/FeatureGuide";
+import { guides } from "@/lib/guides";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
@@ -322,8 +324,24 @@ export function UnifiedChat({
   };
 
   return (
-    <div className="flex h-screen max-h-screen">
-      <aside className={`${sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-0 right-0 h-full w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform`}>
+    /* ⚠️ الارتفاع = الشاشة **ناقص** الشريط العلوي (`--nav-h`).
+       السبب: الشريط `sticky` — يعني **بياخد مكان من الـ flow** (مش
+       `fixed` اللي بيقعد فوق المحتوى). فلو الشات كان `h-screen` (100vh)
+       والـ nav فوقه بـ 56px، الصفحة بتعمل scrollbar (56px زيادة) **و**
+       الشات جوه بيعمل scrollbar تاني → scrollbar مزدوج، وآخر 56px من
+       الشات (شريط الكتابة) بتتحت الـ fold.
+
+       `100dvh` مش `100vh`: على الموبايل `vh` بيحسب مع شريط المتصفح،
+       فالمحتوى بيختفي تحته. `dvh` بيتحسب مع الشريط وهو ظاهر.
+
+       ⚠️ `--nav-h` (3.5rem) = ارتفاع الشريط العلوي — معرّف في
+       `app/globals.css`. الصفحتان اللي فيها الشات (`/chat` و
+       `/lesson/[dayId]`) الاتنين عندهم الشريط فوقهم. */
+    <div className="flex h-[calc(100dvh_-_var(--nav-h))] max-h-[calc(100dvh_-_var(--nav-h))]">
+      {/* ⚠️ الـ aside على الموبايل `fixed` — لازم يبدأ **تحت** الشريط
+          العلوي (`--nav-h`) وإلا غطّاه. وعلى الديسكتوب `md:static` فيصير
+          جوّه الـ flex عادي. */}
+      <aside className={`${sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-[var(--nav-h)] right-0 h-[calc(100%-var(--nav-h))] w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform`}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-sm">المحادثات</h2>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="إغلاق">âœ•</button>
@@ -353,6 +371,12 @@ export function UnifiedChat({
       <div className="flex-1 overflow-y-auto">
         <button onClick={() => setSidebarOpen((v) => !v)} className="m-2 px-2 py-1 border rounded" aria-label="إظهار/إخفاء المحادثات">☰</button>
         <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
+      {/* 📌 دليل الاستخدام — أول حاجة في العمود، قبل المحادثة نفسها.
+          هنا بالذات محتاجه: أربع أوضاع (`Explain` / `Quiz` / `Summarize` /
+          `Review`) مكتوبة بالإنجليزي ومن غير شرح، فالمستخدم الجديد
+          مش هيعرف يختار. */}
+      <FeatureGuide {...guides.chat} storageKey="guide:chat" />
+
       <div className="flex items-center justify-between gap-2 mb-3">
         <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="                   ">
           ?            

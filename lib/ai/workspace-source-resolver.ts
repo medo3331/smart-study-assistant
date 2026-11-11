@@ -75,6 +75,20 @@ function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * normalizeTitle — strips trailing dates, leading "محاضرة:", extra whitespace.
+ * Used for fuzzy title matching so "network lec 4 (2026-11-06)" matches "network lec 4".
+ */
+export function normalizeTitle(s: string | null | undefined): string {
+  if (!s) return "";
+  return s
+    .toLowerCase()
+    .replace(/\s*\(?\d{4}-\d{2}-\d{2}\)?\s*$/, "")   // strip trailing date
+    .replace(/^\s*محاضرة\s*:?\s*/i, "")               // strip leading "محاضرة:"
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function parseOrdinal(text: string): number | "last" | null {
   const t = normalize(text);
   // ⚠️ ممنوع `\b` مع العربية: JS يعرّف \w بـ ASCII، فلا يوجد حدّ كلمة عربي.
@@ -247,14 +261,46 @@ export interface ResolveWorkspaceSourceInput {
   message: string;
   previousSourceId?: string | null;
   previousSourceFamily?: SourceFamily | null;
+  /** Optional: bypass title matching and resolve by lecture/material ID directly. */
+  lectureId?: string | null;
 }
 
 export async function resolveWorkspaceSource(
   input: ResolveWorkspaceSourceInput,
 ): Promise<WorkspaceSourceResolution> {
-  const { supabase, userId, message } = input;
+  const { supabase, userId, message, lectureId } = input;
   if (!userId) {
     return { status: "error", message: "Authentication required." };
+  }
+
+  // Bypass title matching when lectureId is provided (direct resolution)
+  if (lectureId) {
+    // Try lecture first
+    try {
+      const { data, error } = await supabase
+        .from("lectures")
+        .select("id, title, original_filename, status, transcript_text, created_at")
+        .eq("id", lectureId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!error && data) {
+        const row = data as LectureRow;
+        if (isEligibleLecture(row)) {
+          return {
+            status: "resolved",
+            source: { id: row.id, family: "lecture", title: lectureTitle(row), createdAt: row.created_at },
+          };
+        }
+        // Eligible check failed but row exists — return as empty_source
+        return {
+          status: "empty_source",
+          source: { id: row.id, family: "lecture", title: lectureTitle(row), createdAt: row.created_at },
+          message: "Lecture has no usable content.",
+        };
+      }
+    } catch {
+      // fall through to normal resolution
+    }
   }
 
   const parsed = parseSourceRequest(message);
@@ -350,12 +396,42 @@ export async function resolveWorkspaceSource(
 
   if (parsed.titleQuery.trim().length > 0) {
     const q = parsed.titleQuery.trim();
-    const matches = allEligible.filter(({ family, row }) => {
+    const cleanQuery = normalizeTitle(q);
+    // If normalization emptied the query, fall through to ambiguous
+    const effectiveQuery = cleanQuery || q;
+
+    // 1. Try exact match first (normalized)
+    let matches = allEligible.filter(({ family, row }) => {
       const title = family === "lecture" ? lectureTitle(row as LectureRow) : materialTitle(row as MaterialRow);
-      const filename = family === "lecture" ? ((row as LectureRow).original_filename ?? "") : "";
-      const content = family === "lecture" ? ((row as LectureRow).transcript_text ?? "") : ((row as MaterialRow).content ?? "");
-      return contains(title, q) || contains(filename, q) || contains(content.slice(0, 2000), q);
+      return normalizeTitle(title) === effectiveQuery;
     });
+
+    // 2. Fallback: contains match (normalized)
+    if (matches.length === 0) {
+      matches = allEligible.filter(({ family, row }) => {
+        const title = family === "lecture" ? lectureTitle(row as LectureRow) : materialTitle(row as MaterialRow);
+        const filename = family === "lecture" ? ((row as LectureRow).original_filename ?? "") : "";
+        return normalizeTitle(title).includes(effectiveQuery) || contains(filename, q);
+      });
+    }
+
+    // 3. Fallback: query contains title (reverse, normalized)
+    if (matches.length === 0) {
+      matches = allEligible.filter(({ family, row }) => {
+        const title = family === "lecture" ? lectureTitle(row as LectureRow) : materialTitle(row as MaterialRow);
+        return effectiveQuery.includes(normalizeTitle(title));
+      });
+    }
+
+    // 4. Last resort: original contains (title, filename, content)
+    if (matches.length === 0) {
+      matches = allEligible.filter(({ family, row }) => {
+        const title = family === "lecture" ? lectureTitle(row as LectureRow) : materialTitle(row as MaterialRow);
+        const filename = family === "lecture" ? ((row as LectureRow).original_filename ?? "") : "";
+        const content = family === "lecture" ? ((row as LectureRow).transcript_text ?? "") : ((row as MaterialRow).content ?? "");
+        return contains(title, q) || contains(filename, q) || contains(content.slice(0, 2000), q);
+      });
+    }
 
     if (matches.length === 0) {
       return { status: "not_found", candidates, message: "No matching source found." };

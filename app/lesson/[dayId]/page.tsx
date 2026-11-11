@@ -613,7 +613,7 @@ export default function LessonDetailPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error?.message || "خطأ في الاتصال");
 
       const aiReply = data?.choices?.[0]?.message?.content || "لم يتم استقبال رد.";

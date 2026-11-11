@@ -1,78 +1,89 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useLanguage } from '@/lib/i18n/LanguageProvider';
-import { TopControls } from '@/components/TopControls';
-import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { usePathname } from "next/navigation";
+import { SiteNavbar } from "@/components/SiteNavbar";
 
-const NAV_ITEMS = [
-  { href: '/dashboard', labelAr: 'لوحة التحكم', labelEn: 'Dashboard' },
-  { href: '/lessons', labelAr: 'الدروس', labelEn: 'Lessons' },
-  { href: '/lectures', labelAr: 'المحاضرات', labelEn: 'Lectures' },
-  { href: '/chat', labelAr: 'المساعد', labelEn: 'Assistant' },
-  { href: '/shop', labelAr: 'المتجر', labelEn: 'Store' },
+/* ==========================================================================
+   بوابة الشريط العلوي
+
+   📌 الشريط نفسه في `SiteNavbar` — الملف ده بيحدد **امتى** يظهر بس.
+
+   ⚠️ صفحات الداشبورد (`/dashboard/*`) ليها ترويستتها الخاصة في
+      `app/dashboard/layout.tsx`. قبل كده كان في شريطين فوق بعض: ده
+      والـ navbar العام. دلوقتي الـ navbar بيقفلي نفسه على الداشبورد
+      بدل ما ندمج الترويستين — فالترويستة تفضل زي ما هي، ومفيش حاجة
+      فيها اتغيرت.
+
+   ⚠️ الصفحات اللي ليها **chrome تانيها** (ترويستة خاصة، هيدر تسويقي،
+      ترويسة قانونية…) — الـ navbar يقفلي نفسه عندها. غير كده هنتج
+      شريطين فوق بعض، والترويسة القديمة قاعد�� فوق الترويسة الجديدة
+      أو تحتها — وفي الحالتين الشكل وحش.
+   ========================================================================== */
+
+/**
+ * prefixes للصفحات اللي ليها chrome خاص بيها.
+ *
+ * ⚠️ `/` (الصفحة الرئيسية) مش جواها — ليها هيدر تسويقي في `Hero`،
+ *    فمحتاجة مقارنة **تطابق** مش `startsWith`.
+ */
+const OWN_CHROME_PREFIXES = [
+  // لوحة الأدمن — ليها `AdminNav` جانبي
+  "/admin",
+  // صفحات الحساب — ليها `BrandLock` بتاعتهم
+  "/login",
+  "/register",
+  "/welcome",
+  "/onboarding",
+  // صفحات تسويقية ليها ترويستتها (أذرع اللاندينج)
+  "/features",
+  "/faq",
+  "/lecture-transcription",
+  "/ai-study-assistant",
+  "/programming",
+  "/study-tools",
+  "/subjects",
+  "/demo",
+  "/university",
+  // قانوني — `LegalDoc` **متلعمش** nav بالتصميم (صفحة بتتقرا مرة)
+  "/privacy",
+  "/terms",
+  // تدفقات مستقلة بره الـ app (صفحة دفع، صفحة QR، ملف شخصي)
+  "/checkout",
+  "/u/",
+  // صفحة مراجعة التصميم — داخلية ومش للزوار
+  "/preview",
 ];
 
+/** الصفحة الرئيسية — هيدر تسويقي في `Hero`. */
+const LANDING_PATH = "/";
+
+function hasOwnChrome(pathname: string): boolean {
+  if (pathname === LANDING_PATH) return true;
+  return OWN_CHROME_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+/**
+ * هل الصفحة دي فيها الشريط العلوي العام؟
+ *
+ * ⚠️ الدالة دي **مرجع واحد** للحقيقة: `UnifiedNavbar` بيستخدمها عشان
+ *    يقرر يظهر ولا لا، و`NavRail` بيستخدمها عشان يزيح نفسه (هو `fixed`
+ *    بـ `inset-y-0` — يعني بيبقى تحت الشريط لو الشريط موجود).
+ *
+ *    ⚠️ لازم تفضل هنا. لو اتنسخت في مكان تاني، اتنين هيفترقوا
+ *       والـ rail بيرجع يتغطّى تاني.
+ */
+export function siteNavbarVisible(pathname: string): boolean {
+  // الداشبورد عندها ترويستتها — ماكرمناش شريطين فوق بعض.
+  if (pathname.startsWith("/dashboard")) return false;
+  // الصفحات اللي ليها ترويستتها الخاصة.
+  if (hasOwnChrome(pathname)) return false;
+  return true;
+}
+
 export function UnifiedNavbar() {
-  const { locale } = useLanguage();
-  const isAr = locale === 'ar';
-  const pathname = usePathname() || '/';
-  const [open, setOpen] = useState(false);
+  const pathname = usePathname() || "/";
 
-  // Avoid duplicate chrome on marketing/admin/auth routes that already have their own layouts.
-  const show = pathname.startsWith('/dashboard') || pathname.startsWith('/chat') || pathname.startsWith('/lessons') || pathname.startsWith('/lectures') || pathname.startsWith('/store') || pathname.startsWith('/pricing');
-  if (!show) return null;
+  if (!siteNavbarVisible(pathname)) return null;
 
-  return (
-    <nav className="sticky top-0 z-40 w-full border-b border-white/10 bg-[var(--paper,#101524)]/90 backdrop-blur" dir={isAr ? 'rtl' : 'ltr'}>
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold text-[var(--accent,#f59e0b)]">
-          <span>⚡</span>
-          <span>Magicly</span>
-        </Link>
-        <div className="hidden items-center gap-2 md:flex">
-          {NAV_ITEMS.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + '/');
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${active ? 'bg-white/10 text-white' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
-              >
-                {isAr ? item.labelAr : item.labelEn}
-              </Link>
-            );
-          })}
-          <TopControls />
-        </div>
-        <button type="button" className="md:hidden rounded-lg p-2 text-white" onClick={() => setOpen((v) => !v)} aria-label="Menu">
-          {open ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </div>
-      {open && (
-        <div className="border-t border-white/10 px-4 pb-4 md:hidden">
-          <div className="flex flex-col gap-2 pt-3">
-            {NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + '/');
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${active ? 'bg-white/10 text-white' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
-                >
-                  {isAr ? item.labelAr : item.labelEn}
-                </Link>
-              );
-            })}
-            <div className="pt-2">
-              <TopControls />
-            </div>
-          </div>
-        </div>
-      )}
-    </nav>
-  );
+  return <SiteNavbar />;
 }

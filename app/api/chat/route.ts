@@ -16,6 +16,8 @@ import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 
+export const maxDuration = 60;
+
 /** أقصى عدد رسايل بنمررها للموديل (الأحدث بس). */
 const MAX_MESSAGES = 30;
 /** أقصى طول لأي رسالة واحدة. */
