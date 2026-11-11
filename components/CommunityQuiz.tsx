@@ -73,7 +73,7 @@ export function CommunityQuiz({ subject, isGuest, onClose, onSubmitted }: Commun
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error?.message || "فشل توليد الأسئلة");
 
       const raw = data?.choices?.[0]?.message?.content || "";

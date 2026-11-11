@@ -237,7 +237,7 @@ export default function MentorPage() {
         throw new Error(errData.error?.message || "فشل الإرسال");
       }
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       const answer = data.content || data.message || "حدث خطأ في الرد.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: answer }]);

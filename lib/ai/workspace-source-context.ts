@@ -34,6 +34,7 @@ export async function buildWorkspaceSourceContext(input: {
   previousSourceId?: string | null;
   previousSourceFamily?: "lecture" | "material" | null;
   maxChars?: number;
+  lectureId?: string | null;
 }): Promise<WorkspaceSourceContextResult> {
   const { supabase, userId, message } = input;
   const maxChars = input.maxChars ?? DEFAULT_MAX_CHARS;
@@ -44,6 +45,7 @@ export async function buildWorkspaceSourceContext(input: {
     message,
     previousSourceId: input.previousSourceId,
     previousSourceFamily: input.previousSourceFamily,
+    lectureId: input.lectureId,
   });
 
   if (resolution.status !== "resolved" && resolution.status !== "empty_source") {
