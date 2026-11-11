@@ -93,3 +93,66 @@
 ⇒ كل عمليات `recordAiOperation` تُرفض بـ RLS والجدول **فارغ (0 صفوف)**،
 و`ai_models.daily_limit` بلا أثر. المسار الصحيح للقياس هو `ai_usage_events`
 (مفعّل ويُكتب فعليًا). يحتاج قرارًا: إصلاح `ai_operations` أو حذفه.
+
+### N-006 — Root overflow من `NotificationBell` على صفحات `h-screen` (~36px)
+**أين:** `app/layout.tsx` (السطر 222: `<NotificationBell />`) و
+`components/NotificationBell.tsx` (السطر 33: `<div className="relative">`).
+
+**إيه المشكلة:** الـ `NotificationBell` متركّب في الـ root layout **بعد**
+`{children}`، وغلافه `position: relative` — مش `fixed`. فالجرس بياخد
+**مكان في الـ flow** (ارتفاعه ~36px) وبيقعد **تحت** محتوى الصفحة.
+
+على الصفحات اللي بتملأ الشاشة (`h-screen` / `h-[calc(100dvh…)]` زي `/chat`
+و`/lesson/[dayId]`)، المحتوى بياخد **100dvh بالظبط**، فبيطلع الـ document
+أكتر من الـ viewport بـ **~36px** ⇒ scrollbar بتظهر **من غير سبب مرئي**
+(مفيش محتوى تحت الـ fold، بس الـ scrollbar موجودة).
+
+**إزاي اتأكدت:** measuring في متصفح حقيقي (Edge + CDP) على `/chat` بـ 1440×900:
+`docScrollHeight: 936` والمفروض `900` ⇒ `overflowPx: 36` — وهو ارتفاع
+الـ `NotificationBell` بالظبط.
+
+**ليه متصلّحش دلوقتي:** مش جزيء من شغل الـ navbar. التصليح بيخلي الجرس
+`fixed` (زي `SupportWidget` و`FloatingAssistant` اللي جنبه في نفس الـ
+layout)، بس ده بيغيّر سلوك الجرس على **كل** الصفحات ⇒ تيكيت مستقل مع
+مراجعة بصرية.
+
+**الحل المقترح (ل تيكيت لاحق):**
+```tsx
+// components/NotificationBell.tsx — الغلاف
+<div className="fixed end-4 bottom-4 z-40 sm:end-6">
+```
+مع مراجعة `z-index` عشان `FloatingAssistant` (بتاع `start-4`) ما يتغطّاش عليه.
+
+**إزاش تتحقق بعد التصليح:** `npm run check:navbar` — فحص
+`no double scrollbar` بيرجع PASS على `/chat` بدل FAIL.
+
+### N-007 — Phantom page scroll على صفحات `min-h-screen` (+56px من الشريط)
+**أين:** `app/dashboard/components/PageShell.tsx` (السطر 78:
+`min-h-screen …`) + `components/SiteNavbar.tsx` (الشريط `sticky` — 56px).
+
+**إيه المشكلة:** الشريط العلوي `sticky` — يعني **بياخد مكان من الـ flow** (مش
+`fixed` اللي بيقعد فوق المحتوى). والصفحات اللي بتستخدم `PageShell`shell
+بتاعها `min-h-screen` (= 100dvh على الأقل). فالـ document بيطلع:
+`56px (الشريط) + 100dvh (الصفحة) + 36px (جرس N-006)` = 100dvh + 92px.
+
+يعني المستخدم بيسكرول **92px** في آخر الصفحة، وفي الـ 92 دول **مفيش
+محتوى مفيد** — آخر 36px هي جرس الإشعارات، والـ 56px قبلهم فراغ تحت
+الـ shell.
+
+**إزاي اتأكدت:** measuring على 6 صفحات في Edge + CDP — كلهم بالظبط
+`+92px`: `/lessons`، `/missions`، `/exams`، `/escape-room`، `/rewards`،
+`/lesson/1`. وصفحات الـ `calc(100dvh - var(--nav-h))` زي `/chat` في
+`+36px` بس (دي N-006 لوحدها).
+
+**ليه متصلّحش دلوقتي:** الحل الحقيقي بيغيّر الـ shell نفسه (أو بيخلي
+الشريط `fixed` — وهو اللي اتقرّر إنه يفضل `sticky`). الاتنين تغيير في
+سلوك كل صفحة ⇒ تيكيت مستقل.
+
+**إزاش تتحقق بعد التصليح:** `npm run check:navbar` — الـ allowance
+(`KNOWN_LAYOUT_OVERFLOW`) بيتقلّل من 92px لـ 36px في
+`scripts/browser/navbar-smoke.ts`.
+
+**ملاحظة:** الـ allowance ده هو سبب إن فحص `no double scrollbar` في
+`npm run check:navbar` بيسامح 92px. أي overflow أكبر من كده = regression
+جديد (مش known issue) والسكربت بيفشل.
+
