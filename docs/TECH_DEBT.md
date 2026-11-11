@@ -156,3 +156,63 @@ layout)، بس ده بيغيّر سلوك الجرس على **كل** الصفح�
 `npm run check:navbar` بيسامح 92px. أي overflow أكبر من كده = regression
 جديد (مش known issue) والسكربت بيفشل.
 
+### N-008 — `mapWordToGlobalIndex` و `detect-suspects` بيفترضوا شكل `segments[].words[]` مش موجود
+**أين:**
+- `lib/ai/transcript-review.ts:103-118` — `mapWordToGlobalIndex()` بتلفّ على
+  `segments[segIdx].words` وبتكمّل `wordIdx`.
+- `lib/ai/transcript-review.ts:33-43` — نوع `DetectSuspectsInput` بيكتب
+  `segments: Array<{ text: string; words: Array<…> }>`.
+- `app/api/lectures/[id]/transcript/detect-suspects/route.ts:76` و `:175` —
+  نفس الافتراض (`seg?.words?.[wordIdx]`).
+
+**إيه المشكلة:** الشكل الحقيقي للبيانات **مش** ده. في القاعدة (اتأكدت
+بالاستعلام المباشر — 32/32 محاضرة):
+
+```
+segments: [{ end, text, start, speaker }]     ← مافيش words جوّه المقطع
+words:    [{ end, text, start, speaker }, …]   ← مصفوفة **عناومية** منفصلة
+```
+
+يعني `segments[i].words` **Undefined دايماً** في البيانات الحقيقية.
+النتيجة:
+- `mapWordToGlobalIndex()` بيرجّع `null` دايماً (مبيوصلش لآخر الـ loop).
+- `detect-suspects` بيبني الـ batches بـ `seg.text.split(/\s+/)` (السطر 97 —
+  ده **صحيح** وبيشتغل)، بس عند enrichment التوقيتات (السطر 175) بيقرأ
+  `seg?.words?.[wordIdx]` ⇒ `undefined` ⇒ التوقيتات **ما enrichingش**.
+  فالـ `start`/`end` بيرجعوا من الـ Mوديل نفسه (وهو مش مرجعي).
+
+**ليه متصلّحش دلوقتي:** الخاصية دي قديمة (من قبل شغل الـ navbar) ومش في
+نطاق «الشرح المكثف». والتعديل بيغيّر سلوك ميزة موجودة (كشف المصطلحات
+المشكوك فيها) ⇒ تيكيت مستقل مع اختبار سلوك.
+
+**الحل المقترح (ل تيكيت لاحق):** إمّا (أ) نعدّل الدوال عشان تقرا من
+`transcript_data.words` العامة وتعمل mapping بالـ (نص + التوقيت)، أو
+(ب) نخزّن `words` جوّه كل segment وقت الحفظ (`lib/ai/lecture-store.ts:160`).
+الخيار (أ) أقل خطر لأنه **مفيش migration** ولا تغيير في البيانات
+المخزَّنة.
+
+### N-009 — تعديل يدوي للتفريغ بيفصل `transcript_text` عن `transcript_data.segments`
+**أين:** `app/api/lectures/[id]/transcript/route.ts:47-52` — الـ PATCH
+بيحدّث `transcript_text` **و** `transcript_data.text`، بس **مابيحدّثش**
+`transcript_data.segments`.
+
+**إيه المشكلة:** بعد التعديل اليدوي، النص المسطّح والمقاطع بيختلفوا.
+قِسْت على القاعدة: **10 من 32 محاضرة** عندها فرق (من ١ لـ ٧ حروف).
+
+**الأثر:**
+- أي حاجة بتحسب offset حرف-حرف في `transcript_text` هتبقى غلط على
+  المحاضرات دي.
+- الـ UI لازم يقرّر: يعرض النص المتعدّل (وده اللي الطالب عدّله) ولا
+  المقاطع (وده المصدر الحقيقي للـ citations).
+**القرار المتّخذ في «الشرح المكثف»:** الخيار (ب) من الـ Phase 2 —
+الواجهة بتعرض `transcript_reviewed_text` الأول (النص المتعدّل)، وتحته
+«التفريغ الأصلي (بالتوقيت)» في `<details>`، والـ citations بتشاور على
+المقاطع الأصلية مع لافتة صريحة «من التفريغ الأصلي». فال ميزة شغّالة
+من غير ما نغيّر التخزين.
+
+**الحل المقترح (ل تيكيت لاحق — الخيار أ):** الـ PATCH يحدّث نصوص
+المقاطع المقابلية كمان. ده محتاج mapping بين offset النص القديم
+والمقاطع (نفس في `lib/ai/transcript-review.ts:103-118` — بس الشكل
+غلط، انظر N-008).
+
+
