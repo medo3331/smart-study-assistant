@@ -4257,6 +4257,144 @@ html {
 }
 
 /* ==========================================================================
+   🪄 MagiclyLoader — شاشة تحميل العلامة
+
+   تلات حركات بس، كلها CSS على SVG (مفيش JS، مفيش layout):
+   ① ضربة الـ M بتترسم — stroke-dashoffset بيقفل من 1 لـ 0.
+      `pathLength=1` في الكومبوننت بيخلينا مانحتاجش نقيس طول المسار.
+   ② النجمة بتفتح وتقفل (pulse) — بتبدأ بعد الرسم.
+   ③ نقطة صغيرة بتلف حوالين العلامة.
+
+   الألوان من `--marker` / `--ink` فبتتبدّل مع الثيم لوحدها.
+   ========================================================================== */
+
+.magicly-loader {
+  --magicly-loader-size: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-block: clamp(28px, 8vh, 64px);
+  text-align: center;
+  color: var(--ink);
+}
+
+.magicly-loader-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--magicly-loader-size) * 1.55);
+  height: calc(var(--magicly-loader-size) * 1.55);
+}
+
+.magicly-loader-svg {
+  width: var(--magicly-loader-size);
+  height: auto;
+  overflow: visible;
+}
+
+.magicly-loader-stroke {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: magicly-draw 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.magicly-loader-star {
+  color: var(--marker);
+  transform-origin: 48.17px 8.65px;
+  animation: magicly-star 2.6s ease-in-out infinite;
+}
+
+.magicly-loader-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  animation: magicly-orbit 2.6s linear infinite;
+}
+
+.magicly-loader-dot::before {
+  content: "";
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 999px;
+  background: var(--marker);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--marker) 55%, transparent);
+}
+
+.magicly-loader-label {
+  margin: 0;
+  font-size: var(--t-small, 0.8125rem);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+@keyframes magicly-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 0.35;
+  }
+  40% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  80% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 1;
+    opacity: 0.35;
+  }
+}
+
+@keyframes magicly-star {
+  0%,
+  35% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-25deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12) rotate(0deg);
+  }
+  75%,
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes magicly-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* الحركة العامة بتصفّر مدّة الأنيميشن، فالرسم كان هيقفل مخفي.
+   هنا بنثبّته على الحالة النهائية بدل ما نخفيه. */
+@media (prefers-reduced-motion: reduce) {
+  .magicly-loader-stroke {
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+  }
+  .magicly-loader-star {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .magicly-loader-dot {
+    display: none;
+  }
+}
+
+/* ==========================================================================
    ❓ الأسئلة الشائعة — أكورديون
 
    الشكل: سطور متراصة على ورقة واحدة، مش عشر كروت منفصلة. السبب إن
