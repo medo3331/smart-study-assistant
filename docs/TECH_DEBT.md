@@ -485,6 +485,72 @@ fallback خالص.
 `image-generator.ts` — بس مربوط بمهمة تانية)، أو **إخفاء الزر** لما
 المزوّد مش متاح (أفضل من زرار بيطلّع 502).
 
+> ⚠️ **تحديث 2026-11-12 (بعد N-020):** مسار **`/api/ai/image`** (استوديو
+> الصور التعليمية) و**`/api/ai/image-gen`** (صفحة الإنشاء) اتغيّروا
+> و**مش بقوا بيعتمدوا على Gemini** — بقوا بيمشوا على OpenRouter
+> (`black-forest-labs/flux.2-pro`) مع fallback لـ Pollinations.
+> ⇒ اللي فاضل ميتّ هو: `image_edit` · `video_generation` · ومهمة
+> `image_generation` **داخل الـ media router** (`/api/ai` بـ
+> `task=image_generation`) — دي لسه محتجرة `mediaOnly` على مزوّد واحد.
+
+### N-020 — توليد الصور: OpenRouter بدل Gemini (✅ اتطبّق — بس محتاج رصيد)
+**أين:** `lib/ai/openrouter-image.ts` (جديد) · `lib/ai/image-generator.ts` ·
+`app/api/ai/image/route.ts` · `app/api/ai/image-gen/route.ts` ·
+`lib/ai/model-access.ts` (FREE_MODELS).
+
+**إيه المشكلة:** توليد الصور كان محتكر على `gemini-3.1-flash-image`
+(المفتاح باطل/اتشال) ⇒ **ميتّ 100%**:
+- `/api/ai/image` (استوديو الصور) — كان شغّال بس على Pollinations.
+- `/api/ai/image-gen` (زرار صفحة الإنشاء) — **502 على كل ضغطة**.
+
+**الحل (اتطبّق):** OpenRouter عنده **واجهة صور مستقلة**:
+`POST https://openrouter.ai/api/v1/images` — والدخل هو
+`{ model, prompt, resolution, aspect_ratio }` والرد
+`{ created, data: [{ b64_json }], usage: { cost } }`
+(مُتحقَّق منه من `openapi.json` الرسمي + اختبار حي للـ schema).
+
+- الموديل الافتراضي: **`black-forest-labs/flux.2-pro`** (الأرخص/الأسرع).
+- البديل: **`bytedance-seed/seedream-4.5`** (متاح للمستخدم + Ultra بس).
+- `resolution: "1K"` + `aspect_ratio` مشتقّ من المقاس المطلوب
+  (1:1 · 16:9 · 9:16).
+- **الـ mime type بيتحدّد من بايتات الصورة** (مش من content-type — مافيش).
+
+**⚠️ 🔴 ما زال ناقص: رصيد OpenRouter = 0.**
+```
+402 Insufficient credits. This account never purchased credits.
+```
+⇒ الطلب بيروح لـ OpenRouter وبياخد 402 ⇒ السلسلة بتكمّل لـ
+Pollinations. وPollinations (المجاني) **بيحدّ معدّله دلوقتي**:
+`503 "The Classic API is at its limit right now"` وبعدها 404.
+
+⇒ **الخطوة الجاية: اشحن رصيد OpenRouter** (Settings → Credits). أول ما
+يتعمل، `flux.2-pro` هيشتغل فوراً (السلسلة بتجرّبه أول حاجة) **من غير
+أي تعديل في الكود**.
+
+⚠️ **ليه الـ payload صح (مُثبت حيّ)**: أي body مخالف للـ schema بيرجّع
+**400**، وبODY بتاعنا (بكل الموديلات) بيرجّع **402** ⇒ يعني عدّى
+validation. تفصيل الـ probe: `scripts/probe-openrouter-payload.mjs`.
+
+**⚠️ كاش الرصيد**: بعد أول 402 بنتخطّى OpenRouter لمدة ١٠ دقايق (module
+level) ⇒ كل صورة متأخّرةش بنداء بيلفّ 402 قبل ما يكمّل للمجاني.
+
+### N-021 — `ai_operations` مافيش policy للإدخال ⇒ كل تسجيلات AI بتضيع (✅ اتصلّح)
+**أين:** `db/41-ai-operations-insert-policy.sql`.
+
+**إيه المشكلة:** `ai_operations` كان فيه **policy واحدة للقراءة بس**
+(`ai operations: owner reads` — SELECT) ⇒ أي `recordAiOperation` بيرمي:
+`new row violates row-level security policy for table "ai_operations"`.
+
+⇒ **كل تسجيلات الـ AI في التطبيق كله كانت بتضيع** (الشات، الصور،
+المحاضرات، الدرس…). والتسجيل best-effort فمحدش كان بيلاحظ.
+
+**إزاي اتكشاف:** أثناء تفعيل توليد الصور عبر OpenRouter — لازم نعرف
+**مين** ولّد الصورة (OpenRouter ولا Pollinations) و**بتكلّف كام**، بس
+التسجيل كان بيتفضّح.
+
+**الحل (اتطبّق):** `db/41` — insert/update/delete **لصفوف المستخدم هو
+بس** (`auth.uid() = user_id`).
+
 ### N-019 — حذف المادة بيسيب المستند والصفحات (تسريب تخزين)
 **أين:** `db/38-documents.sql` — `documents.material_id references
 materials(id) on delete set null`.

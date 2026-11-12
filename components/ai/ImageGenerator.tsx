@@ -24,6 +24,8 @@ const SIZES = [
 
 const MODELS = [
   { value: "", label: "تلقائي (حسب الباقة)" },
+  { value: "openrouter-flux", label: "FLUX.2 Pro — OpenRouter ⭐" },
+  { value: "openrouter-seedream", label: "Seedream 4.5 — OpenRouter" },
   { value: "pollinations", label: "Pollinations — مجاني وسريع ⚡" },
   { value: "dall-e-3", label: "DALL-E 3 — أعلى جودة" },
   { value: "flux-pro", label: "Flux Pro — سريع وممتاز" },

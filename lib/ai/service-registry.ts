@@ -104,8 +104,19 @@ export const SERVICE_REGISTRY: Record<AiServiceId, ServiceDefinition> = {
  */
 export const IMAGE_MODELS_BY_TIER: Record<ServiceTier, ImageModel[]> = {
   free: [],
-  pro: ["pollinations", "stable-diffusion-xl"],
-  ultra: ["dall-e-3", "flux-pro", "pollinations", "stable-diffusion-xl"],
+  // ⚠️ **الترتيب مهم**: الراوت بياخد `allowedModels[0]` كـ default
+  //    لما المستخدم ما يختارش موديل ⇒ فـ `openrouter-flux` (flux.2-pro)
+  //    هو الافتراضي. وPollinations (مجاني) موجود في كل الباقات ⇒ شبكة
+  //    أمان لو OpenRouter رصيده خلص أو fell over.
+  pro: ["openrouter-flux", "pollinations", "stable-diffusion-xl"],
+  ultra: [
+    "openrouter-flux",
+    "openrouter-seedream",
+    "dall-e-3",
+    "flux-pro",
+    "pollinations",
+    "stable-diffusion-xl",
+  ],
 };
 
 // ============================================

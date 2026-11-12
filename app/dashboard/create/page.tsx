@@ -60,9 +60,10 @@ export default function CreatePlanPage() {
     if (imagePrompt.trim().length < 3 || loading) return;
     setLoading(true); setNotice(null); setImageUrl("");
     try {
-      // TODO(B4.0.3): توليد الصور حصري لـ gemini-3.1-flash-image (المفتاح باطل
-      // ← مكسورة أصلاً). مجمدة بالقرار 2026-11-06 — البديل (Pollinations أو
-      // Flux) أو تعطيل الزرار، قرار مؤجل. الراوت: app/api/ai/image-gen/route.ts.
+      // ⚠️ (2026-11-12): توليد الصور رجع شغّال — كان محتكر على
+      //    gemini-3.1-flash-image (المفتاح باطل/اتشال ⇒ 502 على كل ضغطة).
+      //    دلوقتي بيمشي على OpenRouter (black-forest-labs/flux.2-pro) مع
+      //    fallback لـ Pollinations المجاني. الراوت: app/api/ai/image-gen.
       const res = await fetch("/api/ai/image-gen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: imagePrompt }) });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error?.message || "تعذّر توليد الصورة.");
