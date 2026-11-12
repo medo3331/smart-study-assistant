@@ -1810,6 +1810,220 @@ html {
 }
 
 /* مقبض (grabber) فوق الـ sheet — إشارة بصرية إنّه بيتسحب */
+/* ==========================================================================
+   🎬 العروض التقديمية — بلاطات الصيغ + معاينة الشرائح
+   ============================================================================
+
+   ⚠️ **ليه بلوك واحد للاثنين؟**: مسارين بيولّدوا عروض (مستند / محاضرة)
+   ولازم الشكل يبقى **واحد** في المشروع كله — الطالب يتعلم «الورقة
+   دي = ملف» مرة واحدة.
+
+   ① `.deck-format-tile` — **ورقة واحدة** من مجمّعة ورق. على hover
+      الورقة اللي ورا تتفتّ شوية (stack fan) — إشارة إن ده **ملف**.
+   ② `.deck-slide-mini` — **معاينة شريحة**: الشريط الملوّن فوق (زي
+      اللي في الـ PPTX بالظبط) + العنوان + النقاط.
+
+   ⚠️ كل الألوان من التوكنز ⇒ بتمشي مع كل ثيم وكل pack.
+   ========================================================================== */
+
+/* ① بلاطة الصيغة — مكدّسة ورق */
+.deck-format-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 92px;
+  padding: 12px 8px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms ease, box-shadow 200ms ease;
+}
+
+/* الورقتين اللي ورا — نفس الكعب الأحمر بتاع `.sheet-card`. */
+.deck-format-tile::before,
+.deck-format-tile::after {
+  content: "";
+  position: absolute;
+  inset-inline: 8px;
+  top: 6px;
+  bottom: 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rule);
+  background: var(--paper-3);
+  z-index: -1;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.deck-format-tile::before {
+  transform: translateY(-3px) rotate(-3deg);
+  opacity: 0.55;
+}
+.deck-format-tile::after {
+  transform: translateY(-1.5px) rotate(2deg);
+  opacity: 0.8;
+}
+
+@media (hover: hover) {
+  .deck-format-tile:hover:not(:disabled) {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--rule) 60%, var(--accent) 30%);
+    box-shadow: 0 10px 24px -14px var(--shade-lift);
+  }
+  /* ⭐ الـ fan: الورقتين بتفتّح مع الكليك/الهوفر. */
+  .deck-format-tile:hover:not(:disabled)::before {
+    transform: translateY(-6px) rotate(-7deg);
+  }
+  .deck-format-tile:hover:not(:disabled)::after {
+    transform: translateY(-3px) rotate(4deg);
+  }
+}
+
+.deck-format-tile:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.deck-format-tile:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* أيقونة الملف — المستطيل اللي فوق */
+.deck-format-sheet {
+  position: relative;
+  width: 40px;
+  height: 46px;
+  border-radius: 4px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 1px 2px var(--shade);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  overflow: hidden;
+}
+
+/* الكعب الأحمر (نفس فكرة `.sheet-card`) */
+.deck-format-sheet::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: color-mix(in srgb, var(--redpen) 55%, transparent);
+}
+
+.deck-format-label {
+  font-size: var(--t-label);
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* ② معاينة الشريحة */
+.deck-slide-mini {
+  position: relative;
+  border-radius: var(--r-md);
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  overflow: hidden;
+}
+
+/* ⚠️ الشريط الملوّن فوق — **زي اللي في الـ PPTX بالظبط** (يعني
+ *    «اللي شايفه = اللي هيطلع في الملف»). */
+.deck-slide-mini-bar {
+  height: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 45%, var(--marker)) 100%
+  );
+}
+
+.deck-slide-mini-body {
+  padding: 10px 12px 12px;
+}
+
+.deck-slide-mini-heading {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+/* 📌 شارة المرجع — **نفس لغة الاقتباسات في الشرح المكثف**
+ *    (`.citation-mark`) عشان يتّحد الشكل. */
+.deck-cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1em;
+  height: 1.1em;
+  padding-inline: 0.26em;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--on-marker);
+  background: var(--marker);
+  vertical-align: super;
+  white-space: nowrap;
+}
+
+/* «متحقَّق منه» */
+.deck-cite-verified {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--hl-green-ink);
+  background: color-mix(in srgb, var(--hl-green-fill) 16%, transparent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* ③ مسطرة تقدّم الأجزاء */
+.deck-parts-rail {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.deck-parts-rail span {
+  display: block;
+  width: 14px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--rule);
+  transition: background-color 200ms ease;
+}
+
+.deck-parts-rail span[data-ready="true"] {
+  background: var(--accent);
+}
+
+.deck-parts-rail span[data-current="true"] {
+  background: var(--marker);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--marker) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-format-tile,
+  .deck-format-tile::before,
+  .deck-format-tile::after {
+    transition: none !important;
+  }
+}
 .citation-sheet-grabber {
   width: 36px;
   height: 4px;

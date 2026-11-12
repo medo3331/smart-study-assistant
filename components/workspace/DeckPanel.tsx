@@ -5,11 +5,12 @@ import {
   Presentation,
   LoaderCircle,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Download,
   X,
 } from "lucide-react";
+
+import { DeckFormatTiles, type DeckFormatOption } from "@/components/decks/DeckFormatTiles";
+import { DeckPartNav } from "@/components/decks/DeckPartNav";
+import { DeckSlides } from "@/components/decks/DeckSlides";
 
 /* ==========================================================================
    🎬 لوحة توليد العرض التقديمي من مستند
@@ -54,18 +55,6 @@ type DocumentRow = {
   deck: DeckState | null;
 };
 
-const FORMATS = [
-  { value: "pptx", label: "PowerPoint" },
-  { value: "pdf", label: "PDF" },
-  { value: "docx", label: "Word" },
-] as const;
-
-function unitLabel(unit: DeckState["source"]["unit"], n: number): string {
-  if (unit === "slide") return `شريحة ${n}`;
-  if (unit === "paragraph") return `الفقرة ${n}`;
-  return `صفحة ${n}`;
-}
-
 export function DeckPanel({
   materialId,
   onClose,
@@ -79,7 +68,7 @@ export function DeckPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [current, setCurrent] = useState(0);
-  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<DeckFormatOption | null>(null);
 
   // ── جلب المستند ──
   useEffect(() => {
@@ -149,7 +138,7 @@ export function DeckPanel({
 
   /** ينزّل الملف بالصيغة المطلوبة. */
   const download = useCallback(
-    async (format: (typeof FORMATS)[number]["value"]) => {
+    async (format: DeckFormatOption) => {
       if (!document) return;
       setDownloading(format);
       setError(null);
@@ -238,45 +227,18 @@ export function DeckPanel({
       {document && !loading && !error && (
         <>
           {/* ── شريط الأجزاء ── */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const next = current - 1;
-                  if (next < 0) return;
-                  setCurrent(next);
-                  if (deck?.parts[next]?.status !== "ready") void generatePart(next);
-                }}
-                disabled={current === 0 || busy}
-                aria-label="الجزء السابق"
-                className="grid h-7 w-7 place-items-center rounded-lg border border-rule text-ink-soft transition-colors hover:border-[var(--accent)] disabled:opacity-40"
-              >
-                <ChevronRight size={14} aria-hidden />
-              </button>
-              <span className="min-w-[5.5rem] text-center text-[11px] font-semibold text-ink-soft">
-                {`الجزء ${current + 1} من ${deck?.total_parts ?? "?"}`}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = current + 1;
-                  if (!deck || next >= deck.total_parts) return;
-                  setCurrent(next);
-                  if (deck.parts[next]?.status !== "ready") void generatePart(next);
-                }}
-                disabled={!deck || current >= deck.total_parts - 1 || busy}
-                aria-label="الجزء التالي"
-                className="grid h-7 w-7 place-items-center rounded-lg border border-rule text-ink-soft transition-colors hover:border-[var(--accent)] disabled:opacity-40"
-              >
-                <ChevronLeft size={14} aria-hidden />
-              </button>
-            </div>
-            <span className="text-[11px] text-ink-soft">
-              {readyCount} من {deck?.total_parts ?? 0} متولّد
-            </span>
-          </div>
-
+          <DeckPartNav
+            total={deck?.total_parts ?? 0}
+            current={current}
+            readyCount={readyCount}
+            statuses={(deck?.parts ?? []).map((p) => p.status)}
+            busy={busy}
+            onSelect={(index) => {
+              if (index < 0 || index >= (deck?.total_parts ?? 0)) return;
+              setCurrent(index);
+              if (deck?.parts[index]?.status !== "ready") void generatePart(index);
+            }}
+          />
           {/* ── حالة الجزء ── */}
           {part?.status === "failed" && (
             <button
@@ -308,52 +270,15 @@ export function DeckPanel({
           )}
 
           {/* ── معاينة الشرائح ── */}
-          {slides.length > 0 && (
-            <div className="space-y-3">
-              {slides.map((slide, index) => (
-                <div
-                  key={`${current}-${index}`}
-                  className="rounded-xl border border-rule p-3"
-                >
-                  <p className="text-sm font-bold text-ink">{slide.heading}</p>
-                  <ul className="mt-2 space-y-1.5">
-                    {slide.bullets.map((bullet, i) => (
-                      <li
-                        key={i}
-                        className="flex flex-wrap items-baseline gap-x-2 text-xs leading-relaxed text-ink-soft"
-                      >
-                        <span>• {bullet.text}</span>
-                        {bullet.page !== null && (
-                          <span className="rounded border border-rule px-1 font-mono text-[10px] text-ink-soft">
-                            {unitLabel(deck?.source.unit ?? "page", bullet.page)}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
+          <DeckSlides slides={slides} unit={deck?.source.unit ?? "page"} />
 
           {/* ── التحميل ── */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-rule pt-3">
-            {FORMATS.map((format) => (
-              <button
-                key={format.value}
-                type="button"
-                onClick={() => void download(format.value)}
-                disabled={downloading !== null || readyCount === 0}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rule bg-[var(--card-secondary)] px-2.5 text-xs font-semibold text-ink transition-colors hover:border-[var(--accent)] disabled:opacity-50"
-              >
-                {downloading === format.value ? (
-                  <LoaderCircle size={13} className="animate-spin" aria-hidden />
-                ) : (
-                  <Download size={13} aria-hidden />
-                )}
-                <span>{format.label}</span>
-              </button>
-            ))}
+          <div className="border-t border-rule pt-3">
+            <DeckFormatTiles
+              disabled={readyCount === 0}
+              busyFormat={downloading}
+              onPick={(format) => void download(format)}
+            />
           </div>
 
           {notice && <p className="text-xs text-ink-soft">{notice}</p>}

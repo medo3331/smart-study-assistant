@@ -41,6 +41,7 @@ import {
 import { FILE_MIME_TYPES, sanitizeFilename } from "./file-generator";
 import { ensurePdfFont as registerPdfFont } from "@/lib/lectures/pdf-font";
 import type { DeckSlide, DeckState } from "./slides";
+import { sourceBadge } from "./slides-labels";
 
 /* ═══════════════════════════ الأنواع ═══════════════════════════ */
 
@@ -62,37 +63,12 @@ export type DeckFileResult = {
 /* ═══════════════════════════ أدوات المصدر ═══════════════════════════ */
 
 /**
- * ⚠️ **الليبل بتاع الوحدة** — بيختلف حسب نوع الملف:
- *   PDF  → «صفحة ٤»
- *   PPTX → «شريحة ٤»
- *   DOCX → «الفقرة ٤»
- *
- * (قرار: DOCX مالوش صفحات — الـ page count ناتج rendering مش data.)
+ * ⚠️ **الليبلات في `slides-labels.ts`** — ملف مستقل لأنه **آمن للـ
+ *    client**: الـ generator ده بيستورد `pdf-font.ts` (node:fs) ⇒ أي
+ *    client component بيستورد من هنا بيكسر الـ bundle.
+ *    (نصدّرهم من هنا كمان عشان الـ imports القديمة تفضل شغّالة.)
  */
-export function unitLabel(unit: DeckState["source"]["unit"], n: number): string {
-  if (unit === "slide") return `شريحة ${n}`;
-  if (unit === "paragraph") return `الفقرة ${n}`;
-  return `صفحة ${n}`;
-}
-
-/** شارة المصدر لسلايد واحد: «صفحة ٤» أو «صفحتا ٤ و ٧». */
-export function sourceBadge(
-  slide: DeckSlide,
-  unit: DeckState["source"]["unit"],
-): string {
-  const pages = Array.from(
-    new Set(
-      slide.bullets
-        .map((bullet) => bullet.page)
-        .filter((page): page is number => page !== null),
-    ),
-  );
-  if (pages.length === 0) return "";
-  if (pages.length === 1) return unitLabel(unit, pages[0]);
-  const first = unitLabel(unit, pages[0]);
-  const last = unitLabel(unit, pages[pages.length - 1]);
-  return `${first} و ${last}`;
-}
+export { unitLabel, sourceBadge } from "./slides-labels";
 
 /* ═══════════════════════════ ١) PowerPoint ═══════════════════════════ */
 

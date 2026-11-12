@@ -20,15 +20,13 @@
  */
 
 import { readFileSync } from "node:fs";
-import path from "node:path";
-const PG_ENTRY = path.resolve(process.cwd(), "node_modules/pg/lib/index.js");
-const pg = (await import(`file://${PG_ENTRY.replace(/\\/g, "/")}`)).default;
+import pg from "file:///C:/Desktop/smart-study-assistant/node_modules/pg/lib/index.js";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
 const EMAIL = process.env.SMOKE_EMAIL ?? "me7960878@gmail.com";
 
 const env = Object.fromEntries(
-  readFileSync(path.resolve(process.cwd(), ".env.local"), "utf8")
+  readFileSync("C:/Desktop/smart-study-assistant/.env.local", "utf8")
     .split(/\r?\n/)
     .filter((l) => l.trim() && !l.trim().startsWith("#"))
     .map((l) => {
@@ -48,7 +46,6 @@ function check(name, ok, detail = "") {
   console.log(`  ${ok ? "✅" : "❌"} ${name}${detail ? ` — ${detail}` : ""}`);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-void sleep; // kept for future retry logic
 
 async function jfetch(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, opts);
@@ -88,10 +85,15 @@ await db.connect();
 
 /** تنظيف أي بقايا من اختبارات سابقة (نفس الـ email) */
 await db.query(
-  `delete from public.knowledge_base where user_id = $1 and source_type = 'user' and source_kind = 'material'`,
+  `delete from public.knowledge_base
+   where user_id = $1 and source_type = 'user' and source_kind = 'material'
+     and source_id in (select id from public.documents where material_id is not null)`,
   [UID],
 );
-await db.query(`delete from public.documents where user_id = $1`, [UID]);
+await db.query(
+  `delete from public.documents where user_id = $1 and material_id is not null`,
+  [UID],
+);
 await db.query(`delete from public.materials where user_id = $1 and title like 'smoke-%'`, [UID]);
 
 let materialId = null;
@@ -114,7 +116,7 @@ check(
 
 /* ═════════════ ② رفع مستند ═════════════ */
 console.log("\n② رفع مستند PDF (materials + documents + pages)");
-const pdf = readFileSync(path.resolve(process.cwd(), "workspace/cufe-cce-en.pdf"));
+const pdf = readFileSync("C:/Desktop/smart-study-assistant/workspace/cufe-cce-en.pdf");
 const fd = new FormData();
 fd.append("file", new Blob([pdf], { type: "application/pdf" }), "smoke-test.pdf");
 const up = await jfetch("/api/documents", { method: "POST", headers: H, body: fd });

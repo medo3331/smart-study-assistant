@@ -189,19 +189,27 @@ export async function GET(request: Request) {
     if (authError) return authError;
 
     const materialId = new URL(request.url).searchParams.get("materialId");
-    if (!materialId) {
+    const lectureId = new URL(request.url).searchParams.get("lectureId");
+
+    if (!materialId && !lectureId) {
       return NextResponse.json(
-        { error: { message: "لازم تحدّد المادة." } },
+        { error: { message: "لازم تحدّد المادة أو المحاضرة." } },
         { status: 400 },
       );
     }
 
-    const { data: document, error } = await supabase
+    // ⚠️ **المستند بيتحدد بمصدر واحد**: يا `material_id` (ملف مرفوع)
+    //    يا `lecture_id` (محاضرة). والقيد في القاعدة بيمنع الاتنين مع بعض.
+    const query = supabase
       .from("documents")
-      .select("id, title, file_type, page_count, status, unread_pages, deck")
-      .eq("material_id", materialId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .select(
+        "id, title, file_type, page_count, status, unread_pages, deck, source_unit, thumbnail",
+      )
+      .eq("user_id", user.id);
+
+    const { data: document, error } = materialId
+      ? await query.eq("material_id", materialId).maybeSingle()
+      : await query.eq("lecture_id", lectureId!).maybeSingle();
 
     if (error) {
       console.error(`documents: فشل جلب المستند [${error.code ?? "no-code"}]`);
@@ -212,7 +220,14 @@ export async function GET(request: Request) {
     }
     if (!document) {
       return NextResponse.json(
-        { error: { code: "NO_DOCUMENT", message: "مفيش مستند متسجّل للمادة دي." } },
+        {
+          error: {
+            code: "NO_DOCUMENT",
+            message: materialId
+              ? "مفيش مستند متسجّل للمادة دي."
+              : "مفيش عرض متسجّل للمحاضرة دي.",
+          },
+        },
         { status: 404 },
       );
     }

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Sparkles, Loader2, AlertTriangle, Clock } from "lucide-react";
+import { Sparkles, Loader2, AlertTriangle, Clock, Presentation } from "lucide-react";
 
 import { LectureNote } from "./LectureNote";
 import { FlashcardsPanel } from "./FlashcardsPanel";
 import { McqQuiz } from "./McqQuiz";
 import { LectureIntensive } from "./LectureIntensive";
+import { LectureDeckPanel } from "@/components/decks/LectureDeckPanel";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
 import type { IntensiveExplanation } from "@/lib/ai/lecture-intensive";
 
@@ -79,6 +80,8 @@ export function LectureProcessActions({
   const [mcqs, setMcqs] = useState<Mcq[] | null>(null);
   const [intensive, setIntensive] = useState<IntensiveExplanation | null>(null);
   const [feedback, setFeedback] = useState("");
+  // 🎬 لوحة «ملف المحاضرة» — مفتوحة/مقفولة.
+  const [deckOpen, setDeckOpen] = useState(false);
 
   /**
    * 🔑 معرّف جلسة التوليد — **كريدت واحد لكل المحاضرة**.
@@ -348,6 +351,38 @@ export function LectureProcessActions({
           </p>
         )}
       </div>
+
+      {/* ───────── 🎬 ملف المحاضرة (عرض تقديمي) ─────────
+        *
+        * ⚠️ **منطقة منفصلة** عن أدوات المذاكرة: التكلفة مختلفة
+        *    (كريدت + حدّ خدمة يومي) والطبيعة مختلفة (بيطلع **ملف**).
+        *
+        * ⚠️ **محتاج توقيتات**: من غير `segments` مفيش مراجع ⇒ مفيش
+        *    عرض ينفع.
+        */}
+      {hasTimings && (
+        <div className="border-t border-[var(--rule)] pt-3">
+          <p className="mb-2 text-xs font-semibold text-ink-soft">
+            🎬 ملف المحاضرة
+          </p>
+          {deckOpen ? (
+            <LectureDeckPanel
+              lectureId={lectureId}
+              onClose={() => setDeckOpen(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDeckOpen(true)}
+              disabled={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Presentation size={16} aria-hidden />
+              <span>توليد عرض تقديمي</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ⚠️ العرض عبر `LectureContent` (react-markdown) — **مافيش**
           dangerouslySetInnerHTML. النص المولّد بيتحوّل لعناصر React حقيقية،
