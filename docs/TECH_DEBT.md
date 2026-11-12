@@ -263,4 +263,77 @@ escape hatch الرسمي بتاع الحزمة) ونسخ `worker.js` كـ class
 **ليه مش متعمل دلوقتي:** الترقية لـ Next 16.4 مشتروحة منفصلة عن
 مشروع «الشرح المكثف»، والمطلوب إن الـ build يبقى أخضر للـ PR.
 
+### N-011 — Schema drift في `knowledge_base` (٧ أعمدة مش في أي migration)
+**أين:** الجدول `public.knowledge_base` في القاعدة — Compared بـ
+`db/knowledge-base.sql`.
+
+**إيه المشكلة:** الأعمدة دي **موجودة في القاعدة** بس **مش في أي ملف
+`db/*.sql`** (اتأكدت بـ grep على كل الملفات):
+```
+user_id · source_type · source_kind · source_id
+workspace_subject_id · chunk_index · processing_version
+```
+يعني الـ migration بيوصف ٧ أعمدة والقاعدة فيها ١٤ ⇒ **أي حد يبني
+قاعدة من الصفر من الـ migrations هيحصل عليه schema ناقص**، وأي حد
+يعدّل الـ migration "عشان يطابق" هيكسر الـ production.
+
+**ليه متصلّحش دلوقتي:** مين جاب الأعمدة ومتى مش معروفين، والـ
+`processing_version`/`workspace_subject_id` مرتبطين بشغل جاري. تكملة
+الـ migration من غير معرفة النية = مخاطرة على بيانات الـ production.
+
+**الحل المقترح (ل تيكيت لاحق):** ملف migration **إضافي** بيعمل
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` للأعمدة السبعة (idempotent،
+مش بيعمل تعديل على بيانات موجودة)، + توثيق الـ CHECK constraints
+المفترضة. **متعملش** DROP ولا تعديل على أعمدة موجودة.
+
+**ليه ده مهم دلوقتي:** ميزة «العروض التقديمية» هتعتمد على
+`source_id`/`source_type`/`source_page`/`chunk_index` في
+`knowledge_base` — فلو الـ schema drift اتصلّح، الـ feature تتبني
+عليها بأمان.
+
+### N-012 — PDF→صورة + Vision Model (v2 للعرض التقديمي)
+**أين:** `lib/extract-text.ts` (الاستخراج) و`lib/ai/slides-generator.ts`.
+
+**إيه المشكلة:** في v1 بنستخرج **نص** بس. فالمستند المصوّر (PDF
+بدون text layer) بيتقرا أول **٦ صفحات** بس عبر ocr.space، والباقي
+`empty: true` ⇒ **الـ deck بيطلع ناقص**، والـ diagrams والصور بتضيع
+في كل الحالات (PDF و PPTX).
+
+**ليه مش متعمل دلوقتي:** قرار تأجيل — v1 text-only عشان نطلع
+الـ Core Loop بسرعة.
+
+**الحل المقترح (v2):**
+1. **رندر صفحات PDF لصور** — `unpdf.renderPageAsImage` **موجود فعلاً**
+   (`lib/extract-text.ts:303` بيستخدمه في مسار الـ OCR) ⇒ ما نحتاجش
+   مكتبة جديدة.
+2. **نبعت الصورة للـ vision model** — المشروع عنده نماذج رؤية
+   (`llama-3.2-11b-vision-preview` على Groq، `nvidia/nemotron-3.5-super-vl`)
+   ⇒ ناخد وصف + نقاط من الـ diagram مش بس النص.
+3. **الـ PPTX:** مفيش رندر server-side (محتاج LibreOffice — مش viable
+   في serverless) ⇒ يا نعمله text-only دايماً، يا نرندر في خطوة
+   منفصلة (queue).
+
+**التكلفة:** كل صفحة = نداء vision ⇒ لازم on-demand + سقف يومي
+(زي `SERVICE_REGISTRY`).
+
+### N-013 — OCR للـ PDF المصوّر بيغطّي أول ٦ صفحات بس
+**أين:** `lib/extract-text.ts` — سقف الصفحات اللي بتتقرا بالـ OCR.
+
+**إيه المشكلة:** سطر واحد في المستند (مفيش text layer) ⇒ **كل
+الصفحات** محتاجة OCR، بس السقف بيخلي أول ٦ بس تتقرا. يعني مستند من
+٤٨ صفحة ⇒ ٦ صفحات نص و٤٢ صفحات فاضية.
+
+**ليه مش متعمل دلوقتي:** كل صفحة = نداء ocr.space بـ ٢٥ ثانية
+timeout ⇒ ٤٨ صفحة = ٢٠ دقيقة. مش قابل يتعمل inline.
+
+**الحل المقترح (ل تيكيت لاحق):**
+1. **OCR محلي** (tesseract.js — **مثبّت** في `node_modules` وظاهر في
+   `next.config.ts:63` كـ `serverExternalPackages`) ⇒ صفحة ~١-٢ ثانية
+   بدل ٢٥.
+2. أو **رفع السقف + on-demand**: الـ UI يقول «صفحات ٧-٤٨ مش متقراية
+   — تقرأها؟» وبيتقرا وهي مطلوبة.
+
+**الوضع الحالي:** الـ UI بيصرّح للطالب بالصفحات المتقراش
+(`documents.unread_pages`) — فمافيش كذب، بس الـ feature ناقصة.
+
 
