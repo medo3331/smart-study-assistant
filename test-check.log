@@ -1,0 +1,621 @@
+
+> smart-study-assistant@0.1.0 test:all
+> vitest run
+
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+ RUN  v4.1.11 C:/Desktop/smart-study-assistant
+
+ ✓ tests/daily-maintenance.test.ts (15 tests) 126ms
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > fails with friendly Arabic message when every provider (incl. free Pollinations) fails
+[Image Gen] Skipping openrouter-flux: no API key
+[Image Gen] Skipping openrouter-seedream: no API key
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > fails with friendly Arabic message when every provider (incl. free Pollinations) fails
+[Image Gen] pollinations failed: network down
+[Image Gen] Skipping dall-e-3: no API key
+[Image Gen] Skipping flux-pro: no API key
+[Image Gen] Skipping stable-diffusion-xl: no API key
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > uses Pollinations when it responds — free, zero cost, base64 data URL
+[Image Gen] Skipping openrouter-flux: no API key
+[Image Gen] Skipping openrouter-seedream: no API key
+
+stdout | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > uses Pollinations when it responds — free, zero cost, base64 data URL
+[Image Gen] Success with pollinations (~$0)
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > ⭐ الافتراضي = OpenRouter (flux.2-pro) — وبيتحاول **أول** السلسلة
+[Image Gen] openrouter-flux failed: network down
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > ⭐ الافتراضي = OpenRouter (flux.2-pro) — وبيتحاول **أول** السلسلة
+[Image Gen] openrouter-seedream failed: network down
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > ⭐ الافتراضي = OpenRouter (flux.2-pro) — وبيتحاول **أول** السلسلة
+[Image Gen] pollinations failed: network down
+[Image Gen] Skipping dall-e-3: no API key
+[Image Gen] Skipping flux-pro: no API key
+[Image Gen] Skipping stable-diffusion-xl: no API key
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > ✅ OpenRouter برصيد خلص (402) ⇒ السلسلة بتكمّل لـ Pollinations
+[Image Gen] OpenRouter رصيده خلص — بنكمل للمزوّد المجاني
+[Image Gen] Skipping openrouter-seedream: رصيد OpenRouter خلص
+
+stdout | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > ✅ OpenRouter برصيد خلص (402) ⇒ السلسلة بتكمّل لـ Pollinations
+[Image Gen] Success with pollinations (~$0)
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > skips to next provider immediately when Pollinations times out (AbortController)
+[Image Gen] Skipping openrouter-flux: no API key
+[Image Gen] Skipping openrouter-seedream: no API key
+
+stderr | lib/ai/__tests__/ai-content-services.test.ts > generateEducationalImage fallback chain > skips to next provider immediately when Pollinations times out (AbortController)
+[Image Gen] pollinations failed: Pollinations timed out after 20s — falling back
+[Image Gen] Skipping dall-e-3: no API key
+[Image Gen] Skipping flux-pro: no API key
+[Image Gen] Skipping stable-diffusion-xl: no API key
+
+ ✓ lib/lectures/__tests__/markdown-doc.test.ts (25 tests) 465ms
+     ✓ مpections التوقيع: %PDF  301ms
+stderr | lib/ai/__tests__/routing-usage.test.ts > C3 — ممنوع يمسّCredits أو حدود > ⛔ فشل التسجيل مايكسرش رد الـ AI
+[ai-usage] record failed: Error: db down
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/routing-usage.test.ts:373:41
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64
+
+stderr | lib/__tests__/extract-text.test.ts > extract-text > throws ExtractError for a corrupted PDF
+Warning: Indexing all PDF objects
+
+stderr | lib/__tests__/extract-text.test.ts > extract-text > throws ExtractError for a corrupted PDF
+PDF parse failed: Error: 
+    at BaseExceptionClosure (file:///C:/Desktop/smart-study-assistant/node_modules/unpdf/dist/pdfjs.mjs:47:19754)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/unpdf/dist/pdfjs.mjs:47:19816
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async node:internal/modules/esm/loader:647:26
+    at async resolvePDFJSImport (file:///C:/Desktop/smart-study-assistant/node_modules/unpdf/dist/index.mjs:112:20)
+    at async getResolvedPDFJS (file:///C:/Desktop/smart-study-assistant/node_modules/unpdf/dist/index.mjs:99:23)
+    at async getDocumentProxy (file:///C:/Desktop/smart-study-assistant/node_modules/unpdf/dist/index.mjs:66:26)
+    at extractDocument (C:/Desktop/smart-study-assistant/lib/extract-text.ts:493:13)
+    at extractTextFromFile (C:/Desktop/smart-study-assistant/lib/extract-text.ts:736:15) {
+  message: 'Invalid PDF structure.',
+  name: 'InvalidPDFException'
+}
+
+ ✓ lib/__tests__/extract-text.test.ts (4 tests) 1184ms
+     ✓ extracts text from a valid PDF  1165ms
+ ✓ lib/ai/__tests__/routing-usage.test.ts (29 tests) 273ms
+ ✓ lib/lectures/__tests__/pdf-real.test.ts (4 tests) 917ms
+     ✓ بيولّد PDF كامل مع عربي واقعي (كان بيفشل قبل)  552ms
+ ✓ tests/upsell.test.ts (17 tests) 110ms
+ ✓ lib/lectures/__tests__/pdf-font.test.ts (4 tests) 825ms
+     ✓ تصدير المحاضرات بيشتغل بعربي واقعي  463ms
+ ✓ lib/ai/__tests__/ai-content-services.test.ts (32 tests) 937ms
+     ✓ generates PPTX presentation  307ms
+     ✓ generates PDF (font fetch may fail in sandbox → Helvetica fallback)  441ms
+ ✓ lib/ai/__tests__/slides.test.ts (30 tests) 941ms
+     ✓ ✅ PPTX — بيتولّد ملف صالح  369ms
+     ✓ ✅ PDF — بيتولّد ملف صالح  457ms
+stderr | lib/media/__tests__/lecture-compression.test.ts > الضغط â€” المحرّك > â‌Œ فشل تحميل FFmpeg بيرتهي للطالب
+[ffmpeg] CDN load failed, falling back to local Error: core_load_failed
+    at FFmpeg.load (C:/Desktop/smart-study-assistant/lib/media/__tests__/lecture-compression.test.ts:24:31)
+    at loadFfmpeg (C:/Desktop/smart-study-assistant/lib/media/lecture-compression.ts:185:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at Module.compressLectureMedia (C:/Desktop/smart-study-assistant/lib/media/lecture-compression.ts:248:19)
+    at C:/Desktop/smart-study-assistant/lib/media/__tests__/lecture-compression.test.ts:185:5
+    at async file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20
+
+ ✓ lib/media/__tests__/lecture-compression.test.ts (24 tests) 77ms
+ ✓ tests/config-public.test.ts (9 tests) 119ms
+ ✓ lib/magic/__tests__/memory-api.test.ts (8 tests) 24ms
+ ✓ lib/ai/__tests__/c41-provider-throw.test.ts (7 tests) 42ms
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A1 — يولّد الملخص الأول عند 10+ رسائل بملخص NULL (CAS is-null) ويضيف علامة التغطية
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A1 — يولّد الملخص الأول عند 10+ رسائل بملخص NULL (CAS is-null) ويضيف علامة التغطية
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A1 — يولّد الملخص الأول عند 10+ رسائل بملخص NULL (CAS is-null) ويضيف علامة التغطية
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A2 — لا توليد تحت 10 رسائل
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A2 — لا توليد تحت 10 رسائل
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A2 — لا توليد تحت 10 رسائل
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A3 — تحديث بعد ≥ 5 رسائل جديدة (exactly +5) بشرط CAS eq
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A3 — تحديث بعد ≥ 5 رسائل جديدة (exactly +5) بشرط CAS eq
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A3 — تحديث بعد ≥ 5 رسائل جديدة (exactly +5) بشرط CAS eq
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A4 — لا تحديث قبل العتبة (أقل من 5 رسائل جديدة)
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A4 — لا تحديث قبل العتبة (أقل من 5 رسائل جديدة)
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A4 — لا تحديث قبل العتبة (أقل من 5 رسائل جديدة)
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A5 — ملخص قديم بدون علامة يتلقى ختم تغطية واحدًا بدون AI (2b.1.3)
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A5 — ملخص قديم بدون علامة يتلقى ختم تغطية واحدًا بدون AI (2b.1.3)
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — scheduling > A5 — ملخص قديم بدون علامة يتلقى ختم تغطية واحدًا بدون AI (2b.1.3)
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R1 — 40 رسالة: ختم [covered:40] دون أي استدعاء AI
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R1 — 40 رسالة: ختم [covered:40] دون أي استدعاء AI
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R1 — 40 رسالة: ختم [covered:40] دون أي استدعاء AI
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R2 — 44 رسالة بعد الختم عند 40: لا تحديث ولا AI (لم تكتمل العتبة)
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R2 — 44 رسالة بعد الختم عند 40: لا تحديث ولا AI (لم تكتمل العتبة)
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R2 — 44 رسالة بعد الختم عند 40: لا تحديث ولا AI (لم تكتمل العتبة)
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R3 — 45 رسالة بعد الختم عند 40: التحديث يشتغل بالمسار الطبيعي (AI)
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R3 — 45 رسالة بعد الختم عند 40: التحديث يشتغل بالمسار الطبيعي (AI)
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R3 — 45 رسالة بعد الختم عند 40: التحديث يشتغل بالمسار الطبيعي (AI)
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R4 — رفض CAS أثناء الختم: لا كتابة فوق ملخص مُحدّث تزامنيًا ولا إعادة محاولة
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R4 — رفض CAS أثناء الختم: لا كتابة فوق ملخص مُحدّث تزامنيًا ولا إعادة محاولة
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R4 — رفض CAS أثناء الختم: لا كتابة فوق ملخص مُحدّث تزامنيًا ولا إعادة محاولة
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R5 — الملخص الفارغ (مسافات) يتبع قواعد التوليد الأولي، لا الختم
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R5 — الملخص الفارغ (مسافات) يتبع قواعد التوليد الأولي، لا الختم
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R5 — الملخص الفارغ (مسافات) يتبع قواعد التوليد الأولي، لا الختم
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R6 — بادئة مشوّهة مع نص: تعاد كتابتها كبادئة سليمة بلا AI
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R6 — بادئة مشوّهة مع نص: تعاد كتابتها كبادئة سليمة بلا AI
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — legacy coverage stamp (Sprint 2b.1.3 regression) > R6 — بادئة مشوّهة مع نص: تعاد كتابتها كبادئة سليمة بلا AI
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — input construction > B1 — المدخلات فيها الملخص السابق (بدون علامة التغطية الداخلية)
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — input construction > B1 — المدخلات فيها الملخص السابق (بدون علامة التغطية الداخلية)
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — input construction > B1 — المدخلات فيها الملخص السابق (بدون علامة التغطية الداخلية)
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — input construction > B2 — رسالة المستخدم الحالية تظهر مرة واحدة فقط
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — input construction > B2 — رسالة المستخدم الحالية تظهر مرة واحدة فقط
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — input construction > B2 — رسالة المستخدم الحالية تظهر مرة واحدة فقط
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C1 — مخرجات الموديل الفارغة لا تُخزَّن
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C1 — مخرجات الموديل الفارغة لا تُخزَّن
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C1 — مخرجات الموديل الفارغة لا تُخزَّن
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C2 — فشل مزود التلخيص لا يؤثر على الرد الأساسي
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C2 — فشل مزود التلخيص لا يؤثر على الرد الأساسي
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C2 — فشل مزود التلخيص لا يؤثر على الرد الأساسي
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+ ✓ tests/phase2-diagnostic-api.test.ts (109 tests) 55ms
+stderr | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — failure handling > C2 — فشل مزود التلخيص لا يؤثر على الرد الأساسي
+[unified-ai] conversation summary failed (non-blocking): Error: provider down
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/conversation-summary.test.ts:502:37
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — concurrency (CAS) > D1 — CAS ناجح مع ملخص سابق non-null: تحديث شرطي على قيمة الملخص القديمة
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — concurrency (CAS) > D1 — CAS ناجح مع ملخص سابق non-null: تحديث شرطي على قيمة الملخص القديمة
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — concurrency (CAS) > D1 — CAS ناجح مع ملخص سابق non-null: تحديث شرطي على قيمة الملخص القديمة
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — concurrency (CAS) > D2 — CAS مرفوض (طلب آخر غيّر الملخص): يتجاهل الكتابة بسكوت ولا يعاد المحاولة
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — concurrency (CAS) > D2 — CAS مرفوض (طلب آخر غيّر الملخص): يتجاهل الكتابة بسكوت ولا يعاد المحاولة
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — concurrency (CAS) > D2 — CAS مرفوض (طلب آخر غيّر الملخص): يتجاهل الكتابة بسكوت ولا يعاد المحاولة
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — usage accounting > E1 — مفتاح الاستخدام للملخص منفصل عن مفتاح الطلب الأساسي
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — usage accounting > E1 — مفتاح الاستخدام للملخص منفصل عن مفتاح الطلب الأساسي
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — usage accounting > E1 — مفتاح الاستخدام للملخص منفصل عن مفتاح الطلب الأساسي
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — usage accounting > E2 — التلخيص لا يحجز AI Credit إضافي
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — usage accounting > E2 — التلخيص لا يحجز AI Credit إضافي
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Conversation summary — usage accounting > E2 — التلخيص لا يحجز AI Credit إضافي
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F1 — فشل حفظ الذاكرة (rejection) لا لا يضر الرد الأساسي إطلاقًا
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F1 — فشل حفظ الذاكرة (rejection) لا لا يضر الرد الأساسي إطلاقًا
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F1 — فشل حفظ الذاكرة (rejection) لا لا يضر الرد الأساسي إطلاقًا
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+stderr | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F1 — فشل حفظ الذاكرة (rejection) لا لا يضر الرد الأساسي إطلاقًا
+[unified-ai] memory save failed (non-blocking): Error: memory table down
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/conversation-summary.test.ts:576:39
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)
+    at file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F2 — الكتابة اللانزمنية للذاكرة بنطاق المالك الصحيح
+[PhaseH unified-ai] resolved=default model=openai/gpt-oss-20b task=chat user=auth
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F2 — الكتابة اللانزمنية للذاكرة بنطاق المالك الصحيح
+[UNIFIED-AI DEBUG] { intent: 'GENERAL', prompt: 'اشرح لي البناء الضوئي خطوة بخطوة' }
+
+stdout | lib/ai/__tests__/conversation-summary.test.ts > Student memory — P0 route integration > F2 — الكتابة اللانزمنية للذاكرة بنطاق المالك الصحيح
+[UNIFIED-AI DEBUG] { hasDigest: false, digestLen: 0 }
+
+ ✓ lib/ai/__tests__/conversation-summary.test.ts (21 tests) 56ms
+ ✓ lib/ai/__tests__/c4-routes-usage.test.ts (15 tests) 55ms
+ ✓ lib/__tests__/diagnostic-loop.test.ts (69 tests) 49ms
+stderr | lib/ai/__tests__/ai-credit-guard-idempotency.test.ts > الحجز المكرر — unique violation > ✅ duplicate key ⇒ يتعامل كـ «محجوز قبل كده» (مش فشل)
+[credit-guard] الحجز المكرر اتعامل كـ already_existed — العملية بتستخدم نفس المرجع
+
+stderr | lib/ai/__tests__/ai-credit-guard-idempotency.test.ts > الحجز المكرر — unique violation > ✅ «duplicate key» بالرسالة المختصرة برضو بتعدّي
+[credit-guard] الحجز المكرر اتعامل كـ already_existed — العملية بتستخدم نفس المرجع
+
+ ✓ lib/ai/__tests__/ai-credit-guard-idempotency.test.ts (6 tests) 44ms
+ ✓ lib/ai/__tests__/tickets.test.ts (17 tests) 36ms
+ ✓ lib/__tests__/extract-document.test.ts (12 tests) 41ms
+stderr | lib/ai/__tests__/lecture-intensive.test.ts > parseJsonPayload — استخراج JSON من رد الموديل > ⚠️ مافيش JSON خالص ⇒ مرفوض
+lecture-intensive: رد الموديل مش JSON صالح — len=13 startsWithBrace=false hasFence=false
+
+stderr | lib/ai/__tests__/lecture-intensive.test.ts > parseJsonPayload — استخراج JSON من رد الموديل > ⚠️ JSON مش صالح ⇒ مرفوض
+lecture-intensive: رد الموديل مش JSON صالح — len=12 startsWithBrace=true hasFence=false
+
+ ✓ lib/ai/__tests__/lecture-intensive.test.ts (34 tests) 35ms
+stdout | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ success → exactly one row, feature=chat, and the write was AWAITED
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+stdout | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ provider HTTP error → failed_no_response, still recorded and awaited
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+stderr | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ provider HTTP error → failed_no_response, still recorded and awaited
+Groq error 429 rate limited
+
+stdout | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ empty content → failed_after_response (NOT completed), still awaited
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+stdout | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ network throw → failed_no_response, awaited, and the caller's contract is unchanged
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+stderr | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ network throw → failed_no_response, awaited, and the caller's contract is unchanged
+Groq exception: ECONNRESET
+
+stdout | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ no usage context → no row (back-compat for other callers)
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+stdout | lib/ai/__tests__/c5-unified-ai-usage.test.ts > C5 — /api/unified-ai usage coverage > ✅ a DB failure never breaks the request — the golden rule
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+ ✓ lib/ai/__tests__/c5-unified-ai-usage.test.ts (6 tests) 114ms
+ ✓ lib/ai/__tests__/usage-accounting.test.ts (40 tests) 28ms
+ ✓ lib/ai/__tests__/documents-route.test.ts (5 tests) 27ms
+ ✓ lib/ai/__tests__/exam-review.test.ts (21 tests) 24ms
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — المستخدم المسجّل > بيرجّع النتيجة بنجاح
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — المستخدم المسجّل > الحارس بيتنادى **قبل** التوليد
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — المستخدم المسجّل > الحفظ بيحصل بعد التوليد
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — المستخدم المسجّل > الحارس بيتنادى بمعرّف المستخدم من الجلسة (مش من الـ body)
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-process-guard.test.ts > معالجة المحاضرة — المستخدم المسجّل > المعالجة العادية لسه شغالة وبترجّع النتيجة
+lectures/process: ok type=summary weight=1 aiCalls=2 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — اختيار الجزء > ✅ جزء محدد ⇒ نداء واحد بس للجزء ده
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — اختيار الجزء > ✅ من غير partIndex ⇒ أول جزء مش متولّد
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-process-guard.test.ts > معالجة المحاضرة — المستخدم المسجّل > الحارس بيتنادى **قبل** التوليد
+lectures/process: ok type=summary weight=1 aiCalls=2 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — اختيار الجزء > 💳 الحجز بيستعمل مرجع واحد لكل المحاضرة (كريدت واحد للكل)
+lectures/intensive: part 1/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-intensive-guard.test.ts > الشرح المكثف — اختيار الجزء > 💳 الحجز بيستعمل مرجع واحد لكل المحاضرة (كريدت واحد للكل)
+lectures/intensive: part 2/3 ok sections=1 ready=1 refId=ref-test-1
+
+stdout | lib/ai/__tests__/lecture-process-guard.test.ts > معالجة المحاضرة — المستخدم المسجّل > الحارس بيتنادى بمعرّف المستخدم من الجلسة (مش من الـ body)
+lectures/process: ok type=summary weight=1 aiCalls=2 refId=ref-test-1
+
+stderr | lib/ai/__tests__/lecture-intensive-guard.test.ts > حارس الكروت — الرفض بيحصل قبل أي تكلفة > ⚠️ فشل التوليد بيرجّع الـ credit
+lectures/intensive: خطأ غير متوقع Error: الموديل وقع
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/lecture-intensive-guard.test.ts:329:13
+    at Mock (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/spy/dist/index.js:332:34)
+    at generateIntensivePart (C:/Desktop/smart-study-assistant/lib/ai/__tests__/lecture-intensive-guard.test.ts:132:14)
+    at Module.POST (C:/Desktop/smart-study-assistant/app/api/lectures/[id]/intensive/route.ts:243:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/lecture-intensive-guard.test.ts:332:22
+    at async file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20
+
+ ✓ lib/ai/__tests__/lecture-intensive-guard.test.ts (16 tests) 43ms
+stderr | lib/ai/__tests__/lecture-process-guard.test.ts > استرداد الكرت عند الفشل > فشل التوليد بيرجّع الكرت للطالب
+lecture-analysis: فشل الموديل [UNKNOWN]
+lectures/process: خطأ غير متوقع Error: model exploded
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/lecture-process-guard.test.ts:252:13
+    at Mock (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/spy/dist/index.js:332:34)
+    at analyzeLecture (C:/Desktop/smart-study-assistant/lib/ai/__tests__/lecture-process-guard.test.ts:114:14)
+    at Module.POST (C:/Desktop/smart-study-assistant/app/api/lectures/[id]/process/route.ts:265:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/lecture-process-guard.test.ts:255:22
+    at async file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20
+
+stdout | lib/ai/__tests__/lecture-process-guard.test.ts > استرداد الكرت عند الفشل > النجاح بيرجّعCredit وبيستردش
+lectures/process: ok type=summary weight=1 aiCalls=2 refId=ref-test-1
+
+stderr | lib/ai/__tests__/lecture-process-guard.test.ts > الحمايات القائمة لسه شغالة > الاستعلام يفشل بيرجّع 500
+lectures/process: فشل جلب المحاضرة [XX]
+
+ ✓ lib/ai/__tests__/lecture-process-guard.test.ts (19 tests) 38ms
+ ✓ lib/__tests__/runtime-errors.test.ts (5 tests) 17ms
+stdout | lib/lectures/__tests__/export-route.test.ts > الأمان — ملكية المحاضرة > ✅ صاحب المحاضرة يقدر يصدّر
+lectures/export: pdf ok bytes=13
+
+stdout | lib/lectures/__tests__/export-route.test.ts > الأمان — ملكية المحاضرة > ✅ الفلترة بتستخدم user_id من الجلسة
+lectures/export: pdf ok bytes=13
+
+stdout | lib/lectures/__tests__/export-route.test.ts > الاستجابة > filename في Content-Disposition
+lectures/export: pdf ok bytes=13
+
+ ✓ lib/lectures/__tests__/export-route.test.ts (10 tests) 27ms
+stderr | lib/ai/__tests__/lecture-study.test.ts > saveStudyContent — بيكتب العمود الصح بس > فشل الحفظ بيرمي 500 (مش نجاح كاذب)
+lecture-study: فشل حفظ flashcards [XX]
+
+ ✓ lib/ai/__tests__/lecture-study.test.ts (30 tests) 25ms
+ ✓ lib/ai/__tests__/chaos-main.test.ts (8 tests) 16ms
+stderr | lib/ai/__tests__/quota-check.test.ts > checkSubscriptionQuota (quota-check.ts) > RPC throws → fail-open (QUOTA_FAIL_OPEN != false)
+{"event":"quota_fail_open","severity":"high","user_id":"user-123","kind":"message","reason":"rpc_or_table_unavailable","error":"Database connection failed","timestamp":"2026-11-12T20:44:41.655Z","policy":"fail-open — request allowed without quota consumption"}
+
+stderr | lib/ai/__tests__/quota-check.test.ts > checkSubscriptionQuota (quota-check.ts) > RPC throws → fail-closed (QUOTA_FAIL_OPEN غير موجود — الافتراضي fail-closed)
+{"event":"quota_fail_closed","severity":"critical","user_id":"user-123","kind":"message","reason":"rpc_or_table_unavailable","error":"Database connection failed","timestamp":"2026-11-12T20:44:41.658Z","policy":"fail-closed — request rejected"}
+
+stderr | lib/ai/__tests__/quota-check.test.ts > checkSubscriptionQuota (quota-check.ts) > RPC throws → fail-closed (QUOTA_FAIL_OPEN=false)
+{"event":"quota_fail_closed","severity":"critical","user_id":"user-123","kind":"message","reason":"rpc_or_table_unavailable","error":"Database connection failed","timestamp":"2026-11-12T20:44:41.659Z","policy":"fail-closed — request rejected"}
+
+stderr | lib/ai/__tests__/quota-check.test.ts > checkSubscriptionQuota (quota-check.ts) > RPC throws → fail-open فقط عند QUOTA_FAIL_OPEN=true صريحاً
+{"event":"quota_fail_open","severity":"high","user_id":"user-123","kind":"message","reason":"rpc_or_table_unavailable","error":"Database connection failed","timestamp":"2026-11-12T20:44:41.659Z","policy":"fail-open — request allowed without quota consumption"}
+
+ ✓ lib/ai/__tests__/quota-check.test.ts (10 tests) 26ms
+ ✓ lib/ai/__tests__/lecture-store.test.ts (20 tests) 20ms
+ ✓ lib/magic/__tests__/memory.test.ts (14 tests) 18ms
+stderr | lib/ai/__tests__/slides-route.test.ts > العرض التقديمي — الرفض بيحصل قبل أي تكلفة > ⚠️ فشل التوليد بيرجّع الـ credit
+documents/slides: خطأ غير متوقع Error: الموديل وقع
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/slides-route.test.ts:287:13
+    at Mock (file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/spy/dist/index.js:332:34)
+    at generateDeckPart (C:/Desktop/smart-study-assistant/lib/ai/__tests__/slides-route.test.ts:102:14)
+    at generateDeck (C:/Desktop/smart-study-assistant/lib/ai/slides-service.ts:200:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at Module.POST (C:/Desktop/smart-study-assistant/app/api/documents/[id]/slides/route.ts:149:20)
+    at C:/Desktop/smart-study-assistant/lib/ai/__tests__/slides-route.test.ts:290:22
+    at async file:///C:/Desktop/smart-study-assistant/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20
+
+ ✓ lib/ai/__tests__/slides-route.test.ts (10 tests) 33ms
+ ✓ lib/ai/__tests__/usage-scheduler.test.ts (4 tests) 21ms
+ ✓ lib/ai/__tests__/openrouter-image.test.ts (18 tests) 17ms
+ ✓ lib/ai/__tests__/exam-sessions.test.ts (22 tests) 13ms
+stderr | lib/ai/__tests__/chaos-fallback.test.ts > Chaos: Fallback Chain > fallback_rotates_on_429
+[Stream Fallback] groq failed (429), trying next…
+
+stderr | lib/ai/__tests__/chaos-fallback.test.ts > Chaos: Fallback Chain > fallback_all_providers_fail
+[Stream Fallback] groq failed (Network error), trying next…
+
+stderr | lib/ai/__tests__/chaos-fallback.test.ts > Chaos: Fallback Chain > fallback_all_providers_fail
+[Stream Fallback] nvidia failed (Network error), trying next…
+
+stderr | lib/ai/__tests__/chaos-fallback.test.ts > Chaos: Fallback Chain > fallback_all_providers_fail
+[Stream Fallback] openrouter failed (Network error), trying next…
+
+stderr | lib/ai/__tests__/chaos-fallback.test.ts > Chaos: Fallback Chain > fallback_rotates_on_502
+[Stream Fallback] groq failed (502), trying next…
+
+ ✓ lib/ai/__tests__/chaos-fallback.test.ts (9 tests) 18ms
+stderr | lib/ai/__tests__/c4-final-coverage.test.ts > C4-FINAL — streaming boundary > ✅ fallback → سطر لكل محاولة فعلية
+[Stream Fallback] groq failed (429), trying next…
+
+stderr | lib/ai/__tests__/c4-final-coverage.test.ts > C4-FINAL — streaming boundary > 🚫 مافيش usage → صمت سيليس بلا تسجيل
+[Stream Fallback] groq failed (boom), trying next…
+
+ ✓ lib/ai/__tests__/c4-final-coverage.test.ts (7 tests) 18ms
+stdout | lib/ai/__tests__/phase3c-vision.test.ts > Phase 3C vision > text-only request remains unchanged (no vision, no OCR)
+[UnifiedAI Router] selectedAgent= exam_solver reason= Detected exam/question keywords ocr= false conf= 0.95
+
+stderr | lib/supabase/__tests__/admin-key.test.ts > resolveSupabaseSecretKey > يقرأ SUPABASE_SECRET_KEY (الصيغة الجديدة)
+[supabase-diag] present SUPABASE_SECRET_KEY=true var=SUPABASE_SECRET_KEY exists=true length=46 startsWith_sb_secret=true startsWith_sb_publishable=false startsWith_sb_=true firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=false hadWhitespace=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=false
+[supabase-diag] selected=SUPABASE_SECRET_KEY
+
+stderr | lib/ai/__tests__/phase3c-vision.test.ts > Phase 3C vision > vision provider failure returns error (no silent fallback)
+Vision provider gemini-3.6-flash failed: vision down
+Vision provider failed: vision down
+
+stderr | lib/supabase/__tests__/admin-key.test.ts > resolveSupabaseSecretKey > يرجع للقديم لو الجديد مش موجود
+[supabase-diag] present SUPABASE_SECRET_KEY=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=true var=SUPABASE_SERVICE_ROLE_KEY exists=true length=39 startsWith_sb_secret=false startsWith_sb_publishable=false startsWith_sb_=false firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=true hadWhitespace=false
+[supabase-diag] selected=SUPABASE_SERVICE_ROLE_KEY
+
+stderr | lib/supabase/__tests__/admin-key.test.ts > resolveSupabaseSecretKey > المفتاح الجديد له الأولوية لما الاتنين موجودين
+[supabase-diag] present SUPABASE_SECRET_KEY=true var=SUPABASE_SECRET_KEY exists=true length=46 startsWith_sb_secret=true startsWith_sb_publishable=false startsWith_sb_=true firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=false hadWhitespace=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=true var=SUPABASE_SERVICE_ROLE_KEY exists=true length=39 startsWith_sb_secret=false startsWith_sb_publishable=false startsWith_sb_=false firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=true hadWhitespace=false
+[supabase-diag] selected=SUPABASE_SECRET_KEY
+
+ ✓ lib/ai/__tests__/phase3c-vision.test.ts (8 tests) 19ms
+stderr | lib/supabase/__tests__/admin-key.test.ts > resolveSupabaseSecretKey > يتجاهل القيم الفاضية والمسافات بس
+[supabase-diag] present SUPABASE_SECRET_KEY=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=false
+[supabase-diag] selected=NONE (no usable key in env)
+[supabase-diag] present SUPABASE_SECRET_KEY=true var=SUPABASE_SECRET_KEY exists=true length=0 startsWith_sb_secret=false startsWith_sb_publishable=false startsWith_sb_=false firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=false hadWhitespace=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=false
+[supabase-diag] selected=NONE (no usable key in env)
+[supabase-diag] present SUPABASE_SECRET_KEY=true var=SUPABASE_SECRET_KEY exists=true length=0 startsWith_sb_secret=false startsWith_sb_publishable=false startsWith_sb_=false firstCharIsWhitespace=true lastCharIsWhitespace=true looksLikeLegacyJwt=false hadWhitespace=true
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=false
+[supabase-diag] selected=NONE (no usable key in env)
+[supabase-diag] present SUPABASE_SECRET_KEY=true var=SUPABASE_SECRET_KEY exists=true length=0 startsWith_sb_secret=false startsWith_sb_publishable=false startsWith_sb_=false firstCharIsWhitespace=true lastCharIsWhitespace=true looksLikeLegacyJwt=false hadWhitespace=true
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=true var=SUPABASE_SERVICE_ROLE_KEY exists=true length=39 startsWith_sb_secret=false startsWith_sb_publishable=false startsWith_sb_=false firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=true hadWhitespace=false
+[supabase-diag] selected=SUPABASE_SERVICE_ROLE_KEY
+
+stderr | lib/supabase/__tests__/admin-key.test.ts > resolveSupabaseSecretKey > بيتجاهل القيم غير النصية بدل ما يكسر
+[supabase-diag] present SUPABASE_SECRET_KEY=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=false
+[supabase-diag] selected=NONE (no usable key in env)
+
+stderr | lib/supabase/__tests__/admin-key.test.ts > resolveSupabaseSecretKey > النتيجة دايمًا نص غير فاضي — مش الـ env object
+[supabase-diag] present SUPABASE_SECRET_KEY=true var=SUPABASE_SECRET_KEY exists=true length=46 startsWith_sb_secret=true startsWith_sb_publishable=false startsWith_sb_=true firstCharIsWhitespace=false lastCharIsWhitespace=false looksLikeLegacyJwt=false hadWhitespace=false
+[supabase-diag] present SUPABASE_SERVICE_ROLE_KEY=false
+[supabase-diag] selected=SUPABASE_SECRET_KEY
+
+ ✓ lib/supabase/__tests__/admin-key.test.ts (13 tests) 15ms
+ ✓ lib/curriculum/__tests__/curriculum.test.ts (17 tests) 15ms
+ ✓ lib/unified-ai/__tests__/error-reporting.test.ts (8 tests) 13ms
+ ✓ lib/ai/__tests__/lecture-analysis.test.ts (15 tests) 13ms
+ ✓ lib/ai/__tests__/transcription-shared.test.ts (22 tests) 14ms
+ ✓ lib/ai/__tests__/workspace-source-resolver-mock.test.ts (9 tests) 16ms
+ ✓ lib/ai/__tests__/lecture-content-ui.test.ts (33 tests) 12ms
+ ✓ lib/media/__tests__/lecture-recovery.test.ts (14 tests) 13ms
+ ✓ lib/ai/__tests__/api-key-invalid-fallback.test.ts (6 tests) 18ms
+ ✓ lib/magic/__tests__/summary.test.ts (32 tests) 13ms
+ ✓ lib/ai/__tests__/chaos-tokens.test.ts (8 tests) 8ms
+ ✓ lib/ai/__tests__/workspace-source-resolver.test.ts (13 tests) 12ms
+ ✓ tests/grants.test.ts (20 tests) 11ms
+ ✓ lib/ai/__tests__/chaos-isolation.test.ts (8 tests) 9ms
+ ✓ tests/site-settings-validation.test.ts (24 tests) 12ms
+ ✓ lib/ai/__tests__/plan-version.test.ts (9 tests) 25ms
+ ✓ lib/ai/__tests__/gemini-fallback-removed.test.ts (4 tests) 16ms
+ ✓ tests/profile-whatsapp.test.ts (15 tests) 10ms
+ ✓ tests/plans-validation.test.ts (15 tests) 10ms
+ ✓ tests/site-settings-display.test.ts (12 tests) 10ms
+ ✓ lib/ai/__tests__/chat-intent.test.ts (18 tests) 10ms
+ ✓ lib/ai/__tests__/transcript-review.test.ts (10 tests) 10ms
+ ✓ lib/ai/agents/__tests__/career-coach.test.ts (12 tests) 8ms
+ ✓ lib/learning/__tests__/lesson-sequence.test.ts (7 tests) 9ms
+ ✓ lib/ai/agents/__tests__/planner.test.ts (11 tests) 8ms
+ ✓ tests/phase1b-announcement-api.test.ts (8 tests) 7ms
+ ✓ lib/ai/agents/__tests__/language-tutor.test.ts (12 tests) 8ms
+ ✓ lib/ai/__tests__/chaos-logs.test.ts (3 tests) 10ms
+ ✓ lib/ai/agents/__tests__/research.test.ts (8 tests) 7ms
+ ✓ lib/admin/__tests__/announcements-schema.test.ts (21 tests | 9 skipped) 8ms
+ ✓ lib/ai/__tests__/slides-labels.test.ts (9 tests) 8ms
+ ✓ lib/ai/agents/__tests__/freelance-assistant.test.ts (9 tests) 8ms
+ ✓ lib/ai/agents/__tests__/exam-solver.test.ts (8 tests) 7ms
+ ✓ tests/magic-avatar.test.ts (4 tests) 6ms
+ ✓ lib/ai/agents/__tests__/quiz-generator.test.ts (7 tests) 7ms
+ ✓ lib/ai/agents/__tests__/document-analyzer.test.ts (8 tests) 8ms
+ ✓ tests/phase-1.3-curriculum-coverage.test.ts (6 tests) 7ms
+ ✓ lib/ai/agents/__tests__/image-agent.test.ts (11 tests) 8ms
+ ✓ lib/magic/__tests__/persona-prompt.test.ts (6 tests) 7ms
+ ✓ lib/ai/agents/__tests__/writing.test.ts (7 tests) 6ms
+ ✓ lib/magic/__tests__/magicly-integration.test.ts (6 tests) 6ms
+ ✓ lib/admin/__tests__/ai-usage.test.ts (4 tests) 6ms
+ ✓ lib/__tests__/user-profiles.test.ts (7 tests) 6ms
+ ✓ tests/chat-routes-identity.test.ts (2 tests) 6ms
+ ✓ lib/ai/agents/__tests__/study-tutor.test.ts (6 tests) 7ms
+ ✓ lib/voice/__tests__/clean.test.ts (3 tests) 6ms
+ ✓ lib/ai/__tests__/phase3d-capabilities.test.ts (5 tests) 6ms
+ ✓ lib/__tests__/user-persona.test.ts (3 tests) 5ms
+ ✓ lib/auth/__tests__/mag-id.test.ts (3 tests) 5ms
+ ✓ lib/personal-assistant/__tests__/briefing.test.ts (3 tests) 6ms
+ ✓ tests/phase-notifications-401-sw.test.ts (4 tests | 2 skipped) 5ms
+ ✓ tests/phase1d-announcement-dashboard.test.ts (7 tests | 1 skipped) 6ms
+ ✓ tests/phase1c-announcements-admin-ui.test.ts (5 tests | 2 skipped) 5ms
+ ✓ lib/notifications/__tests__/schema.test.ts (4 tests) 5ms
+ ✓ lib/ai/__tests__/extract-text.test.ts (5 tests) 5ms
+ ✓ lib/__tests__/extract-text-load.test.ts (2 tests) 3ms
+
+ Test Files  97 passed (97)
+      Tests  1310 passed | 14 skipped (1324)
+   Start at  22:44:37
+   Duration  8.12s (transform 4.41s, setup 0ms, import 15.83s, tests 7.48s, environment 16ms)
+
