@@ -37,6 +37,7 @@ import {
   MAX_SLIDES_PER_PART,
   SLIDES_MAX_TOKENS,
   SLIDES_PART_CHARS,
+  type SlidesSourceKind,
 } from "./slides-prompts";
 
 /* ═══════════════════════════ الأنواع ═══════════════════════════ */
@@ -364,6 +365,16 @@ export async function generateDeckPart(input: {
   allPages: DocumentPage[];
   totalParts: number;
   unitLabel: string;
+  /**
+   * ⚠️ **نوع المصدر** — `transcript` (محاضرة) ⇒ تعليمات تنظيف الـ ASR
+   *   | «إعادة صياغة مش نسخ».
+   */
+  sourceKind?: SlidesSourceKind;
+  /**
+   * ⭐ **عدد الشرائح المستهدف** — بيتحسب من حجم الجزء (١٢٠٠ حرف/شريحة).
+   *   من غيره الموديل بيعمل شريحة لكل فكرة ⇒ شرائح رفيعة.
+   */
+  slidesTarget?: number;
   deps: SlidesDeps;
 }): Promise<DeckPartResult> {
   const { group, allPages, totalParts, unitLabel, deps } = input;
@@ -374,6 +385,8 @@ export async function generateDeckPart(input: {
       partIndex: group.index,
       totalParts,
       unitLabel,
+      ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
+      ...(input.slidesTarget ? { slidesTarget: input.slidesTarget } : {}),
     }),
     // ⚠️ **السقف لازم** — موديل gpt-oss استدلال، ومن غيره المزوّد بيحط
     //    سقف افتراضي صغير فالموديل بيصرفه كله على التفكير ويطلع

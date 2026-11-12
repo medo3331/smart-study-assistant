@@ -1,6 +1,27 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-guard";
 
+/**
+ * 🔒 أنواع الذاكرة المسموحة (نفس قيد CHECK في db/ai-learning.sql).
+ *
+ * ⚠️ أمان (P0، 2026-11): بدون قائمة سماح، أي كلاينت يقدر يخزّن
+ * `kind = "system_directive"` ويحقن تعليمات في الـprompt. الـPATCH/DELETE
+ * بيرفضوا أي نوع خارج القائمة **قبل** أي كتابة.
+ */
+const MEMORY_KINDS = new Set([
+  "weak_topic",
+  "preferred_style",
+  "recent_subject",
+  "recent_lesson",
+  "completed_topic",
+  "common_mistake",
+]);
+
+/** يقصّ لأقصى ٣٠٠ حرف (مطابق لقيد CHECK) ويسطّح أي أسطر جديدة. */
+function normalizeMemoryValue(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
 export async function GET() {
   const { user, supabase, response } = await requireUser("message");
   if (response) return response;
@@ -25,8 +46,8 @@ export async function DELETE(req: Request) {
   const body = await req.json().catch(() => null);
   const kind = typeof body?.kind === "string" ? body.kind : "";
   const value = typeof body?.value === "string" ? body.value : "";
-  if (!kind || !value) {
-    return NextResponse.json({ error: { message: "kind و value مطلوبان." } }, { status: 400 });
+  if (!MEMORY_KINDS.has(kind) || !value) {
+    return NextResponse.json({ error: { message: "kind أو value غير صالح." } }, { status: 400 });
   }
 
   const { error } = await supabase
@@ -49,10 +70,14 @@ export async function PATCH(req: Request) {
 
   const body = await req.json().catch(() => null);
   const kind = typeof body?.kind === "string" ? body.kind : "";
-  const oldValue = typeof body?.oldValue === "string" ? body.oldValue : "";
-  const newValue = typeof body?.newValue === "string" ? body.newValue.trim().slice(0, 300) : "";
-  if (!kind || !oldValue || !newValue) {
-    return NextResponse.json({ error: { message: "kind, oldValue, newValue مطلوبة." } }, { status: 400 });
+  const oldValue = typeof body?.oldValue === "string" ? body.oldValue.trim() : "";
+  const newValue =
+    typeof body?.newValue === "string" ? normalizeMemoryValue(body.newValue) : "";
+  if (!MEMORY_KINDS.has(kind) || !oldValue || !newValue) {
+    return NextResponse.json(
+      { error: { message: "kind, oldValue, newValue مطلوبة وصالحة." } },
+      { status: 400 }
+    );
   }
 
   const { error: deleteError } = await supabase

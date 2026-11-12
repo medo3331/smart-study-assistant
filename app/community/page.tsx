@@ -80,7 +80,7 @@ export default function CommunityPage() {
     async (uid: string | null, myXp: number, myStreak: number) => {
       setBoardLoading(true);
       const { data } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, xp, streak, display_name")
         .order("xp", { ascending: false })
         .limit(20);
@@ -112,8 +112,8 @@ export default function CommunityPage() {
       // الترتيب الحقيقي = عدد اللي الـ XP بتاعهم أعلى منك + ١
       if (uid) {
         const [{ count: above }, { count: total }] = await Promise.all([
-          supabase.from("profiles").select("id", { count: "exact", head: true }).gt("xp", myXp),
-          supabase.from("profiles").select("id", { count: "exact", head: true }),
+          supabase.from("public_profiles").select("id", { count: "exact", head: true }).gt("xp", myXp),
+          supabase.from("public_profiles").select("id", { count: "exact", head: true }),
         ]);
         setYourRank((above ?? 0) + 1);
         setTotalPlayers(total ?? entries.length);

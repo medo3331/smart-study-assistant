@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     // ٢) حدّ استخدام: توليد الخطة أغلى طلب عندنا
-    const limited = checkRateLimit(`plan:${user.id}`, 8, 60_000, "success");
+    const limited = await checkRateLimit(`plan:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
 
     // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)

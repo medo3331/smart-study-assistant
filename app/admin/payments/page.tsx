@@ -4,7 +4,8 @@ import PaymentsManager from "./PaymentsManager";
 import { AdminPageHeader, AdminCard } from "@/components/admin/ui";
 
 export default async function AdminPaymentsPage() {
-  const ctx = await requireAdminPermission("users.read");
+  // ⚠️ الصفحة والـ actions بيفرضوا نفس الصلاحية دلوقتي (subscriptions.manage).
+  const ctx = await requireAdminPermission("subscriptions.manage");
   const rows = await fetchPayments();
 
   // العملة الافتراضية من site_settings (Phase B1) — بسقوط آمن إلى EGP.
@@ -26,9 +27,8 @@ export default async function AdminPaymentsPage() {
     <div className="space-y-6 p-6">
       <AdminPageHeader title="الدفعات (يدوي)" subtitle="تسجيل دفعات يدوية وتاريخها" badge="payments" permissionKey="subscriptions.manage" />
       <AdminCard title="إدارة الدفعات" tone="default">
-        <PaymentsManager adminUserId={ctx.user.id} initial={rows} defaultCurrency={defaultCurrency} />
+        <PaymentsManager initial={rows} defaultCurrency={defaultCurrency} />
       </AdminCard>
     </div>
   );
 }
-

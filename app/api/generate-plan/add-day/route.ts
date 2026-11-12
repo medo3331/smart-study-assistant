@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     __hUser = user; __hSupabase = supabase;
     if (authError) return authError;
 
-    const limited = checkRateLimit(`add-day:${user.id}`, 10, 60_000, "success");
+    const limited = await checkRateLimit(`add-day:${user.id}`, 10, 60_000, "success");
     if (limited) return limited;
     // Phase H: credit gate — التكلفة من CREDIT_COSTS.
     guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b", {

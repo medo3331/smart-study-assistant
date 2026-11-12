@@ -135,9 +135,7 @@ export default async function AdminRewardsPage({
                   rewardValue: parseInt((formData.get("rewardValue") as string) || "0", 10) || 0,
                   durationDays: durationRaw ? parseInt(durationRaw, 10) : undefined,
                   note: (formData.get("note") as string) || "",
-                },
-                user.id,
-                user.email ?? null
+                }
               );
               if (result.ok) redirect("/admin/rewards?success=" + encodeURIComponent(result.message || "تم إصدار المكافأة"));
               redirect("/admin/rewards?error=" + encodeURIComponent(result.message || "فشل إصدار المكافأة"));

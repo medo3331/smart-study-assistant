@@ -8,6 +8,7 @@
  */
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Check, Copy, Download, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
+import DOMPurify from "dompurify";
 
 interface MermaidViewerProps {
   chart: string;
@@ -44,7 +45,9 @@ export function MermaidViewer({ chart, className = "", label }: MermaidViewerPro
         mermaid.initialize({
           startOnLoad: false,
           theme: "dark",
-          securityLevel: "loose",
+          // ⚠️ أمان (P0، 2026-11): كانت "loose" — بتسمح بـ HTML/روابط/JS داخل
+          // المخطط، وده XSS لو الكود جاي من مصدر غير موثوق (ناتج AI/مستخدم).
+          securityLevel: "strict",
           fontFamily: "Alexandria, Tahoma, sans-serif",
           themeVariables: {
             darkMode: true,
@@ -73,8 +76,16 @@ export function MermaidViewer({ chart, className = "", label }: MermaidViewerPro
         const renderId = `mermaid_${uniqueId}_${Date.now()}`;
         const { svg } = await mermaid.render(renderId, cleaned);
 
+        // ⚠️ طبقة دفاع ثانية: حتى مع securityLevel: strict بنمرّر الـSVG على
+        // DOMPurify قبل dangerouslySetInnerHTML (defense in depth).
+        const safeSvg = DOMPurify.sanitize(svg, {
+          USE_PROFILES: { svg: true, svgFilters: true },
+          ADD_TAGS: ["foreignObject"],
+          ADD_ATTR: ["xmlns", "xmlns:xlink"],
+        });
+
         if (isMounted) {
-          setSvgContent(svg);
+          setSvgContent(safeSvg);
           setIsRendering(false);
         }
       } catch (err) {

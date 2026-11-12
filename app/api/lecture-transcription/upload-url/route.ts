@@ -71,12 +71,12 @@ export async function POST(request: NextRequest) {
   try {
     /* ترتيب الطبقتين مقصود: السقف اليومي **قبل** حد الـ IP، عشان
        حد الـ IP بيكتب في ماب في الذاكرة قبل ما يرجّع. */
-    const overBudget = checkDailyBudget("lecture-transcription-upload", DAILY_BUDGET);
+    const overBudget = await checkDailyBudget("lecture-transcription-upload", DAILY_BUDGET);
     if (overBudget) return overBudget;
 
     const forwarded = request.headers.get("x-forwarded-for") ?? "";
     const ip = forwarded.split(",")[0].trim() || "unknown";
-    const limited = checkRateLimit(`lecture-upload:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
+    const limited = await checkRateLimit(`lecture-upload:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
     if (limited) return limited;
 
     if (!isStorageConfigured()) {

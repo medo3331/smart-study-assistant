@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     // ٢) حدّ استخدام خفيف لكل مستخدم عشان فاتورة Groq (بدون كوتة shoutbot)
-    const limited = checkRateLimit(`ai:generate:${user.id}`, 30, 60_000, "message");
+    const limited = await checkRateLimit(`ai:generate:${user.id}`, 30, 60_000, "message");
     if (limited) return limited;
 
     // ٢.٥) تحديث حالة الموديلات من الداتابيز (fail-open)

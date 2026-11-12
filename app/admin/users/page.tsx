@@ -201,9 +201,9 @@ export default async function AdminUsersPage({
                       action={async () => {
                         "use server";
                         if (u.is_banned) {
-                          await unbanUser(u.id, u.user_code, user.id, user.email ?? null);
+                          await unbanUser(u.id, u.user_code);
                         } else {
-                          await banUser(u.id, u.user_code, "حظر من إدارة المستخدمين", user.id, user.email ?? null);
+                          await banUser(u.id, u.user_code, "حظر من إدارة المستخدمين");
                         }
                       }}
                     >

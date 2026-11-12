@@ -5,6 +5,7 @@ import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
+import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
 import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     // ٢) حدّ استخدام لكل مستخدم عشان فاتورة Groq
-    const limited = checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
+    const limited = await checkRateLimit(`chat:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
     // ٢.٥) كوتة الاشتراك للرسايل (Phase 1.5) — messages_per_2h كانت موجودة في
@@ -107,7 +108,15 @@ export async function POST(req: Request) {
     const intentResult = classifyChatIntent(latestMessage, {});
     console.log("[CHAT DEBUG]", { intent: intentResult.intent, latestMessage: latestMessage.slice(0, 80) });
     const selectedMode = parseMode(mode, latestMessage, intentResult.intent);
-    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
+    // ⚠️ **البحث في الملفات** شغّال في نوايتين:
+    //    `WORKSPACE_SEARCH` (طلب محتوى من مصدر) و`RECORDED_LECTURES_SEARCH`
+    //    (طلب عن تسجيل/تفريغ) — التانية كانت **بتتشال** (مفيش بحث).
+    const allowFileSearch =
+      intentResult.intent === "WORKSPACE_SEARCH" ||
+      intentResult.intent === "RECORDED_LECTURES_SEARCH";
+    const toolFacts = await getStudyToolFacts(supabase, user.id, context ?? {}, latestMessage, {
+      allowFileSearch,
+    });
     let workspaceDigest: string | null = null;
     try {
       workspaceDigest = await getWorkspaceDigest(supabase, user.id);
@@ -115,6 +124,38 @@ export async function POST(req: Request) {
       console.error("[CHAT DEBUG] digest failed:", e);
     }
     console.log("[CHAT DEBUG]", { hasDigest: !!workspaceDigest, digestLen: workspaceDigest?.length ?? 0 });
+
+    // ⚠️⚠️ **محتوى المصدر المملوك** (2026-11-12) — ده الجزء الناقص:
+    //    الـ digest فيه **أسماء** بس (عنوان + تاريخ)، والبحث بيحطّ
+    //    ٥٠٠ حرف. ⇒ سؤال عام عن محاضرة («اشرحلي اللي اتقال عن الـ white
+    //    lesion») كان بيجاوب من **معلومة**.
+    //    ⇒ بنحقن نص المصدر بالكامل (٨٠٠٠ حرف) لما الـ resolver يلاقي
+    //    مصدر مملوك للطالب.
+    let sourceContext = "";
+    if (allowFileSearch) {
+      try {
+        const built = await buildWorkspaceSourceContext({
+          supabase,
+          userId: user.id,
+          message: latestMessage,
+        });
+        if (built.ok && built.context) {
+          sourceContext = built.context;
+          console.log("[CHAT DEBUG]", {
+            source: built.source.family,
+            sourceLen: sourceContext.length,
+          });
+        } else {
+          console.log("[CHAT DEBUG]", {
+            source: "none",
+            reason: built.ok ? "empty context" : built.resolution?.status ?? built.message,
+          });
+        }
+      } catch (e) {
+        console.error("[CHAT DEBUG] source context failed:", e);
+      }
+    }
+
     const system = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest);
 
     // دمج شخصية الطالب (Persona Builder) مع البرومبت الأساسي
@@ -125,6 +166,12 @@ export async function POST(req: Request) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
     const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
+    // ⚠️ **محتوى المصدر** — بيتحقن **بعد** البرومبت الأساسي عشان يبقى
+    //    آخر حاجة يقرأها الموديل (أقرب للرد) ⇒ بيلغي «المعلومة دي مش
+    //    موجودة عندي» حتى لو موجودة في المصدر.
+    const systemWithSource = sourceContext
+      ? `${combinedSystem}\n\n---\n\nمحتوى المصدر المطلوب (من حساب الطالب — استخدمه في إجابتك):\n${sourceContext}`
+      : combinedSystem;
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)
@@ -153,7 +200,7 @@ export async function POST(req: Request) {
       const usage = resolveUsageRequestContext(req, user.id);
 
       completion = await aiRouter.completeChat("chat", {
-        messages: [{ role: "system", content: combinedSystem }, ...safeMessages],
+        messages: [{ role: "system", content: systemWithSource }, ...safeMessages],
         temperature: 0.7,
         usage,
       });

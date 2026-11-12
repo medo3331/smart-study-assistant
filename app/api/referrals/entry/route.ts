@@ -21,7 +21,7 @@ export async function POST() {
     return NextResponse.json({ success: true, tracked: false, rewarded: false });
   }
 
-  const limited = checkRateLimit(`referral-entry:${user.id}`, 10, 60_000, "success");
+  const limited = await checkRateLimit(`referral-entry:${user.id}`, 10, 60_000, "success");
   if (limited) return limited;
 
   try {

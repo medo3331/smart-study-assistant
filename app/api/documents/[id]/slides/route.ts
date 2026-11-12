@@ -24,6 +24,14 @@ import { SlidesError, type DeckState } from "@/lib/ai/slides";
    `lib/ai/slides-service.ts` ⇒ **منطق واحد** للتوليد في المشروع كله.
    ========================================================================== */
 
+/**
+ * ⏱ **مهلة التنفيذ**.
+ *
+ * ⚠️ **لازم!** من غيرها Vercel بيقتل الطلب عند ١٠-١٥ ثانية (الافتراضي)
+ *    والتوليد بياخد ~١٠ ثواني ⇒ **502/504** للمستخدم.
+ */
+export const maxDuration = 300;
+
 export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -143,6 +151,8 @@ export async function POST(
       userId: user.id,
       pages,
       unit,
+      // ⚠️ **المصدر نص مكتوب** (مش تفريغ) ⇒ مافيش تعليمات تنظيف ASR.
+      sourceKind: "document",
       fileName: document.title,
       title: document.title,
       ...(partIndex !== undefined ? { partIndex } : {}),

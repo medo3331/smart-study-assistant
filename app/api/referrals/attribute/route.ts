@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Missing code." }, { status: 400 });
   }
 
-  const limited = checkRateLimit(`referrals:attribute:${user.id}`, 20, 60_000, "success");
+  const limited = await checkRateLimit(`referrals:attribute:${user.id}`, 20, 60_000, "success");
   if (limited) return limited;
 
   try {

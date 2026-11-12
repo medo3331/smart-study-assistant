@@ -6,11 +6,24 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { resolveActor } from "@/lib/policy";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
+import type { ActorContext } from "@/lib/policy";
 
-
+/**
+ * ⚠️ أمان (P0، 2026-11): كل الدوال هنا كانت بتاخد `adminUserId`/`adminEmail`
+ * من المتصل، و`getSubscriptionStatus` ما كانش فيها أي فحص خالص (service_role).
+ * دلوقتي الهوية من الجلسة فقط.
+ */
 
 export async function getSubscriptionStatus(userIdOrCode: string): Promise<any> {
+  // قراءة بيانات مستخدم (إيميل/خطة) بـ service_role — لازم صلاحية قراءة.
+  try {
+    await requireAdminActor("users.read");
+  } catch (e) {
+    if (e instanceof ActionAuthError) return null;
+    throw e;
+  }
+
   const supabase = createServiceClient();
   try {
     // Try by UUID first
@@ -98,19 +111,23 @@ export async function getSubscriptionStatus(userIdOrCode: string): Promise<any> 
 
 
 export async function resetSubscriptionQuota(
-  userIdOrCode: string,
-  adminUserId: string,
-  adminEmail: string | null = null
+  userIdOrCode: string
 ): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const db = createServiceClient();
+
+  let actor: ActorContext;
+  try {
+    ({ actor } = await requireAdminActor("subscriptions.manage"));
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { ok: false, message: e.message };
+    throw e;
+  }
+
+  const adminUserId = actor.userId!;
+  const adminEmail = actor.userEmail;
   const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription_quota", resource_id: lookup || null };
   try {
-    const actor = await resolveActor(db, adminUserId, adminEmail);
-    if (!actor.isOwner && actor.role !== "admin") {
-      await recordAuditLog({ ...auditBase, details: { op: "quota_reset", reason: "forbidden" }, result: "BLOCKED" });
-      return { ok: false, message: "غير مصرح" };
-    }
     if (!lookup) return { ok: false, message: "معرّف المستخدم مطلوب" };
     let userId = lookup;
     const { data: profile } = await db.from("profiles").select("id").eq("id", lookup).maybeSingle();
@@ -139,15 +156,23 @@ export async function resetSubscriptionQuota(
 
 export async function revokeSubscription(
   userIdOrCode: string,
-  adminUserId: string,
-  adminEmail: string | null = null,
   note: string | null = null
 ): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const db = createServiceClient();
+
+  let actor: ActorContext;
+  try {
+    ({ actor } = await requireAdminActor("subscriptions.manage"));
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { ok: false, message: e.message };
+    throw e;
+  }
+
+  const adminUserId = actor.userId!;
+  const adminEmail = actor.userEmail;
   const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription", resource_id: lookup || null };
   try {
-    const actor = await resolveActor(db, adminUserId, adminEmail);
     if (!actor.isOwner) {
       await recordAuditLog({ ...auditBase, details: { op: "revoke", reason: "non_owner_attempt" }, result: "BLOCKED" });
       return { ok: false, message: "غير مصرح: الإلغاء متاح لـ Owner فقط" };
@@ -218,12 +243,23 @@ export async function revokeSubscription(
 export async function extendSubscription(
   userIdOrCode: string,
   durationDays: number,
-  note: string | null,
-  adminUserId: string,
-  adminEmail: string | null = null
+  note: string | null
 ): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
   const extraDays = Math.floor(durationDays);
+
+  let actor: ActorContext;
+  try {
+    ({ actor } = await requireAdminActor("subscriptions.manage"));
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { ok: false, message: e.message, previousExpiry: null, newExpiry: null, entitlementExtended: false };
+    }
+    throw e;
+  }
+
+  const adminUserId = actor.userId!;
+  const adminEmail = actor.userEmail;
   const auditBase = {
     actor: adminUserId,
     actor_email: adminEmail,
@@ -243,8 +279,7 @@ export async function extendSubscription(
 
   try {
     // ── 1) حماية Owner-only (نفس activateSubscription — مش مجرد إخفاء زر)
-    const supabaseClient = createServiceClient();
-    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
+    // الهوية من الجلسة (فوق) — مفيش resolveActor بباراميترات.
     if (!actor.isOwner) {
       await recordAuditLog({
         ...auditBase,

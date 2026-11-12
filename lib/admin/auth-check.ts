@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/policy";
 import type { ActorContext } from "@/lib/policy";

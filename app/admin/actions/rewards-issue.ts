@@ -9,7 +9,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { resolveActor, actorHasPermission } from "@/lib/policy";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 
 export type RewardType = "limit_boost" | "trial_week" | "pro_week" | "upload_credits";
 
@@ -32,37 +32,43 @@ export interface IssueRewardResult {
 }
 
 export async function issueReward(
-  input: IssueRewardInput,
-  adminUserId: string,
-  adminEmail: string | null = null
+  input: IssueRewardInput
 ): Promise<IssueRewardResult> {
   try {
     // ── EPIC-2 Authorization Guard: ONLY Owner (rewards.manage = owner only)
-    const supabaseClient = createServiceClient();
-    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
-    if (!actorHasPermission(actor, "rewards.manage")) {
-      await recordAuditLog({
-        actor: adminUserId,
-        actor_email: adminEmail,
-        action: "rewards.manage",
-        resource_type: "reward",
-        resource_id: input.recipientUserId ?? null,
-        details: {
-          recipient_user_id: input.recipientUserId,
-          reward_type: input.rewardType,
-          rejected_by: adminUserId,
-          reason: "non_owner_attempt_rejected",
-        },
-        result: "BLOCKED",
-      });
-      return {
-        ok: false,
-        message: "غير مصرح: إصدار المكافآت متاح لـ Owner فقط",
-        error: "authorization_denied_non_owner",
-        rewardId: null,
-        auditId: null,
-      };
+    // ⚠️ الهوية من الجلسة — كانت adminUserId/adminEmail باراميترات من المتصل.
+    let actor;
+    try {
+      ({ actor } = await requireAdminActor("rewards.manage"));
+    } catch (e) {
+      if (e instanceof ActionAuthError) {
+        await recordAuditLog({
+          actor: null,
+          actor_email: null,
+          action: "rewards.manage",
+          resource_type: "reward",
+          resource_id: input.recipientUserId ?? null,
+          details: {
+            recipient_user_id: input.recipientUserId,
+            reward_type: input.rewardType,
+            reason: "non_owner_attempt_rejected",
+            cause: e.code,
+          },
+          result: "BLOCKED",
+        });
+        return {
+          ok: false,
+          message: "غير مصرح: إصدار المكافآت متاح لـ Owner فقط",
+          error: "authorization_denied_non_owner",
+          rewardId: null,
+          auditId: null,
+        };
+      }
+      throw e;
     }
+
+    const adminUserId = actor.userId!;
+    const adminEmail = actor.userEmail;
 
     const privileged = createServiceClient();
 
