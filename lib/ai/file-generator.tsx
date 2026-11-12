@@ -69,7 +69,12 @@ const BRAND_NOTE = "تم التوليد بواسطة ماجيكلي 🧙‍♂�
 // ============================================
 // أدوات مساعدة
 // ============================================
-function sanitizeFilename(title: string): string {
+/**
+ * ⚠️ **exported**: مولّد العرض التقديمي (`lib/ai/slides-generator.tsx`)
+ * بيستخدم نفس التنظيف — عشان أسماء الملفات تتنضّف بنفس القاعدة في
+ * المشروع كله (مش نسختين).
+ */
+export function sanitizeFilename(title: string): string {
   const cleaned = title
     .replace(/[\\/:*?"<>|#%&{}$!'@+`=]/g, "")
     .replace(/\s+/g, "_")
