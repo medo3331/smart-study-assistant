@@ -215,4 +215,52 @@ words:    [{ end, text, start, speaker }, …]   ← مصفوفة **عناومي
 والمقاطع (نفس في `lib/ai/transcript-review.ts:103-118` — بس الشكل
 غلط، انظر N-008).
 
+### N-010 — `@ffmpeg/ffmpeg` بيكسر الـ build على Turbopack (Next 16.4+)
+**أين:** `lib/media/lecture-compression.ts:174` —
+`const { FFmpeg } = await import("@ffmpeg/ffmpeg");`
+(والخطأ جوه `node_modules/@ffmpeg/ffmpeg/dist/esm/classes.js:105` —
+`new Worker(new URL("./worker.js", import.meta.url), { type: "module" })`).
+
+**إيه المشكلة:** Turbopack في Next 16.4+ بيحاول يحلّ
+`new URL("./worker.js", import.meta.url)` **جوه `node_modules`** وبيفشل:
+`Module not found: Can't resolve (<dynamic> | 'undefined')`. النتيجة: `npm
+run build` بيقع والـ feature (ضغط تسجيلات المحاضرة) مش بيترجم.
+
+⚠️ **مش من كودنا**: `lib/media/lecture-compression.ts` و`app/university/
+[subjectId]/page.tsx` ما اتغيّروش، و`@ffmpeg/ffmpeg@0.12.15` اتثبت من
+أكتوبر. المتغير الوحيد هو Next (16.2.10 → 16.4.6).
+
+**الحل المؤقت (مطبَّق):** الرجوع لـ `next@16.2.10` (النسخة المثبّتة في
+`package.json` الأصلية) — الـ build بيرجع أخضر.
+
+**الحل الدائم (مقترح — نتّفق عليه كـ تيكيت):** نسخ الـ ESM build بتاع
+الحزمة على `/public` عشان المتصفح يجيبه من نفس الأصل، والـ bundler ما
+يشوفش الحزمة خالص:
+
+```bash
+cp node_modules/@ffmpeg/ffmpeg/dist/esm/*.js public/ffmpeg/
+```
+```ts
+// lib/media/lecture-compression.ts
+// ⚠️ turbopackIgnore: بتخطّى الـ bundler — Next 16.4 (docs/01-app/02-guides/lazy-loading.md)
+const { FFmpeg } = await import(/* turbopackIgnore: true */ "/ffmpeg/index.js");
+```
+
+ليه ده بيشتغل: الاستيرادات جوه الحزمة كلها **نسبية**
+(`./classes.js`, `./const.js`) فبتتحل في `/ffmpeg/` ✓، و`import.meta.url`
+جوه `classes.js` بيبقى `/ffmpeg/classes.js` ⇒
+`new URL("./worker.js", …)` ⇒ **`/ffmpeg/worker.js`** ✓ (بننسخه معاهم).
+وبكده Turbopack **مش** بيحلّل الحزمة ⇒ مافيش build error، والـ wrapper
+بييجي من نفس الأصل (زي الـ core اللي بييجي من `/ffmpeg/ffmpeg-core.js`
+من زمان).
+
+⚠️ **اللي محتاجة اختبار بعد التطبيق:** `worker.js` بيستخدم
+`importScripts(coreURL)` جوه worker من نوع `module` — و`importScripts`
+مش متاح في module workers. لو وقع، البديل هو `classWorkerURL` (الـ
+escape hatch الرسمي بتاع الحزمة) ونسخ `worker.js` كـ classic worker، أو
+التحميل من CDN.
+
+**ليه مش متعمل دلوقتي:** الترقية لـ Next 16.4 مشتروحة منفصلة عن
+مشروع «الشرح المكثف»، والمطلوب إن الـ build يبقى أخضر للـ PR.
+
 
