@@ -58,6 +58,9 @@ export class NvidiaProvider implements AiTextProvider, AiEmbeddingProvider {
           model,
           messages: input.messages,
           temperature: input.temperature ?? 0.7,
+          // ⚠️ السقف اختياري — من غيره موديلات الاستدلال بتصرف كل
+          //    الميزانية على التفكير وتطلع `content` فاضية.
+          ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
         }),
         signal: AbortSignal.timeout(NVIDIA_TIMEOUT_MS),
       });

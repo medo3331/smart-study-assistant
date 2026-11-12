@@ -28,6 +28,8 @@ import {
   type Material,
 } from "@/lib/pages-data";
 import { prepareFileForUpload, isImageFile } from "@/lib/image-compress";
+import { DeckPanel } from "@/components/workspace/DeckPanel";
+import { Presentation } from "lucide-react";
 
 /* ==========================================================================
    مساحة العمل — مركز القيادة
@@ -125,6 +127,24 @@ function truncate(text: string, max: number): string {
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
+/**
+ * ⚠️ **الملفات اللي ليها صفحات** (= اللي ينفع منها عرض تقديمي).
+ *
+ * PDF ⇒ صفحات · PPTX ⇒ شرائح · DOCX ⇒ فقرات.
+ * النص العادي والصور مالهمش وحدات ⇒ الزرار مش بيظهر ليهم.
+ */
+function isDeckCapable(fileType: string | null): boolean {
+  if (!fileType) return false;
+  return (
+    fileType === "application/pdf" ||
+    fileType ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    fileType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    /\.(pdf|pptx|docx)$/i.test(fileType)
+  );
+}
+
 export default function WorkspacePage() {
   const router = useRouter();
   const { supabase, session } = useAuthUser();
@@ -145,6 +165,9 @@ export default function WorkspacePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStep, setUploadStep] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 🎬 لوحة العرض التقديمي (من مستند). null = مقفولة.
+  const [deckMaterialId, setDeckMaterialId] = useState<string | null>(null);
 
   // مسوّدة الملاحظة للمادة المفتوحة، وحالة الحفظ
   const [noteDraft, setNoteDraft] = useState("");
@@ -375,17 +398,34 @@ export default function WorkspacePage() {
           return;
         }
 
+        // ⚠️ **الرفع بيتمّ عن طريق `/api/documents`** (مش `/api/analyze-file`):
+        //    السيرفر بيستخرج الملف **و** بيحفظه مرتين — مادة (نص مدمج)
+        //    + مستند (صفحات) — فـ«العرض التقديمي» يقدر يبني عليه.
+        //   -pages الـ PPTX مافيش له ingestion في المتصفح أصلاً.
         setUploadStep("بيستخرج النص…");
         const formData = new FormData();
         formData.append("file", prepared.file);
-        const res = await fetch("/api/analyze-file", { method: "POST", body: formData });
+        const res = await fetch("/api/documents", { method: "POST", body: formData });
         const data = await res.json().catch(() => null);
 
-        if (!res.ok) {
-          setNotice(data?.error || "ما قدرناش نستخرج نص الملف ده. جرّب ملف تاني.");
+        if (!res.ok || !data?.ok) {
+          setNotice(data?.error?.message || "ما قدرناش نستخرج نص الملف ده. جرّب ملف تاني.");
           return;
         }
-        text = data?.text || "";
+        text = data?.material?.content || "";
+        const created = data?.material;
+        if (created) {
+          setMaterials((prev) => [created as Material, ...prev]);
+          openFile(created.id);
+          // ⚠️ لو في صفحات متقراش (PDF مصوّر) ⇒ نصرّح للطالب.
+          const unread = (data?.unread ?? []) as number[];
+          if (unread.length > 0) {
+            setNotice(
+              `${unread.length} صفحة في الملف ده مش متقراية (PDF مصوّر). العرض هيغطي الصفحات المقروءة بس.`,
+            );
+          }
+        }
+        return;
       }
 
       if (!text.trim()) {
@@ -984,6 +1024,14 @@ export default function WorkspacePage() {
                     </span>
                   </button>
 
+                  {/* 🎬 لوحة العرض التقديمي — بتنفتح تحت الكارت */}
+                  {deckMaterialId === material.id && (
+                    <DeckPanel
+                      materialId={material.id}
+                      onClose={() => setDeckMaterialId(null)}
+                    />
+                  )}
+
                   <div className="flex items-center justify-end gap-2 border-t border-rule pt-2">
                     <button
                       onClick={() => openFile(material.id)}
@@ -997,6 +1045,22 @@ export default function WorkspacePage() {
                     >
                       اسأل
                     </button>
+                    {/* ⚠️ العرض متاح للملفات اللي ليها صفحات (PDF/PPTX/DOCX).
+                        النص العادي والصور مالهمش صفحات ⇒ الزرار مش بيظهر. */}
+                    {isDeckCapable(material.fileType) && (
+                      <button
+                        onClick={() =>
+                          setDeckMaterialId(
+                            deckMaterialId === material.id ? null : material.id,
+                          )
+                        }
+                        aria-expanded={deckMaterialId === material.id}
+                        className="mono text-ink-soft hover:text-ink px-2 py-1.5 rounded-[6px] transition text-xs inline-flex items-center gap-1"
+                      >
+                        <Presentation size={13} aria-hidden />
+                        <span>عرض</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

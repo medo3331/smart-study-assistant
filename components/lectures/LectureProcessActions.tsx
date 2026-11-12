@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Sparkles, Loader2, AlertTriangle } from "lucide-react";
+import { Sparkles, Loader2, AlertTriangle, Clock } from "lucide-react";
 
 import { LectureNote } from "./LectureNote";
 import { FlashcardsPanel } from "./FlashcardsPanel";
 import { McqQuiz } from "./McqQuiz";
+import { LectureIntensive } from "./LectureIntensive";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
+import type { IntensiveExplanation } from "@/lib/ai/lecture-intensive";
 
 /* ==========================================================================
    ✨ أزرار معالجة المحاضرة بالذكاء الاصطناعي — Phase 4-A
@@ -35,6 +37,7 @@ type ProcessResponse = {
   explanation?: string;
   flashcards?: Flashcard[];
   mcqs?: Mcq[];
+  intensive?: IntensiveExplanation;
   error?: { code?: string; message?: string };
 };
 
@@ -43,6 +46,7 @@ const LOADING_MESSAGE: Record<string, string> = {
   summary: "جاري تجهيز ملخص المحاضرة...",
   explanation: "جاري شرح المحاضرة...",
   all: "جاري تحليل المحاضرة وتجهيز المحتوى...",
+  intensive: "جاري تجهيز الشرح المكثف مع المصادر... المحاضرة الكبيرة ممكن تاخد دقيقة.",
 };
 
 const GENERIC_ERROR = "حصلت مشكلة أثناء المعالجة. جرّب تاني كمان شوية.";
@@ -51,10 +55,21 @@ export function LectureProcessActions({
   lectureId,
   hasSummary,
   hasExplanation,
+  hasIntensive,
+  hasTimings,
 }: {
   lectureId: string;
   hasSummary: boolean;
   hasExplanation: boolean;
+  /** فيه شرح مكثف متولّد قبل كده (يبان في القسم، مش زرار جديد). */
+  hasIntensive: boolean;
+  /**
+   * ⚠️ **المحاضرة فيها مقاطع بتوقيتات؟**
+   *
+   * من غيرها مفيش Citations ممكنة — فبنخفي الزرار ونقول للطالب ليه
+   * بدل ما نخلّيه يفشل برسالة عامة.
+   */
+  hasTimings: boolean;
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +77,26 @@ export function LectureProcessActions({
   const [explanation, setExplanation] = useState<string | null>(null);
   const [flashcards, setFlashcards] = useState<Flashcard[] | null>(null);
   const [mcqs, setMcqs] = useState<Mcq[] | null>(null);
+  const [intensive, setIntensive] = useState<IntensiveExplanation | null>(null);
   const [feedback, setFeedback] = useState("");
+
+  /**
+   * 🔑 معرّف جلسة التوليد — **كريدت واحد لكل المحاضرة**.
+   *
+   * ⚠️ **ليه**: `reserve_ai_credit` idempotent على `p_ref_id`، والراوت
+   *    بياخد المرجع من الـ header `Idempotency-Key`. فلو كل أجزاء
+   *    المحاضرة الاتنين بيبعتوا نفس المفتاح ⇒ حجز واحد ⇒ **كريدت واحد
+   *    للمحاضرة كلها** (١١ جزء = ١ كريدت مش ١١).
+   *
+   * ⚠️ **ثابت طوال عمر الصفحة**: كأنها «جلسة توليد» واحدة. إعادة
+   *    تحميل الصفحة = جلسة جديدة = كريدت جديد (وده الصح: جولة توليد
+   *    جديدة = شغل جديد).
+   */
+  const [intensiveSessionId] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `s${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   /**
    * ⚠️ القفل بـ `useRef` مش بـ state: الـ state setter بيلفّ async، فدوسين
@@ -72,21 +106,31 @@ export function LectureProcessActions({
   const inFlight = useRef(false);
 
   const run = useCallback(
-    async (type: "summary" | "explanation" | "all" | "flashcards" | "mcq") => {
+    async (type: "summary" | "explanation" | "all" | "flashcards" | "mcq" | "intensive") => {
       if (inFlight.current) return;
       inFlight.current = true;
       setLoading(type);
       setError(null);
 
       try {
-        const response = await fetch(
-          `/api/lectures/${encodeURIComponent(lectureId)}/process`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type, feedback: feedback.trim() || undefined }),
+        // ⚠️ «شرح مكثف» ليه endpoint مختلف — بيبعت المقاطع بتوقيتها مش
+        //    النص المسطّح، فرافع `/process` مش هينفع.
+        const url =
+          type === "intensive"
+            ? `/api/lectures/${encodeURIComponent(lectureId)}/intensive`
+            : `/api/lectures/${encodeURIComponent(lectureId)}/process`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // ⚠️ «شرح مكثف» بس: نفس المفتاح عبر كل الأجزاء ⇒ كريدت واحد
+            //    للمحاضرة. (المسارات التانية مش محتاجاه.)
+            ...(type === "intensive" ? { "Idempotency-Key": intensiveSessionId } : {}),
           },
-        );
+          body: JSON.stringify(
+            type === "intensive" ? {} : { type, feedback: feedback.trim() || undefined },
+          ),
+        });
 
         const payload = (await response.json().catch(() => null)) as ProcessResponse | null;
 
@@ -100,6 +144,9 @@ export function LectureProcessActions({
         if (payload.explanation) setExplanation(payload.explanation);
         if (payload.flashcards) setFlashcards(payload.flashcards);
         if (payload.mcqs) setMcqs(payload.mcqs);
+        // ⚠️ الشرح المكثف بيرجّع **الحالة الكاملة** (الأجزاء) — لأنها
+        //    بتتولّد on-demand، فالجزء الأول بس هو اللي اتولّد دلوقتي.
+        if (payload.intensive) setIntensive(payload.intensive);
       } catch {
         setError(GENERIC_ERROR);
       } finally {
@@ -109,7 +156,7 @@ export function LectureProcessActions({
         setLoading(null);
       }
     },
-    [lectureId],
+    [lectureId, feedback, intensiveSessionId],
   );
 
   const busy = loading !== null;
@@ -249,12 +296,74 @@ export function LectureProcessActions({
         </div>
       </div>
 
+      {/* ───────── 🧠 الشرح المكثف (Phase 5) ─────────
+       *
+       * ⚠️ **منطقة منفصلة** عن أدوات المذاكرة: التكلفة مختلفة (الشرح
+       *    المكثف بيقرا المقاطع وبيدّعي نداء لكل قطعة) والطبيعة مختلفة
+       *    (هو بيطلع مع مصادر، مش بطاقات).
+       *
+       * ⚠️ **ليه الزرار بيختفي لو مفيش توقيتات**: من غير `segments`
+       *    مفيش أي مصدر نقدر نرجّعه — فأحسن للطالب يشوف سبب واضح
+       *    (تحت) بدل ما يدوس زرار ويفشل برسالة عامة.
+       */}
+      <div className="border-t border-[var(--rule)] pt-3">
+        <p className="mb-2 text-xs font-semibold text-ink-soft">🧠 الشرح المكثف</p>
+
+        {hasTimings ? (
+          intensive || hasIntensive ? (
+            /* ⚠️ الشرح موجود ⇒ **شريط الأجزاء** (في `LectureIntensive`
+               تحت) هو اللي بيكمّل. زرار هنا كان هيبقى مدخلين لتوليد
+               نفس الشغل. */
+            <p className="text-xs leading-relaxed text-ink-soft">
+              الشرح المكثف جاهز — استخدم «الجزء التالي» في قسم «شرح مكثف
+              مع المصادر» تحت.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void run("intensive")}
+              disabled={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading === "intensive" ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden />
+              ) : (
+                <Sparkles size={16} aria-hidden />
+              )}
+              <span>
+                {loading === "intensive" ? "جاري التجهيز…" : "شرح مكثف مع المصادر"}
+              </span>
+            </button>
+          )
+        ) : (
+          /* ⚠️ **رسالة صريحة** — الطالب لازم يعرف إن الميزة دي مش
+             * متاحة ليه، وإيه السبب بالظبط (مش «حصل خطأ»). */
+          <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-relaxed text-ink">
+            <Clock size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+            <span>
+              الشرح المكثف محتاج توقيتات، والمحاضرة دي مفيهاش (نص قديم أو
+              محاضرة اتسجلت من غير فهرسة). استخدم «شرح المحاضرة» العادي، أو
+              ارفع المحاضرة من جديد.
+            </span>
+          </p>
+        )}
+      </div>
+
       {/* ⚠️ العرض عبر `LectureContent` (react-markdown) — **مافيش**
           dangerouslySetInnerHTML. النص المولّد بيتحوّل لعناصر React حقيقية،
           فمافيش أي HTML بيترجم أو بينفّذ. */}
       {summary && <LectureNote kind="summary" content={summary} />}
 
       {explanation && <LectureNote kind="explanation" content={explanation} />}
+
+      {intensive && (
+        <LectureIntensive
+          lectureId={lectureId}
+          explanation={intensive}
+          sessionId={intensiveSessionId}
+          onChange={setIntensive}
+        />
+      )}
 
       {flashcards && <FlashcardsPanel cards={flashcards} />}
 

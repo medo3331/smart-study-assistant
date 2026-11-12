@@ -20,19 +20,41 @@ import { ChevronDown, FileDown, FileText } from "lucide-react";
    `hidden` على الحاوية = وصول صح + حالة بتتحفظ.
    ═══════════════════════════════════════════════════════════════════════ */
 
-export type SectionId = "summary" | "explanation" | "flashcards" | "mcq" | "transcript";
+export type SectionId =
+  | "summary"
+  | "explanation"
+  | "intensive"
+  | "flashcards"
+  | "mcq"
+  | "transcript";
 
 /** الأقسام اللي بتتعمل لها focus: فتح واحد بيقفل الباقي. */
-const FOCUSABLE: SectionId[] = ["explanation", "flashcards", "mcq"];
+const FOCUSABLE: SectionId[] = ["explanation", "intensive", "flashcards", "mcq"];
 
 type WorkspaceContextValue = {
   isOpen: (id: SectionId) => boolean;
   toggle: (id: SectionId) => void;
+  /**
+   * يفتح قسم **من غير** ما يقفل غيره.
+   *
+   * ⚠️ لازمها للـ citations: لما الطالب يضغط على مرجع، إحنا عايزين
+   *    نقفل قسم «الشرح المكثف» ونفتح «التفريغ» — مش نقفل ونفتح عشوائي.
+   *    `toggle` مش بيعمل كده (بيقلب الحالة)، وكمان بيقفل الباقي
+   *    لو القسم focusable.
+   */
+  open: (id: SectionId) => void;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-function useWorkspace(): WorkspaceContextValue {
+/**
+ * يقرأ سياق مساحة المذاكرة.
+ *
+ * ⚠️ **exported**: مسار الـ citations بيحتاج `open("transcript")` عشان
+ *    يفتح قسم التفريغ لما الطالب يضغط على مرجع. الـ context لسه جوه
+ *    `LectureWorkspace` بس.
+ */
+export function useWorkspace(): WorkspaceContextValue {
   const value = useContext(WorkspaceContext);
   if (!value) throw new Error("LectureSection لازم يكون جوه LectureWorkspace");
   return value;
@@ -45,7 +67,7 @@ export function LectureWorkspace({
   defaultOpen?: SectionId[];
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState<Record<string, boolean>>(() => {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     for (const id of defaultOpen) initial[id] = true;
     return initial;
@@ -56,10 +78,10 @@ export function LectureWorkspace({
    *
    * ⚠️ **منطق الـ focus**: لو القسم ده focusable، فتحه بيقفل الباقي —
    * لأن الطالب لما يفتح «شرح المحاضرة» عايز يقرأ الشرح. **بس** الفتح
-   * التاني مش ممنوع: بنقفل بـ `open[x] = false` مش بنمنع الفتح.
+   * التاني مش ممنوع: بنقفل بـ `openSections[x] = false` مش بنمنع الفتح.
    */
   const toggle = useCallback((id: SectionId) => {
-    setOpen((prev) => {
+    setOpenSections((prev) => {
       const isCurrentlyOpen = prev[id] === true;
       const next: Record<string, boolean> = { ...prev, [id]: !isCurrentlyOpen };
       if (!isCurrentlyOpen && FOCUSABLE.includes(id)) {
@@ -71,9 +93,20 @@ export function LectureWorkspace({
     });
   }, []);
 
+  /**
+   * 📂 فتح قسم من غير ما يقفل غيره.
+   *
+   * ⚠️ ده اللي بيستخدمه مسار الـ citations: فتح «التفريغ» عشان نبرز
+   *    المقطع. لو استعملنا `toggle` كان ممكن نقفل قسم مفتوح، وكمان
+   *    السلوك بيختلف (لما يكون مفتوح أصلاً).
+   */
+  const open = useCallback((id: SectionId) => {
+    setOpenSections((prev) => (prev[id] === true ? prev : { ...prev, [id]: true }));
+  }, []);
+
   const value = useMemo<WorkspaceContextValue>(
-    () => ({ isOpen: (id) => open[id] === true, toggle }),
-    [open, toggle],
+    () => ({ isOpen: (id) => openSections[id] === true, toggle, open }),
+    [openSections, toggle, open],
   );
 
   return (

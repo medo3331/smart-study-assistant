@@ -37,7 +37,10 @@ export async function* streamWithFallback(
     }
   }
   if (ordered.length === 0) {
-    ordered.push("groq", "nvidia", "openrouter", "gemini");
+    // ⚠️ **من غير `gemini`** (2026-11-12): المفتاح باطل (`API_KEY_INVALID`)
+    //    ⇒ نداءه بيضيّع الوقت وبيطلّع 400. شيله من سلسلة الـ fallback.
+    //    (قرار المستخدم: «شيله لو مفيش مفتاح جديد» — ومفيش.)
+    ordered.push("groq", "nvidia", "openrouter");
   }
 
   for (const provider of ordered) {

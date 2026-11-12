@@ -23,7 +23,8 @@ export type AiServiceId =
   | "file_pdf"
   | "file_docx"
   | "file_xlsx"
-  | "file_pptx";
+  | "file_pptx"
+  | "documents_slides";
 
 export interface ServiceDefinition {
   id: AiServiceId;
@@ -75,6 +76,16 @@ export const SERVICE_REGISTRY: Record<AiServiceId, ServiceDefinition> = {
     labelAr: "تحميل عروض PowerPoint",
     dailyLimits: { free: 0, pro: 10, ultra: UNLIMITED },
     upgradeHintAr: "تصدير PowerPoint متاح في باقة Pro وباقة Ultra.",
+  },
+  // ⚠️ **العرض التقديمي من مستند** — خدمة مستقلة عن `file_pptx`:
+  //    دي بتولّد من مستند مرفوع (استخراج + توليد + تصدير)، مش مجرد
+  //    تصدير بيانات موجودة. تكلفتها أعلى ⇒ `free: 0`.
+  documents_slides: {
+    id: "documents_slides",
+    labelAr: "توليد عرض تقديمي من مستند",
+    dailyLimits: { free: 0, pro: 10, ultra: UNLIMITED },
+    upgradeHintAr:
+      "توليد العروض التقديمية من ملفاتك متاح في باقة Pro وباقة Ultra.",
   },
 };
 

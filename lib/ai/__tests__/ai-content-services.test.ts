@@ -250,7 +250,10 @@ describe("Diagram Generator", () => {
 // 3. سجل الخدمات وحدود الباقات
 // ─────────────────────────────────────────────
 describe("Service Registry", () => {
-  it("registry covers all six services", () => {
+  it("registry covers all seven services", () => {
+    // ⚠️ `documents_slides` (العرض التقديمي من مستند) خدمة **مستقلة** عن
+    //    `file_pptx`: دي بتولّد من مستند (استخراج + توليد + تصدير) مش
+    //    مجرد تصدير بيانات موجودة ⇒ تكلفتها أعلى.
     expect(Object.keys(SERVICE_REGISTRY)).toEqual([
       "image",
       "diagram",
@@ -258,6 +261,7 @@ describe("Service Registry", () => {
       "file_docx",
       "file_xlsx",
       "file_pptx",
+      "documents_slides",
     ]);
   });
 
@@ -270,6 +274,9 @@ describe("Service Registry", () => {
     expect(SERVICE_REGISTRY.file_docx.dailyLimits.free).toBe(0);
     expect(SERVICE_REGISTRY.file_xlsx.dailyLimits.free).toBe(0);
     expect(SERVICE_REGISTRY.file_pptx.dailyLimits.free).toBe(0);
+    // ⚠️ العرض التقديمي من مستند: Pro/Ultra بس (قرار تسعير).
+    expect(SERVICE_REGISTRY.documents_slides.dailyLimits.free).toBe(0);
+    expect(SERVICE_REGISTRY.documents_slides.dailyLimits.pro).toBeGreaterThan(0);
   });
 
   it("image models gated by tier — free tier has no image generation", () => {

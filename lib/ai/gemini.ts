@@ -80,6 +80,10 @@ export class GeminiProvider implements AiMediaProvider, AiImageProvider {
         config: {
           ...(systemInstruction ? { systemInstruction } : {}),
           temperature: input.temperature ?? 0.3,
+          // ⚠️ السقف اختياري — Gemini بيسمّيها maxOutputTokens.
+          ...(input.maxTokens !== undefined
+            ? { maxOutputTokens: input.maxTokens }
+            : {}),
         },
       });
       const content = response.text?.trim();

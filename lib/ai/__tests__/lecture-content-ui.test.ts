@@ -22,6 +22,12 @@ const CONTENT_SRC = read("components/lectures/LectureContent.tsx");
 const NOTE_SRC = read("components/lectures/LectureNote.tsx");
 const ACTIONS_SRC = read("components/lectures/LectureProcessActions.tsx");
 const PAGE_SRC = read("app/lectures/page.tsx");
+/* ⚠️ Phase 5: عارض التفريغ الواعي بالمقاطع + لوحة الشرح المكثف اتنقلوا
+   لملفات مستقلة —Inclusion هنا عشان فحص الأمان (مافيش HTML خام)
+   يغطّيهم كمان. */
+const VIEWER_SRC = read("components/lectures/LectureTranscriptViewer.tsx");
+const INTENSIVE_SRC = read("components/lectures/LectureIntensive.tsx");
+const CITATION_SRC = read("components/lectures/lecture-citation-context.tsx");
 
 /**
  * ⚠️ شيل التعليقات قبل الفحص.
@@ -43,6 +49,9 @@ const CODE = {
   LectureNote: stripComments(NOTE_SRC),
   LectureProcessActions: stripComments(ACTIONS_SRC),
   lecturesPage: stripComments(PAGE_SRC),
+  LectureTranscriptViewer: stripComments(VIEWER_SRC),
+  LectureIntensive: stripComments(INTENSIVE_SRC),
+  lectureCitationContext: stripComments(CITATION_SRC),
 } as const;
 
 /* ═══════════════════════════ الأمان ═══════════════════════════ */
@@ -203,7 +212,11 @@ describe("البيانات — العرض بس، مافيش تعديل", () => {
 
   it("✅ التفريغ بيفضل نص خام (مش بيتلوّن بـ Markdown)", () => {
     // التفريغ نص كلام حرفي — تلميحه بيبوّبه. لازم يفضل <pre>.
-    expect(CODE.lecturesPage).toContain("<pre");
+    // ⚠️ Phase 5: العرض اتنقل لـ `LectureTranscriptViewer` (المقاطع
+    //    بتوقيتاتها)، والـ <pre> بتاع النص المتعدّل بقى فيه.
+    expect(CODE.lecturesPage).toContain("LectureTranscriptViewer");
+    expect(CODE.LectureTranscriptViewer).toContain("<pre");
+    // والنص المسطّح لسه موجود في الصفحة (المحرّر بيحتاجه).
     expect(CODE.lecturesPage).toContain("transcript_text");
   });
 

@@ -27,9 +27,23 @@ export async function runAiTask(taskId: "chat" | "explain" | "tutor", input: AiT
       ? Math.min(Math.max(rawTemperature, 0), 2)
       : task.temperature;
 
+  // 🔢 سقف المخرج — اختياري. مهم لموديلات الاستدلال (gpt-oss): من غيره
+  //    المزوّد بيحط سقف افتراضي صغير، الموديل بيصرفه كله على التفكير،
+  //    وبيطلع `content` فاضي.
+  const rawMaxTokens = Number(input.options?.maxTokens);
+  const maxTokens =
+    input.options?.maxTokens !== undefined && Number.isFinite(rawMaxTokens)
+      ? Math.min(Math.max(Math.floor(rawMaxTokens), 1), 32_768)
+      : undefined;
+
   // \ud83e\udde1 \u0627\u0644\u0633\u064a\u0627\u0642 \u0628\u064a\u0639\u062f\u0627 \u0643\u0645\u0627 \u0647\u0648\u0629 \u2014 \u0645\u0646 \u0627\u0644\u0631\u0648\u0627\u062a.
   // \ud83d\udeab \u0645\u0627\u0641\u064a\u0634 \u062c\u064a\u0644 \u0647\u0646\u0627 \u0623\u0635\u0644\u0627\u064b: \u062a\u0645\u0631\u064a\u0631\u0647 \u0639\u0646\u062f \u0627\u0644\u0631\u0627\u0648\u062a \u0641\u064a `AiChatRequest.usage`.
-  const response = await AIService.generate(task.id, { messages, temperature, usage: input.usage });
+  const response = await AIService.generate(task.id, {
+    messages,
+    temperature,
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+    usage: input.usage,
+  });
 
   let content = response.content;
   if (task.parseOutput) content = task.parseOutput(content);
