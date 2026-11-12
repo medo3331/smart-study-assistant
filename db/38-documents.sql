@@ -99,8 +99,16 @@ create policy "documents: owner updates" on public.documents for update using (a
 create policy "documents: owner deletes" on public.documents for delete using (auth.uid() = user_id);
 
 -- ٥) توثيق.
+--
+-- ⚠️ **`source_type`/`source_kind` للصفحات**: `user` / `material` — مش
+--    `document` / `page`. السبب: CHECK constraint موجود في القاعدة
+--    (`kb_source_type_kind_check`) بيقبل زوجين بس:
+--      (source_type='sample', source_kind='sample')
+--      (source_type='user',   source_kind IN ('material','lecture'))
+--    ⇒ أي زوج تاني بيرمي `23514`. (الـ CHECK ده بره الـ migrations —
+--    انظر N-011 في `docs/TECH_DEBT.md`.)
 comment on table public.documents is
-  'Phase 5 — مستندات المستخدم مستخرجة صفحة بصفحة (PDF/PPTX/DOCX). الصفحات بتتخزّن في knowledge_base بـ source_id = documents.id و source_type = ''document''.';
+  'Phase 5 — مستندات المستخدم مستخرجة صفحة بصفحة (PDF/PPTX/DOCX). الصفحات بتتخزّن في knowledge_base بـ source_id = documents.id و source_type = ''user'' و source_kind = ''material''';
 comment on column public.documents.page_count is
   'عدد وحدات العدّ: صفحات (PDF) · شرائح (PPTX) · فقرات (DOCX).';
 comment on column public.documents.unread_pages is
@@ -115,14 +123,14 @@ comment on column public.documents.deck is
 --
 --   user_id       = صاحب المستند
 --   source_id     = documents.id
---   source_type   = 'document'
---   source_kind   = 'page' | 'slide' | 'paragraph'
+--   source_type   = 'user'      ← مش 'document' (CHECK constraint — شوف فوق)
+--   source_kind   = 'material'  ← مش 'page'/'slide'/'paragraph' (CHECK)
 --   source_name   = عنوان الملف
 --   source_page   = رقم الوحدة (1-based، كنص — عشان يحمل «شريحة ٤» كمان)
 --   chunk_index   = ترتيب القطعة جوه الصفحة
 --   content       = نص الصفحة
 --   subject       = المادة (اختياري)
---   embedding     = vector(1536)
+--   embedding     = vector(1536) — **NULL في v1** (الـ RAG شغل منفصل)
 --
 -- ⚠️ **مش بنعمل migration على `knowledge_base`**: الجدول في القاعدة فيه
 --    أعمدة (`user_id`, `source_type`, `source_kind`, `source_id`,
