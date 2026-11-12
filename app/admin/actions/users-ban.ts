@@ -2,7 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { resolveActor, actorHasPermission } from "@/lib/policy";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 
 export interface BanResult {
   ok: boolean;
@@ -12,31 +12,57 @@ export interface BanResult {
 }
 
 /**
- * حظر مستخدم — Phase 4.4: كتابة حقيقية في profiles.is_banned (+banned_at/ban_reason).
- * الصلاحية: users.ban (Owner/Admin حسب ADMIN_PERMISSION_MAP) — فحص server-side
- * حقيقي هنا. أي رفض يُسجَّل BLOCKED.
+ * حظر / فك حظر مستخدم — Phase 4.4.
+ *
+ * ⚠️ أمان (P0، 2026-11):
+ *   الدالتين كانوا بياخدوا `adminUserId` و`adminEmail` من المتصل ويبنوا عليهما
+ *   قرار الصلاحية (`resolveActor`). أي حد يقرأ `site_admins` (كانت مقروءة
+ *   للعامة) يجيب id المالك ويحظر/يفك حظر أي حد. دلوقتي الهوية من الجلسة فقط،
+ *   وأي محاولة مرفوضة بتتسجل BLOCKED بهوية غير موثوقة (null).
  */
-export async function banUser(userId: string, userCode: string | null, reason: string, adminUserId: string, adminEmail: string | null): Promise<BanResult> {
+
+async function resolveBanActor(permission: "users.ban" | "users.unban") {
   try {
-    const supabaseClient = createServiceClient();
-    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
-    if (!actorHasPermission(actor, "users.ban")) {
+    const { actor } = await requireAdminActor(permission);
+    return { actor, error: null as null };
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { actor: null, error: e };
+    }
+    throw e;
+  }
+}
+
+export async function banUser(
+  userId: string,
+  userCode: string | null,
+  reason: string
+): Promise<BanResult> {
+  try {
+    const { actor, error: authError } = await resolveBanActor("users.ban");
+
+    if (!actor) {
       await recordAuditLog({
-        actor: adminUserId,
-        actor_email: adminEmail,
+        actor: null,
+        actor_email: null,
         action: "users.ban",
         resource_type: "user",
         resource_id: userId,
-        details: { user_id: userId, user_code: userCode, reason: reason, rejected_by: adminUserId, status: "blocked_attempt" },
+        details: { user_id: userId, user_code: userCode, reason, status: "blocked_attempt", cause: authError?.code },
         result: "BLOCKED",
       });
-      return { ok: false, message: "غير مصرح: حظر المستخدم يتطلب صلاحية users.ban (Owner/Admin)", error: "authorization_denied", auditId: null };
+      return { ok: false, message: authError?.message ?? "غير مصرح", error: "authorization_denied", auditId: null };
     }
-    // Phase 4.4: كتابة حقيقية — الأعمدة مؤكدة في الـDB الحية (is_banned/banned_at/ban_reason)
+
+    const adminUserId = actor.userId!;
+    const adminEmail = actor.userEmail;
+    const supabaseClient = createServiceClient();
+
     const { error: updateError } = await supabaseClient
       .from("profiles")
       .update({ is_banned: true, banned_at: new Date().toISOString(), ban_reason: reason || null })
       .eq("id", userId);
+
     if (updateError) {
       await recordAuditLog({
         actor: adminUserId,
@@ -49,6 +75,7 @@ export async function banUser(userId: string, userCode: string | null, reason: s
       });
       return { ok: false, message: "فشل كتابة الحظر في الداتابيز: " + updateError.message, error: "db_error", auditId: null };
     }
+
     const auditRes = await recordAuditLog({
       actor: adminUserId,
       actor_email: adminEmail,
@@ -64,28 +91,36 @@ export async function banUser(userId: string, userCode: string | null, reason: s
   }
 }
 
-/** فك حظر مستخدم — Phase 4.4: تصفير حقيقي للأعمدة. يتطلب users.unban. */
-export async function unbanUser(userId: string, userCode: string | null, adminUserId: string, adminEmail: string | null): Promise<BanResult> {
+/** فك حظر مستخدم — يتطلب users.unban. الهوية من الجلسة. */
+export async function unbanUser(
+  userId: string,
+  userCode: string | null
+): Promise<BanResult> {
   try {
-    const supabaseClient = createServiceClient();
-    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
-    if (!actorHasPermission(actor, "users.unban")) {
+    const { actor, error: authError } = await resolveBanActor("users.unban");
+
+    if (!actor) {
       await recordAuditLog({
-        actor: adminUserId,
-        actor_email: adminEmail,
+        actor: null,
+        actor_email: null,
         action: "users.unban",
         resource_type: "user",
         resource_id: userId,
-        details: { user_id: userId, user_code: userCode, rejected_by: adminUserId, status: "blocked_attempt" },
+        details: { user_id: userId, user_code: userCode, status: "blocked_attempt", cause: authError?.code },
         result: "BLOCKED",
       });
-      return { ok: false, message: "غير مصرح: فك الحظر يتطلب صلاحية users.unban (Owner/Admin)", error: "authorization_denied", auditId: null };
+      return { ok: false, message: authError?.message ?? "غير مصرح", error: "authorization_denied", auditId: null };
     }
-    // Phase 4.4: تصفير حقيقي لحالة الحظر
+
+    const adminUserId = actor.userId!;
+    const adminEmail = actor.userEmail;
+    const supabaseClient = createServiceClient();
+
     const { error: updateError } = await supabaseClient
       .from("profiles")
       .update({ is_banned: false, banned_at: null, ban_reason: null })
       .eq("id", userId);
+
     if (updateError) {
       await recordAuditLog({
         actor: adminUserId,
@@ -98,6 +133,7 @@ export async function unbanUser(userId: string, userCode: string | null, adminUs
       });
       return { ok: false, message: "فشل كتابة فك الحظر في الداتابيز: " + updateError.message, error: "db_error", auditId: null };
     }
+
     const auditRes = await recordAuditLog({
       actor: adminUserId,
       actor_email: adminEmail,

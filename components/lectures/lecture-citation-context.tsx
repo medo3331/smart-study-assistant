@@ -78,16 +78,13 @@ export function useLectureCitation(): CitationContextValue {
 /**
  * ⏱ تنسيق توقيت للعرض: `12:30` أو `1:05:20`.
  *
+ * ⚠️ **التنفيذ في `lib/ai/lecture-intensive.ts`** — عشان السيرفر (راوت
+ *    الـ slides) ينسّق التوقيت كمان. الدالة دي مجرد **إعادة تصدير**
+ *    عشان места الاستيراد القديم يفضل شغّال.
+ *
  * ⚠️ **مش من `formatDuration` في `app/lectures/page.tsx`** — دي بتطبع
  * المدة الكلية بنفس الشكل تقريباً. دي بتطبع **نقطة زمنية** جوه
  * المحاضرة، ومعيارها إنها قصيرة (ثانيتين على الأكثر). بنستخدمها في
  * الـ chips عشان تلتف في سطر واحد.
  */
-export function formatTimestamp(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
+export { formatTimestamp } from "@/lib/ai/lecture-intensive";

@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
-    const limited = checkRateLimit(`image-analysis:${user.id}`, 4, 60_000, "message");
+    const limited = await checkRateLimit(`image-analysis:${user.id}`, 4, 60_000, "message");
     if (limited) return limited;
     const form = await req.formData();
     const file = form.get("file");

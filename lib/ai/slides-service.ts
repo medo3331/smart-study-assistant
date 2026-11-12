@@ -42,6 +42,14 @@ export type DeckUnit = DeckState["source"]["unit"];
 /** أقصى عدد أجزاء (حماية من المصادر العملاقة). */
 export const MAX_DECK_PARTS = 40;
 
+/**
+ * ⚠️ **نوع المصدر** — بيحدّد تعليمات الـ prompt.
+ *
+ * `transcript` ⇒ المصدر تفريغ صوتي ⇒ لازم تنظيف الـ ASR + إعادة صياغة.
+ * `document` ⇒ المصدر نص مكتوب.
+ */
+export type DeckSourceKind = "transcript" | "document";
+
 /** الموديل اللي بنحجز الكريديت عليه. */
 const CREDIT_MODEL = "openai/gpt-oss-120b";
 
@@ -52,6 +60,11 @@ export type GenerateDeckInput = {
   pages: DocumentPage[];
   /** نوع الوحدة — بيحدّد الليبل. */
   unit: DeckUnit;
+  /**
+   * ⚠️ **نوع المصدر** — `transcript` للمحاضرات (⇒ تعليمات تنظيف الـ
+   *   ASR وإعادة الصياغة) و`document` للمستندات.
+   */
+  sourceKind?: DeckSourceKind;
   /** اسم المصدر (المادة/المحاضرة) — بيظهر في الـ footer. */
   fileName: string;
   /** عنوان العرض. */
@@ -179,13 +192,19 @@ export async function generateDeck(
   }
 
   // ⑤ التوليد (نداء واحد).
+  const targetGroup = groups[targetIndex];
+  // ⚠️ **حجم الجزء بالحروف** — بيتحسب للهدف فقط (مش للتقطيع).
+  const groupChars = targetGroup.pages.reduce((sum, p) => sum + p.text.length + 1, 0);
   let generated;
   try {
     generated = await generateDeckPart({
-      group: groups[targetIndex],
+      group: targetGroup,
       allPages: pages,
       totalParts: groups.length,
       unitLabel: unitLabelFor(unit),
+      ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
+      // ⭐ **الهدف** — ١٢٠٠ حرف/شريحة (كل شريحة ≈ ٣ نقاط).
+      slidesTarget: Math.max(1, Math.min(6, Math.round(groupChars / 1200))),
       deps: { runTask: runAiTask },
     });
   } catch (error) {

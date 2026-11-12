@@ -1,8 +1,8 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
-import { hasPermission } from "@/lib/auth-roles";
 import { recordAuditLog } from "./audit-log-record";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 
 export interface RegenerateCodeResult {
   ok: boolean;
@@ -29,26 +29,23 @@ const CANONICAL_CODE_RE = /^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i;
  * - كل نتيجة (PASS/FAIL/BLOCKED) بتتسجل في audit_log بـ action="qr_regenerate".
  */
 export async function regenerateUserPublicCode(
-  targetUserId: string,
-  adminUserId: string,
-  adminEmail: string | null
+  targetUserId: string
 ): Promise<RegenerateCodeResult> {
-  const service = createServiceClient();
-
-  // 1) صلاحية — فحص حقيقي داخل الـaction نفسه
-  const allowed = await hasPermission(service, adminUserId, adminEmail, "users.regenerate_code");
-  if (!allowed) {
-    const audit = await recordAuditLog({
-      actor: adminUserId,
-      actor_email: adminEmail,
-      action: "qr_regenerate",
-      resource_type: "user",
-      resource_id: targetUserId,
-      details: { reason: "missing_permission", permission: "users.regenerate_code" },
-      result: "BLOCKED",
-    });
-    return { ok: false, message: "غير مصرح — تحتاج صلاحية users.regenerate_code (Owner/Admin)", auditId: audit.id, error: "forbidden" };
+  // ⚠️ الهوية من الجلسة — كانت بتاخد adminUserId/adminEmail من المتصل،
+  // فأي حد يقدر يبعت id المالك ويعدّي الفحص.
+  let ctx;
+  try {
+    ctx = await requireAdminActor("users.regenerate_code");
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { ok: false, message: e.message, auditId: null, error: e.code };
+    }
+    throw e;
   }
+
+  const adminUserId = ctx.actor.userId!;
+  const adminEmail = ctx.actor.userEmail;
+  const service = createServiceClient();
 
   if (!UUID_RE.test(targetUserId)) {
     return { ok: false, message: "معرّف مستخدم غير صالح", error: "invalid_user_id" };

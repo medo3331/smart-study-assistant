@@ -8,7 +8,7 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
 import type { AdminPermissionKey } from "@/lib/auth-roles";
-import { resolveActor } from "@/lib/policy";
+import { requireAdminActor } from "@/lib/admin/action-guard";
 
 export interface SubscriptionActivationInput {
   email?: string;          // البريد الإلكتروني — يُحلّ لـ UUID سيرفر-side (يُفضّل)
@@ -29,14 +29,16 @@ export interface SubscriptionActivationResult {
 
 /** تفعيل اشتراك يدوي عبر User Code — يسجل في subscription_activations + audit_log */
 export async function activateSubscription(
-  input: SubscriptionActivationInput,
-  adminUserId: string,
-  adminEmail: string | null = null
+  input: SubscriptionActivationInput
 ): Promise<SubscriptionActivationResult> {
   try {
+    // ⚠️ الهوية من الجلسة. قبل كده كانت adminUserId/adminEmail باراميترات،
+    // فأي حد يبعت id المالك ويعدّي فحص الـOwner.
+    const { actor } = await requireAdminActor("subscriptions.manage");
+    const adminUserId = actor.userId!;
+    const adminEmail = actor.userEmail;
+
     // ── EPIC-2 Authorization Guard: ONLY Owner can activate subscriptions (not Admin, not Support)
-    const supabaseClient = createServiceClient();
-    const actor = await resolveActor(supabaseClient, adminUserId, adminEmail ?? null);
     if (!actor.isOwner) {
       // Explicit clear rejection — NOT silent fail, NOT bypass
       await recordAuditLog({

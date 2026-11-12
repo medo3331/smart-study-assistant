@@ -41,59 +41,77 @@ export async function requireUser(shape: ErrorShape = "message") {
   return { user, supabase, response: null as null };
 }
 
-/**
- * حدّ استخدام بسيط في الذاكرة (sliding window).
- *
- * ⚠️ حدود الحل ده: الذاكرة بتبقى لكل instance لوحدها، فعلى Vercel
- * لو اتشغّل أكتر من instance يبقى الحد الفعلي أعلى من الرقم المكتوب.
- * ده كفاية لحماية فاتورة Groq من الاستهلاك العادي، ومش بديل عن
- * حل مركزي (Upstash/Redis) لو الموقع كبر.
- */
+/* ==========================================================================
+   Redis (Upstash REST) — عدّاد مركزي بين كل الـ instances
+
+   ⚠️ المشكلة اللي بيحلها (P1، 2026-11): العدّاد القديم كان Map في ذاكرة
+   كل instance. على Vercel/serverless، كل instance عندها Map مستقلة، فالحد
+   الفعلي = الحد × عدد الـ instances — يعني الحماية من فاتورة AI كانت وهمية
+   تقريبًا وقت الضغط.
+
+   الحل: INCR + PEXPIRE على Upstash عبر REST (مفيش SDK جديد ولا اتصال TCP).
+   لو المتغيرات مش مضبوطة (تطوير محلي)، بنرجع تلقائيًا للذاكرة — نفس السلوك
+   القديم بدون كسر.
+   ========================================================================== */
+
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/+$/, "") ?? "";
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN ?? "";
+const hasRedis = Boolean(REDIS_URL && REDIS_TOKEN);
+
+type RedisCommand = (string | number)[];
+
+/** ينفّذ أوامر في pipeline واحد. بيرجّع null لو Redis مش متاح/فشل. */
+async function redisPipeline(commands: RedisCommand[]): Promise<(string | number | null)[] | null> {
+  if (!hasRedis) return null;
+  try {
+    const res = await fetch(`${REDIS_URL}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(commands),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) return null;
+    return data.map((entry) => {
+      const result = (entry as { result?: unknown } | null)?.result;
+      return typeof result === "number" || typeof result === "string" ? result : null;
+    });
+  } catch {
+    return null;
+  }
+}
+
+/* ==========================================================================
+   Fallback في الذاكرة (تطوير محلي أو لو Redis وقع)
+   ========================================================================== */
+
 const hits = new Map<string, number[]>();
 
-/** أقصى عدد مفاتيح متتبّعة. فوقه بنمسح الأقدم بالقوة — سقف ذاكرة مضمون
-    مهما كان المهاجم بيولّد IPs جديدة. */
+/** أقصى عدد مفاتيح متتبّعة. فوقه بنمسح الأقدم بالقوة — سقف ذاكرة مضمون. */
 const MAX_TRACKED_KEYS = 500;
 
-export function checkRateLimit(
-  key: string,
-  limit: number,
-  windowMs: number,
-  shape: ErrorShape = "message"
-) {
+function inMemoryRateLimit(key: string, limit: number, windowMs: number): number | null {
   const now = Date.now();
   const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
 
   if (recent.length >= limit) {
     const retryAfter = Math.ceil((windowMs - (now - recent[0])) / 1000);
     hits.set(key, recent);
-    return NextResponse.json(
-      errorBody(
-        shape,
-        `استخدمت الخدمة كتير في وقت قصير. استنى ${retryAfter} ثانية وحاول تاني.`
-      ),
-      { status: 429, headers: { "Retry-After": String(retryAfter) } }
-    );
+    return retryAfter;
   }
 
   recent.push(now);
   hits.set(key, recent);
 
-  /* تنضيف الماب.
-     ⚠️ الشرط الأول (انتهاء النافذة) لوحده **مش كفاية**، ودي كانت ثغرة
-     حقيقية: مع نافذة ساعة ومهاجم بيغيّر الـ IP كل طلب، مفيش ولا مفتاح
-     بيبقى منتهي، فالمسح بيلف على الماب كلها كل طلب من غير ما يمسح حاجة
-     — تكلفة تربيعية وذاكرة بتكبر خطّي. والسقف اليومي مابيوقفش ده لأنه
-     بيتفحص بعد ما المفتاح اتكتب هنا خلاص.
-     فبعد التنضيف العادي، لو الماب لسه فوق السقف بنمسح الأقدم بالقوة.
-     ضحية ده مهاجم بيدوّر IPs (بيفقد عدّاده) مش مستخدم عادي. */
   if (hits.size > MAX_TRACKED_KEYS) {
     for (const [k, v] of hits) {
       if (v.every((t) => now - t >= windowMs)) hits.delete(k);
     }
-
     if (hits.size > MAX_TRACKED_KEYS) {
-      // Map بتحافظ على ترتيب الإدخال، فأول المفاتيح هي الأقدم كتابةً
       const excess = hits.size - MAX_TRACKED_KEYS;
       let i = 0;
       for (const k of hits.keys()) {
@@ -101,6 +119,63 @@ export function checkRateLimit(
         hits.delete(k);
       }
     }
+  }
+
+  return null;
+}
+
+/**
+ * حدّ استخدام (fixed window) — Redis مركزي لو متاح، وإلا ذاكرة محلية.
+ *
+ * بيرجّع `NextResponse` جاهزة (429) لو تجاوز الحد، أو `null` لو مسموح.
+ * ⚠️ الدالة async — أي استدعاء لازم يكون `await checkRateLimit(...)`.
+ */
+export async function checkRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+  shape: ErrorShape = "message"
+): Promise<NextResponse | null> {
+  const redisKey = `rl:${key}`;
+
+  const results = await redisPipeline([
+    ["INCR", redisKey],
+    ["PTTL", redisKey],
+  ]);
+
+  if (results) {
+    const count = Number(results[0] ?? 0);
+    let ttl = Number(results[1] ?? -1);
+
+    // أول طلب في النافذة (أو مفتاح بلا TTL) → اضبط الانتهاء.
+    if (count === 1 || ttl < 0) {
+      await redisPipeline([["PEXPIRE", redisKey, windowMs]]);
+      ttl = windowMs;
+    }
+
+    if (count > limit) {
+      const retryAfter = Math.max(1, Math.ceil(ttl / 1000));
+      return NextResponse.json(
+        errorBody(
+          shape,
+          `استخدمت الخدمة كتير في وقت قصير. استنى ${retryAfter} ثانية وحاول تاني.`
+        ),
+        { status: 429, headers: { "Retry-After": String(retryAfter) } }
+      );
+    }
+
+    return null;
+  }
+
+  const retryAfter = inMemoryRateLimit(key, limit, windowMs);
+  if (retryAfter !== null) {
+    return NextResponse.json(
+      errorBody(
+        shape,
+        `استخدمت الخدمة كتير في وقت قصير. استنى ${retryAfter} ثانية وحاول تاني.`
+      ),
+      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+    );
   }
 
   return null;
@@ -125,15 +200,6 @@ export function clampText(value: unknown, max: number): string {
    أو فاشل، وبيقفل الباب لما يوصل السقف. العدّ بيحصل قبل الشغل مش بعده
    عن قصد (fail-closed): لو عدّينا الناجح بس، طلب بيفشل بعد ما صرف
    توكنز كان هيبقى ببلاش على العدّاد.
-   وتمن ده إن ١٥٠ طلب رخيص فاشل (نوع ملف غلط مثلاً) بيقفلوا الديمو
-   لبقية اليوم. مقبول: البديل إن الفشل مايتحسبش، وساعتها مهاجم يلف
-   على أخطاء بتصرف فلوس من غير عدّاد.
-
-   يعني أسوأ حالة إن مهاجم يحرق ميزانية اليوم — مش الفاتورة كلها.
-
-   ⚠️ نفس قيد checkRateLimit: الذاكرة لكل instance، فعلى Vercel السقف
-   الفعلي = السقف × عدد الـ instances. لسه بيحوّل الخطر من "مفتوح" لـ
-   "محدود بمضاعف صغير"، وده الفرق اللي بيهم.
    ========================================================================== */
 
 const budgets = new Map<string, { day: string; used: number }>();
@@ -146,17 +212,46 @@ function todayKey() {
 /**
  * بيتأكد إن الميزانية اليومية لخدمة معيّنة ما خلصتش، وبيزوّد العدّاد.
  * بيرجّع `response` جاهزة لو خلصت، أو null لو فيه رصيد.
+ * ⚠️ الدالة async — أي استدعاء لازم يكون `await checkDailyBudget(...)`.
  */
-export function checkDailyBudget(
+export async function checkDailyBudget(
   name: string,
   limit: number,
   shape: ErrorShape = "message"
-) {
+): Promise<NextResponse | null> {
   const day = todayKey();
-  const entry = budgets.get(name);
+  const redisKey = `budget:${name}:${day}`;
 
-  // يوم جديد = عدّاد جديد. مفيش تنضيف محتاج نتعمله: المفاتيح عددها
-  // ثابت (اسم خدمة واحد لكل راوت) والقيمة بتتكتب فوق القديمة.
+  const results = await redisPipeline([
+    ["INCR", redisKey],
+    ["PTTL", redisKey],
+  ]);
+
+  if (results) {
+    const used = Number(results[0] ?? 0);
+    let ttl = Number(results[1] ?? -1);
+
+    // ميزانية اليوم تنتهي بعد يومين — يغطي فروق التوقيت بدون مفاتيح يتيمة.
+    if (used === 1 || ttl < 0) {
+      await redisPipeline([["PEXPIRE", redisKey, 2 * 24 * 60 * 60 * 1000]]);
+      ttl = 2 * 24 * 60 * 60 * 1000;
+    }
+
+    if (used > limit) {
+      const retryAfter = Math.max(1, Math.ceil(ttl / 1000));
+      return NextResponse.json(
+        errorBody(
+          shape,
+          "التجربة المجانية وصلت حدها اليومي. سجّل حساب مجاني وكمّل من غير حدود."
+        ),
+        { status: 429, headers: { "Retry-After": String(retryAfter) } }
+      );
+    }
+
+    return null;
+  }
+
+  const entry = budgets.get(name);
   const current = entry && entry.day === day ? entry : { day, used: 0 };
 
   if (current.used >= limit) {

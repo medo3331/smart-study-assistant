@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     // ٢) حدّ استخدام لكل مستخدم
-    const limited = checkRateLimit(`day:${user.id}`, 20, 60_000, "success");
+    const limited = await checkRateLimit(`day:${user.id}`, 20, 60_000, "success");
     if (limited) return limited;
     guard = await guardAiAccessAndReserve(supabase, user.id, "openai/gpt-oss-120b");
     if (!guard.ok) return guard.response;

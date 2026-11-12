@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    const limited = checkRateLimit("lesson-quiz:" + user.id, 6, 60_000, "message");
+    const limited = await checkRateLimit("lesson-quiz:" + user.id, 6, 60_000, "message");
     if (limited) return limited;
 
     const body = await req.json().catch(() => null);

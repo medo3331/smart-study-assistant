@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     const limitKey = user ? `feedback:${user.id}` : `feedback:ip:${ip}`;
     // الزائر ٤ في الدقيقة، المسجّل ١٠. الودجت نفسها بتمنع التكرار على
     // نفس الصفحة، فالحد ده للحماية من إساءة الاستخدام بس.
-    const limited = checkRateLimit(limitKey, user ? 10 : 4, 60_000, "success");
+    const limited = await checkRateLimit(limitKey, user ? 10 : 4, 60_000, "success");
     if (limited) return limited;
 
     const body = await req.json().catch(() => null);

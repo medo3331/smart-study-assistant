@@ -13,7 +13,7 @@ type Payment = {
   paid_at: string | null;
 };
 
-export default function PaymentsManager({ adminUserId, initial, defaultCurrency = "EGP" }: { adminUserId: string; initial: Payment[]; defaultCurrency?: string }) {
+export default function PaymentsManager({ initial, defaultCurrency = "EGP" }: { initial: Payment[]; defaultCurrency?: string }) {
   const [rows, setRows] = useState<Payment[]>(initial);
   const [editing, setEditing] = useState<Payment | null>(null);
   const [form, setForm] = useState({ userId: "", payerName: "", amount: "", currency: defaultCurrency, method: "", note: "", paidAt: "" });
@@ -30,8 +30,7 @@ export default function PaymentsManager({ adminUserId, initial, defaultCurrency 
     setLoading(true);
     setMsg(null);
     const res = await recordPayment(
-      { userId: form.userId, payerName: form.payerName, amount: Number(form.amount), currency: form.currency, method: form.method, note: form.note, paidAt: form.paidAt },
-      adminUserId
+      { userId: form.userId, payerName: form.payerName, amount: Number(form.amount), currency: form.currency, method: form.method, note: form.note, paidAt: form.paidAt }
     );
     setMsg(res.message);
     setLoading(false);

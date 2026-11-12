@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    const limited = checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
+    const limited = await checkRateLimit(`ai-core:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
 
     // الفحص المركزي للكوتة + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)

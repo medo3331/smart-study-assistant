@@ -155,7 +155,7 @@ export async function POST(req: Request) {
     supabase = db;
     userId = user.id;
 
-    const limited = checkRateLimit(`curriculum-generate:${user.id}`, 6, 60_000, "success");
+    const limited = await checkRateLimit(`curriculum-generate:${user.id}`, 6, 60_000, "success");
     if (limited) return limited;
 
     const body = await req.json().catch(() => null);

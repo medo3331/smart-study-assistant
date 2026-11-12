@@ -155,7 +155,7 @@ export default async function AdminSubscriptionsPage({
                   const lookup = String(formData.get("lookup") || sp.sub_lookup || "");
                   const days = Number(formData.get("duration_days") || 0);
                   const extNote = String(formData.get("ext_note") || "");
-                  const result = await extendSubscription(lookup, days, extNote, user.id, user.email ?? null);
+                  const result = await extendSubscription(lookup, days, extNote);
                   const back = "/admin/subscriptions?sub_lookup=" + encodeURIComponent(lookup);
                   if (result.ok) redirect(back + "&success=" + encodeURIComponent(result.message));
                   redirect(back + "&error=" + encodeURIComponent(result.message));
@@ -259,14 +259,14 @@ export default async function AdminSubscriptionsPage({
         </AdminNotice>
       </AdminCard>
       <AdminCard title="إلغاء اشتراك" description="إلغاء آخر اشتراك نشط (Owner فقط، مسجّل في audit_log)." tone="rose">
-        <form action={async (formData: FormData) => { "use server"; const r = await revokeSubscription(formData.get("lookup")?.toString() || "", user.id, user.email ?? null, formData.get("note")?.toString() || null); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
+        <form action={async (formData: FormData) => { "use server"; const r = await revokeSubscription(formData.get("lookup")?.toString() || "", formData.get("note")?.toString() || null); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
           <input name="lookup" type="text" placeholder="MAG-XXX-XXXX أو UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
           <input name="note" type="text" placeholder="ملاحظة (اختياري)" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs" />
           <button type="submit" className="bg-rose-600 text-white font-bold rounded-lg px-4 py-2 text-xs hover:bg-rose-500">إلغاء</button>
         </form>
       </AdminCard>
       <AdminCard title="إعادة تعيين الحصص" description="تصفير messages_24h / uploads_today (Owner/Admin)." tone="amber">
-        <form action={async (formData: FormData) => { "use server"; const r = await resetSubscriptionQuota(formData.get("lookup")?.toString() || "", user.id, user.email ?? null); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
+        <form action={async (formData: FormData) => { "use server"; const r = await resetSubscriptionQuota(formData.get("lookup")?.toString() || ""); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
           <input name="lookup" type="text" placeholder="MAG-XXX-XXXX أو UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
           <button type="submit" className="bg-amber-500 text-slate-950 font-bold rounded-lg px-4 py-2 text-xs hover:bg-amber-400">إعادة تعيين</button>
         </form>

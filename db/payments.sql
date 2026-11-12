@@ -12,5 +12,14 @@ create table if not exists public.payments (
   created_at timestamptz not null default now()
 );
 alter table public.payments enable row level security;
-create policy payments_admin_read on public.payments for select using (true);
-create policy payments_admin_write on public.payments for insert with check (true);
+
+-- ⚠️ أمان (2026-11): كانت `using (true)` للقراءة و`with check (true)` للكتابة —
+-- أي زائر يقرأ/يكتب سجل الدفعات. دلوقتي: القراءة لصاحب الدفعة فقط، والكتابة
+-- من الكلاينت ممنوعة (service_role فقط عبر لوحة الأدمن).
+drop policy if exists payments_admin_read on public.payments;
+drop policy if exists payments_owner_read on public.payments;
+create policy payments_owner_read on public.payments for select using (auth.uid() = user_id);
+
+drop policy if exists payments_admin_write on public.payments;
+drop policy if exists payments_no_client_write on public.payments;
+create policy payments_no_client_write on public.payments for insert with check (false);

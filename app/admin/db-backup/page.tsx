@@ -4,7 +4,11 @@ import DbBackupClient from "./DbBackupClient";
 
 export default async function AdminDbBackupPage() {
   await requireAdminPermission("admins.manage");
-  const tables = await listTables();
+
+  // listTables محمية بـ guardAction — بترجّع ActionDenied لو الصلاحية اتسحبت.
+  const result = await listTables();
+  const tables = Array.isArray(result) ? result : [];
+
   return (
     <div className="space-y-4 p-6">
       <h1 className="text-2xl font-bold">نسخة من قاعدة البيانات</h1>

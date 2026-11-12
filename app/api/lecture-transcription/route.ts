@@ -50,14 +50,14 @@ export async function POST(request: NextRequest) {
     /* ترتيب الطبقتين مقصود: السقف اليومي **قبل** حدّ الـ IP. السبب إن
        checkRateLimit بيكتب في ماب في الذاكرة قبل ما يرجّع، فلو اتنادى
        الأول كان كل طلب جديد بيكبر الماب حتى بعد ما الميزانية تخلص. */
-    const overBudget = checkDailyBudget("lecture-transcription", DAILY_BUDGET);
+    const overBudget = await checkDailyBudget("lecture-transcription", DAILY_BUDGET);
     if (overBudget) return overBudget;
 
     /* حدّ الـ IP. x-forwarded-for بيتزوّر، فهو وحده مش كفاية — السقف
        اليومي فوق هو اللي بيغطي الحالة دي. */
     const forwarded = request.headers.get("x-forwarded-for") ?? "";
     const ip = forwarded.split(",")[0].trim() || "unknown";
-    const limited = checkRateLimit(`lecture-transcription:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
+    const limited = await checkRateLimit(`lecture-transcription:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
     if (limited) return limited;
 
     /* رفض مبكر بالحجم قبل قراءة الـ body.

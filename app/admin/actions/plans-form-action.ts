@@ -59,7 +59,7 @@ export async function createPlanFormAction(formData: FormData): Promise<ActionRe
     return { ok: false, message: "معرّف الخطة والاسم مطلوبان", error: "missing_fields" };
   }
 
-  const res = await createPlan(input, actor.userId, actor.email);
+  const res = await createPlan(input);
   return toResult(res);
 }
 
@@ -90,7 +90,7 @@ export async function updatePlanFormAction(formData: FormData): Promise<ActionRe
     features: parseFeatures(String(formData.get("features") ?? "")),
   };
 
-  const res = await updatePlan(planKey, input, actor.userId, actor.email);
+  const res = await updatePlan(planKey, input);
   return toResult(res);
 }
 
@@ -98,7 +98,7 @@ export async function deletePlanFormAction(formData: FormData): Promise<ActionRe
   const actor = await getSessionActor();
   if ("error" in actor) return actor.error;
   const planKey = String(formData.get("plan_key") ?? "").trim();
-  const res = await deletePlan(planKey, actor.userId, actor.email);
+  const res = await deletePlan(planKey);
   return toResult(res);
 }
 
@@ -107,6 +107,6 @@ export async function togglePlanActiveFormAction(formData: FormData): Promise<Ac
   if ("error" in actor) return actor.error;
   const planKey = String(formData.get("plan_key") ?? "").trim();
   const active = formData.get("active") === "true";
-  const res = await togglePlanActive(planKey, active, actor.userId, actor.email);
+  const res = await togglePlanActive(planKey, active);
   return toResult(res);
 }
