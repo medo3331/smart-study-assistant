@@ -338,8 +338,20 @@ export function routeCandidates(
   }
 
   // مزوّدات بديلة — بس اللي حالتهم بتسمح بالاستخدام الآن.
+  //
+  // ⚠️ **`gemini` مش مسموح كـ fallback** (2026-11-12): المفتاح في
+  //    `.env.local` **باطل** (`API_KEY_INVALID` — وهو فعلياً مفتاح NVIDIA
+  //    متحط في المكان الغلط). وهو موجود ⇒ `isConfigured("gemini")` =
+  //    true ⇒ كان بيتبعت لكل نداء كنصير أخير وبيضيّع وقته في 400.
+  //    (قرار المستخدم: «شيل Gemini من سلسلة الـ fallback لو مفيش مفتاح
+  //    جديد» — ومفيش مفتاح جديد لحد الآن.)
+  //
+  //    ⚠️ **ايه اللي ماتغيرش**: Gemini **still** مزوّد **أساسي** للمهام
+  //    اللي هو محتكر فيها (`file_analysis` · `image_analysis` ·
+  //    `image_generation` · `image_edit` · `video_generation`) — دي بتفشل
+  //    نضيفة برسالة واضحة بدل ما يبقى مفيش مرشّح خالص.
   const otherProviders = [...new Set(MODEL_REGISTRY.map((m) => m.provider))].filter(
-    (p) => p !== primaryProvider && !(hasImage && p === "gemini")
+    (p) => p !== primaryProvider && p !== "gemini"
   );
   for (const provider of otherProviders) {
     if (!isUsable(provider)) continue;

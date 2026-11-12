@@ -389,3 +389,37 @@ decommissioned and is no longer supported.
 `llama-3.3-70b-versatile` على Groq) بعد التأكد إنه موجود في الحساب،
 أو إضافة موديل الرؤية من NVIDIA. **متعملش دلوقتي** — تغيير في سلسلة
 الـ fallback بيأثر على كل المسارات، وهو قرار منتج.
+
+### N-016 — مفتاح Gemini باطل ⇒ اتشال من سلسلة الـ fallback (✅ اتطبّق)
+**أين:** `lib/ai/routing.ts` (`routeCandidates` — قائمة المزوّدات البديلة)
+و`lib/ai/streaming-fallback.ts` (السلسلة الصريحة).
+
+**إيه المشكلة:** مفتاح `GEMINI_API_KEY` في `.env.local` **باطل**:
+```
+400 API_KEY_INVALID: "API key not valid. Please pass a valid API key."
+```
+(وفعلاً هو **مفتاح NVIDIA** متحط في المكان الغلط — ٨٥ حرف بيبدأ بـ
+`NVIDIA`.)
+
+ولأن المفتاح **موجود** ⇒ `isConfigured("gemini")` = `true` ⇒ Gemini كان
+**آخر مرشّح في كل نداء نصّي** ⇒ نداء ضايع + 400 في كل مرة.
+
+**الحل (اتطبّق — قرار المستخدم):** «شيل Gemini من سلسلة الـ fallback لو
+مفيش مفتاح جديد» — ومفيش مفتاح جديد لحد الآن.
+- `routeCandidates`: استثنى `gemini` من قائمة المزوّدات البديلة.
+- `streaming-fallback`: شال `"gemini"` من السلسلة الصريحة.
+
+⚠️ **اللي ماتغيّرش:** Gemini **لسه** مزوّد **أساسي** للمهام اللي هو
+محتكر فيها (`file_analysis` · `image_analysis` · `image_generation` ·
+`image_edit` · `video_generation`) — دي بتفشل نضيفة برسالة واضحة بدل ما
+يبقى «مفيش مرشّح خالص».
+
+**الاختبار الحارس:** `lib/ai/__tests__/gemini-fallback-removed.test.ts` —
+بياثبت إن `routeCandidates` ما بيرجّعش Gemini في أي مهمة نصّية، وإن
+المهام المحتكر لسه عليه.
+
+**الخطوة الجاية (ل تيكيت مستقل):** امسح `GEMINI_API_KEY` من
+`.env.local` (هو **مفتاح NVIDIA** — لازم تروح على متغير NVIDIA) أو
+حطّ مفتاح Gemini **صحيح** في مكانه.
+
+
