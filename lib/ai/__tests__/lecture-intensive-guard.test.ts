@@ -70,13 +70,17 @@ function makeSupabase(): SupabaseMock {
     lecture: {
       id: "lec-1",
       transcript_text: "نص المحاضرة الطويل",
+      // ⚠️ ٦ مقاطع كبيرة — عشان التقسيم يعمل **أكثر من جزء** (القطعة
+      //    الواحدة ٤٠٠٠ حرف) ⇒ نقدر نختبر جزءين مختلفين.
       transcript_data: {
-        segments: [
-          { text: "المقطع الأول", start: 0, end: 5, speaker: null },
-          { text: "المقطع التاني", start: 5, end: 9, speaker: null },
-        ],
+        segments: Array.from({ length: 6 }, (_, i) => ({
+          text: `مقطع ${i} ${"كلمة ".repeat(300)}`,
+          start: i * 100,
+          end: i * 100 + 99,
+          speaker: null,
+        })),
       },
-      duration_seconds: 60,
+      duration_seconds: 600,
     },
     readFails: false,
   };
@@ -286,6 +290,22 @@ describe("الشرح المكثف — اختيار الجزء", () => {
     expect(response.status).toBe(200);
     expect(body.part.index).toBe(0);
     expect(body.part.status).toBe("ready");
+  });
+
+  it("💳 الحجز بيستعمل مرجع واحد لكل المحاضرة (كريدت واحد للكل)", async () => {
+    // ⚠️ `reserve_ai_credit` idempotent على `p_ref_id` ⇒ نفس المرجع عبر
+    //    الأجزاء ⇒ **كريدت واحد للمحاضرة كلها** (١١ جزء = ١ كريدت).
+    await callIntensive("lec-1", { partIndex: 0 });
+    await callIntensive("lec-1", { partIndex: 1 });
+
+    expect(guardMock).toHaveBeenCalledTimes(2);
+    const refIds = guardMock.mock.calls.map((c) => (c[3] as { refId?: string })?.refId);
+    expect(refIds[0]).toBeTruthy();
+    // ⚠️ نفس المرجع في الطلبين ⇒ الحجز التاني مش بيخصم.
+    expect(refIds[0]).toBe(refIds[1]);
+    // ⚠️ والمرجع فيه الـ user والـ lecture (مربوط بيهم).
+    expect(refIds[0]).toContain(USER_ID);
+    expect(refIds[0]).toContain("lec-1");
   });
 });
 

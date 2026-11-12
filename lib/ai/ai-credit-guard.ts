@@ -46,7 +46,30 @@ export async function guardAiAccessAndReserve(
   supabase: SupabaseClient,
   userId: string | null,
   modelId: string,
-  opts?: { isVisionOrFile?: boolean; isAnonymous?: boolean; agentId?: string | null; cost?: number }
+  opts?: {
+    isVisionOrFile?: boolean;
+    isAnonymous?: boolean;
+    agentId?: string | null;
+    cost?: number;
+    /**
+     * 🔑 مرجع الحجز — **اختياري**.
+     *
+     * ⚠️ **ليه مهم**: `reserve_ai_credit` **idempotent على `p_ref_id`** —
+     *    لو نفس المرجع اتحجز قبل كده، الراوت بيرجّع `already_existed`
+     *    و**مش بيخصم تاني**.
+     *
+     *    فالمسارات اللي بتعمل **عدة طلبات كتير لنفس العملية** (زي
+     *    «الشرح المكثف» — كل جزء طلب مستقل) بتقدر تبعت نفس المرجع
+     *    ⇒ **كريدت واحد للعملية كلها** بدل واحد لكل جزء.
+     *
+     * ⚠️ **لازم يكون:** (أ) ثابت عبر الطلبات بتاع العملية الواحدة،
+     *    (ب) **مختلف** بين عمليتين مختلفتين — وإلا العميل هيعيد
+     *    التوليد مجاناً. (ج) مربوط بـ process عشان مايتحبسش لمستخدم تاني.
+     *
+     * ⚠️ **لو اترك**: كل طلب بيحجز كريدت مستقل (السلوك القديم).
+     */
+    refId?: string;
+  },
 ): Promise<GuardResult> {
   const policy = getModelAccessPolicy(modelId);
   const isAnonymous = Boolean(opts?.isAnonymous);
@@ -188,7 +211,8 @@ export async function guardAiAccessAndReserve(
   if (isAnonymous) {
     // Guest: track via ledger for Guest limit counting (best-effort)
     // Use same reserve but Guest limit already checked; failure here maps to GUEST_RATE_LIMIT
-    const refId = `ai_req:${serverRequestId()}`;
+    // ⚠️ `opts?.refId` — لو العملية بتعمل أكتر من طلب، نفس المرجع ⇒ حجز واحد.
+    const refId = opts?.refId ?? `ai_req:${serverRequestId()}`;
     const reserveKind = opts?.isVisionOrFile ? "vision" : "text";
     let reserveErr: unknown = null;
     try {
@@ -229,6 +253,19 @@ export async function guardAiAccessAndReserve(
           ),
         };
       }
+      // ⚠️ نفسecase الـ owner: الحجز المكرر = الحجز موجود (شوف الشرح
+      //    في الفرع المسجّل تحت).
+      const isDuplicateRef =
+        msg.includes("duplicate key") ||
+        msg.includes("ai_credit_ledger_user_reason_ref_unique") ||
+        msg.includes("unique constraint");
+      if (isDuplicateRef) {
+        console.error(
+          "[credit-guard] الحجز المكرر اتعامل كـ already_existed — العملية بتستخدم نفس المرجع",
+        );
+        return { ok: true, refId };
+      }
+
       return {
         ok: false,
         response: new Response(JSON.stringify({ ok: false, error: "تعذر حجز الطلب. حاول مرة أخرى.", code: "RESERVE_FAILED" }), {
@@ -241,7 +278,10 @@ export async function guardAiAccessAndReserve(
   }
 
   // ---- Reserve 1 credit atomically for authenticated user ----
-  const refId = `ai_req:${serverRequestId()}`;
+  // ⚠️ `opts?.refId` — نفس المرجع عبر طلبات العملية الواحدة ⇒ **حجز واحد**.
+  //    `reserve_ai_credit` idempotent على `p_ref_id` (بيرجّع
+  //    `already_existed` من غير خصم تاني).
+  const refId = opts?.refId ?? `ai_req:${serverRequestId()}`;
   const reserveKind = opts?.isVisionOrFile ? "vision" : "text";
   let reserveErr: unknown = null;
   const agentForMeta = agentId ?? null;
@@ -304,6 +344,31 @@ export async function guardAiAccessAndReserve(
         ),
       };
     }
+    // ⚠️ **الحجز المكرر = الحجز موجود أصلاً** — مش خطأ.
+    //
+    // `reserve_ai_credit` عند الـ owner بيعمل INSERT مباشر (reason =
+    // 'owner_usage') **من غير** ما يتشيك على وجود حجز سابق. ولو فيه
+    // فهرس فريد على (user_id, reason, ref_id) ⇒ الطلب التاني بيقع في
+    // unique violation.
+    //
+    // وده بالظبط اللي بصير لما عملية واحدة تعمل **أكتر من طلب** بنفس
+    // المرجع (زي «الشرح المكثف» — كل جزء طلب مستقل): الطلب التاني
+    // بيقابل الحجز الموجود ⇒ **مش المفروض يتخصم تاني**، بس الـ RPC
+    // رمي unique violation.
+    //
+    // ⇒ نعامله كـ «محجوز قبل كده» ونترك الطلب يعدّي. Credit واحد
+    //    للعملية الواحدة — زي ما اتفقنا.
+    const isDuplicateRef =
+      msg.includes("duplicate key") ||
+      msg.includes("ai_credit_ledger_user_reason_ref_unique") ||
+      msg.includes("unique constraint");
+    if (isDuplicateRef) {
+      console.error(
+        "[credit-guard] الحجز المكرر اتعامل كـ already_existed — العملية بتستخدم نفس المرجع",
+      );
+      return { ok: true, refId };
+    }
+
     return {
       ok: false,
       response: new Response(JSON.stringify({ ok: false, error: "تعذر حجز AI Credit. حاول مرة أخرى.", code: "RESERVE_FAILED" }), {

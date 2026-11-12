@@ -203,10 +203,23 @@ export async function POST(
     const part = plan[partIndex];
 
     // ── ٦) حارس الكروت — **قبل أي نداء للموديل** ──
-    // ⚠️ **كل جزء = credit واحد.** ده مقصود: التوليد on-demand معناه إن
-    //    الطالب بيدفع على الأجزاء اللي بيقراها فعلاً. والـ credit
-    //    محجوز **قبل** النداء، فلو النداء فشل بيرجع (refund).
-    const guard = await guardAiAccessAndReserve(supabase, user.id, GUARD_MODEL_ID);
+    // ⚠️ **كريدت واحد لكل المحاضرة** (مش لكل جزء).
+    //
+    // `reserve_ai_credit` idempotent على `p_ref_id` — فلو كل أجزاء
+    // المحاضرة اتحجزوا بنفس المرجع، الراوت بيرجّع `already_existed` من
+    // غير خصم تاني ⇒ **كريدت واحد للمحاضرة كلها** (١١ جزء = ١ كريدت).
+    //
+    // ⚠️ **ليه المرجع فيه الـ lectureId**: عشان يكون «كريدت لكل محاضرة»
+    //    زي ما اتفقنا. إعادة تحميل الصفحة أو إعادة توليد جزء فاشل ما
+    //    بتخصمش تاني — الطالب خلاص دفع عن المحاضرة دي.
+    //
+    // ⚠️ **والـ `Idempotency-Key` من الـ client** (بيرسله الكلاينت) بيفصل
+    //    تتبّع الاستخدام: كل أجزاء المحاضرة بتتسجّل تحت عملية واحدة.
+    const creditRefId = `lecture_intensive:${user.id}:${lecture.id}`;
+
+    const guard = await guardAiAccessAndReserve(supabase, user.id, GUARD_MODEL_ID, {
+      refId: creditRefId,
+    });
     if (!guard.ok) {
       // ⚠️ ممنوع نكتب في المحاضرة ولا ننداء الموديل في الحالة دي.
       const guardBody = await guard.response.json().catch(() => ({
@@ -265,7 +278,14 @@ export async function POST(
         explanation: nextState,
       });
     } catch (error) {
-      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      // ⚠️ **الاسترجاع بس لو مفيش ولا جزء اتولّد** — الكريدت ده بيغطي
+      //    المحاضرة كلها (مش الجزء ده بس)، فلو parts قبله نجحت
+      //    وآخر جزء فشل، الاسترجاع هيسحب كريدت Parts حقيقيين اتستخدموا.
+      //    فلو مفيش ولا جزء ready ⇒ ده أول محاولة فات ⇒ الاسترجاع صح.
+      const alreadyGenerated = state.parts.some((p) => p.status === "ready");
+      if (!alreadyGenerated) {
+        await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
+      }
 
       // ⚠️ **الجزء ده فشل بس** — الباقي سليم. فبنحفظ الحالة بتاعته
       //    كـ "failed" (مع الرسالة) عشان الواجهة تقدر تعرض زرار

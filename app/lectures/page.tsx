@@ -269,6 +269,12 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                         <LectureIntensive
                           lectureId={lecture.id}
                           explanation={intensiveState}
+                          /* 🔑 معرّف جلسة التوليد — بيتبعت كـ
+                             `Idempotency-Key` فكل أجزاء المحاضرة
+                             بتتسجّل تحت عملية usage واحدة. (الحجز نفسه
+                             كريدت واحد للمحاضرة — المرجع بينحسب
+                             في السيرفر من الـ lectureId.) */
+                          sessionId={`lecture-${lecture.id}`}
                         />
                       </LectureSection>
                     )}

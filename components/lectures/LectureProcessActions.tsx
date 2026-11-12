@@ -81,6 +81,24 @@ export function LectureProcessActions({
   const [feedback, setFeedback] = useState("");
 
   /**
+   * 🔑 معرّف جلسة التوليد — **كريدت واحد لكل المحاضرة**.
+   *
+   * ⚠️ **ليه**: `reserve_ai_credit` idempotent على `p_ref_id`، والراوت
+   *    بياخد المرجع من الـ header `Idempotency-Key`. فلو كل أجزاء
+   *    المحاضرة الاتنين بيبعتوا نفس المفتاح ⇒ حجز واحد ⇒ **كريدت واحد
+   *    للمحاضرة كلها** (١١ جزء = ١ كريدت مش ١١).
+   *
+   * ⚠️ **ثابت طوال عمر الصفحة**: كأنها «جلسة توليد» واحدة. إعادة
+   *    تحميل الصفحة = جلسة جديدة = كريدت جديد (وده الصح: جولة توليد
+   *    جديدة = شغل جديد).
+   */
+  const [intensiveSessionId] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `s${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+
+  /**
    * ⚠️ القفل بـ `useRef` مش بـ state: الـ state setter بيلفّ async، فدوسين
    * سريعين كان هياخدوا قفلين ويبعتوا طلبين والموديل بيتكلّف مرتين.
    * القفل بالـ ref بيتحط **فوراً** قبل أول `await`.
@@ -103,7 +121,12 @@ export function LectureProcessActions({
             : `/api/lectures/${encodeURIComponent(lectureId)}/process`;
         const response = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // ⚠️ «شرح مكثف» بس: نفس المفتاح عبر كل الأجزاء ⇒ كريدت واحد
+            //    للمحاضرة. (المسارات التانية مش محتاجاه.)
+            ...(type === "intensive" ? { "Idempotency-Key": intensiveSessionId } : {}),
+          },
           body: JSON.stringify(
             type === "intensive" ? {} : { type, feedback: feedback.trim() || undefined },
           ),
@@ -133,7 +156,7 @@ export function LectureProcessActions({
         setLoading(null);
       }
     },
-    [lectureId, feedback],
+    [lectureId, feedback, intensiveSessionId],
   );
 
   const busy = loading !== null;
@@ -287,25 +310,31 @@ export function LectureProcessActions({
         <p className="mb-2 text-xs font-semibold text-ink-soft">🧠 الشرح المكثف</p>
 
         {hasTimings ? (
-          <button
-            type="button"
-            onClick={() => void run("intensive")}
-            disabled={busy}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading === "intensive" ? (
-              <Loader2 size={16} className="animate-spin" aria-hidden />
-            ) : (
-              <Sparkles size={16} aria-hidden />
-            )}
-            <span>
-              {loading === "intensive"
-                ? "جاري التجهيز…"
-                : intensive || hasIntensive
-                  ? "إعادة إنشاء الشرح المكثف"
-                  : "شرح مكثف مع المصادر"}
-            </span>
-          </button>
+          intensive || hasIntensive ? (
+            /* ⚠️ الشرح موجود ⇒ **شريط الأجزاء** (في `LectureIntensive`
+               تحت) هو اللي بيكمّل. زرار هنا كان هيبقى مدخلين لتوليد
+               نفس الشغل. */
+            <p className="text-xs leading-relaxed text-ink-soft">
+              الشرح المكثف جاهز — استخدم «الجزء التالي» في قسم «شرح مكثف
+              مع المصادر» تحت.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void run("intensive")}
+              disabled={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] bg-[var(--card-secondary)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading === "intensive" ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden />
+              ) : (
+                <Sparkles size={16} aria-hidden />
+              )}
+              <span>
+                {loading === "intensive" ? "جاري التجهيز…" : "شرح مكثف مع المصادر"}
+              </span>
+            </button>
+          )
         ) : (
           /* ⚠️ **رسالة صريحة** — الطالب لازم يعرف إن الميزة دي مش
              * متاحة ليه، وإيه السبب بالظبط (مش «حصل خطأ»). */
@@ -331,6 +360,7 @@ export function LectureProcessActions({
         <LectureIntensive
           lectureId={lectureId}
           explanation={intensive}
+          sessionId={intensiveSessionId}
           onChange={setIntensive}
         />
       )}

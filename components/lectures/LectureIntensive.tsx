@@ -51,11 +51,19 @@ type AskMessage = { role: "user" | "assistant"; content: string };
 export function LectureIntensive({
   lectureId,
   explanation,
+  sessionId,
   onChange,
 }: {
   lectureId: string;
   /** الحالة (الأجزاء) — من السيرفر. */
   explanation: IntensiveExplanation;
+  /**
+   * 🔑 معرّف جلسة التوليد — **كريدت واحد لكل المحاضرة**.
+   *
+   * ⚠️ نفس الـ header `Idempotency-Key` في كل الأجزاء ⇒ `reserve_ai_credit`
+   *    idempotent على `p_ref_id` ⇒ حجز واحد ⇒ ١١ جزء = ١ كريدت.
+   */
+  sessionId: string;
   /**
    * بنبلّغ الأب بالنسخة الجديدة بعد توليد جزء.
    *
@@ -108,7 +116,11 @@ export function LectureIntensive({
           `/api/lectures/${encodeURIComponent(lectureId)}/intensive`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              // ⚠️ نفس المفتاح عبر كل الأجزاء ⇒ **كريدت واحد للمحاضرة**.
+              "Idempotency-Key": sessionId,
+            },
             body: JSON.stringify({ partIndex }),
           },
         );
@@ -135,7 +147,7 @@ export function LectureIntensive({
         setBusy(false);
       }
     },
-    [lectureId, onChange],
+    [lectureId, onChange, sessionId],
   );
 
   const goTo = useCallback(
