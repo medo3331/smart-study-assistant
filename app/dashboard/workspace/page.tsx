@@ -16,7 +16,7 @@ import {
   Presentation,
   Sparkles,
 } from "lucide-react";
-import { PageShell, EmptyState, LoadingSheets, DataNotice } from "../components/PageShell";
+import { PageShell, EmptyState, DataNotice } from "../components/PageShell";
 import { useAuthUser, formatArabicDate, formatFileSize } from "../components/use-page-data";
 import { setAiSeed, railAccountFromUser } from "../components/nav-config";
 import { FeatureGuide } from "@/components/FeatureGuide";
@@ -30,6 +30,8 @@ import {
 } from "@/lib/pages-data";
 import { prepareFileForUpload, isImageFile } from "@/lib/image-compress";
 import { DeckPanel } from "@/components/workspace/DeckPanel";
+import { WorkspaceCardSkeletons } from "@/components/workspace/WorkspaceCardSkeletons";
+import { MagiclyLoader } from "@/components/ui/MagiclyLoader";
 import { DocumentActionSheet } from "@/components/workspace/DocumentActionSheet";
 import {
   FileKindIcon,
@@ -716,7 +718,8 @@ export default function WorkspacePage() {
         {/* الدليل بيظهر في حالة التحميل كمان — عشان يظهر فورًا أول ما
             المستخدم يفتح الصفحة، مش بعد ما البيانات تخلص. */}
         <FeatureGuide {...guides.workspace} storageKey="guide:workspace" />
-        <LoadingSheets count={4} />
+        <MagiclyLoader label="بنجهّز ملفاتك ومحاضراتك…" />
+        <WorkspaceCardSkeletons count={4} />
       </PageShell>
     );
   }
@@ -979,7 +982,7 @@ export default function WorkspacePage() {
                 <div className="flex items-center justify-between gap-3">
                   <p className="eyebrow eyebrow-flush">الملخص</p>
                   {!openMaterial.summary && (
-                    <button onClick={handleSummarize} disabled={isSummarizing} className="btn btn-quiet text-sm">
+                    <button onClick={handleSummarize} disabled={isSummarizing} className="btn btn-quiet text-sm transition-colors">
                       {isSummarizing ? "بيلخّص…" : "لخّصها بالمساعد"}
                     </button>
                   )}
@@ -1011,7 +1014,7 @@ export default function WorkspacePage() {
                     <button
                       key={id}
                       onClick={() => setFileAction(id)}
-                      className={`btn text-xs ${fileAction === id ? "btn-marker" : "btn-quiet"}`}
+                      className={`btn text-xs transition-colors ${fileAction === id ? "btn-marker" : "btn-quiet"}`}
                     >
                       {label}
                     </button>
@@ -1028,7 +1031,7 @@ export default function WorkspacePage() {
                 <button
                   onClick={() => void handleGeminiAnalysis()}
                   disabled={isGeminiAnalyzing || (fileAction === "question" && fileQuestion.trim().length < 3)}
-                  className="btn btn-quiet text-sm disabled:opacity-40"
+                  className="btn btn-quiet text-sm transition-colors disabled:opacity-40"
                 >
                   {isGeminiAnalyzing ? "بيحلّل…" : "حلّل بـ Gemini"}
                 </button>
