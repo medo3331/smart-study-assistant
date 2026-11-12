@@ -18,6 +18,7 @@ import {
   chunkPages,
   quoteOverlap,
   validateSlidesPart,
+  parsePageNumber,
   generateDeckPart,
   flattenDeck,
   emptyDeckState,
@@ -78,6 +79,35 @@ describe("quoteOverlap — مطابقة الاقتباس", () => {
 
   it("⛔ اقتباس من صفحة تانية ⇒ تداخل منخفض", () => {
     expect(quoteOverlap("الاستدعاء ظاهرة", PAGES[0].text)).toBeLessThan(0.6);
+  });
+});
+
+/* ═══════════════════════════ parsePageNumber ═══════════════════════════ */
+
+describe("parsePageNumber — قراءة رقم الصفحة من أي شكل", () => {
+  it("✅ رقم", () => {
+    expect(parsePageNumber(12)).toBe(12);
+  });
+
+  it("✅ نص رقمي", () => {
+    expect(parsePageNumber("12")).toBe(12);
+  });
+
+  it("⚠️ نص بعلامة P (اللي الموديل بينسخه من البرومبت)", () => {
+    // ⚠️ الأهم: الموديل بينسخ الـ anchor زي ما هو ([P12]) ⇒ بيرجّع
+    //    نص مش رقم. لو رفضنا النص كان كل المراجع مرفوضة والميزة
+    //    مبتشتغلش خالص.
+    expect(parsePageNumber("P12")).toBe(12);
+    expect(parsePageNumber("p12")).toBe(12);
+    expect(parsePageNumber(" P 12 ")).toBe(12);
+  });
+
+  it("⛔ شكل مش صالح ⇒ null", () => {
+    expect(parsePageNumber("abc")).toBeNull();
+    expect(parsePageNumber("P1x")).toBeNull();
+    expect(parsePageNumber(0)).toBeNull();
+    expect(parsePageNumber(-3)).toBeNull();
+    expect(parsePageNumber(null)).toBeNull();
   });
 });
 

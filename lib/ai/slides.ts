@@ -35,6 +35,7 @@ import {
   MAX_HEADING_CHARS,
   MAX_QUOTE_CHARS,
   MAX_SLIDES_PER_PART,
+  SLIDES_MAX_TOKENS,
   SLIDES_PART_CHARS,
 } from "./slides-prompts";
 
@@ -189,6 +190,27 @@ export function quoteOverlap(quote: string, pageText: string): number {
 }
 
 /**
+ * يقرا رقم الصفحة من أي شكل بيرجعه الموديل.
+ *
+ * ⚠️ **ليه مش رقم وخلاص**: الموديل بينسخ الـ anchor **زي ما هو** في
+ *    البرومبت (`[P12]`)، فبيرجّع `"P12"` (نص) مش `12` (رقم). ولو
+ *    رفضنا النص كان **كل** المراجع مرفوضة ⇒ الميزة مبتشتغلش خالص.
+ *
+ * ⇒ بنقبل: رقم (`12`) · نص رقمي (`"12"`) · نص بعلامة P (`"P12"` · `"p 12"`).
+ */
+export function parsePageNumber(value: unknown): number | null {
+  // ⚠️ الأرقام 1-based ⇒ صفر مرفوض (رقم الصفحة الأول = 1).
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value !== "string") return null;
+  const match = /^\s*[Pp]?\s*(\d+)\s*$/.exec(value);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
  * يتحقق من رد الموديل لجزء واحد.
  *
  * ⚠️ **٤ طبقات** (زي «الشرح المكثف»):
@@ -247,11 +269,10 @@ export function validateSlidesPart(
       }
 
       // ٢) `page` جوه مدى الجزء ده.
-      if (
-        typeof bulletObj.page !== "number" ||
-        !Number.isInteger(bulletObj.page) ||
-        !groupNumbers.has(bulletObj.page)
-      ) {
+      //    ⚠️ `parsePageNumber` بيقبل `12` و `"12"` و `"P12"` — الموديل
+      //    بينسخ الـ anchor من البرومبت بالحرف.
+      const page = parsePageNumber(bulletObj.page);
+      if (page === null || !groupNumbers.has(page)) {
         rejected += 1;
         bullets.push({ text, page: null });
         continue;
@@ -259,7 +280,7 @@ export function validateSlidesPart(
 
       // ٣) الاقتباس لازم يكون من الصفحة نفسها.
       const quote = typeof bulletObj.quote === "string" ? bulletObj.quote.trim() : "";
-      const pageText = pageByNumber.get(bulletObj.page) ?? "";
+      const pageText = pageByNumber.get(page) ?? "";
       if (
         quote === "" ||
         quote.length > MAX_QUOTE_CHARS ||
@@ -272,13 +293,13 @@ export function validateSlidesPart(
 
       // ٤) الرقم جوه المدى الكلي (مفروض مضمون بالطبقة ٢، بس ده
       //    الفحصOSH الأخير).
-      if (bulletObj.page < 1 || bulletObj.page > allPages.length) {
+      if (page < 1 || page > allPages.length) {
         rejected += 1;
         bullets.push({ text, page: null });
         continue;
       }
 
-      bullets.push({ text, page: bulletObj.page, quote });
+      bullets.push({ text, page, quote });
     }
 
     if (bullets.length > 0) {
@@ -329,7 +350,10 @@ export async function generateDeckPart(input: {
       totalParts,
       unitLabel,
     }),
-    options: { temperature: 0.3 },
+    // ⚠️ **السقف لازم** — موديل gpt-oss استدلال، ومن غيره المزوّد بيحط
+    //    سقف افتراضي صغير فالموديل بيصرفه كله على التفكير ويطلع
+    //    `content` فاضي ⇒ 502 «no assistant content».
+    options: { temperature: 0.3, maxTokens: SLIDES_MAX_TOKENS },
   });
 
   const parsed = parseJsonPayload(response.content);

@@ -17,7 +17,6 @@ const guardMock = vi.fn();
 const refundMock = vi.fn();
 const quotaMock = vi.fn();
 const generateMock = vi.fn();
-const saveMock = vi.fn();
 
 type SbState = {
   document: Record<string, unknown> | null;
@@ -54,7 +53,9 @@ function makeSupabase() {
       eq: () => ({
         eq: () => ({
           eq: () => ({
-            order: async () => ({ data: sbState.pages, error: null }),
+            eq: () => ({
+              order: async () => ({ data: sbState.pages, error: null }),
+            }),
           }),
         }),
       }),
@@ -224,7 +225,6 @@ describe("العرض التقديمي — الرفض بيحصل قبل أي تك
     sbState.document = null;
 
     const response = await callRoute();
-    const body = await response.json();
 
     expect(response.status).toBe(404);
     expect(callLog).not.toContain("ai:generate");

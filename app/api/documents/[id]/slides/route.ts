@@ -117,7 +117,8 @@ export async function POST(
       .select("source_page, content")
       .eq("source_id", document.id)
       .eq("user_id", user.id)
-      .eq("source_type", "document")
+      .eq("source_type", "user")
+      .eq("source_kind", "material")
       .order("chunk_index", { ascending: true });
 
     if (pageError) {

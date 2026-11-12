@@ -336,4 +336,56 @@ timeout ⇒ ٤٨ صفحة = ٢٠ دقيقة. مش قابل يتعمل inline.
 **الوضع الحالي:** الـ UI بيصرّح للطالب بالصفحات المتقراش
 (`documents.unread_pages`) — فمافيش كذب، بس الـ feature ناقصة.
 
+### N-014 — `consume_service_quota` كان مكسوراً في الإنتاج (✅ اتصلّح)
+**أين:** الدالة `public.consume_service_quota(p_user_id uuid,
+p_service text, p_limit integer)` — **مش في أي migration** (اتعملت يدوي
+في SQL Editor).
 
+**إيه المشكلة:** الدالة كانت `RETURNS TABLE(allowed boolean, used integer)`
+⇒ الـ OUT parameter اسمه `used` — **نفس اسم العمود** في
+`ai_service_usage_daily`. فداخل plpgsql:
+
+```sql
+select used into v_used from public.ai_service_usage_daily ...   -- بياخد الـ variable (NULL)
+set used = used + 1, updated_at = now() ...                      -- ambiguous ⇒ 42702
+```
+
+**الأثر (كان شغّال من زمان):**
+1. **الحد اليومي مش بيتطبَّق خالص** — `v_used` كان NULL ⇒
+   `if v_used >= p_limit` بيبقى NULL ⇒ false دايماً.
+2. الـ RPC بيرمي ⇒ `consumeServiceQuota` بيرجّع `allowed: false`
+   (fail closed) ⇒ **كل خدمة محسوبة بالحد اليومي كانت بتفشل بـ 402
+   «تعذر التحقق من حصة الخدمة»** للمستخدمين المسجّلين: توليد الصور،
+   المخططات، وتصدير PDF/Word/Excel/PPT.
+
+**إزاي اتكشاف:** لما ميزة «العرض التقديمي» وقفت على 402 «تعذر التحقق
+من حصة الخدمة» ⇒ رحت أتبّع الـ RPC لقيت الـ ambiguity.
+
+**الحل (اتطبّق):** `db/40-fix-consume-service-quota.sql` — تأهيل اسم
+العمود (`t.used`) في الـ SELECT والـ UPDATE، + توثيق الجدول والدالة
+(كانوا مش في أي migration). اتحقّق بالنداء الفعلي على الـ RPC بعد
+التطبيق (بيزوّد العدّاد صح: 1 → 2).
+
+⚠️ **ملاحظة أمنية (مش متصلّحة):** سياسات
+`ai_service_usage_daily_service_all` (ALL, `qual=true`) بتسمح لأي مستخدم
+مسجّل يقرأ/يكتب **أي** صف في جدول العدّاد. مش مؤثّر على المنطق (العدّاد
+مش فيه بيانات حساسة)، بس **مرشّح لـ tightening** مستقل.
+
+### N-015 — `llama-3.2-11b-vision-preview` اتشال من Groq (fallback ميت)
+**أين:** `lib/ai/models.ts:71-81` (الموديل الثالث في سلسلة `chat`).
+
+**إيه المشكلة:** Groq رجّع:
+```
+400 model_decommissioned: The model `llama-3.2-11b-vision-preview` has been
+decommissioned and is no longer supported.
+```
+⇒ الموديل **ماتشتغلش** خالص ⇒ سلسلة الـ fallback لمهمة `chat` اتقصّرت
+لـ موديلين (gpt-oss-120b → gpt-oss-20b) بدل ٣.
+
+**ليه مهم:** لما الموديلين الاتنين يفشلوا (مثلاً 429 من حدّ الـ TPM)،
+مفيش شبكة أمان ⇒ الـ user بياخد 502.
+
+**الحل المقترح:** استبدال الموديل الثالث بموديل حيّ (مثل
+`llama-3.3-70b-versatile` على Groq) بعد التأكد إنه موجود في الحساب،
+أو إضافة موديل الرؤية من NVIDIA. **متعملش دلوقتي** — تغيير في سلسلة
+الـ fallback بيأثر على كل المسارات، وهو قرار منتج.
