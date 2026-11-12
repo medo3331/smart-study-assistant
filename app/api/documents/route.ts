@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { checkRateLimit, requireUser } from "@/lib/api-guard";
 import { extractDocument, type ExtractedPage } from "@/lib/extract-text";
+import { toMaterial, type MaterialRow } from "@/lib/pages-data";
 
 /* ==========================================================================
    📄 /api/documents — رفع مستند + استخراجه صفحة بصفحة
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     });
 
     // ── ① المادة (النص المدمج) — زي ما كانت ──
-    const { data: material, error: materialError } = await supabase
+    const { data: materialRow, error: materialError } = await supabase
       .from("materials")
       .insert({
         user_id: user.id,
@@ -83,6 +84,12 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
+
+    // ⚠️ **نحوّل الصف لشكل `Material`** (camelCase) — نفس `fetchMaterials`.
+    //    الراوت بيرجّع الصف زي ما هو (snake_case) ⇒ الواجهة كانت بتقرأ
+    //    `fileType === undefined` ⇒ **زرار «عرض» مش بيظهر خالص**،
+    //    و`createdAt === undefined` ⇒ التاريخ «Invalid Date».
+    const material = toMaterial(materialRow as MaterialRow);
 
     // ── ② المستند + الصفحات ──
     // ⚠️ **ليه بنخزّن `material_id`**: عشان نربط المستند بالمادة (و vice

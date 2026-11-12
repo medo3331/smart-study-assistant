@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
-    const limited = checkRateLimit(`file-analysis:${user.id}`, 6, 60_000, "message");
+    const limited = await checkRateLimit(`file-analysis:${user.id}`, 6, 60_000, "message");
     if (limited) return limited;
 
     const body = await req.json().catch(() => null) as Record<string, unknown> | null;
@@ -44,9 +44,28 @@ export async function POST(req: Request) {
       analyze: "حلّل المحتوى: الأفكار الرئيسية، العلاقات، نقاط القوة أو الغموض، والاستنتاجات المدعومة بالنص فقط.",
       question: `أجب عن هذا السؤال من الملف فقط: ${question}`,
     };
+    // ⚠️ **مهمة التوجيه ≠ مهمة التقارير**
+    //
+    // `taskType` = "file_analysis" — ده اللي بيتسجّل في الـ accounting
+    // والـ ops (عشان نعرف راح يطلب «تحليل ملف»).
+    //
+    // `routingTask` = "summarize" — ده اللي بنوجّه بيه. **ليه؟**
+    //
+    //   الراوت ده بيبعت **النص المستخرج بس** (`material.content`) — مش
+    //   الملف. وحتى الـ system prompt (تحت) بيقول للموديل صراحةً:
+    //   «لا تدّعِ رؤية الملف الأصلي؛ أمامك النص المستخرج منه فقط».
+    //
+    //   ⇒ شرط القدرة `file_analysis` (اللي **gemini-3.6-flash** هو
+    //   الموديل الوحيد اللي عنده) كان **قيد وهمي**: مع غياب مفتاح
+    //   Gemini ⇒ صفر مرشّحين ⇒ 502 «تعذّر تحليل الملف» على **كل** طلب.
+    //   (ومش بس(file_analysis): `mediaOnly` بيودّي المسار في فرع
+    //   `getProviderName(task)` اللي بيرمي لو المزوّد مش متاح.)
+    //
+    //   ⇒ المهمة النصية بتيجي بمرشّحين حقيقيين (Groq) + fallback كامل.
     const taskType = "file_analysis" as const;
+    const routingTask = "summarize" as const;
     // Phase H: credit gate
-    const candidates = routeCandidates(taskType);
+    const candidates = routeCandidates(routingTask);
     const hasEnt = async (k: string, v: string) => { const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v }); return Boolean(data); };
     const accessible = await filterAccessibleModels(candidates, hasEnt);
     if (accessible.length === 0 && candidates.length > 0) return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية. اشترِها من المتجر.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
@@ -54,7 +73,7 @@ export async function POST(req: Request) {
     if (!guard.ok) return guard.response;
     let completion;
     try {
-      completion = await aiRouter.completeChat(taskType, {
+      completion = await aiRouter.completeChat(routingTask, {
         messages: [
           { role: "system", content: "أنت محلل ملفات دقيق. لا تدّعِ رؤية الملف الأصلي؛ أمامك النص المستخرج منه فقط. إن لم تجد الإجابة في النص، قل ذلك بوضوح." },
           { role: "user", content: `اسم الملف: ${material.title}\n\nالمطلوب: ${instruction[action as Action]}\n\n--- النص المستخرج ---\n${material.content.slice(0, 50_000)}\n--- نهاية النص ---` },
@@ -64,7 +83,7 @@ export async function POST(req: Request) {
     } catch (error) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       if (!(error instanceof AiProviderError)) throw error;
-      return NextResponse.json({ error: { message: error.status === 429 ? "Gemini مشغول حاليًا. حاول تاني بعد شوية." : "تعذّر تحليل الملف حاليًا." } }, { status: error.status === 429 ? 429 : 502 });
+      return NextResponse.json({ error: { message: error.status === 429 ? "الخدمة مشغولة حاليًا. حاول تاني بعد شوية." : "تعذّر تحليل الملف حاليًا." } }, { status: error.status === 429 ? 429 : 502 });
     }
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType, status: "completed", usage: completion.usage, contentLength: completion.content.length });
     return NextResponse.json({ result: completion.content, provider: completion.provider, model: completion.model });

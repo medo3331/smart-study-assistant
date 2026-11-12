@@ -17,6 +17,7 @@
     "test:ai:agents": "node --experimental-strip-types scripts/test-ai-agents.mjs",
     "test:ai:image": "node scripts/test-gemini-image.mjs",
     "test:ai:chaos": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run lib/ai/__tests__/chaos-*.test.ts",
+    "test:smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-core-loop.mjs",
     "typecheck": "tsc --noEmit",
     "test:all": "vitest run"
   },

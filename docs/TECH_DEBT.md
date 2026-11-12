@@ -422,4 +422,83 @@ decommissioned and is no longer supported.
 `.env.local` (هو **مفتاح NVIDIA** — لازم تروح على متغير NVIDIA) أو
 حطّ مفتاح Gemini **صحيح** في مكانه.
 
+⚠️ **تصحيح (من الـ audit):** المسح اتعمل **غلط** — سطر `NVIDIA_API_KEY`
+اتلزق بسطر `GEMINI_API_KEY` فطلع:
+```
+GEMINI_API_KEY="NVIDIA_API_KEY=nvapi-…"
+```
+⇒ المفتاح **لسه "موجود"** (85 حرف من الفوضى) ⇒ `isConfigured("gemini")`
+= true ⇒ كل نداء `file_analysis` بيروح لـ Gemini وبياخد 400.
+**اتصلّح:** السطر اتشال من `.env.local` (والـ `NVIDIA_API_KEY` اتحافظ
+عليه). `.env.local` مش متتبَّع في git ⇒ تغيير محلي.
+
+### N-017 — `file_analysis` كان ميتّ بالكامل (✅ اتصلّح)
+**أين:** `app/api/ai/file-analysis/route.ts` + `lib/ai/routing.ts`
+(`TASK_CAPABILITIES` · `AI_PROVIDER_BY_TASK`).
+
+**إيه المشكلة:** مهمة `file_analysis` كانت **مقفولة على Gemini في مكانين**:
+1. `AI_PROVIDER_BY_TASK.file_analysis = "gemini"` (المزوّد).
+2. `TASK_CAPABILITIES.file_analysis = ["file_analysis"]` — و
+   `gemini-3.6-flash` هو **الموديل الوحيد** في السجل بالقدرة دي.
+
+⇒ مع غياب مفتاح Gemini: صفر مرشّحين ⇒ **502 «تعذّر تحليل الملف» على كل
+طلب** (زرار «تلخيص/تحليل» في الـ workspace كان ميتّ).
+
+**ليه كانت القيد وهمي:** الراوت بيبعت **النص المستخرج بس**
+(`material.content.slice(0, 50_000)`) — **مش الملف**. وحتى الـ system
+prompt بيقول للموديل صراحةً: «لا تدّعِ رؤية الملف الأصلي؛ أمامك النص
+المستخرج منه فقط». ⇒ القدرة `file_analysis` (قراءة ملف حقيقي) مش
+مطلوبة أصلاً في المسار ده.
+
+كمان: `mediaOnly` (routing.ts:422) بيودّي المسار في فرع
+`getProviderName(task)` — وهو **بيرمي** لو المزوّد مش متاح، فمافيش
+fallback خالص.
+
+**الحل (اتطبّق):** فصلنا بين **مهمة التقارير** و**مهمة التوجيه**:
+- `taskType = "file_analysis"` → ده اللي بيتسجّل في الـ accounting
+  (نعرف راح يطلب «تحليل ملف»).
+- `routingTask = "summarize"` → ده اللي بنوجّه بيه. مهمة نصّية
+  عادية ⇒ مرشّحين حقيقيين (Groq) + سلسلة fallback كاملة.
+
+وكمان: رسالة الخطأ بقت **مزود-محايدة** («الخدمة مشغولة حاليًا») بدل
+«Gemini مشغول» (اللي بقت غلط بعد شيل Gemini).
+
+⚠️ **اللي ماتغيّرش**: `aiRouter.analyzeMedia("file_analysis", …)`
+(المسار التاني — بيبعت **ملف حقيقي** للموديل) ساب Gemini — لأنه
+محتاج رؤية ملف فعلاً.
+
+### N-018 — مهام الوسائط لسه محتكرة على Gemini (غير متصلّحة)
+**أين:** `lib/ai/routing.ts` — `AI_PROVIDER_BY_TASK` + `TASK_CAPABILITIES`.
+
+| المهمة | القدرة المطلوبة | مين عنده |
+|---|---|---|
+| `image_generation` | `image_generation` | `gemini-3.1-flash-image` **بس** |
+| `image_edit` | `vision` + `image_generation` | مفيش (محتاجة الاثنين) |
+| `video_generation` | `video_generation` | مفيش |
+| `image_analysis` | `vision` | Groq/OpenRouter/NVIDIA — **شغّال** ✓ |
+
+⇒ بعد شيل مفتاح Gemini: **توليد الصور** و**تعديل الصور** و**توليد
+الفيديو** ميّتين (ولا fallback — مثل N-017 بس القدرة مش متاحة عند حد).
+
+**الحل المقترح (ل تيكيت مستقل):** `image_generation` — إما مفتاح Gemini
+صحيح، أو موديل مجاني توليد صور ( pollinations شغّال فعلاً في
+`image-generator.ts` — بس مربوط بمهمة تانية)، أو **إخفاء الزر** لما
+المزوّد مش متاح (أفضل من زرار بيطلّع 502).
+
+### N-019 — حذف المادة بيسيب المستند والصفحات (تسريب تخزين)
+**أين:** `db/38-documents.sql` — `documents.material_id references
+materials(id) on delete set null`.
+
+**إيه المشكلة:** «احذف الملف من مكتبتي» ⇒ الـ `materials` صف اتمسح،
+بس **`documents` + صفحات `knowledge_base` + الـ deck** باقيين في القاعدة
+للأبد. الـ FK `ON DELETE SET NULL` كان **قرار متعمد** (المستند يفضل
+لو المادة اتمسحت)، بس الأثر العملي:
+- النص المستخرج + الـ deck بيفضلوا في القاعدة (خصوصية + مساحة).
+- الـ deck بقى **مش قابل للوصول** من الـ UI (لوحة العرض متربوطة
+  بـ materialId ⇒ الـ lookup بيرجّع 404 بعد ما `material_id` يبقى NULL).
+
+**الحل المقترح:** خلي حذف المادة **يمسح كمان** المستند والصفحات
+(RPC واحدة `delete_material_cascade` أو `on delete cascade` بدل
+`set null` + تنظيف `knowledge_base`).
+
 
