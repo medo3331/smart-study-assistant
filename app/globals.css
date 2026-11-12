@@ -1637,6 +1637,199 @@ html {
 }
 
 /* ==========================================================================
+   📌 الاقتباسات: علامة مرقّمة + ضربة الفسفوري + ورقة المصدر
+   ============================================================================
+
+   الفكرة: **الاقتباس جزء من النص مش chrome فوقه** (زي Notion / NotebookLM).
+
+   ① `.citation-mark` — الرقم الصغير فوق الجملة (زي رقم هامش في كتاب).
+      لونه `--marker` (فسفوري الثيم) والنص `--on-marker`.
+   ② `.citation-claim` — سطر الجملة نفسه. لما المؤشر يبقى على الرقم،
+      السطر بيتلوّن بغسلة فسفوري خفيفة (مش `.mark` التدرّج — لأن الجملة
+      ممكن تعدّي سطرين والتدرّج بيفضل على السطر الأخير بس).
+   ③ `.citation-peek` — «ورقة المصدر»: بتدخل تحت الجملة على الديسكتوب،
+      وبتطلع **Bottom Sheet** على الموبايل (مافيش hover هناك).
+
+   ⚠️ كل الألوان من التوكنز ⇒ بتمشي مع الثيم والـ pack من غير أي لون مكتوب
+   مرتين. والـ focus ring من `--color-focus-ring` (متاح في globals.css).
+   ========================================================================== */
+
+/* ① الرقم المرقّم — superscript */
+.citation-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15em;
+  height: 1.15em;
+  padding-inline: 0.28em;
+  margin-inline-start: 0.3em;
+  vertical-align: super;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--on-marker);
+  background: var(--marker);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 140ms ease, filter 140ms ease;
+  /* الرقم صغير — فمحتاج مساحة لمس أكبر من حجمه */
+  position: relative;
+}
+
+.citation-mark::after {
+  /* مساحة لمس扩大 — من غير ما يأثر على التخطيط */
+  content: "";
+  position: absolute;
+  inset: -8px -6px;
+}
+
+@media (hover: hover) {
+  .citation-mark:hover {
+    transform: translateY(-1px) scale(1.08);
+    filter: brightness(1.06);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--marker) 45%, transparent);
+  }
+}
+
+.citation-mark[aria-expanded="true"] {
+  transform: translateY(-1px) scale(1.08);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--marker) 35%, transparent),
+    0 2px 8px color-mix(in srgb, var(--marker) 45%, transparent);
+}
+
+/* focus واضح — الـ chip القديم كان بلا focus ring (a11y gap) */
+.citation-mark:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ② سطر الجملة — الغسلة الفسفورية */
+.citation-claim {
+  border-radius: var(--r-sm);
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.citation-claim[data-hovered="true"] {
+  background: color-mix(in srgb, var(--marker) 11%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--marker) 11%, transparent);
+}
+
+/* ③ ورقة المصدر */
+.citation-peek {
+  border-inline-start: 3px solid var(--redpen);
+  border-radius: var(--r-sm);
+  background: var(--paper-3);
+  box-shadow: 0 1px 2px var(--shade);
+  animation: citation-peek-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes citation-peek-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* الاقتباس الحرفي — بخط فسفوري على-side المارGIN */
+.citation-quote {
+  border-inline-start: 2px solid var(--marker);
+  padding-inline-start: 10px;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  line-height: 1.75;
+}
+
+/* شارة «متحقَّق منه» */
+.citation-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--hl-green-ink);
+  background: color-mix(in srgb, var(--hl-green-fill) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hl-green-fill) 34%, transparent);
+}
+
+/* ④ Bottom sheet للموبايل — مافيش hover هناك فالمصدر لازم يطلع فوق */
+.citation-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: color-mix(in srgb, #000 42%, transparent);
+  animation: citation-fade-in 160ms ease both;
+}
+
+.citation-sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 61;
+  max-height: 78vh;
+  overflow-y: auto;
+  border-start-start-radius: var(--r-lg);
+  border-start-end-radius: var(--r-lg);
+  border-top: 1px solid var(--rule);
+  background: var(--paper-2);
+  box-shadow: 0 -18px 48px -20px var(--shade-lift);
+  animation: citation-sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* ⚠️ الحشو السفلي كبير: الأزرار قريبة من حافة الشاشة على الموبايل،
+   *    و`env(safe-area-inset-bottom)` بيغطّي الـ iPhone notch. */
+  padding-bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px));
+}
+
+@keyframes citation-sheet-in {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes citation-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* مقبض (grabber) فوق الـ sheet — إشارة بصرية إنّه بيتسحب */
+.citation-sheet-grabber {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--rule-strong);
+  margin: 10px auto 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .citation-peek,
+  .citation-sheet,
+  .citation-sheet-backdrop {
+    animation: none !important;
+  }
+  .citation-mark,
+  .citation-claim {
+    transition: none !important;
+  }
+}
+/* ==========================================================================
    العنصر المميز: ضربة القلم الفسفوري
    تدرّج على الصندوق السطري — يلتف مع النص ويشتغل في الاتجاهين.
    الضربة بتغطي طول الحرف بالكامل (مش تسطير) عشان النص يفضل كحلي مقروء

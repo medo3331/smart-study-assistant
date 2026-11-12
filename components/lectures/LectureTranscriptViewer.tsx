@@ -133,7 +133,13 @@ export function LectureTranscriptViewer({
  *    بيبان زي ما كان في النص الأصلي.
  */
 function SegmentTimeline({ segments }: { segments: TimedSegment[] }) {
-  const { activeSeg } = useLectureCitation();
+  // ⚠️ **حالتين للإبراز**:
+  //    - `activeSeg` = «الطالب اختار المصدر» ⇒ إبراز **قوي** + scroll.
+  //    - `hoverSeg`  = «المؤشر فوق الجملة» ⇒ إبراز **خفيف** بس (مش scroll).
+  //
+  //    ⭐ والربط **في الاتجاهين**: hover على المقطع ⇒ الجمل اللي
+  //    بتستشهد بيه في الشرح تتلوّن (بتقرأ `hoverSeg` من نفس الـ context).
+  const { activeSeg, hoverSeg, setHoverSeg } = useLectureCitation();
 
   if (segments.length === 0) {
     return (
@@ -148,23 +154,31 @@ function SegmentTimeline({ segments }: { segments: TimedSegment[] }) {
       className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/5 p-3 text-sm leading-relaxed text-ink dark:bg-white/10"
       dir="rtl"
     >
-      {segments.map((segment, index) => (
-        <span key={segment.index}>
-          {index > 0 ? " " : null}
-          <span
-            data-seg={segment.index}
-            tabIndex={-1}
-            title={`⏱ ${formatTimestamp(segment.start)}`}
-            className={
-              activeSeg === segment.index
-                ? "rounded bg-[var(--accent)]/20 px-0.5 outline outline-2 outline-[var(--accent)]"
-                : "rounded px-0.5 outline-none transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-            }
-          >
-            {segment.text}
+      {segments.map((segment, index) => {
+        const isActive = activeSeg === segment.index;
+        const isHovered = hoverSeg === segment.index;
+        return (
+          <span key={segment.index}>
+            {index > 0 ? " " : null}
+            <span
+              data-seg={segment.index}
+              tabIndex={-1}
+              title={`⏱ ${formatTimestamp(segment.start)}`}
+              onMouseEnter={() => setHoverSeg(segment.index)}
+              onMouseLeave={() => setHoverSeg(null)}
+              className={
+                isActive
+                  ? "rounded bg-[var(--accent)]/20 px-0.5 outline outline-2 outline-[var(--accent)]"
+                  : isHovered
+                    ? "rounded bg-[var(--marker)]/22 px-0.5 outline-none"
+                    : "rounded px-0.5 outline-none transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+              }
+            >
+              {segment.text}
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
 }
