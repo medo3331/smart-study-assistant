@@ -272,7 +272,8 @@ export function rewardEventId(source: string, refId: string): string {
 }
 // XP validation debt المتبقي بعد Phase C:
 // - Boss XP ما زال يُمنح عبر increment_xp من الكلاينت (onWin) — سيُربط بالـ badge في Phase D
-// - profiles.streak/last_study_day ما زال يُكتب من الكلاينت (تسريب 13 كوين/يوم)
+// - ✅ profiles.streak/last_study_day بقوا سيرفر-أوثوريتاتيف (db/43-retention-p0-streak.sql):
+//   _streak_apply هي الوحيدة اللي بتكتبهم، وtrigger protect_profiles_streak بيمنع الكلاينت.
 // - XP_PER_LEVEL مكرر في db/shop.sql:200
 
 // ---------------------------------------------------------------------------
@@ -311,7 +312,7 @@ export type AiCreditLedgerEntry = {
 // Phase 4.0 — Economy Foundation: Signup + Daily Login + Study Rewards
 // ---------------------------------------------------------------------------
 // Signup: +20 مرة واحدة (ref=user_id, unique index يمنع التكرار)
-// Daily Login: +10 مرة/يوم (ref=UTC date, idempotent via unique index + daily cap)
+// Daily Login: +10 مرة/يوم (ref = يوم القاهرة, idempotent via unique index + daily cap)
 // Study: day_done/goal_done/badge عبر complete_study_day / award_coins — موجودة ومثبتة
 // Wheel eligibility: Successful Study Activity (complete_study_day success) → wheel_status.can_spin
 //   لا يُحتسب مجرد فتح صفحة الدرس؛ الشرط هو ledger row لـ day_done/goal_done اليوم.

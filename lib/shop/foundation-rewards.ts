@@ -49,7 +49,7 @@ export async function claimSignupBonus(
 }
 
 /**
- * محاولة منح دخول اليوم (+10) — مرة/يوم UTC.
+ * محاولة منح دخول اليوم (+10) — مرة/يوم بتوقيت القاهرة (public.cairo_day).
  * idempotent: نفس اليوم → awarded=0, capped=false (unique index).
  * لا يتطلب مذاكرة — الحدث هو الدخول نفسه.
  */
