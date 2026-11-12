@@ -8,6 +8,8 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, requireUser } from "@/lib/api-guard";
 import {
   generateEducationalImage,
+  imageModelLabel,
+  imageProviderFor,
   type ImageModel,
   type ImageSize,
   type ImageStyle,
@@ -17,7 +19,14 @@ import { consumeServiceQuota, IMAGE_MODELS_BY_TIER, resolveServiceTier } from "@
 const MAX_PROMPT_CHARS = 1000;
 const VALID_SIZES: ImageSize[] = ["1024x1024", "1024x1792", "1792x1024"];
 const VALID_STYLES: ImageStyle[] = ["educational", "realistic", "cartoon", "infographic"];
+/**
+ * ⚠️ **`openrouter-flux` هو الافتراضي** (black-forest-labs/flux.2-pro) —
+ *    OpenRouter هو المزوّد الأساسي في المشروع ومفتاحه موجود.
+ *    و`openrouter-seedream` (bytedance-seed/seedream-4.5) البديل.
+ */
 const VALID_MODELS: ImageModel[] = [
+  "openrouter-flux",
+  "openrouter-seedream",
   "pollinations",
   "dall-e-3",
   "flux-pro",
@@ -44,7 +53,7 @@ export async function POST(req: Request) {
     }
 
     // حماية من الضغط المتواصل (مهم خصوصًا إن المزوّد المجاني مفتوح للكل)
-    const limited = checkRateLimit(`image:${user.id}`, 3, 60_000, "message");
+    const limited = await checkRateLimit(`image:${user.id}`, 3, 60_000, "message");
     if (limited) return limited;
 
     // الباقة بتحدد هل الخدمة متاحة أصلًا + الحد اليومي
@@ -96,6 +105,10 @@ export async function POST(req: Request) {
       url: result.url,
       revisedPrompt: result.revisedPrompt,
       model: result.model,
+      // ⚠️ الاسم المألوف للـ UI (slug OpenRouter كامل).
+      modelLabel: imageModelLabel(model),
+      // ⚠️ المزوّد الفعلي — OpenRouter ولا Pollinations (المجاني).
+      provider: imageProviderFor(result.model),
       cost: result.cost,
       quota: { remaining: quota.remaining, limit: quota.limit },
     });

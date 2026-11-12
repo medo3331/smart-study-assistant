@@ -63,6 +63,26 @@ import {
 
 /* ═══════════════════════════ الأنواع ═══════════════════════════ */
 
+/**
+ * ⏱ تنسيق توقيت للعرض: `12:30` أو `1:05:20`.
+ *
+ * ⚠️ **في `lib/` مش في الكومبوننت**: كده السيرفر (راوت الـ slides) يقدر
+ *    ينسّق التوقيت كمان — من غير ما يستورد من ملف `"use client"`
+ *    (الاستيراد من كومبوننت client في راوت server = مرجع client، مش
+ *    function عادية).
+ *
+ * ⚠️ **مش من `formatDuration`**: دي بتطبع نقطة زمنية **جوه** المحاضرة،
+ *    ومعيارها إنها قصيرة (ثانيتين على الأكثر) عشان تلتف في سطر واحد.
+ */
+export function formatTimestamp(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 /** جملة واحدة في الشرح المكثف — ومعها مرجعها. */
 export type IntensiveClaim = {
   /** نص الجملة المشرحة (من الموديل). */

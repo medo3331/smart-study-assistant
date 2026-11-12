@@ -1,7 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['mammoth', 'tesseract.js', '@react-pdf/renderer'],
+  serverExternalPackages: [
+    'mammoth',
+    'tesseract.js',
+    '@react-pdf/renderer',
+    // ⚠️ **لازم!** `@napi-rs/canvas` (اللي بيستخدمه `unpdf` عشان
+    //    يرندر صفحات PDF) **native** — لو Next bundlها، الـ binary
+    //    المنصّب للمنصة (مثل `@napi-rs/canvas-win32-x64-msvc`) مش
+    //    بيلاقيها وقت التشغيل:
+    //      Cannot find module '@napi-rs/canvas-win32-x64-msvc'
+    //    ⇒ بتبقى external ويترجع Node يحلّها من node_modules.
+    '@napi-rs/canvas',
+  ],
   async headers() {
     return [
       {

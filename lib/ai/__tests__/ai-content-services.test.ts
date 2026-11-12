@@ -13,6 +13,7 @@ import {
   buildEducationalImagePrompt,
   generateEducationalImage,
 } from "../image-generator";
+import { resetOpenRouterCreditsState } from "../openrouter-image";
 import {
   buildDiagramPrompt,
   cleanMermaidCode,
@@ -117,6 +118,9 @@ describe("generateEducationalImage fallback chain", () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("REPLICATE_API_TOKEN", "");
     vi.stubEnv("STABILITY_API_KEY", "");
+    // ⚠️ OpenRouter بقى **الأول** في السلسلة (2026-11-12) — من غير ده
+    //    الاختبار بيكون معتمد على إن المفتاح مش موجود في البيئة.
+    vi.stubEnv("OPENROUTER_API_KEY", "");
 
     // ⚠️ This used to depend on the sandbox having no network: the comment
     //    said "مفيش نت في الساندبوكس" and the paid keys were emptied to make
@@ -148,6 +152,8 @@ describe("generateEducationalImage fallback chain", () => {
   }, 30000);
 
   it("uses Pollinations when it responds — free, zero cost, base64 data URL", async () => {
+    // ⚠️ OpenRouter مش موجود ⇒ السلسلة بتبدأ من Pollinations مباشرة.
+    vi.stubEnv("OPENROUTER_API_KEY", "");
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]).buffer;
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -167,6 +173,65 @@ describe("generateEducationalImage fallback chain", () => {
     expect(calledUrl).toContain("image.pollinations.ai/prompt/");
     expect(calledUrl).toContain("model=flux");
     expect(calledUrl).toContain("nologo=true");
+  });
+
+  it("⭐ الافتراضي = OpenRouter (flux.2-pro) — وبيتحاول **أول** السلسلة", async () => {
+    // ⚠️ ده اللي بيحدد 「إعادة تفعيل توليد الصور»:
+    //    OpenRouter هو المزوّد الأساسي في المشروع، والموديل الافتراضي
+    //    `black-forest-labs/flux.2-pro`.
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("REPLICATE_API_TOKEN", "");
+    vi.stubEnv("STABILITY_API_KEY", "");
+
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generateEducationalImage({ prompt: "تجربة" })).rejects.toThrow();
+
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
+    // ⚠️ أول نداء = OpenRouter images (مش Pollinations).
+    expect(urls[0]).toContain("openrouter.ai/api/v1/images");
+    // وبعدها Pollinations (المجاني) ← شبكة الأمان.
+    expect(urls.some((u) => u.includes("pollinations"))).toBe(true);
+  });
+
+  it("✅ OpenRouter برصيد خلص (402) ⇒ السلسلة بتكمّل لـ Pollinations", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("REPLICATE_API_TOKEN", "");
+    vi.stubEnv("STABILITY_API_KEY", "");
+    resetOpenRouterCreditsState();
+
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]).buffer;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("openrouter.ai")) {
+        return {
+          ok: false,
+          status: 402,
+          json: async () => ({}),
+          text: async () => '{"error":{"code":402,"message":"Insufficient credits."}}',
+        };
+      }
+      return {
+        ok: true,
+        arrayBuffer: async () => bytes,
+        headers: new Headers({ "content-type": "image/jpeg" }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateEducationalImage({ prompt: "تجربة" });
+
+    // ⚠️ المستخدم بياخد صورة برضه — من Pollinations (مجاني).
+    expect(result.model).toBe("pollinations");
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(urls[0]).toContain("openrouter.ai/api/v1/images");
+    expect(urls.some((u) => u.includes("pollinations"))).toBe(true);
+
+    resetOpenRouterCreditsState();
   });
 
   it("skips to next provider immediately when Pollinations times out (AbortController)", async () => {

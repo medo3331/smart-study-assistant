@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { checkRateLimit, requireUser } from "@/lib/api-guard";
 import { extractDocument, type ExtractedPage } from "@/lib/extract-text";
+import { toMaterial, type MaterialRow } from "@/lib/pages-data";
 
 /* ==========================================================================
    📄 /api/documents — رفع مستند + استخراجه صفحة بصفحة
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     });
 
     // ── ① المادة (النص المدمج) — زي ما كانت ──
-    const { data: material, error: materialError } = await supabase
+    const { data: materialRow, error: materialError } = await supabase
       .from("materials")
       .insert({
         user_id: user.id,
@@ -84,6 +85,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // ⚠️ **نحوّل الصف لشكل `Material`** (camelCase) — نفس `fetchMaterials`.
+    //    الراوت بيرجّع الصف زي ما هو (snake_case) ⇒ الواجهة كانت بتقرأ
+    //    `fileType === undefined` ⇒ **زرار «عرض» مش بيظهر خالص**،
+    //    و`createdAt === undefined` ⇒ التاريخ «Invalid Date».
+    const material = toMaterial(materialRow as MaterialRow);
+
     // ── ② المستند + الصفحات ──
     // ⚠️ **ليه بنخزّن `material_id`**: عشان نربط المستند بالمادة (و vice
     //    versa) من غير ما نعمل استعلام في كل مرة.
@@ -98,8 +105,10 @@ export async function POST(request: Request) {
         page_count: extracted.pageCount,
         status: extracted.unread.length > 0 ? "partial" : "ready",
         unread_pages: extracted.unread,
+        // 📄 معاينة مصغّرة لأول صفحة (PDF بس) — بتظهر في شبكة الملفات.
+        ...(extracted.thumbnail ? { thumbnail: extracted.thumbnail } : {}),
       })
-      .select("id, title, file_type, page_count, status, unread_pages")
+      .select("id, title, file_type, page_count, status, unread_pages, thumbnail")
       .single();
 
     if (documentError) {
@@ -182,19 +191,27 @@ export async function GET(request: Request) {
     if (authError) return authError;
 
     const materialId = new URL(request.url).searchParams.get("materialId");
-    if (!materialId) {
+    const lectureId = new URL(request.url).searchParams.get("lectureId");
+
+    if (!materialId && !lectureId) {
       return NextResponse.json(
-        { error: { message: "لازم تحدّد المادة." } },
+        { error: { message: "لازم تحدّد المادة أو المحاضرة." } },
         { status: 400 },
       );
     }
 
-    const { data: document, error } = await supabase
+    // ⚠️ **المستند بيتحدد بمصدر واحد**: يا `material_id` (ملف مرفوع)
+    //    يا `lecture_id` (محاضرة). والقيد في القاعدة بيمنع الاتنين مع بعض.
+    const query = supabase
       .from("documents")
-      .select("id, title, file_type, page_count, status, unread_pages, deck")
-      .eq("material_id", materialId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .select(
+        "id, title, file_type, page_count, status, unread_pages, deck, source_unit, thumbnail",
+      )
+      .eq("user_id", user.id);
+
+    const { data: document, error } = materialId
+      ? await query.eq("material_id", materialId).maybeSingle()
+      : await query.eq("lecture_id", lectureId!).maybeSingle();
 
     if (error) {
       console.error(`documents: فشل جلب المستند [${error.code ?? "no-code"}]`);
@@ -205,7 +222,14 @@ export async function GET(request: Request) {
     }
     if (!document) {
       return NextResponse.json(
-        { error: { code: "NO_DOCUMENT", message: "مفيش مستند متسجّل للمادة دي." } },
+        {
+          error: {
+            code: "NO_DOCUMENT",
+            message: materialId
+              ? "مفيش مستند متسجّل للمادة دي."
+              : "مفيش عرض متسجّل للمحاضرة دي.",
+          },
+        },
         { status: 404 },
       );
     }

@@ -91,7 +91,16 @@ export interface Material {
   createdAt: string;
 }
 
-interface MaterialRow {
+/**
+ * ⚠️ **مصدّر عمداً**: راوت `/api/documents` بيرجّع **الصف نفسه** من القاعدة
+ *    (snake_case) — والواجهة (والـ workspace) بتقرأ `Material`
+ *    (camelCase). فلو رجعنا الصف الخام، الـ UI هيشوف:
+ *      `fileType === undefined` ⇒ زرار «عرض» **مش بيظهر** خالص،
+ *      `createdAt === undefined` ⇒ التاريخ «Invalid Date».
+ *
+ * ⇒ المصدر الواحد للشكل: `toMaterial` هنا، مش نسخة تانية في الراوت.
+ */
+export interface MaterialRow {
   id: string;
   title: string;
   file_type: string | null;
@@ -102,7 +111,7 @@ interface MaterialRow {
   created_at: string;
 }
 
-function toMaterial(row: MaterialRow): Material {
+export function toMaterial(row: MaterialRow): Material {
   return {
     id: row.id,
     title: row.title,

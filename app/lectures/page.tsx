@@ -275,6 +275,10 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                              كريدت واحد للمحاضرة — المرجع بينحسب
                              في السيرفر من الـ lectureId.) */
                           sessionId={`lecture-${lecture.id}`}
+                          /* 📄 المقاطع — عشان «ورقة المصدر» تعرض
+                             **الاقتباس الحرفي** من غير أي نداء شبكة
+                             (المقاطع موجودة في الصفحة أصلاً). */
+                          segments={segments}
                         />
                       </LectureSection>
                     )}

@@ -28,12 +28,26 @@ type CitationContextValue = {
   activeSeg: number | null;
   /** يطلب إبراز مقطع معيّن. */
   focusSegment: (seg: number | null) => void;
+  /**
+   * 🖍️ **المقطع اللي المؤشر عليه دلوقتي** (hover) — **مش** النشط.
+   *
+   * ⚠️ **ليه حالة منفصلة عن `activeSeg`**:
+   *    - `activeSeg` = «الطالب اختار المصدر» ⇒ إبراز **قوي** + scroll.
+   *    - `hoverSeg`  = «المؤشر فوق الجملة» ⇒ إبراز **خفيف** بس.
+   *
+   *    لو استعملنا حالة واحدة، أي hover هيعمل scroll للقسم التاني — وده
+   *    بيقطّع القراءة في نص طويل.
+   */
+  hoverSeg: number | null;
+  /** يحدّد المقطع اللي تحت المؤشر (أو `null` لما المؤشر يخرج). */
+  setHoverSeg: (seg: number | null) => void;
 };
 
 const CitationContext = createContext<CitationContextValue | null>(null);
 
 export function LectureCitationProvider({ children }: { children: ReactNode }) {
   const [activeSeg, setActiveSeg] = useState<number | null>(null);
+  const [hoverSeg, setHoverSeg] = useState<number | null>(null);
 
   // ⚠️ `useCallback` بـ setter مباشر — `focusSegment` بتبقى نفس
   //    المرجع عبر الرندر، فالمكوّنات اللي بتستهلكها ما بتعملش
@@ -43,8 +57,8 @@ export function LectureCitationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ activeSeg, focusSegment }),
-    [activeSeg, focusSegment],
+    () => ({ activeSeg, focusSegment, hoverSeg, setHoverSeg }),
+    [activeSeg, focusSegment, hoverSeg],
   );
 
   return (

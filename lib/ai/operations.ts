@@ -19,18 +19,27 @@ const USD_PER_MILLION_TOKENS: Record<AiProviderName, { prompt: number; completio
 /** توليد الصور بيتحسب بالصورة مش بالتوكن — تقدير تقريبي لكل صورة. */
 const USD_PER_IMAGE = 0.04;
 
-function estimateCost(provider: AiProviderName, taskType: AiTaskType, usage: AiTokenUsage, contentLength: number): number | undefined {
+function estimateCost(provider: string, taskType: AiTaskType, usage: AiTokenUsage, contentLength: number): number | undefined {
   if (taskType === "image_generation") return USD_PER_IMAGE;
   const promptTokens = usage.promptTokens ?? Math.ceil(contentLength / 4);
   const completionTokens = usage.completionTokens ?? 0;
   if (!promptTokens && !completionTokens) return undefined;
-  const rates = USD_PER_MILLION_TOKENS[provider];
+  // ⚠️ **حماية**: المزوّد ممكن يكون خارج `AiProviderName` (مثل `pollinations`
+  //    لمولّد الصور) ⇒ من غير الحارس ده السطر ده كان بيرمي TypeError
+  //    وقت التسجيل. المزوّد المجهول ⇒ مافيش تقدير (undefined) أفضل من كراش.
+  const rates = USD_PER_MILLION_TOKENS[provider as AiProviderName];
+  if (!rates) return undefined;
   return Number(((promptTokens * rates.prompt + completionTokens * rates.completion) / 1_000_000).toFixed(6));
 }
 
 export type AiOperationRecord = {
   userId: string;
-  provider: AiProviderName;
+  /**
+   * ⚠️ **أوسع من `AiProviderName`**: مهام الوسائط ممكن تتولّد من مزوّدين
+   *    برّه سجل المزوّدين (مثل `pollinations` لمولّد الصور المجاني).
+   *    العمود في القاعدة `text` فمفيش قيد.
+   */
+  provider: AiProviderName | (string & {});
   model: string;
   taskType: AiTaskType;
   status: "completed" | "failed";

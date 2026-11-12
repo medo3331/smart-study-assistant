@@ -2,24 +2,84 @@
  * lib/ai/image-generator.ts — توليد الصور التعليمية
  *
  * سلسلة مزوّدين مع Fallback:
- *   Pollinations (مجاني — الأول دائمًا) → DALL-E 3 (OpenAI — الأعلى جودة)
- *   → Flux Pro (Replicate) → SD3/SDXL (Stability — الأرخص بين المدفوعين)
+ *   OpenRouter (flux.2-pro) — الأساسي ⭐
+ *     → Pollinations (مجاني) → DALL-E 3 (OpenAI)
+ *     → Flux Pro (Replicate) → SD3/SDXL (Stability)
  *
  * أي مزوّد مدفوع بيشتغل بمفتاح البيئة الخاص به، ولو المفتاح مش موجود
  * بيتعدّى للذي بعده — ووجود Pollinations المجاني معناه إن الخدمة
  * بتفضل شغالة حتى لو مفيش أي مفاتيح مدفوعة خالص.
  *
- * ملحوظة: دي طبقة المزوّدين المستقلة عن مسار Gemini المجاني في
- * /api/ai/image-gen وبتستخدمها خدمة "استوديو الصور التعليمية".
+ * ملحوظة: دي طبقة المزوّدين المستقلة عن مسار الـ media router في
+ * /api/ai (اللي كان محتكر على Gemini) وبتستخدمها خدمة "استوديو الصور
+ * التعليمية" + زرار إنشاء الصورة في صفحة الإنشاء.
  */
 
+import {
+  aspectRatioForSize,
+  generateWithOpenRouterImages,
+  OpenRouterCreditsExhaustedError,
+  OPENROUTER_SLUG_BY_KEY,
+  openRouterCreditsExhausted,
+  type OpenRouterImageModelKey,
+} from "./openrouter-image";
+
 export type ImageModel =
+  | "openrouter-flux"
+  | "openrouter-seedream"
   | "pollinations"
   | "dall-e-3"
   | "flux-pro"
   | "stable-diffusion-xl";
 export type ImageSize = "1024x1024" | "1024x1792" | "1792x1024";
 export type ImageStyle = "educational" | "realistic" | "cartoon" | "infographic";
+
+/**
+ * ⭐ **الموديل الافتراضي** — `black-forest-labs/flux.2-pro` عبر OpenRouter.
+ *
+ * ليه: OpenRouter **هو** المزوّد الأساسي في المشروع (مفتاحه موجود
+ * وفعّال)، ومفيش دمج جديد ولا إعداد. و`flux.2-pro` أرخص وأسرع من
+ * `seedream-4.5` ⇒ نبدأ بيه، والبديل متاح للمستخدم يختاره.
+ */
+export const DEFAULT_IMAGE_MODEL: ImageModel = "openrouter-flux";
+
+/** الموديلات اللي بتمشي على OpenRouter. */
+const OPENROUTER_KEYS = Object.keys(
+  OPENROUTER_SLUG_BY_KEY,
+) as OpenRouterImageModelKey[];
+
+/** هل الموديل ده OpenRouter؟ */
+export function isOpenRouterImageModel(model: ImageModel): boolean {
+  return (OPENROUTER_KEYS as string[]).includes(model);
+}
+
+/** الاسم اللي بيتعرض للمستخدم (نفس slug بتاع OpenRouter). */
+export function imageModelLabel(model: ImageModel): string {
+  if (isOpenRouterImageModel(model)) {
+    return OPENROUTER_SLUG_BY_KEY[model as OpenRouterImageModelKey];
+  }
+  return model;
+}
+
+/**
+ * المزوّد اللي ولّد الصورة فعلياً — من اسم/موديل النتيجة.
+ *
+ * ⚠️ **ليه محتاجينها**: `recordAiOperation` بيتسجّل بالمزوّد (مش بالموديل)
+ *    ⇒ التقارير لازم تعرف: ده OpenRouter ولا Pollinations ولا غيرهم.
+ *
+ * ⚠️ `pollinations` برّه `AiProviderName` — بس العمود في القاعدة `text`
+ *    و`estimateCost` بقى آمن مع المزوّد المجهول.
+ */
+export function imageProviderFor(model: string): string {
+  if (Object.values(OPENROUTER_SLUG_BY_KEY).includes(model as never)) {
+    return "openrouter";
+  }
+  if (model === "pollinations") return "pollinations";
+  if (model === "dall-e-3") return "openai";
+  if (model === "flux-pro") return "replicate";
+  if (model === "stable-diffusion-xl") return "stability";
+  return "openrouter";
+}
 
 export interface GenerateImageOptions {
   prompt: string;
@@ -93,6 +153,55 @@ Minimal text, maximum visual clarity.`,
 }
 
 // ============================================
+// ============================================
+// 1.5. OpenRouter Images — المزوّد الأساسي ⭐
+//     `POST https://openrouter.ai/api/v1/images`
+//     الموديل الافتراضي: black-forest-labs/flux.2-pro
+// ============================================
+
+/**
+ * يولّد صورة من OpenRouter ويحوّلها لـ data URL.
+ *
+ * ⚠️ **ليه data URL**: الرد بيرجّع `b64_json` (base64 خام) — والواجهة
+ *    محتاجة رابط جاهز للعرض والتحميل. والـ mime type بنحدّده من **بايتات
+ *    الصورة نفسها** (مش من content-type — مفيش content-type أصلاً).
+ */
+async function generateWithOpenRouter(
+  prompt: string,
+  size: ImageSize,
+  model: OpenRouterImageModelKey
+): Promise<ImageResult> {
+  const result = await generateWithOpenRouterImages({
+    prompt,
+    model,
+    // ⚠️ دُرّة الدقة الثابتة `1K` — المقاس بيتحدد من الـ aspect ratio.
+    resolution: "1K",
+    aspectRatio: aspectRatioForSize(size),
+  });
+
+  return {
+    url: `data:${result.mimeType};base64,${result.base64}`,
+    model: result.model,
+    cost: result.cost,
+  };
+}
+/**
+ * lib/ai/image-generator.ts — توليد الصور التعليمية
+ *
+ * سلسلة مزوّدين مع Fallback:
+ *   OpenRouter (flux.2-pro) — الأساسي ⭐
+ *     → Pollinations (مجاني) → DALL-E 3 (OpenAI)
+ *     → Flux Pro (Replicate) → SD3/SDXL (Stability)
+ *
+ * أي مزوّد مدفوع بيشتغل بمفتاح البيئة الخاص به، ولو المفتاح مش موجود
+ * بيتعدّى للذي بعده — ووجود Pollinations المجاني معناه إن الخدمة
+ * بتفضل شغالة حتى لو مفيش أي مفاتيح مدفوعة خالص.
+ *
+ * ملحوظة: دي طبقة المزوّدين المستقلة عن مسار الـ media router في
+ * /api/ai (اللي كان محتكر على Gemini) وبتستخدمها خدمة "استوديو الصور
+ * التعليمية" + زرار إنشاء الصورة في صفحة الإنشاء.
+ */
+
 // 2. Pollinations — مجاني وسريع، المزوّد الأول والفولباك الدائم
 //    (موديل flux عبر Pollinations بيكتب نصوص عربي/إنجليزي كويس
 //     و &nologo=true بيشيل اللوجو عشان الصور تبقى جاهزة للملفات)
@@ -320,7 +429,8 @@ async function generateWithSDXL(prompt: string, size: ImageSize): Promise<ImageR
 export async function generateEducationalImage(
   options: GenerateImageOptions
 ): Promise<ImageResult> {
-  const { model = "pollinations", size = "1024x1024" } = options;
+  // ⚠️ **الافتراضي بقى OpenRouter** (flux.2-pro) — مش Pollinations.
+  const { model = DEFAULT_IMAGE_MODEL, size = "1024x1024" } = options;
 
   const enhancedPrompt = buildEducationalImagePrompt(options);
 
@@ -331,6 +441,19 @@ export async function generateEducationalImage(
     fn: () => Promise<ImageResult>;
     key?: string;
   }> = [
+    {
+      // ⭐ OpenRouter — المزوّد الأساسي في المشروع.
+      name: "openrouter-flux",
+      fn: () =>
+        generateWithOpenRouter(enhancedPrompt, size, "openrouter-flux"),
+      key: "OPENROUTER_API_KEY",
+    },
+    {
+      name: "openrouter-seedream",
+      fn: () =>
+        generateWithOpenRouter(enhancedPrompt, size, "openrouter-seedream"),
+      key: "OPENROUTER_API_KEY",
+    },
     {
       name: "pollinations",
       fn: () => generateWithPollinations(enhancedPrompt, size),
@@ -363,12 +486,29 @@ export async function generateEducationalImage(
       continue;
     }
 
+    // ⚠️ **رصيد OpenRouter خلص** ⇒ متنسألوش تاني (الموديل التاني
+    //   |OpenRouter كمان). الـ كاش في openrouter-image بيمنع نداء
+    //    الشبكة، بس السطر ده بيوفّر لوجينته الكرم.
+    if (isOpenRouterImageModel(gen.name) && openRouterCreditsExhausted()) {
+      console.warn(`[Image Gen] Skipping ${gen.name}: رصيد OpenRouter خلص`);
+      continue;
+    }
+
     try {
       const result = await gen.fn();
       console.log(`[Image Gen] Success with ${gen.name} (~$${result.cost})`);
       return result;
     } catch (err) {
-      console.error(`[Image Gen] ${gen.name} failed:`, (err as Error).message);
+      // ⚠️ **رصيد OpenRouter خلص** (402) — مش فشل تقني. بنسجّله ونكمّل
+      //    للسلسلة (Pollinations المجاني). الـ openrouter-image module
+      //    كاش الرصيد نفسه ⇒ الطلب الجاي مش هيحاول تاني لحد ١٠ دقايق.
+      if (err instanceof OpenRouterCreditsExhaustedError) {
+        console.warn(
+          "[Image Gen] OpenRouter رصيده خلص — بنكمل للمزوّد المجاني",
+        );
+      } else {
+        console.error(`[Image Gen] ${gen.name} failed:`, (err as Error).message);
+      }
     }
   }
 

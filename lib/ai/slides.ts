@@ -41,11 +41,19 @@ import {
 
 /* ═══════════════════════════ الأنواع ═══════════════════════════ */
 
-/** وحدة مستخرجة (صفحة/شريحة/فقرة). */
+/** وحدة مستخرجة (صفحة/شريحة/فقرة/مقطع). */
 export type DocumentPage = {
   /** 1-based. */
   number: number;
   text: string;
+  /**
+   * ⚠️ **الليبل المعروض** (اختياري).
+   *
+   * لو موجود ⇒ هو اللي بيتعرض بدل `unitLabel(unit, number)`.
+   * بتستخدمه **المحاضرات**: الوحدة = مقطع التفريغ، والليبل =
+   * «دقيقة 12:30» (مش «مقطع ٤») — لأن المرجع بتاع الطالب زمن مش رقم.
+   */
+  label?: string;
 };
 
 /** نقطة في شريحة — ومعها مرجعها. */
@@ -58,6 +66,13 @@ export type DeckBullet = {
    *    بتظهر **من غير** شارة مصدر.
    */
   page: number | null;
+  /**
+   * ⚠️ **الليبل المعروض للمرجع** (اختياري).
+   *
+   * المستندات ⇒ `undefined` (الـ UI بيحسبه من `unit`).
+   * المحاضرات ⇒ «دقيقة 12:30» (الوحدة = مقطع، والمرجع زمن).
+   */
+  label?: string;
   /** الاقتباس الحرفي (للتحقق فقط — مش بيتخزَّن). */
   quote?: string;
 };
@@ -90,7 +105,7 @@ export type DeckState = {
   source: {
     file_name: string;
     page_count: number;
-    unit: "page" | "slide" | "paragraph";
+    unit: "page" | "slide" | "paragraph" | "segment";
   };
 };
 
@@ -238,6 +253,11 @@ export function validateSlidesPart(
 
   const groupNumbers = new Set(group.pages.map((p) => p.number));
   const pageByNumber = new Map(allPages.map((p) => [p.number, p.text]));
+  // ⚠️ **الليبل المعروض** لكل وحدة — بتنتقل مع النقطة (المحاضرات:
+  //    «دقيقة 12:30» بدل «مقطع ٤»).
+  const labelByNumber = new Map(
+    allPages.filter((p) => p.label).map((p) => [p.number, p.label as string]),
+  );
 
   const slides: DeckSlide[] = [];
   let rejected = 0;
@@ -299,7 +319,12 @@ export function validateSlidesPart(
         continue;
       }
 
-      bullets.push({ text, page, quote });
+      bullets.push({
+        text,
+        page,
+        ...(labelByNumber.has(page) ? { label: labelByNumber.get(page) } : {}),
+        quote,
+      });
     }
 
     if (bullets.length > 0) {

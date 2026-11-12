@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { checkRateLimit, requireUser } from "@/lib/api-guard";
-import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
-import { runAiTask } from "@/lib/ai/tasks/runner";
-import { consumeServiceQuota, refundServiceQuota } from "@/lib/ai/service-registry";
+import { requireUser, checkRateLimit } from "@/lib/api-guard";
 import {
-  chunkPages,
-  emptyDeckState,
-  flattenDeck,
-  generateDeckPart,
-  SlidesError,
-  type DeckState,
-  type DocumentPage,
-} from "@/lib/ai/slides";
-import { generateDeckFile, type DeckFormat } from "@/lib/ai/slides-generator";
+  exportDeckFile,
+  generateDeck,
+  unitLabelFor,
+} from "@/lib/ai/slides-service";
+import { SlidesError, type DeckState } from "@/lib/ai/slides";
 
 /* ==========================================================================
-   🎨 /api/documents/[id]/slides — توليد عرض تقديمي من مستند
+   🎬 /api/documents/[id]/slides — توليد عرض تقديمي من مستند
    ============================================================================
 
    POST { "partIndex"?: number, "format"?: "pptx" | "pdf" | "docx" }
@@ -26,25 +19,10 @@ import { generateDeckFile, type DeckFormat } from "@/lib/ai/slides-generator";
    والحد ٨٠٠٠/دقيقة. فلو المستند ٤٨ صفحة اتولّد كله مرة واحدة ⇒
    Timeout + 429.
 
-   ونفس فكرة «الشرح المكثف»: كل جزء بيتحفظ لحظه في
-   `documents.deck` ⇒ refresh مبيضيّعشش تقدم.
-
-   ═══ ترتيب الحمايات (مقصود) ═══
-     1. جلسة؟ → 401
-     2. حدّ استخدام خفيف → 429
-     3. المستند (بفلتر المستخدم) → 404
-     4. عنده صفحات؟ → 422
-     5. حدّ الخدمة (باقة Pro/Ultra) → 402
-     6. حارس الكروت → 429/403/402  ← **قبل** أي نداء موديل
-     7. نداء الموديل (واحد)
-     8. حفظ الجزء
+   ⚠️ **المحاضرات** ليها مسار تاني (`/api/lectures/[id]/slides`) لأن
+   الوحدات مختلفة (مقاطع + توقيت). والمنطق مشترك كله في
+   `lib/ai/slides-service.ts` ⇒ **منطق واحد** للتوليد في المشروع كله.
    ========================================================================== */
-
-/** صيغ الملفات المدعومة. */
-const VALID_FORMATS: DeckFormat[] = ["pptx", "pdf", "docx"];
-
-/** أقصى عدد أجزاء (الحماية من المستندات العملاقة). */
-const MAX_PARTS = 40;
 
 export async function POST(
   request: Request,
@@ -71,8 +49,8 @@ export async function POST(
       format?: unknown;
     } | null;
     const format =
-      typeof body?.format === "string" && VALID_FORMATS.includes(body.format as DeckFormat)
-        ? (body.format as DeckFormat)
+      body?.format === "pptx" || body?.format === "pdf" || body?.format === "docx"
+        ? body.format
         : undefined;
     const partIndex =
       typeof body?.partIndex === "number" && Number.isInteger(body.partIndex)
@@ -82,7 +60,9 @@ export async function POST(
     // ── ٣) المستند (بفلتر المستخدم) ──
     const { data: document, error: docError } = await supabase
       .from("documents")
-      .select("id, title, file_type, page_count, status, unread_pages, deck")
+      .select(
+        "id, title, file_type, page_count, status, unread_pages, deck, source_unit",
+      )
       .eq("id", id)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -92,19 +72,13 @@ export async function POST(
         `documents/slides: فشل جلب المستند [${docError.code ?? "no-code"}]`,
       );
       return NextResponse.json(
-        {
-          error: {
-            message: "مقدرناش نقرأ المستند. جرّب تاني كمان شوية.",
-          },
-        },
+        { error: { message: "مقدرناش نقرأ المستند. جرّب تاني كمان شوية." } },
         { status: 500 },
       );
     }
     if (!document) {
       return NextResponse.json(
-        {
-          error: { message: "مفيش مستند بالـ id ده في حسابك." },
-        },
+        { error: { message: "مفيش مستند بالـ id ده في حسابك." } },
         { status: 404 },
       );
     }
@@ -131,7 +105,7 @@ export async function POST(
       );
     }
 
-    const pages: DocumentPage[] = (
+    const pages = (
       (pageRows ?? []) as Array<{ source_page: string | null; content: string | null }>
     )
       .map((row) => ({
@@ -154,139 +128,32 @@ export async function POST(
       );
     }
 
-    // ── ٥) خطة الأجزاء ──
-    const groups = chunkPages(pages);
-    if (groups.length > MAX_PARTS) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "TOO_MANY_PARTS",
-            message: "المستند ده طويل أوي. جرّب جزء منه.",
-          },
-        },
-        { status: 422 },
-      );
-    }
-
-    const unit: DeckState["source"]["unit"] =
-      document.file_type === "pptx"
+    // ⚠️ **نوع الوحدة** — من `source_unit` (مصدر الحقيقة) مع fallback
+    //    على `file_type` للصفوف القديمة اللي اتعملت قبل العمود ده.
+    const unit =
+      document.source_unit ??
+      (document.file_type === "pptx"
         ? "slide"
         : document.file_type === "docx"
           ? "paragraph"
-          : "page";
-    const unitText =
-      unit === "slide" ? "شريحة" : unit === "paragraph" ? "فقرة" : "صفحة";
+          : "page");
 
-    // الحالة المحفوظة (أو جديدة)
-    const stored = document.deck as Partial<DeckState> | null;
-    const base: DeckState =
-      stored && stored.version === 1 && Array.isArray(stored.parts) && stored.parts.length === groups.length
-        ? (stored as DeckState)
-        : emptyDeckState({
-            title: document.title,
-            groups,
-            source: {
-              file_name: document.title,
-              page_count: pages.length,
-              unit,
-            },
-          });
-
-    // ── ٦) أي جزء نولّده؟ ──
-    const targetIndex =
-      partIndex !== undefined
-        ? partIndex
-        : (base.parts.find((part) => part.status !== "ready")?.index ?? 0);
-
-    if (targetIndex < 0 || targetIndex >= groups.length) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "BAD_PART_INDEX",
-            message: `الجزء ده مش موجود. المستند ده فيه ${groups.length} أجزاء.`,
-          },
-        },
-        { status: 400 },
-      );
-    }
-
-    // ── ٧) حدّ الخدمة (باقة Pro/Ultra) ──
-    const quota = await consumeServiceQuota(
+    const result = await generateDeck({
       supabase,
-      user.id,
-      "documents_slides",
-    );
-    if (!quota.allowed) {
-      return NextResponse.json(
-        {
-          error: {
-            message: quota.reasonAr,
-            code: "QUOTA_EXCEEDED",
-            tier: quota.tier,
-            resetAtUtc: quota.resetAtUtc,
-          },
-        },
-        { status: 402 },
-      );
-    }
+      userId: user.id,
+      pages,
+      unit,
+      fileName: document.title,
+      title: document.title,
+      ...(partIndex !== undefined ? { partIndex } : {}),
+      existingDeck: (document.deck as DeckState | null) ?? null,
+      creditRefId: `document_slides:${user.id}:${document.id}`,
+    });
 
-    // ── ٨) حارس الكروت — **قبل** أي نداء موديل ──
-    // ⚠️ **كريدت واحد للمستند كله**: نفس المرجع عبر كل الأجزاء ⇒
-    //    `reserve_ai_credit` بيرجّع `already_existed` (idempotent على
-    //    `p_ref_id`) ⇒ الأجزاء التانية مجانية.
-    const creditRefId = `document_slides:${user.id}:${document.id}`;
-    const guard = await guardAiAccessAndReserve(
-      supabase,
-      user.id,
-      "openai/gpt-oss-120b",
-      { refId: creditRefId },
-    );
-    if (!guard.ok) {
-      await refundServiceQuota(supabase, user.id, "documents_slides");
-      return guard.response;
-    }
-
-    // ── ٩) التوليد (نداء واحد) ──
-    let generated;
-    try {
-      generated = await generateDeckPart({
-        group: groups[targetIndex],
-        allPages: pages,
-        totalParts: groups.length,
-        unitLabel: unitText,
-        deps: { runTask: runAiTask },
-      });
-    } catch (error) {
-      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-      await refundServiceQuota(supabase, user.id, "documents_slides");
-      throw error;
-    }
-
-    // ── ١٠) حفظ الجزء ──
-    const nextState: DeckState = {
-      ...base,
-      title: base.title || document.title,
-      total_parts: groups.length,
-      parts: base.parts.map((part) =>
-        part.index === targetIndex
-          ? {
-              ...part,
-              status: "ready" as const,
-              error: null,
-              slides: generated.slides,
-            }
-          : part,
-      ),
-      source: base.source ?? {
-        file_name: document.title,
-        page_count: pages.length,
-        unit,
-      },
-    };
-
+    // ── حفظ الـ deck ──
     const { error: saveError } = await supabase
       .from("documents")
-      .update({ deck: nextState, updated_at: new Date().toISOString() })
+      .update({ deck: result.deck, updated_at: new Date().toISOString() })
       .eq("id", document.id)
       .eq("user_id", user.id);
 
@@ -294,45 +161,38 @@ export async function POST(
       console.error(
         `documents/slides: فشل حفظ الـ deck [${saveError.code ?? "no-code"}]`,
       );
-      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-      await refundServiceQuota(supabase, user.id, "documents_slides");
       return NextResponse.json(
         { error: { message: "العرض اتولّد بس مقدرش نحفظه." } },
         { status: 500 },
       );
     }
 
-    // ── ١١) الرد ──
+    // ── الرد ──
     // ⚠️ من غير `format` ⇒ بترجع الـ deck JSON (الواجهة بتعرضه).
     //    مع `format` ⇒ الملف نفسه (binary).
     if (!format) {
-      const ready = nextState.parts.filter((part) => part.status === "ready").length;
       return NextResponse.json({
         ok: true,
         documentId: document.id,
-        deck: nextState,
-        slides: flattenDeck(nextState),
-        total_parts: groups.length,
-        ready_parts: ready,
-        next_pending: nextState.parts.find((part) => part.status !== "ready")
-          ?.index,
+        deck: result.deck,
+        slides: result.slides,
+        total_parts: result.totalParts,
+        ready_parts: result.readyParts,
+        next_pending: result.nextPending,
+        unit,
+        unit_label: unitLabelFor(unit),
+        quota: result.quota,
       });
     }
 
-    const slides = flattenDeck(nextState);
-    if (slides.length === 0) {
+    if (result.slides.length === 0) {
       return NextResponse.json(
         { error: { message: "مفيش شرائح جاهزة بعد." } },
         { status: 422 },
       );
     }
 
-    const file = await generateDeckFile({
-      format,
-      state: nextState,
-      slides,
-    });
-
+    const file = await exportDeckFile(result.deck, result.slides, format);
     const encoded = encodeURIComponent(file.filename);
     return new Response(new Uint8Array(file.buffer), {
       headers: {

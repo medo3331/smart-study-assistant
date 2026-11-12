@@ -336,6 +336,54 @@ timeout ⇒ ٤٨ صفحة = ٢٠ دقيقة. مش قابل يتعمل inline.
 **الوضع الحالي:** الـ UI بيصرّح للطالب بالصفحات المتقراش
 (`documents.unread_pages`) — فمافيش كذب، بس الـ feature ناقصة.
 
+> ⭐ **تحديث 2026-11-12 (Phase 6): اتصلّح bug أخطر من السقف نفسه!**
+>
+> مسار الـ OCR كان **بيفشل دايمًا** — مش لأن السقف ٦، لأن
+> `renderPageAsImage` في Node **بيطلب `canvasImport`**:
+> ```
+> Parameter "canvasImport" is required in Node.js environment.
+> ```
+> ⇒ **كل** صفحة مصوّرة كانت بتفشل في الرندر (والخطأ كان متقطّع في
+> catch) ⇒ الصفحات بتفضل فاضية والطالب بيشوف «مش متقراية» من غير
+> سبب حقيقي.
+>
+> **اتصلّح:** `canvasImport: () => import('@napi-rs/canvas')` +
+> `'@napi-rs/canvas'` في `serverExternalPackages` (وإلا Next bundlها
+> والـ native binarypositionalمش بيلتقي).
+>
+> ⚠️ **ملاحظة تثبيت**: `@napi-rs/canvas-win32-x64-msvc` اتنصّب
+> **ناقص** (الـ `.node`-binary مش موجود) ⇒ حتاج reinstallation. على
+> Vercel (Linux) الحزمة بتتمشي مع `optionalDependencies`.
+>
+> ⇒ **السقف ٦ لسه هو القيد الحقيقي** (٦ × ٢٥ ثانية = ١٥٠ ثانية).
+> الحل المقترح (tesseract.js محلي / رفع السقف) **لسه قائم** — بس
+> الحين المسار **شغّال** لأول ٦ صفحات فعلاً.
+
+### N-022 — `renderPageAsImage` كان محتاج `canvasImport` (✅ اتصلّح)
+**أين:** `lib/extract-text.ts` + `next.config.ts` (`serverExternalPackages`).
+
+**إيه المشكلة:** `unpdf.renderPageAsImage` في Node.js بيطلب
+`canvasImport` — من غيره بيرمي:
+`Parameter "canvasImport" is required in Node.js environment.`
+
+⇒ مسار **الـ OCR للـ PDF المصوّر** (N-013) كان **ميتّ فعلياً**، ومعاينة
+الملف المصغّرة (Phase 6) كانت مستحيلة.
+
+**الحل (اتطبّق):**
+- `canvasImport: () => import('@napi-rs/canvas')` (الاستيراد كسول).
+- `'@napi-rs/canvas'` في `serverExternalPackages` — **لازم**: من غيرها
+  Next بيعمل bundle للـ package والـ native binarypositionalمش بيلتقي
+  وقت التشغيل ⇒ `Cannot find module '@napi-rs/canvas-win32-x64-msvc'`.
+
+⚠️ **ملاحظة تثبيت (Windows):** حزمة المنصّة اتنصّبت **ناقصة** (الـ
+`skia.win32-x64-msvc.node` مش موجود) ⇒ `Failed to load native binding`.
+**الحل:** إعادة تنزيل الحزمة من الـ tarball:
+```
+npm view "@napi-rs/canvas-win32-x64-msvc@<ver>" dist.tarball
+# فكّ الضغط، وانسخ skia.win32-x64-msvc.node جوه node_modules/
+```
+(على Linux/Vercel مفيش حاجة — الحزمة بتتمشي مع `optionalDependencies`.)
+
 ### N-014 — `consume_service_quota` كان مكسوراً في الإنتاج (✅ اتصلّح)
 **أين:** الدالة `public.consume_service_quota(p_user_id uuid,
 p_service text, p_limit integer)` — **مش في أي migration** (اتعملت يدوي
@@ -421,5 +469,150 @@ decommissioned and is no longer supported.
 **الخطوة الجاية (ل تيكيت مستقل):** امسح `GEMINI_API_KEY` من
 `.env.local` (هو **مفتاح NVIDIA** — لازم تروح على متغير NVIDIA) أو
 حطّ مفتاح Gemini **صحيح** في مكانه.
+
+⚠️ **تصحيح (من الـ audit):** المسح اتعمل **غلط** — سطر `NVIDIA_API_KEY`
+اتلزق بسطر `GEMINI_API_KEY` فطلع:
+```
+GEMINI_API_KEY="NVIDIA_API_KEY=nvapi-…"
+```
+⇒ المفتاح **لسه "موجود"** (85 حرف من الفوضى) ⇒ `isConfigured("gemini")`
+= true ⇒ كل نداء `file_analysis` بيروح لـ Gemini وبياخد 400.
+**اتصلّح:** السطر اتشال من `.env.local` (والـ `NVIDIA_API_KEY` اتحافظ
+عليه). `.env.local` مش متتبَّع في git ⇒ تغيير محلي.
+
+### N-017 — `file_analysis` كان ميتّ بالكامل (✅ اتصلّح)
+**أين:** `app/api/ai/file-analysis/route.ts` + `lib/ai/routing.ts`
+(`TASK_CAPABILITIES` · `AI_PROVIDER_BY_TASK`).
+
+**إيه المشكلة:** مهمة `file_analysis` كانت **مقفولة على Gemini في مكانين**:
+1. `AI_PROVIDER_BY_TASK.file_analysis = "gemini"` (المزوّد).
+2. `TASK_CAPABILITIES.file_analysis = ["file_analysis"]` — و
+   `gemini-3.6-flash` هو **الموديل الوحيد** في السجل بالقدرة دي.
+
+⇒ مع غياب مفتاح Gemini: صفر مرشّحين ⇒ **502 «تعذّر تحليل الملف» على كل
+طلب** (زرار «تلخيص/تحليل» في الـ workspace كان ميتّ).
+
+**ليه كانت القيد وهمي:** الراوت بيبعت **النص المستخرج بس**
+(`material.content.slice(0, 50_000)`) — **مش الملف**. وحتى الـ system
+prompt بيقول للموديل صراحةً: «لا تدّعِ رؤية الملف الأصلي؛ أمامك النص
+المستخرج منه فقط». ⇒ القدرة `file_analysis` (قراءة ملف حقيقي) مش
+مطلوبة أصلاً في المسار ده.
+
+كمان: `mediaOnly` (routing.ts:422) بيودّي المسار في فرع
+`getProviderName(task)` — وهو **بيرمي** لو المزوّد مش متاح، فمافيش
+fallback خالص.
+
+**الحل (اتطبّق):** فصلنا بين **مهمة التقارير** و**مهمة التوجيه**:
+- `taskType = "file_analysis"` → ده اللي بيتسجّل في الـ accounting
+  (نعرف راح يطلب «تحليل ملف»).
+- `routingTask = "summarize"` → ده اللي بنوجّه بيه. مهمة نصّية
+  عادية ⇒ مرشّحين حقيقيين (Groq) + سلسلة fallback كاملة.
+
+وكمان: رسالة الخطأ بقت **مزود-محايدة** («الخدمة مشغولة حاليًا») بدل
+«Gemini مشغول» (اللي بقت غلط بعد شيل Gemini).
+
+⚠️ **اللي ماتغيّرش**: `aiRouter.analyzeMedia("file_analysis", …)`
+(المسار التاني — بيبعت **ملف حقيقي** للموديل) ساب Gemini — لأنه
+محتاج رؤية ملف فعلاً.
+
+### N-018 — مهام الوسائط لسه محتكرة على Gemini (غير متصلّحة)
+**أين:** `lib/ai/routing.ts` — `AI_PROVIDER_BY_TASK` + `TASK_CAPABILITIES`.
+
+| المهمة | القدرة المطلوبة | مين عنده |
+|---|---|---|
+| `image_generation` | `image_generation` | `gemini-3.1-flash-image` **بس** |
+| `image_edit` | `vision` + `image_generation` | مفيش (محتاجة الاثنين) |
+| `video_generation` | `video_generation` | مفيش |
+| `image_analysis` | `vision` | Groq/OpenRouter/NVIDIA — **شغّال** ✓ |
+
+⇒ بعد شيل مفتاح Gemini: **توليد الصور** و**تعديل الصور** و**توليد
+الفيديو** ميّتين (ولا fallback — مثل N-017 بس القدرة مش متاحة عند حد).
+
+**الحل المقترح (ل تيكيت مستقل):** `image_generation` — إما مفتاح Gemini
+صحيح، أو موديل مجاني توليد صور ( pollinations شغّال فعلاً في
+`image-generator.ts` — بس مربوط بمهمة تانية)، أو **إخفاء الزر** لما
+المزوّد مش متاح (أفضل من زرار بيطلّع 502).
+
+> ⚠️ **تحديث 2026-11-12 (بعد N-020):** مسار **`/api/ai/image`** (استوديو
+> الصور التعليمية) و**`/api/ai/image-gen`** (صفحة الإنشاء) اتغيّروا
+> و**مش بقوا بيعتمدوا على Gemini** — بقوا بيمشوا على OpenRouter
+> (`black-forest-labs/flux.2-pro`) مع fallback لـ Pollinations.
+> ⇒ اللي فاضل ميتّ هو: `image_edit` · `video_generation` · ومهمة
+> `image_generation` **داخل الـ media router** (`/api/ai` بـ
+> `task=image_generation`) — دي لسه محتجرة `mediaOnly` على مزوّد واحد.
+
+### N-020 — توليد الصور: OpenRouter بدل Gemini (✅ اتطبّق — بس محتاج رصيد)
+**أين:** `lib/ai/openrouter-image.ts` (جديد) · `lib/ai/image-generator.ts` ·
+`app/api/ai/image/route.ts` · `app/api/ai/image-gen/route.ts` ·
+`lib/ai/model-access.ts` (FREE_MODELS).
+
+**إيه المشكلة:** توليد الصور كان محتكر على `gemini-3.1-flash-image`
+(المفتاح باطل/اتشال) ⇒ **ميتّ 100%**:
+- `/api/ai/image` (استوديو الصور) — كان شغّال بس على Pollinations.
+- `/api/ai/image-gen` (زرار صفحة الإنشاء) — **502 على كل ضغطة**.
+
+**الحل (اتطبّق):** OpenRouter عنده **واجهة صور مستقلة**:
+`POST https://openrouter.ai/api/v1/images` — والدخل هو
+`{ model, prompt, resolution, aspect_ratio }` والرد
+`{ created, data: [{ b64_json }], usage: { cost } }`
+(مُتحقَّق منه من `openapi.json` الرسمي + اختبار حي للـ schema).
+
+- الموديل الافتراضي: **`black-forest-labs/flux.2-pro`** (الأرخص/الأسرع).
+- البديل: **`bytedance-seed/seedream-4.5`** (متاح للمستخدم + Ultra بس).
+- `resolution: "1K"` + `aspect_ratio` مشتقّ من المقاس المطلوب
+  (1:1 · 16:9 · 9:16).
+- **الـ mime type بيتحدّد من بايتات الصورة** (مش من content-type — مافيش).
+
+**⚠️ 🔴 ما زال ناقص: رصيد OpenRouter = 0.**
+```
+402 Insufficient credits. This account never purchased credits.
+```
+⇒ الطلب بيروح لـ OpenRouter وبياخد 402 ⇒ السلسلة بتكمّل لـ
+Pollinations. وPollinations (المجاني) **بيحدّ معدّله دلوقتي**:
+`503 "The Classic API is at its limit right now"` وبعدها 404.
+
+⇒ **الخطوة الجاية: اشحن رصيد OpenRouter** (Settings → Credits). أول ما
+يتعمل، `flux.2-pro` هيشتغل فوراً (السلسلة بتجرّبه أول حاجة) **من غير
+أي تعديل في الكود**.
+
+⚠️ **ليه الـ payload صح (مُثبت حيّ)**: أي body مخالف للـ schema بيرجّع
+**400**، وبODY بتاعنا (بكل الموديلات) بيرجّع **402** ⇒ يعني عدّى
+validation. تفصيل الـ probe: `scripts/probe-openrouter-payload.mjs`.
+
+**⚠️ كاش الرصيد**: بعد أول 402 بنتخطّى OpenRouter لمدة ١٠ دقايق (module
+level) ⇒ كل صورة متأخّرةش بنداء بيلفّ 402 قبل ما يكمّل للمجاني.
+
+### N-021 — `ai_operations` مافيش policy للإدخال ⇒ كل تسجيلات AI بتضيع (✅ اتصلّح)
+**أين:** `db/41-ai-operations-insert-policy.sql`.
+
+**إيه المشكلة:** `ai_operations` كان فيه **policy واحدة للقراءة بس**
+(`ai operations: owner reads` — SELECT) ⇒ أي `recordAiOperation` بيرمي:
+`new row violates row-level security policy for table "ai_operations"`.
+
+⇒ **كل تسجيلات الـ AI في التطبيق كله كانت بتضيع** (الشات، الصور،
+المحاضرات، الدرس…). والتسجيل best-effort فمحدش كان بيلاحظ.
+
+**إزاي اتكشاف:** أثناء تفعيل توليد الصور عبر OpenRouter — لازم نعرف
+**مين** ولّد الصورة (OpenRouter ولا Pollinations) و**بتكلّف كام**، بس
+التسجيل كان بيتفضّح.
+
+**الحل (اتطبّق):** `db/41` — insert/update/delete **لصفوف المستخدم هو
+بس** (`auth.uid() = user_id`).
+
+### N-019 — حذف المادة بيسيب المستند والصفحات (تسريب تخزين)
+**أين:** `db/38-documents.sql` — `documents.material_id references
+materials(id) on delete set null`.
+
+**إيه المشكلة:** «احذف الملف من مكتبتي» ⇒ الـ `materials` صف اتمسح،
+بس **`documents` + صفحات `knowledge_base` + الـ deck** باقيين في القاعدة
+للأبد. الـ FK `ON DELETE SET NULL` كان **قرار متعمد** (المستند يفضل
+لو المادة اتمسحت)، بس الأثر العملي:
+- النص المستخرج + الـ deck بيفضلوا في القاعدة (خصوصية + مساحة).
+- الـ deck بقى **مش قابل للوصول** من الـ UI (لوحة العرض متربوطة
+  بـ materialId ⇒ الـ lookup بيرجّع 404 بعد ما `material_id` يبقى NULL).
+
+**الحل المقترح:** خلي حذف المادة **يمسح كمان** المستند والصفحات
+(RPC واحدة `delete_material_cascade` أو `on delete cascade` بدل
+`set null` + تنظيف `knowledge_base`).
 
 

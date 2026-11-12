@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import {
-  Clock,
-  Quote,
+  ArrowUpLeft,
+  Check,
+  Copy,
   Sparkles,
   AlertTriangle,
   ChevronLeft,
@@ -17,10 +19,12 @@ import {
 import { useLectureCitation, formatTimestamp } from "./lecture-citation-context";
 import { useWorkspace } from "./LectureWorkspace";
 import type {
+  IntensiveClaim,
   IntensiveExplanation,
   IntensivePart,
   IntensiveSection,
 } from "@/lib/ai/lecture-intensive";
+import type { TimedSegment } from "@/lib/ai/lecture-intensive-prompts";
 
 /* ==========================================================================
    🧠 الشرح المكثف مع المراجع — Phase 5
@@ -46,12 +50,31 @@ import type {
 /** حالة الجزء من ناحية الواجهة (الفرق عن المخزَّن: `loading`). */
 type PartUiState = "ready" | "pending" | "failed" | "loading";
 
+/**
+ * 📌 جملة **مرقّمة** — الرقم عرضي (ترتيب الجملة في القسم) مش مرجع.
+ *
+ * ⚠️ **مش جزء من `IntensiveClaim`**: الرقم بيتحسب في العرض (مش في
+ *    الداتابيز) لأنه بيتبعت مع أي إعادة توليد.
+ */
+type NumberedClaim = IntensiveClaim & { mark: number };
+
+/** قسم جمله مرقّمة. */
+type NumberedSection = Omit<IntensiveSection, "claims"> & {
+  claims: NumberedClaim[];
+};
+
 type AskMessage = { role: "user" | "assistant"; content: string };
+
+/** مشترك لـ `useSyncExternalStore` — ما بيعملش أي حاجة (المصدر ثابت). */
+function subscribeNoop(): () => void {
+  return () => {};
+}
 
 export function LectureIntensive({
   lectureId,
   explanation,
   sessionId,
+  segments,
   onChange,
 }: {
   lectureId: string;
@@ -65,6 +88,15 @@ export function LectureIntensive({
    */
   sessionId: string;
   /**
+   * 📄 المقاطع بتوقيتها — منها بنجيب **الاقتباس الحرفي** في «ورقة
+   * المصدر».
+   *
+   * ⚠️ **مش محتاج نداء شبكة**: المقاطع موجودة في الصفحة أصلاً (بتنقرأ
+   *    من `transcript_data`) ⇒ الاقتباس = `segments[claim.seg].text`.
+   *    (لو المقاطع مش موجودة ⇒ ورقة المصدر بتعرض التوقيت بس.)
+   */
+  segments?: TimedSegment[];
+  /**
    * بنبلّغ الأب بالنسخة الجديدة بعد توليد جزء.
    *
    * ⚠️ **اختياري**: في داخل `LectureProcessActions` (الزرار) الأب هو
@@ -73,12 +105,15 @@ export function LectureIntensive({
    */
   onChange?: (next: IntensiveExplanation) => void;
 }) {
-  const { focusSegment } = useLectureCitation();
+  const { focusSegment, setHoverSeg } = useLectureCitation();
   const { open: openSection } = useWorkspace();
   const [openClaim, setOpenClaim] = useState<string | null>(null);
   const [current, setCurrent] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** المقاطع — fallback لـ[] عشان الـ component يشتغل من غيرها. */
+  const segs = useMemo(() => segments ?? [], [segments]);
 
   /**
    * ⚠️ **الحالة مزدوجة المصدر**: لو الأب بيبعت `onChange` ⇒ هو صاحب
@@ -91,6 +126,22 @@ export function LectureIntensive({
   );
   const total = parts.length;
   const part = parts[current];
+
+  /**
+   * 📌 **ترقيم الجمل** — متسلسل عبر الجزء كله (زي أرقام الهوامش في
+   * الكتاب: ١ ٢ ٣ ٤ …).
+   *
+   * ⚠️ **ليه مش من الـ API**: الرقم **عرضي** (ترتيب الجملة في القسم)،
+   *    مش مرجع — فبيتبعت في كل رندر. لو خبّناه في الداتابيز كان هيتلخبط
+   *    مع أي إعادة توليد. ⇒ المصدر الوحيد للترقيم هنا.
+   */
+  const numberedSections = useMemo(() => {
+    let n = 0;
+    return (part?.sections ?? []).map((section) => ({
+      ...section,
+      claims: section.claims.map((claim) => ({ ...claim, mark: ++n })),
+    }));
+  }, [part]);
 
   /**
    * ⚠️ الترتيب مهم: **نفس الـ event** لازم يغيّر الحالتين مع بعض
@@ -254,15 +305,17 @@ export function LectureIntensive({
 
         {state === "ready" && (
           <>
-            {part?.sections.map((section, sectionIndex) => (
+            {numberedSections.map((section, sectionIndex) => (
               <IntensiveSectionBlock
                 key={`${sectionIndex}-${section.heading}`}
                 section={section}
+                segments={segs}
                 openClaim={openClaim}
                 onOpenClaim={(claimId) =>
                   setOpenClaim((current) => (current === claimId ? null : claimId))
                 }
                 onFocusSegment={goToTranscript}
+                onHoverSegment={setHoverSeg}
               />
             ))}
 
@@ -350,18 +403,32 @@ function PartSkeleton() {
 
 /* ═══════════════════════════ الأقسام ═══════════════════════════ */
 
-/** قسم واحد — عنوانه وجمله. */
+/**
+ * قسم واحد — عنوانه وجمله.
+ *
+ * ⚠️ **الترقيم متسلسل عبر القسم كله** (`mark`): الرقم هو «رقم الهامش»
+ *    في الكتاب — الطالب بيشوف ٣ ٤ ٥ ٦ متلاصقة فيعرف 它们 جملة واحدة.
+ */
 function IntensiveSectionBlock({
   section,
+  segments,
   openClaim,
   onOpenClaim,
   onFocusSegment,
+  onHoverSegment,
 }: {
-  section: IntensiveSection;
+  section: NumberedSection;
+  /** المقاطع — بنجيب منها **الاقتباس الحرفي** للعرض. */
+  segments: TimedSegment[];
   openClaim: string | null;
   onOpenClaim: (claimId: string) => void;
   onFocusSegment: (seg: number) => void;
+  onHoverSegment: (seg: number | null) => void;
 }) {
+  // ⚠️ **المقطع اللي تحت المؤشر** — من الـ context، مش state محلي.
+  //    كده الربط **في الاتجاهين**: hover على الجملة ⇄ hover على المقطع.
+  const { hoverSeg } = useLectureCitation();
+
   return (
     <div>
       <h4 className="mb-2 text-base font-extrabold text-ink">{section.heading}</h4>
@@ -370,31 +437,37 @@ function IntensiveSectionBlock({
           const claimId = `${section.heading}-${claimIndex}`;
           const isOpen = openClaim === claimId;
           // ⚠️ `seg === null` = المرجع ما تقدرش يتحقَّق منه ⇒ الجملة
-          //    بتظهر من غير chip. مخفيين الـ chip أحسن من chip مكسور.
+          //    بتظهر من غير علامة. مخفيين العلامة أحسن من علامة مكسورة.
           const hasSource = claim.seg !== null && claim.start !== null;
+          const isHovered = hasSource && hoverSeg === claim.seg;
           return (
             <li key={claimId} className="text-[0.98rem] leading-[1.95] text-ink">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span>{claim.text}</span>
-                {hasSource && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenClaim(claimId)}
-                    aria-expanded={isOpen}
-                    aria-label={`مصدر المعلومة — الدقيقة ${formatTimestamp(claim.start as number)}`}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rule bg-black/[0.04] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ink-soft transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] dark:bg-white/[0.06]"
-                  >
-                    <Clock size={11} aria-hidden />
-                    <span>{formatTimestamp(claim.start as number)}</span>
-                  </button>
-                )}
+              <div
+                className="citation-claim"
+                data-hovered={isHovered ? "true" : undefined}
+                onMouseEnter={() => hasSource && onHoverSegment(claim.seg)}
+                onMouseLeave={() => hasSource && onHoverSegment(null)}
+              >
+                <span className="flex flex-wrap items-baseline gap-x-1">
+                  <span>{claim.text}</span>
+                  {hasSource && (
+                    <CitationMark
+                      mark={claim.mark}
+                      start={claim.start as number}
+                      open={isOpen}
+                      onToggle={() => onOpenClaim(claimId)}
+                    />
+                  )}
+                </span>
               </div>
 
               {isOpen && hasSource && (
-                <SourceCard
+                <CitationPeek
                   seg={claim.seg as number}
                   start={claim.start as number}
+                  quote={segments[claim.seg as number]?.text ?? ""}
                   onFocusSegment={onFocusSegment}
+                  onClose={() => onOpenClaim(claimId)}
                 />
               )}
             </li>
@@ -405,39 +478,160 @@ function IntensiveSectionBlock({
   );
 }
 
+/* ═══════════════════════════ العلامة المرقّمة ═══════════════════════════ */
+
 /**
- * كارت المصدر — بيظهر تحت الجملة لما الطالب يضغط على الـ chip.
+ * 📌 رقم المرقّم فوق الجملة — بديل الـ chip القديم.
  *
- * ⚠️ **ليه بيعرض رقم المقطع مش نص المقطع**: نص المقطع بيتبين لما
- *    الطالب يفتح في التفريغ (وهو بيبرزه). هنا رقم المقطع + التوقيت
- *    كفاية يأكدوا إن المعلومة لها مصدر.
+ * ⚠️ **ليه رقم مش توقيت**: التوقيت طويل (「12:30」) وبيقطّع النص لما
+ *    يتكرّر في كل جملة. الرقم القصير بيبقى زي **رقم هامش في كتاب** —
+ *    مرتّب، مقروء، ومحدود المساحة. والتوقيت جوّه «ورقة المصدر».
+ *
+ * ⚠️ **ليه `aria-label` كامل**: الرقم لوحده مش بيقول حاجة لقارئ
+ *    الشاشة ⇒ لازم نقرا «مصدر المعلومة — الدقيقة 12:30».
  */
-function SourceCard({
+function CitationMark({
+  mark,
+  start,
+  open,
+  onToggle,
+}: {
+  mark: number;
+  start: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="citation-mark"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={`مصدر المعلومة رقم ${mark} — الدقيقة ${formatTimestamp(start)}`}
+      title={`مصدر المعلومة — الدقيقة ${formatTimestamp(start)}`}
+    >
+      <span aria-hidden>{mark}</span>
+    </button>
+  );
+}
+
+/* ═══════════════════════════ ورقة المصدر ═══════════════════════════ */
+
+/**
+ * 📄 «ورقة المصدر» — بتظهر تحت الجملة (ديسكتوب) أو كـ Bottom Sheet
+ *    (موبايل، لأن مافيش hover هناك).
+ *
+ * ⚠️ **الاقتباس الحرفي**: بنجيبه من `segments[seg].text` — **من غير أي
+ *    نداء شبكة** (المقاطع موجودة في الصفحة أصلاً). ده اللي بيخلي
+ *    المرجع **مقنعاً** مش مجرد رقم.
+ */
+function CitationPeek({
   seg,
   start,
+  quote,
   onFocusSegment,
+  onClose,
 }: {
   seg: number;
   start: number;
+  quote: string;
   onFocusSegment: (seg: number) => void;
+  onClose: () => void;
 }) {
-  return (
-    <div className="mt-1.5 rounded-xl border border-rule bg-black/[0.03] p-3 dark:bg-white/[0.03]">
-      <p className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-ink-soft">
-        <Quote size={12} aria-hidden />
-        <span>
-          المصدر: المقطع رقم {seg} — الدقيقة {formatTimestamp(start)}
+  // ⚠️ **Escape يقفل** — سلوك متوقّع في الـ dialog.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // ⚠️ **الـ portal محتاج DOM** — فبنستنى الـ mount.
+  //    `useSyncExternalStore` هو الطريقة المعتمدة (من غير setState في effect
+  //    — اللي `react-hooks/set-state-in-effect` بيمنعه).
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+
+  const body = (
+    <>
+      <div className="flex items-center gap-2">
+        <span className="mono text-[11px] font-semibold text-ink-soft">
+          <span className="ltr-num">{formatTimestamp(start)}</span> · المقطع{" "}
+          <span className="ltr-num">{seg}</span>
         </span>
-      </p>
-      <button
-        type="button"
-        onClick={() => onFocusSegment(seg)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-[var(--card-secondary)] px-2.5 py-1 text-xs font-semibold text-ink transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-      >
-        <span>افتح في التفريغ</span>
-        <span aria-hidden>←</span>
-      </button>
-    </div>
+        {/* ⚠️ شارة الثقة: المرجع متحقَّق منه (الـ segment موجود فعلاً). */}
+        <span className="citation-verified">
+          <Check size={10} aria-hidden />
+          <span>متحقَّق منه</span>
+        </span>
+      </div>
+
+      {quote && (
+        <blockquote className="citation-quote mt-2">{quote}</blockquote>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onFocusSegment(seg)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-[var(--card-secondary)] px-2.5 py-1 text-xs font-semibold text-ink transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+        >
+          <ArrowUpLeft size={13} aria-hidden />
+          <span>اذهب للمصدر</span>
+        </button>
+        {quote && (
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(
+                `${quote}\n\n— ${formatTimestamp(start)} (المقطع ${seg})`,
+              );
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-ink-soft transition-colors hover:text-ink"
+          >
+            <Copy size={13} aria-hidden />
+            <span>نسخ الاقتباس</span>
+          </button>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* ── ديسكتوب: ورقة تحت الجملة ── */}
+      <div className="citation-peek mt-2 hidden p-3 sm:block">{body}</div>
+
+      {/* ── موبايل: Bottom Sheet (مافيش hover ⇒ المصدر لازم يطلع فوق) ──
+          ⚠️ **portal لـ `document.body` إجباري**: الـ sheet `position: fixed`
+          ولو اتركن جوه شجرة الصفحة بيقيّده أقرب ancestor عنده
+          transform/contain ⇒ بيطلع برّه الشاشة. الـ portal بيخليه
+          مباشر ابن الـ body ⇒ بيتعلّق بأسفل الشاشة فعلاً. */}
+      {mounted &&
+        createPortal(
+          <div className="sm:hidden">
+            <div
+              className="citation-sheet-backdrop"
+              onClick={onClose}
+              aria-hidden
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="مصدر المعلومة"
+              className="citation-sheet px-4 pt-1"
+            >
+              <div className="citation-sheet-grabber" aria-hidden />
+              <div className="pb-1">{body}</div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

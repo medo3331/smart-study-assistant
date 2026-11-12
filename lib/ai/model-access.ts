@@ -33,6 +33,19 @@ const FREE_MODELS = new Set<string>([
   // OpenRouter Free — بدائل مجانية مؤكدة
   "nvidia/nemotron-3.5-lightning:free",
   "dots-studio/dots-3-note-preview:free",
+  // OpenRouter — **توليد الصور** (2026-11-12).
+  //
+  // ⚠️ **ليه هما هنا من غير صلاحية موديل منفصلة؟**
+  //    البوابة الحقيقية للخدمة دي **مش** هنا — هي في `SERVICE_REGISTRY`:
+  //      `image` → free: 0 · pro: 10 · ultra: ∞
+  //    والراوت `/api/ai/image` بيتأكد من الباقة **قبل** الحارس.
+  //    فلو استلمنا هنا صلاحية موديل، كان ده هيعني «الاشتراك في الباقة
+  //    + شراء صلاحية الموديل» —ouz-policy غلط ومكرر.
+  //
+  //    ⇒ الباقة هي البوابة (المستخدم الـ Free لسه مش هيقدر يولّد:
+  //    403 من الـ route نفسه قبل أي نداء).
+  "black-forest-labs/flux.2-pro",
+  "bytedance-seed/seedream-4.5",
   // Gemini — تخصصي مجاني
   "gemini-3.6-flash",
   "gemini-3.1-flash-image",
