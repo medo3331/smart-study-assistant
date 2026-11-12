@@ -336,6 +336,54 @@ timeout ⇒ ٤٨ صفحة = ٢٠ دقيقة. مش قابل يتعمل inline.
 **الوضع الحالي:** الـ UI بيصرّح للطالب بالصفحات المتقراش
 (`documents.unread_pages`) — فمافيش كذب، بس الـ feature ناقصة.
 
+> ⭐ **تحديث 2026-11-12 (Phase 6): اتصلّح bug أخطر من السقف نفسه!**
+>
+> مسار الـ OCR كان **بيفشل دايمًا** — مش لأن السقف ٦، لأن
+> `renderPageAsImage` في Node **بيطلب `canvasImport`**:
+> ```
+> Parameter "canvasImport" is required in Node.js environment.
+> ```
+> ⇒ **كل** صفحة مصوّرة كانت بتفشل في الرندر (والخطأ كان متقطّع في
+> catch) ⇒ الصفحات بتفضل فاضية والطالب بيشوف «مش متقراية» من غير
+> سبب حقيقي.
+>
+> **اتصلّح:** `canvasImport: () => import('@napi-rs/canvas')` +
+> `'@napi-rs/canvas'` في `serverExternalPackages` (وإلا Next bundlها
+> والـ native binarypositionalمش بيلتقي).
+>
+> ⚠️ **ملاحظة تثبيت**: `@napi-rs/canvas-win32-x64-msvc` اتنصّب
+> **ناقص** (الـ `.node`-binary مش موجود) ⇒ حتاج reinstallation. على
+> Vercel (Linux) الحزمة بتتمشي مع `optionalDependencies`.
+>
+> ⇒ **السقف ٦ لسه هو القيد الحقيقي** (٦ × ٢٥ ثانية = ١٥٠ ثانية).
+> الحل المقترح (tesseract.js محلي / رفع السقف) **لسه قائم** — بس
+> الحين المسار **شغّال** لأول ٦ صفحات فعلاً.
+
+### N-022 — `renderPageAsImage` كان محتاج `canvasImport` (✅ اتصلّح)
+**أين:** `lib/extract-text.ts` + `next.config.ts` (`serverExternalPackages`).
+
+**إيه المشكلة:** `unpdf.renderPageAsImage` في Node.js بيطلب
+`canvasImport` — من غيره بيرمي:
+`Parameter "canvasImport" is required in Node.js environment.`
+
+⇒ مسار **الـ OCR للـ PDF المصوّر** (N-013) كان **ميتّ فعلياً**، ومعاينة
+الملف المصغّرة (Phase 6) كانت مستحيلة.
+
+**الحل (اتطبّق):**
+- `canvasImport: () => import('@napi-rs/canvas')` (الاستيراد كسول).
+- `'@napi-rs/canvas'` في `serverExternalPackages` — **لازم**: من غيرها
+  Next بيعمل bundle للـ package والـ native binarypositionalمش بيلتقي
+  وقت التشغيل ⇒ `Cannot find module '@napi-rs/canvas-win32-x64-msvc'`.
+
+⚠️ **ملاحظة تثبيت (Windows):** حزمة المنصّة اتنصّبت **ناقصة** (الـ
+`skia.win32-x64-msvc.node` مش موجود) ⇒ `Failed to load native binding`.
+**الحل:** إعادة تنزيل الحزمة من الـ tarball:
+```
+npm view "@napi-rs/canvas-win32-x64-msvc@<ver>" dist.tarball
+# فكّ الضغط، وانسخ skia.win32-x64-msvc.node جوه node_modules/
+```
+(على Linux/Vercel مفيش حاجة — الحزمة بتتمشي مع `optionalDependencies`.)
+
 ### N-014 — `consume_service_quota` كان مكسوراً في الإنتاج (✅ اتصلّح)
 **أين:** الدالة `public.consume_service_quota(p_user_id uuid,
 p_service text, p_limit integer)` — **مش في أي migration** (اتعملت يدوي

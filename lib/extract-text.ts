@@ -5,6 +5,29 @@ import { extractText, getDocumentProxy, renderPageAsImage } from 'unpdf';
 //    deps مباشرة موجودة، فمستقرة. (تفصيل في `extractPptxSlides`.)
 import JSZip from 'jszip';
 import { DOMParser } from '@xmldom/xmldom';
+
+/* ==========================================================================
+   🎨 canvas للـ PDF → صورة (Node.js)
+   ============================================================================
+
+   ⚠️ **`renderPageAsImage` في Node بيطلب `canvasImport`** — من غيره بيرمي:
+   ```
+   Parameter "canvasImport" is required in Node.js environment.
+   ```
+   و`@napi-rs/canvas` **مثبّت** (م`<unpdf` كـ transitive dep) ⇒ بنمرّره
+   استيراد كسول.
+
+   ⚠️ **ليه ده مهمHistorically**: مسار **الـ OCR للـ PDF المصوّر** كان
+   بيستدعي `renderPageAsImage` **من غير** `canvasImport` ⇒ كان **بيفشل
+   دايمًا** (والخطأ كان متقطّع في catch ⇒ الصفحات بتفضل فاضية والطالب
+   بيشوف «صفحات مش متقراية» من غير سبب حقيقي).
+
+   ⇒ التكلفة: ~٠ (الحزمة موجودة) — والمكسب: **الـ OCR بيرجع يشتغل**
+   + **معاينة مصغّرة** لصفحة 1.
+   ========================================================================== */
+
+/** استيراد كسول للـ canvas — بيحمّله بس وقت الحاجة. */
+const canvasImport = () => import('@napi-rs/canvas');
 // PDF parsing is intentionally loaded dynamically inside extractTextFromFile so
 // ordinary chat requests never evaluate pdfjs-dist (which requires browser
 // globals such as DOMMatrix in Node.js).
@@ -54,6 +77,17 @@ const OCR_TIMEOUT_MS = 25_000;
  */
 const MAX_OCR_PDF_PAGES = 6;
 
+/**
+ * 📄 **.scale المعاينة المصغّرة**.
+ *
+ * صفحة A4 عند 72dpi ≈ 595px عرض ⇒ `0.25` ≈ **149px** — كفاية لمعاينة
+ * في شبكة الملفات (العرض الفعلي ٤٤px ⇒ ٣x للأجهزة الـ retina).
+ *
+ * ⚠️ **ليه مش أكبر**: المعاينة بتتخزّن كـ base64 في قاعدة البيانات ⇒
+ * كل ٠٫٠١ زيادة في الـ scale = ~١٠ ك.ب زيادة لكل ملف.
+ */
+const THUMBNAIL_SCALE = 0.25;
+
 type OcrAttempt = { engine: 1 | 3 };
 
 export type FileKind = 'pdf' | 'pptx' | 'docx' | 'image' | 'text';
@@ -91,6 +125,15 @@ export type ExtractedDocument = {
   kind: FileKind;
   /** أرقام الوحدات اللي متقرتش (1-based) — عشان الـ UI يصرّح. */
   unread: number[];
+  /**
+   * 📄 **معاينة مصغّرة** (data URL) لأول صفحة/شريحة.
+   *
+   * بتتخزّن في `documents.thumbnail` وتظهر في شبكة الملفات. الـ PDF بس
+   * (للـ PPTX/DOCX مافيش رندر server-side من غير LibreOffice).
+   *
+   * ⚠️ **مش حرجة**: فشل الرندر **مش** بيفشل الرفع (المعاينة اختيارية).
+   */
+  thumbnail?: string;
 };
 
 /** بيحدد نوع الملف من الـ MIME والامتداد، أو null لو مش مدعوم. */
@@ -439,6 +482,8 @@ export async function extractDocument(
   const buffer = new Uint8Array(await file.arrayBuffer());
   let pages: ExtractedPage[] = [];
   let text = '';
+  // 📄 المعاينة المصغّرة (PDF بس) — بتتعيّن جوه فرع الـ PDF.
+  let thumbnail: string | undefined;
 
   if (kind === 'pdf') {
     // PDF مكسور أو محمي بباسورد بيرمي من جوه pdf-parse — ده خطأ متوقّع
@@ -475,6 +520,21 @@ export async function extractDocument(
     //    بس نصوّر بعد ⇒ الصفحات دي هي اللي محتاجة OCR.
     const apiKey = process.env.OCR_SPACE_API_KEY?.trim();
     let ocrBudget = MAX_OCR_PDF_PAGES;
+
+    // 📄 **معاينة مصغّرة لأول صفحة** — بتظهر في شبكة الملفات.
+    //    ⚠️ **مش حرجة**: أي فشل هنا ما بيأثرش على الرفع (نكمّل بدونها).
+    try {
+      const rendered = await renderPageAsImage(pdf, 1, {
+        scale: THUMBNAIL_SCALE,
+        toDataURL: true,
+        canvasImport,
+      });
+      if (typeof rendered === 'string' && rendered.startsWith('data:image/')) {
+        thumbnail = rendered;
+      }
+    } catch (err) {
+      console.error('PDF thumbnail failed:', err);
+    }
 
     pages = pageTexts.map((raw, i) => {
       const pageText = raw.trim();
@@ -522,6 +582,9 @@ export async function extractDocument(
           const rendered = await renderPageAsImage(pdf, page.number, {
             scale: 1.5,
             toDataURL: false,
+            // ⚠️ **لازم في Node** — من غيره `renderPageAsImage` بيرمي
+            //    «canvasImport is required» ⇒ الـ OCR بيفشل دايمًا.
+            canvasImport,
           });
           const pngBytes = new Uint8Array(rendered as ArrayBuffer);
           const ocrText = await extractTextFromImage(
@@ -655,6 +718,7 @@ export async function extractDocument(
     pageCount: pages.length,
     kind,
     unread,
+    ...(thumbnail ? { thumbnail } : {}),
   };
 }
 

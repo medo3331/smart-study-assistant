@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Mic,
   Plus,
+  Presentation,
   Sparkles,
 } from "lucide-react";
 import { PageShell, EmptyState, LoadingSheets, DataNotice } from "../components/PageShell";
@@ -29,7 +30,15 @@ import {
 } from "@/lib/pages-data";
 import { prepareFileForUpload, isImageFile } from "@/lib/image-compress";
 import { DeckPanel } from "@/components/workspace/DeckPanel";
-import { Presentation } from "lucide-react";
+import { DocumentActionSheet } from "@/components/workspace/DocumentActionSheet";
+import {
+  FileKindIcon,
+  fileKindFor,
+  fileKindSpine,
+  fileKindTint,
+  statusSpine,
+  type FileKindUi,
+} from "@/components/workspace/FileKindIcon";
 
 /* ==========================================================================
    مساحة العمل — مركز القيادة
@@ -145,6 +154,24 @@ function isDeckCapable(fileType: string | null): boolean {
   );
 }
 
+/**
+ * ⭐ **اسم النوع المعروض**.
+ */
+function kindLabel(kind: FileKindUi): string {
+  if (kind === "pdf") return "PDF";
+  if (kind === "pptx") return "PPTX";
+  if (kind === "docx") return "DOCX";
+  if (kind === "image") return "صورة";
+  return "ملف";
+}
+
+/** وحدة العدّ (صفحة/شريحة/فقرة). */
+function kindUnitLabel(kind: FileKindUi): string {
+  if (kind === "pptx") return "شريحة";
+  if (kind === "docx") return "فقرة";
+  return "صفحة";
+}
+
 export default function WorkspacePage() {
   const router = useRouter();
   const { supabase, session } = useAuthUser();
@@ -168,6 +195,25 @@ export default function WorkspacePage() {
 
   // 🎬 لوحة العرض التقديمي (من مستند). null = مقفولة.
   const [deckMaterialId, setDeckMaterialId] = useState<string | null>(null);
+
+  // ✦ «ماذا تحب نعمل بيه؟» — بتظهر بعد الرفع (أو بتفتحها يدويًا).
+  const [actionSheetId, setActionSheetId] = useState<string | null>(null);
+
+  // 📄 المستندات (معاينة + حالة) — بالـ material id.
+  const [documents, setDocuments] = useState<
+    Map<
+      string,
+      {
+        id: string;
+        material_id: string | null;
+        page_count: number;
+        status: string;
+        unread_pages: number[];
+        thumbnail: string | null;
+        source_unit: string;
+      }
+    >
+  >(new Map());
 
   // مسوّدة الملاحظة للمادة المفتوحة، وحالة الحفظ
   const [noteDraft, setNoteDraft] = useState("");
@@ -205,24 +251,35 @@ export default function WorkspacePage() {
     (async () => {
       setIsLoading(true);
 
-      const [materialsResult, lecturesResult, chatsResult] = await Promise.all([
-        fetchMaterials(supabase, userId),
-        supabase
-          .from("lectures")
-          .select(
-            "id, title, original_filename, status, source_type, created_at, duration_seconds, subject_id",
-            { count: "exact" }
-          )
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(12),
-        supabase
-          .from("chat_conversations")
-          .select("id, title, updated_at", { count: "exact" })
-          .eq("user_id", userId)
-          .order("updated_at", { ascending: false })
-          .limit(10),
-      ]);
+      const [materialsResult, lecturesResult, chatsResult, documentsResult] =
+        await Promise.all([
+          fetchMaterials(supabase, userId),
+          supabase
+            .from("lectures")
+            .select(
+              "id, title, original_filename, status, source_type, created_at, duration_seconds, subject_id",
+              { count: "exact" }
+            )
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(12),
+          supabase
+            .from("chat_conversations")
+            .select("id, title, updated_at", { count: "exact" })
+            .eq("user_id", userId)
+            .order("updated_at", { ascending: false })
+            .limit(10),
+          // 📄 **المستندات** — منها المعاينة المصغّرة + حالة الملف
+          //    (كعب ملوّن) + عدد الصفحات. ⚠️ **best-effort**: فشلها ما
+          //    بيمنعش الملفات من الظهور.
+          supabase
+            .from("documents")
+            .select(
+              "id, material_id, page_count, status, unread_pages, thumbnail, source_unit",
+            )
+            .eq("user_id", userId)
+            .not("material_id", "is", null),
+        ]);
 
       if (cancelled) return;
 
@@ -232,6 +289,23 @@ export default function WorkspacePage() {
         errors.push(materialsResult.error.message);
       } else {
         setMaterials(materialsResult.data);
+      }
+
+      if (!documentsResult.error) {
+        const rows = (documentsResult.data ?? []) as Array<{
+          id: string;
+          material_id: string | null;
+          page_count: number;
+          status: string;
+          unread_pages: number[];
+          thumbnail: string | null;
+          source_unit: string;
+        }>;
+        const map = new Map<string, (typeof rows)[number]>();
+        for (const row of rows) {
+          if (row.material_id) map.set(row.material_id, row);
+        }
+        setDocuments(map);
       }
 
       if (lecturesResult.error) {
@@ -417,6 +491,10 @@ export default function WorkspacePage() {
         if (created) {
           setMaterials((prev) => [created as Material, ...prev]);
           openFile(created.id);
+          // ⚠️ **✦ الـ action sheet بتتفتح فوراً** — الرفع بيخلّي
+          //    الطالب ياخد كارت في شبكة وخلاص (من غير ما يعرف إن الملف
+          //    ده بينفع معاه ٣ حاجات). الـ sheet بتخلي الرفع **تحويل**.
+          setActionSheetId(created.id);
           // ⚠️ لو في صفحات متقراش (PDF مصوّر) ⇒ نصرّح للطالب.
           const unread = (data?.unread ?? []) as number[];
           if (unread.length > 0) {
@@ -1005,24 +1083,80 @@ export default function WorkspacePage() {
                 <span className="ltr-num">{materials.length}</span> ملف في مكتبتك
               </p>
 
-              {materials.map((material) => (
-                <div key={material.id} className="sheet-card p-4 space-y-3">
+              {materials.map((material) => {
+                // 📄 المستند المرتبط بالمادة (معاينة + حالة + عدد صفحات).
+                const doc = documents.get(material.id);
+                const kind = fileKindFor(material.fileType, material.title);
+                const spine = doc
+                  ? statusSpine(doc.status as "ready" | "partial" | "failed")
+                  : fileKindSpine(kind);
+                return (
+                <div
+                  key={material.id}
+                  className="sheet-card p-4 space-y-3"
+                  style={{ borderInlineStartColor: spine }}
+                >
                   <button
                     onClick={() => openFile(material.id)}
                     className="w-full flex items-start gap-3 min-w-0 text-right"
                   >
-                    <span className="text-xl leading-none shrink-0 mt-0.5" aria-hidden>
-                      {fileIcon(material.fileType, material.title)}
-                    </span>
+                    {/* 📄 المعاينة المصغّرة (ولّا أيقونة النوع) */}
+                    {doc?.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={doc.thumbnail}
+                        alt=""
+                        className="h-14 w-11 shrink-0 rounded-md border border-rule object-cover object-top"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
+                        style={{
+                          background: `color-mix(in srgb, ${fileKindTint(kind)} 14%, transparent)`,
+                          color: fileKindTint(kind),
+                        }}
+                      >
+                        <FileKindIcon kind={kind} size={20} />
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-ink truncate">{material.title}</span>
                       <span className="tag mt-1">
-                        <span>{formatArabicDate(material.createdAt)}</span>
+                        {doc ? (
+                          <>
+                            <span>{kindLabel(kind)}</span>
+                            <span>
+                              {doc.source_unit === "segment"
+                                ? `${doc.page_count} مقطع`
+                                : `${doc.page_count} ${kindUnitLabel(kind)}`}
+                            </span>
+                            {doc.unread_pages.length > 0 && (
+                              <span className="text-amber-600 dark:text-amber-400">
+                                {doc.unread_pages.length} متقراش
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span>{formatArabicDate(material.createdAt)}</span>
+                        )}
                         {material.summary && <span>ملخّصة</span>}
                         {material.note.trim() && <span>عليها ملاحظات</span>}
                       </span>
                     </span>
                   </button>
+
+                  {/* ✦ action sheet — بتظهر بعد الرفع مباشرة */}
+                  {actionSheetId === material.id && (
+                    <DocumentActionSheet
+                      materialId={material.id}
+                      title={material.title}
+                      content={material.content}
+                      fileType={material.fileType}
+                      onDeck={() => setDeckMaterialId(material.id)}
+                      onClose={() => setActionSheetId(null)}
+                    />
+                  )}
 
                   {/* 🎬 لوحة العرض التقديمي — بتنفتح تحت الكارت */}
                   {deckMaterialId === material.id && (
@@ -1061,9 +1195,23 @@ export default function WorkspacePage() {
                         <span>عرض</span>
                       </button>
                     )}
+                    {/* ✦ «ماذا تحب نعمل بيه؟» — تفتحها يدويًا كمان */}
+                    <button
+                      onClick={() =>
+                        setActionSheetId(
+                          actionSheetId === material.id ? null : material.id,
+                        )
+                      }
+                      aria-expanded={actionSheetId === material.id}
+                      className="mono text-ink-soft hover:text-ink px-2 py-1.5 rounded-[6px] transition text-xs inline-flex items-center gap-1"
+                    >
+                      <Sparkles size={13} aria-hidden />
+                      <span>خيارات</span>
+                    </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

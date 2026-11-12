@@ -105,8 +105,10 @@ export async function POST(request: Request) {
         page_count: extracted.pageCount,
         status: extracted.unread.length > 0 ? "partial" : "ready",
         unread_pages: extracted.unread,
+        // 📄 معاينة مصغّرة لأول صفحة (PDF بس) — بتظهر في شبكة الملفات.
+        ...(extracted.thumbnail ? { thumbnail: extracted.thumbnail } : {}),
       })
-      .select("id, title, file_type, page_count, status, unread_pages")
+      .select("id, title, file_type, page_count, status, unread_pages, thumbnail")
       .single();
 
     if (documentError) {
