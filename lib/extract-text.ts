@@ -1,5 +1,10 @@
 import mammoth from 'mammoth';
 import { extractText, getDocumentProxy, renderPageAsImage } from 'unpdf';
+// ⚠️ استخراج PPTX — `jszip` (من `docx`/`mammoth`/`pptxgenjs`) و`xmldom`
+//    (من `mammoth`). الاتنين **مش direct** في package.json — بس جايين من
+//    deps مباشرة موجودة، فمستقرة. (تفصيل في `extractPptxSlides`.)
+import JSZip from 'jszip';
+import { DOMParser } from '@xmldom/xmldom';
 // PDF parsing is intentionally loaded dynamically inside extractTextFromFile so
 // ordinary chat requests never evaluate pdfjs-dist (which requires browser
 // globals such as DOMMatrix in Node.js).
@@ -35,18 +40,74 @@ export class ExtractError extends Error {
 const MIN_USEFUL_CHARS = 12;
 /** مهلة نداء الـ OCR — من غيرها الراوت يقدر يستنى للأبد. */
 const OCR_TIMEOUT_MS = 25_000;
-/** حد صفحات PDF التي تُحوّل إلى صور وتُقرأ عبر OCR. */
-const MAX_OCR_PDF_PAGES = 3;
+/**
+ * ⚠️ **عدد صفحات PDF اللي بتتقرا بالـ OCR**.
+ *
+ * سطر واحد في المستند (مفيش text layer) ⇒ **كل** الصفحات محتاجة OCR.
+ * بس كل صفحة = نداء ocr.space بـ ٢٥ ثانية timeout ⇒ ٤٨ صفحة = ٢٠ دقيقة.
+ *
+ * ⇒ سقف ٦ صفحات (١٥٠ ثانية أسوأ حالة) + الباقي بيتعلّم `empty: true`
+ *   ⇒ الـ UI يصرّح للطالب بالصفحات اللي متقرتش (مش نعمل كذب).
+ *
+ * (الحد كان ٣ — اترفع لـ ٦ مع العروض التقديمية. مسجّل في
+ * `docs/TECH_DEBT.md` N-013: الحل الدائم OCR محلي بـ tesseract.js.)
+ */
+const MAX_OCR_PDF_PAGES = 6;
 
 type OcrAttempt = { engine: 1 | 3 };
 
-export type FileKind = 'pdf' | 'docx' | 'image' | 'text';
+export type FileKind = 'pdf' | 'pptx' | 'docx' | 'image' | 'text';
+
+/**
+ * ⚠️ **نوع الوحدة اللي بنعدّ بيها** — بيختلف حسب نوع الملف:
+ *   pdf  → صفحة
+ *   pptx → شريحة
+ *   docx → فقرة (الـ DOCX مالوش صفحات ثابتة — الـ page count ناتج
+ *          rendering مش data، فالمرجع الصحيح هو الفقرة)
+ *   نص/صورة → وحدة واحدة
+ */
+export type DocumentUnitKind = 'page' | 'slide' | 'paragraph';
+
+/** وحدة واحدة (صفحة/شريحة/فقرة) بنصّها. */
+export type ExtractedPage = {
+  /** 0-based — الداخلي. */
+  index: number;
+  /** 1-based — اللي بنعرضه للطالب («صفحة ٤»). */
+  number: number;
+  text: string;
+  kind: DocumentUnitKind;
+  /** اتقرا بالـ OCR (مش نص مدمج). */
+  viaOcr: boolean;
+  /** مفيش نص خالص (صفحة مصوّرة اتخطّت بسبب السقف). */
+  empty: boolean;
+};
+
+/** المستند بعد الاستخراج: النص المدمج + الوحدات مقصوصة وحدة وحدة. */
+export type ExtractedDocument = {
+  /** النص المدمج — مطابق لسلوك `extractTextFromFile` القديم. */
+  text: string;
+  pages: ExtractedPage[];
+  pageCount: number;
+  kind: FileKind;
+  /** أرقام الوحدات اللي متقرتش (1-based) — عشان الـ UI يصرّح. */
+  unread: number[];
+};
 
 /** بيحدد نوع الملف من الـ MIME والامتداد، أو null لو مش مدعوم. */
 export function detectFileKind(fileType: string, fileName: string): FileKind | null {
   const lower = fileName.toLowerCase();
 
   if (fileType === 'application/pdf' || lower.endsWith('.pdf')) return 'pdf';
+
+  // ⚠️ PPTX — كان مش مدعوم خالص (مافيش ingestion للـ pptx في المشروع).
+  //    الـ MIME الرسمي + الامتداد (المتصفحات بيبعتوا أنواع تانية أحياناً).
+  if (
+    fileType ===
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    lower.endsWith('.pptx')
+  ) {
+    return 'pptx';
+  }
 
   if (
     fileType ===
@@ -230,14 +291,129 @@ export type ExtractOptions = {
   maxTextChars: number;
 };
 
+/* ═══════════════════════════ استخراج PPTX ═══════════════════════════ */
+
 /**
- * بيقرا ملف مرفوع ويرجّع نصه. بيرمي `ExtractError` برسالة عربية
- * مفهومة للمستخدم في كل حالات الفشل المتوقّعة.
+ * ⚠️ **ليه `jszip` + `xmldom` مش `officeparser`**:
+ *   `officeparser` بيطلع **نص واحد مدمج** — واحنا محتاجين **حدود
+ *   الشرائح بالظبط** (كل شريحة = مرجع/anchor). بنقرا الـ OOXML مباشرة:
+ *   `ppt/slides/slideN.xml` فيه نصوص الشريحة في `<a:t>`.
+ *
+ *   ومكافأة: `ppt/notesSlides/notesSlideN.xml` فيه **ملاحظات المُقدِّم
+ *   الأصلية** ⇒ نقدر نستخدمها كمصدر إضافي.
+ *
+ *   ⚠️ **التبعيات مش direct**: `jszip` جاية من `docx`/`mammoth`/`pptxgenjs`
+ *   (كلهم direct) و`@xmldom/xmldom` من `mammoth` (direct). فمستقرة طول
+ *   ما الـ deps المباشرة موجودة. (لو هنضيفهم لـ package.json، محتاجين
+ *   نعملها في نفس الـ PR بتاع ترقية Next عشان ما نعملش تعارض.)
  */
-export async function extractTextFromFile(
+
+/** رقم الشريحة من اسم الملف — للترتيب الرقمي (مش الأبجدي). */
+function slideNumberFromPath(path: string): number {
+  const match = /slide(\d+)\.xml$/i.exec(path);
+  return match ? Number(match[1]) : 0;
+}
+
+/** يقرا نصوص `<a:t>` من XML بتاع DrawingML. */
+function readDrawingText(xml: string): string {
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  const all = doc.getElementsByTagName("*");
+  const parts: string[] = [];
+  for (let i = 0; i < all.length; i++) {
+    const el = all[i] as unknown as {
+      localName?: string;
+      namespaceURI?: string;
+      textContent?: string;
+    };
+    // ⚠️ `a:t` بس — الـ namespace بيمنع أي عنصر تاني اسمه `t`.
+    if (el.localName !== "t") continue;
+    if (!el.namespaceURI || !el.namespaceURI.includes("drawingml")) continue;
+    const text = (el.textContent ?? "").trim();
+    if (text) parts.push(text);
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * يستخرج شرائح العرض (نص + ملاحظات) من ملف PPTX.
+ *
+ * ⚠️ **ترتيب الشرائح رقمي مش أبجدي**: `slide10.xml` لازم تيجي بعد
+ *    `slide2.xml` — الترتيب الأبجدي بيرتّب ١٠ قبل ٢ وبيدمّر التسلسل.
+ */
+async function extractPptxSlides(
+  buffer: ArrayBuffer
+): Promise<Array<{ text: string; notes: string }>> {
+  const zip = await JSZip.loadAsync(buffer);
+
+  const slidePaths = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+    .sort((a, b) => slideNumberFromPath(a) - slideNumberFromPath(b));
+
+  const slides: Array<{ text: string; notes: string }> = [];
+
+  for (const slidePath of slidePaths) {
+    const entry = zip.file(slidePath);
+    if (!entry) continue;
+
+    const xml = await entry.async("text");
+    const text = readDrawingText(xml);
+
+    // ⚠️ **الـ notes مرتبطة بالـ slide عن طريق الـ rels** — الترقيم
+    //    `notesSlideN` مش مضمون يطابق `slideN`.
+    let notes = "";
+    try {
+      const relsPath = slidePath.replace(
+        /slides\/(slide\d+\.xml)$/i,
+        "slides/_rels/$1.rels"
+      );
+      const relsEntry = zip.file(relsPath);
+      if (relsEntry) {
+        const relsXml = await relsEntry.async("text");
+        const relsDoc = new DOMParser().parseFromString(relsXml, "text/xml");
+        const rels = relsDoc.getElementsByTagName("Relationship");
+        for (let i = 0; i < rels.length; i++) {
+          const rel = rels[i] as unknown as {
+            getAttribute?: (n: string) => string | null;
+          };
+          const type = rel.getAttribute?.("Type") ?? "";
+          if (!type.endsWith("/notesSlide")) continue;
+          const target = rel.getAttribute?.("Target") ?? "";
+          // ⚠️ الـ Target نسبي لجوه `ppt/slides/` ⇒ نطبّعه.
+          const notesPath = target.startsWith("/")
+            ? target.slice(1)
+            : `ppt/slides/${target.replace(/^\.\//, "")}`.replace("slides/../", "");
+          const notesEntry = zip.file(notesPath);
+          if (!notesEntry) continue;
+          notes = readDrawingText(await notesEntry.async("text"));
+          break;
+        }
+      }
+    } catch (err) {
+      // ⚠️ الـ notes مش حرجة — لو مانعرفش نجيبها، نمشي كمان.
+      console.error("pptx notes read failed:", err);
+    }
+
+    slides.push({ text, notes });
+  }
+
+  return slides;
+}
+
+/* ═══════════════════════════ استخراج المستند ═══════════════════════════ */
+
+/**
+ * بيقرا ملف مرفوع وبيحوّله لـ **وحدات** (صفحات/شرائح/فقرات).
+ *
+ * ⚠️ **ليه دالة جديدة مش تعديل على `extractTextFromFile`**: الـ function
+ *    القديمة بترجّع `string` وليها ٤+ مستهلكين (راوت الـ analyze-file،
+ *    راوت الديمو، مرفقات الشات، صفحة الـ workspace). تغيير الـ return
+ *    type = كسر ٤ مواضع. ⇒ `extractTextFromFile` بقى غلاف رقيق على
+ *    `extractDocument` فسلوكه ما بيتغيرش **حرفياً**.
+ */
+export async function extractDocument(
   file: File,
   options: ExtractOptions
-): Promise<string> {
+): Promise<ExtractedDocument> {
   if (file.size === 0) {
     throw new ExtractError('الملف فاضي.', 400, 'FILE_EMPTY');
   }
@@ -261,6 +437,7 @@ export async function extractTextFromFile(
   }
 
   const buffer = new Uint8Array(await file.arrayBuffer());
+  let pages: ExtractedPage[] = [];
   let text = '';
 
   if (kind === 'pdf') {
@@ -277,9 +454,14 @@ export async function extractTextFromFile(
         'PDF_PARSE_FAILED'
       );
     }
+
+    // ⚠️ **`mergePages: false`** — الـ overload التاني بتاع `unpdf`
+    //    بيرجّع `text: string[]` (نص لكل صفحة) بدل نص مدمج. ده اللي
+    //    بيخلّي نقدر نشتغل بالصفحات من غير أي مكتبة تانية.
+    let pageTexts: string[] = [];
     try {
-      const extracted = await extractText(pdf, { mergePages: true });
-      text = typeof extracted.text === 'string' ? extracted.text : '';
+      const extracted = await extractText(pdf, { mergePages: false });
+      pageTexts = Array.isArray(extracted.text) ? extracted.text : [];
     } catch (err) {
       console.error('PDF text extraction failed:', err);
       throw new ExtractError(
@@ -289,43 +471,128 @@ export async function extractTextFromFile(
       );
     }
 
-    // إذا لم يُستخرج نص قابل للاستخدام، جرّب OCR على صفحات محدودة.
-    if (text.replace(/\s/g, '').length < MIN_USEFUL_CHARS) {
-      const apiKey = process.env.OCR_SPACE_API_KEY?.trim();
-      if (!apiKey) {
-        throw new ExtractError('تحليل الصور غير متاح حالياً.', 503, 'OCR_NOT_CONFIGURED');
+    // ⚠️ **الـ OCR للصفحات الفاضية بس** (مش للملف كله): ملف نصّه مدمج
+    //    بس نصوّر بعد ⇒ الصفحات دي هي اللي محتاجة OCR.
+    const apiKey = process.env.OCR_SPACE_API_KEY?.trim();
+    let ocrBudget = MAX_OCR_PDF_PAGES;
+
+    pages = pageTexts.map((raw, i) => {
+      const pageText = raw.trim();
+      const usable = pageText.replace(/\s/g, '').length >= MIN_USEFUL_CHARS;
+      if (usable) {
+        return {
+          index: i,
+          number: i + 1,
+          text: pageText,
+          kind: 'page' as const,
+          viaOcr: false,
+          empty: false,
+        };
       }
-      const pageCount = (pdf as { numPages?: number }).numPages ?? 1;
-      const pagesToOcr = Math.min(Math.max(1, pageCount), MAX_OCR_PDF_PAGES);
-      const parts: string[] = [];
-      for (let p = 1; p <= pagesToOcr; p++) {
+
+      if (!apiKey || ocrBudget <= 0) {
+        // ⚠️ تجاوزنا السقف (أو مفيش مفتاح) ⇒ الصفحة بتتعلّم فاضية
+        //    (والـ UI بيصرّح بالصفحات اللي متقرتش).
+        return {
+          index: i,
+          number: i + 1,
+          text: '',
+          kind: 'page' as const,
+          viaOcr: false,
+          empty: true,
+        };
+      }
+      ocrBudget -= 1;
+      return {
+        index: i,
+        number: i + 1,
+        text: '',
+        kind: 'page' as const,
+        viaOcr: true,
+        empty: true,
+      };
+    });
+
+    // ⚠️ الـ OCR **متزامن** — بنعمله في loop تاني بعد الـ map (عشان
+    //    ترتيب الأولوية: الصفحات الفاضية بالترتيب).
+    if (apiKey) {
+      for (const page of pages) {
+        if (!page.viaOcr) continue;
         try {
-          const rendered = await renderPageAsImage(pdf, p, { scale: 1.5, toDataURL: false });
+          const rendered = await renderPageAsImage(pdf, page.number, {
+            scale: 1.5,
+            toDataURL: false,
+          });
           const pngBytes = new Uint8Array(rendered as ArrayBuffer);
-          const pageText = await extractTextFromImage(apiKey, pngBytes, `page-${p}.png`, 'image/png');
-          if (pageText.trim()) parts.push(pageText.trim());
+          const ocrText = await extractTextFromImage(
+            apiKey,
+            pngBytes,
+            `page-${page.number}.png`,
+            'image/png'
+          );
+          page.text = ocrText.trim();
+          page.empty = page.text.replace(/\s/g, '').length < MIN_USEFUL_CHARS;
         } catch (err) {
           if (err instanceof ExtractError) {
-            if (err.code === 'OCR_AUTH_FAILED' || err.code === 'OCR_QUOTA_EXCEEDED' || err.code === 'OCR_TIMEOUT') {
+            if (
+              err.code === 'OCR_AUTH_FAILED' ||
+              err.code === 'OCR_QUOTA_EXCEEDED' ||
+              err.code === 'OCR_TIMEOUT'
+            ) {
               throw err;
             }
           }
           console.error('PDF page OCR failed:', err);
         }
       }
-      text = parts.join('\n\n');
-      if (!text.trim()) {
-        throw new ExtractError('مفيش نص اتقرا من الملف ده.', 422, 'PDF_NO_TEXT');
-      }
     }
+
+    text = pages.map((p) => p.text).join('\n\n');
+  } else if (kind === 'pptx') {
+    const slides = await extractPptxSlides(
+      buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      ) as ArrayBuffer
+    );
+    if (slides.length === 0) {
+      throw new ExtractError(
+        'مفيش شرائح في الملف ده (أو الملف مش عرض تقديمي سليم).',
+        422,
+        'PPTX_NO_SLIDES'
+      );
+    }
+    pages = slides.map((slide, i) => ({
+      index: i,
+      number: i + 1,
+      text: slide.text,
+      kind: 'slide' as const,
+      viaOcr: false,
+      empty: slide.text.trim() === '',
+    }));
+    text = pages.map((p) => p.text).join('\n\n');
   } else if (kind === 'docx') {
     try {
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
       text = result.value;
     } catch (err) {
       console.error('DOCX parse failed:', err);
-      throw new ExtractError('مقدرتش أقرا ملف الـ Word ده. جرّب تحفظه تاني.', 422, 'DOCX_PARSE_FAILED');
+      throw new ExtractError('مقدرتش أفتح ملف الـ Word ده. جرّب تحفظه تاني.', 422, 'DOCX_PARSE_FAILED');
     }
+    // ⚠️ **الـ DOCX مالوش صفحات** — الـ page count ناتج rendering مش
+    //    data. فالمرجع الصحيح هو **الفقرة**، مش الصفحة.
+    const paragraphs = text
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    pages = paragraphs.map((paragraph, i) => ({
+      index: i,
+      number: i + 1,
+      text: paragraph,
+      kind: 'paragraph' as const,
+      viaOcr: false,
+      empty: paragraph.length === 0,
+    }));
   } else if (kind === 'image') {
     const apiKey = process.env.OCR_SPACE_API_KEY?.trim();
     // مفتاح OCR ناقص = خطأ صريح، مش طلب مجهول بيفشل بصمت
@@ -335,21 +602,42 @@ export async function extractTextFromFile(
     }
 
     // النوع اللي بنبعته لـ ocr.space: لو المتصفح مبعتش type
-    // بنستنتجه من الامتداد بدل ما نبعت octet-stream
+    // بنستنتجه من الامتداد (عشان مش نبعته كـ application/octet-stream
+    // اللي ocr.space بيرفضه بـ "Unable to recognize the file type")
     const ext = file.name.toLowerCase().split('.').pop() || '';
     const safeMime = file.type.startsWith('image/')
       ? file.type
       : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
 
     text = await extractTextFromImage(apiKey, buffer, file.name, safeMime);
+    pages = [
+      {
+        index: 0,
+        number: 1,
+        text: text.trim(),
+        kind: 'page',
+        viaOcr: true,
+        empty: text.trim() === '',
+      },
+    ];
   } else {
     text = Buffer.from(buffer).toString('utf-8');
+    pages = [
+      {
+        index: 0,
+        number: 1,
+        text: text.trim(),
+        kind: 'page',
+        viaOcr: false,
+        empty: text.trim() === '',
+      },
+    ];
   }
 
   if (!text.trim()) {
     throw new ExtractError(
       kind === 'image'
-        ? 'مفيش نص واضح في الصورة. اتأكد إنها مش مقلوبة والكتابة باينة.'
+        ? 'مفيش نص واضح في الصورة. اتأكد إن الكلام فيها واضح.'
         : 'مفيش نص اتقرا من الملف ده.',
       422,
       kind === 'image' ? 'IMAGE_NO_TEXT' : 'PDF_NO_TEXT'
@@ -357,6 +645,30 @@ export async function extractTextFromFile(
   }
 
   // Strip NULL bytes (U+0000) — they break PostgREST JSON serialization (22P05)
-  const cleaned = text.replace(/\x00/g, "");
-  return cleaned.slice(0, options.maxTextChars);
+  const cleaned = text.replace(/\x00/g, '');
+  const unread = pages.filter((p) => p.empty).map((p) => p.number);
+
+  return {
+    // ⚠️ نفس القطع（旧） — عشان `materials.content` يفضل زي ما كان.
+    text: cleaned.slice(0, options.maxTextChars),
+    pages: pages.map((p) => ({ ...p, text: p.text.replace(/\x00/g, '') })),
+    pageCount: pages.length,
+    kind,
+    unread,
+  };
+}
+
+/**
+ * بيقرا ملف مرفوع ويرجّع نصه. بيرمي `ExtractError` برسالة عربية
+ * مفهومة للمستخدم في كل حالات الفشل المتوقّعة.
+ *
+ * ⚠️ **سلوكه ما يتغيرش خالص** — بقى غلاف على `extractDocument`.
+ *    (النص المدمج بيتقصّ بنفس الحد القديم بالظبط.)
+ */
+export async function extractTextFromFile(
+  file: File,
+  options: ExtractOptions
+): Promise<string> {
+  const doc = await extractDocument(file, options);
+  return doc.text;
 }
