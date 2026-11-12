@@ -1,6 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 
 export interface UserSearchResult {
   id: string;
@@ -36,6 +37,15 @@ export async function searchUsers(
   createdAfter: string | null = null,
   createdBefore: string | null = null
 ): Promise<UserSearchResult[]> {
+  // ⚠️ أمان (P0، 2026-11): كانت بتشتغل بـ service_role بدون أي فحص — أي حد
+  // يقدر يسحب كل المستخدمين وإيميلاتهم (من auth.users كمان).
+  try {
+    await requireAdminActor("users.read");
+  } catch (e) {
+    if (e instanceof ActionAuthError) return [];
+    throw e;
+  }
+
   try {
     const privileged = createServiceClient();
     const q = (query || "").trim();

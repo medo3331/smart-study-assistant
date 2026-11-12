@@ -25,7 +25,8 @@ describe("buildMagiclySystemPrompt integration", () => {
   });
 
   it("يحفظ الذاكرة", () => {
-    expect(prompt).toContain("weak_topic: السرعة");
+    // P0 (2026-11): الذاكرة بتتقدّم كبيانات خام `[kind] value` — مش نص حر.
+    expect(prompt).toContain("[weak_topic] السرعة");
   });
 
   it("يحفظ سياق المادة والدرس والتقدم", () => {

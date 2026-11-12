@@ -1,10 +1,10 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
-import { resolveActor } from "@/lib/policy";
 import { recordAuditLog } from "./audit-log-record";
-import { hasPermission } from "@/lib/auth-roles";
 import { validatePlanInput } from "@/lib/plans/validation";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
+import type { ActorContext } from "@/lib/policy";
 
 export interface PlanInput {
   plan_key: string;
@@ -39,26 +39,40 @@ export interface PlanActionResult {
 
 const ACTION = "plans.manage";
 
-async function guard(actorId: string, actorEmail: string | null, resourceId: string, details: Record<string, unknown>) {
+/**
+ * ⚠️ أمان (P0، 2026-11): كانت بتاخد actorId/actorEmail من المتصل وتبني
+ * عليهما فحص "plans.manage" — انتحال شخصية المالك. دلوقتي الهوية من الجلسة.
+ */
+async function guard(resourceId: string, details: Record<string, unknown>) {
   const db = createServiceClient();
-  const actor = await resolveActor(db, actorId, actorEmail);
-  const allowed = await hasPermission(db, actorId, actorEmail, "plans.manage");
-  if (!allowed) {
-    await recordAuditLog({
-      actor: actorId,
-      actor_email: actorEmail,
-      action: ACTION,
-      resource_type: "plan",
-      resource_id: resourceId,
-      details: { ...details, rejected_by: actorId, status: "blocked_attempt" },
-      result: "BLOCKED",
-    });
-    return { ok: false as const, denied: true as const, db, actor };
+  let actor: ActorContext;
+  try {
+    ({ actor } = await requireAdminActor(ACTION));
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      await recordAuditLog({
+        actor: null,
+        actor_email: null,
+        action: ACTION,
+        resource_type: "plan",
+        resource_id: resourceId,
+        details: { ...details, status: "blocked_attempt", cause: e.code },
+        result: "BLOCKED",
+      });
+      return { ok: false as const, denied: true as const, db, actor: null as ActorContext | null };
+    }
+    throw e;
   }
   return { ok: true as const, denied: false as const, db, actor };
 }
 
-export async function listPlans(actorId: string, actorEmail: string | null) {
+export async function listPlans() {
+  try {
+    await requireAdminActor(ACTION);
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { ok: false, data: [], error: e.message };
+    throw e;
+  }
   try {
     const db = createServiceClient();
     const { data, error } = await db
@@ -71,10 +85,13 @@ export async function listPlans(actorId: string, actorEmail: string | null) {
     return { ok: false, data: [], error: e?.message || String(e) };
   }
 }
-export async function createPlan(input: PlanInput, actorId: string, actorEmail: string | null): Promise<PlanActionResult> {
+
+export async function createPlan(input: PlanInput): Promise<PlanActionResult> {
   try {
-    const g = await guard(actorId, actorEmail, input.plan_key, { op: "create", plan_key: input.plan_key });
+    const g = await guard(input.plan_key, { op: "create", plan_key: input.plan_key });
     if (g.denied) return { ok: false, message: "غير مصرح: إدارة الخطط متاحة لـ Owner فقط", error: "authorization_denied", auditId: null };
+    const actorId = g.actor!.userId!;
+    const actorEmail = g.actor!.userEmail;
 
     // تحقّق خادم قبل أي كتابة — أي طلب يمكن أن يصل بدون النموذج.
     const check = validatePlanInput(input);
@@ -121,10 +138,12 @@ export async function createPlan(input: PlanInput, actorId: string, actorEmail: 
   }
 }
 
-export async function updatePlan(planKey: string, input: PlanInput, actorId: string, actorEmail: string | null): Promise<PlanActionResult> {
+export async function updatePlan(planKey: string, input: PlanInput): Promise<PlanActionResult> {
   try {
-    const g = await guard(actorId, actorEmail, planKey, { op: "update", plan_key: planKey });
+    const g = await guard(planKey, { op: "update", plan_key: planKey });
     if (g.denied) return { ok: false, message: "غير مصرح: إدارة الخطط متاحة لـ Owner فقط", error: "authorization_denied", auditId: null };
+    const actorId = g.actor!.userId!;
+    const actorEmail = g.actor!.userEmail;
 
     const check = validatePlanInput(input);
     if (!check.ok) {
@@ -169,10 +188,12 @@ export async function updatePlan(planKey: string, input: PlanInput, actorId: str
   }
 }
 
-export async function deletePlan(planKey: string, actorId: string, actorEmail: string | null): Promise<PlanActionResult> {
+export async function deletePlan(planKey: string): Promise<PlanActionResult> {
   try {
-    const g = await guard(actorId, actorEmail, planKey, { op: "delete", plan_key: planKey });
+    const g = await guard(planKey, { op: "delete", plan_key: planKey });
     if (g.denied) return { ok: false, message: "غير مصرح: إدارة الخطط متاحة لـ Owner فقط", error: "authorization_denied", auditId: null };
+    const actorId = g.actor!.userId!;
+    const actorEmail = g.actor!.userEmail;
 
     const { count } = await g.db.from("subscription_activations").select("id", { count: "exact", head: true }).eq("plan_key", planKey);
     if (count && count > 0) {
@@ -192,10 +213,13 @@ export async function deletePlan(planKey: string, actorId: string, actorEmail: s
   }
 }
 
-export async function togglePlanActive(planKey: string, active: boolean, actorId: string, actorEmail: string | null): Promise<PlanActionResult> {
+export async function togglePlanActive(planKey: string, active: boolean): Promise<PlanActionResult> {
   try {
-    const g = await guard(actorId, actorEmail, planKey, { op: "toggle_active", plan_key: planKey, target: active });
+    const g = await guard(planKey, { op: "toggle_active", plan_key: planKey, target: active });
     if (g.denied) return { ok: false, message: "غير مصرح", error: "authorization_denied", auditId: null };
+    const actorId = g.actor!.userId!;
+    const actorEmail = g.actor!.userEmail;
+
     const { error } = await g.db.from("subscription_plans").update({ is_active: active }).eq("plan_key", planKey);
     if (error) {
       await recordAuditLog({ actor: actorId, actor_email: actorEmail, action: ACTION, resource_type: "plan", resource_id: planKey, details: { op: "toggle_active", reason: "db_update_failed", error: error.message }, result: "FAIL" });
@@ -207,4 +231,3 @@ export async function togglePlanActive(planKey: string, active: boolean, actorId
     return { ok: false, message: "خطأ غير متوقع: " + (e?.message || String(e)), error: String(e), auditId: null };
   }
 }
-

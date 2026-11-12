@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
-    const limited = checkRateLimit(`plans:${user.id}`, 6, 60_000, "message");
+    const limited = await checkRateLimit(`plans:${user.id}`, 6, 60_000, "message");
     if (limited) return limited;
     const body = await req.json().catch(() => null) as Record<string, unknown> | null;
     const taskType = body?.type;

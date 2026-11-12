@@ -85,11 +85,13 @@ export function DeckPanel({
           return;
         }
         setDocument(body.document as DocumentRow);
-        // ⚠️ لو فيه deck محفوظ ⇒ نفتح على أول جزء مش متولّد.
+        // ⚠️ **نفتح على أول جزء متولّد** (مش أول جزء ناقص) — عشان
+        //    الطالب يشوف المحتوى الموجود فوراً.
         const deck = (body.document as DocumentRow).deck;
         if (deck?.parts) {
+          const ready = deck.parts.find((p) => p.status === "ready");
           const pending = deck.parts.find((p) => p.status !== "ready");
-          setCurrent(pending ? pending.index : 0);
+          setCurrent(ready ? ready.index : (pending ? pending.index : 0));
         }
       } catch {
         if (!cancelled) setError("مقدرناش نقرأ المستند.");

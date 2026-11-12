@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
        تحمي كانت واقفة ورا side-effect بتاع اللي قبلها.
        بالترتيب ده، لما الميزانية تخلص الطلب بيترفض من غير ما يلمس
        الماب خالص. */
-    const overBudget = checkDailyBudget('demo', DAILY_BUDGET, 'flat');
+    const overBudget = await checkDailyBudget('demo', DAILY_BUDGET, 'flat');
     if (overBudget) return overBudget;
 
     /* حدّ الـ IP.
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
        اليومي فوق هو اللي بيغطي الحالة دي. */
     const forwarded = request.headers.get('x-forwarded-for') ?? '';
     const ip = forwarded.split(',')[0].trim() || 'unknown';
-    const limited = checkRateLimit(`demo:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS, 'flat');
+    const limited = await checkRateLimit(`demo:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS, 'flat');
     if (limited) return limited;
 
     /* رفض مبكر بالحجم قبل ما نقرا الـ body.

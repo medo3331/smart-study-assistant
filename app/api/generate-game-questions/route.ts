@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     if (authError) return authError;
     supabase = sb;
     userId = user.id;
-    const limited = checkRateLimit(`game-questions:${user.id}`, 10, 60_000, "message");
+    const limited = await checkRateLimit(`game-questions:${user.id}`, 10, 60_000, "message");
     if (limited) return limited;
 
     const body = await request.json().catch(() => null);

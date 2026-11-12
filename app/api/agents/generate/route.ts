@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    const limited = checkRateLimit(`agent:${user.id}`, 8, 60_000, "message");
+    const limited = await checkRateLimit(`agent:${user.id}`, 8, 60_000, "message");
     if (limited) return limited;
 
     const input = parseAgentGenerationInput(await req.json().catch(() => null));

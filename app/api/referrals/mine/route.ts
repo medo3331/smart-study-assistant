@@ -30,7 +30,7 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const limited = checkRateLimit(`referrals:mine:${user.id}`, 30, 60_000, "success");
+  const limited = await checkRateLimit(`referrals:mine:${user.id}`, 30, 60_000, "success");
   if (limited) return limited;
 
   try {

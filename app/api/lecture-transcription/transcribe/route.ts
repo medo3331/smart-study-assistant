@@ -102,12 +102,12 @@ async function resolveSessionUserId(): Promise<string | null> {
 export async function POST(request: NextRequest) {
   let claimId: string | null = null;
   try {
-    const overBudget = checkDailyBudget("lecture-transcription-job", DAILY_BUDGET);
+    const overBudget = await checkDailyBudget("lecture-transcription-job", DAILY_BUDGET);
     if (overBudget) return overBudget;
 
     const forwarded = request.headers.get("x-forwarded-for") ?? "";
     const ip = forwarded.split(",")[0].trim() || "unknown";
-    const limited = checkRateLimit(`lecture-transcribe:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
+    const limited = await checkRateLimit(`lecture-transcribe:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
     if (limited) return limited;
 
     if (!isStorageConfigured()) {

@@ -28,9 +28,7 @@ export async function GET(req: Request) {
       code: url.searchParams.get("code") || "all",
       after: url.searchParams.get("after"),
       before: url.searchParams.get("before"),
-    },
-    user.id,
-    user.email ?? null
+    }
   );
 
   if (!res.ok) {

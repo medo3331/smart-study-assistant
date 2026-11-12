@@ -7,7 +7,8 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "./audit-log-record";
-import { hasPermission } from "@/lib/auth-roles";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
+import type { ActorContext } from "@/lib/policy";
 
 export interface FileActionResult {
   ok: boolean;
@@ -17,22 +18,34 @@ export interface FileActionResult {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MANUAL_SQL_HINT = "عمود deleted_at غير موجود — نفّذ db/12-files-deleted-at.sql يدويًا (manual run #12)";
 
-/** فحص files.moderate على السيرفر (إخفاء الزر في الصفحة مجرد UX) + BLOCKED audit. */
-async function requireModerate(actorId: string, actorEmail: string | null, fileId: string, op: string): Promise<boolean> {
-  const supabase = createServiceClient();
-  const allowed = await hasPermission(supabase, actorId, actorEmail, "files.moderate");
-  if (!allowed) {
-    await recordAuditLog({
-      actor: actorId,
-      actor_email: actorEmail,
-      action: "files.moderate",
-      resource_type: "file",
-      resource_id: fileId,
-      details: { op, reason: "permission_denied" },
-      result: "BLOCKED",
-    });
+/**
+ * فحص files.moderate على السيرفر (إخفاء الزر في الصفحة مجرد UX) + BLOCKED audit.
+ *
+ * ⚠️ أمان (P0، 2026-11): كانت بتاخد actorId/actorEmail من المتصل — انتحال.
+ * دلوقتي الهوية من الجلسة عبر `requireAdminActor("files.moderate")`.
+ */
+async function requireModerate(
+  fileId: string,
+  op: string
+): Promise<{ ok: true; actor: ActorContext } | { ok: false; result: FileActionResult }> {
+  try {
+    const { actor } = await requireAdminActor("files.moderate");
+    return { ok: true, actor };
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      await recordAuditLog({
+        actor: null,
+        actor_email: null,
+        action: "files.moderate",
+        resource_type: "file",
+        resource_id: fileId,
+        details: { op, reason: "permission_denied", cause: e.code },
+        result: "BLOCKED",
+      });
+      return { ok: false, result: { ok: false, message: "غير مصرح: تحتاج صلاحية files.moderate" } };
+    }
+    throw e;
   }
-  return allowed;
 }
 
 /**
@@ -50,26 +63,23 @@ async function probeDeletedAtColumn(): Promise<{ ok: boolean; reason: string | n
 /** تعديل تصنيف ملف (classification/stage/grade/subject) — قبل/بعد في audit. */
 export async function updateFileClassification(
   fileIdRaw: string,
-  fields: { classification?: string; stage?: string; grade?: string; subject?: string },
-  actorId: string,
-  actorEmail: string | null
+  fields: { classification?: string; stage?: string; grade?: string; subject?: string }
 ): Promise<FileActionResult> {
   const fileId = (fileIdRaw || "").trim();
-  const auditBase = {
-    actor: actorId,
-    actor_email: actorEmail,
-    action: "files.moderate" as const,
-    resource_type: "file",
-    resource_id: fileId || null,
-  };
 
   if (!UUID_RE.test(fileId)) {
-    await recordAuditLog({ ...auditBase, details: { op: "classify", reason: "invalid_file_id" }, result: "FAIL" });
     return { ok: false, message: "معرّف ملف غير صالح" };
   }
-  if (!(await requireModerate(actorId, actorEmail, fileId, "classify"))) {
-    return { ok: false, message: "غير مصرح: تحتاج صلاحية files.moderate" };
-  }
+  const gate = await requireModerate(fileId, "classify");
+  if (!gate.ok) return gate.result;
+
+  const auditBase = {
+    actor: gate.actor.userId,
+    actor_email: gate.actor.userEmail,
+    action: "files.moderate" as const,
+    resource_type: "file",
+    resource_id: fileId,
+  };
 
   // تنظيف: نص فارغ = NULL، حد أقصى 120 حرف (لا نستقبل بيانات ضخمة)
   const clean = (v: unknown): string | null => {
@@ -123,27 +133,24 @@ export async function updateFileClassification(
 /** soft-delete ملف (deleted_at = now) — يتطلب SQL #12 اليدوي. */
 export async function softDeleteFile(
   fileIdRaw: string,
-  reasonRaw: string,
-  actorId: string,
-  actorEmail: string | null
+  reasonRaw: string
 ): Promise<FileActionResult> {
   const fileId = (fileIdRaw || "").trim();
   const reason = (reasonRaw || "").trim().slice(0, 200) || "من لوحة التحكم";
-  const auditBase = {
-    actor: actorId,
-    actor_email: actorEmail,
-    action: "files.moderate" as const,
-    resource_type: "file",
-    resource_id: fileId || null,
-  };
 
   if (!UUID_RE.test(fileId)) {
-    await recordAuditLog({ ...auditBase, details: { op: "soft_delete", reason: "invalid_file_id" }, result: "FAIL" });
     return { ok: false, message: "معرّف ملف غير صالح" };
   }
-  if (!(await requireModerate(actorId, actorEmail, fileId, "soft_delete"))) {
-    return { ok: false, message: "غير مصرح: تحتاج صلاحية files.moderate" };
-  }
+  const gate = await requireModerate(fileId, "soft_delete");
+  if (!gate.ok) return gate.result;
+
+  const auditBase = {
+    actor: gate.actor.userId,
+    actor_email: gate.actor.userEmail,
+    action: "files.moderate" as const,
+    resource_type: "file",
+    resource_id: fileId,
+  };
 
   try {
     const db = createServiceClient();
@@ -194,26 +201,23 @@ export async function softDeleteFile(
 }
 /** استرجاع ملف محذوف (deleted_at = null) — نفس حماية/audit الحذف. */
 export async function restoreFile(
-  fileIdRaw: string,
-  actorId: string,
-  actorEmail: string | null
+  fileIdRaw: string
 ): Promise<FileActionResult> {
   const fileId = (fileIdRaw || "").trim();
-  const auditBase = {
-    actor: actorId,
-    actor_email: actorEmail,
-    action: "files.moderate" as const,
-    resource_type: "file",
-    resource_id: fileId || null,
-  };
 
   if (!UUID_RE.test(fileId)) {
-    await recordAuditLog({ ...auditBase, details: { op: "restore", reason: "invalid_file_id" }, result: "FAIL" });
     return { ok: false, message: "معرّف ملف غير صالح" };
   }
-  if (!(await requireModerate(actorId, actorEmail, fileId, "restore"))) {
-    return { ok: false, message: "غير مصرح: تحتاج صلاحية files.moderate" };
-  }
+  const gate = await requireModerate(fileId, "restore");
+  if (!gate.ok) return gate.result;
+
+  const auditBase = {
+    actor: gate.actor.userId,
+    actor_email: gate.actor.userEmail,
+    action: "files.moderate" as const,
+    resource_type: "file",
+    resource_id: fileId,
+  };
 
   try {
     const db = createServiceClient();

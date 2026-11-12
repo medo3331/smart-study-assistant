@@ -31,7 +31,7 @@ export async function regenerateUserCodeFormAction(formData: FormData): Promise<
     redirect("/login");
   }
 
-  const res = await regenerateUserPublicCode(targetUserId, user.id, user.email ?? null);
+  const res = await regenerateUserPublicCode(targetUserId);
   const param = res.ok
     ? `success=${encodeURIComponent(res.message)}`
     : `error=${encodeURIComponent(res.message)}`;

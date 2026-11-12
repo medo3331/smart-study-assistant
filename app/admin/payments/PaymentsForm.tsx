@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { recordPayment } from "@/app/admin/actions/payments";
 
-export default function PaymentsForm({ adminUserId, defaultCurrency = "EGP" }: { adminUserId: string; defaultCurrency?: string }) {
+export default function PaymentsForm({ defaultCurrency = "EGP" }: { defaultCurrency?: string }) {
   const [userId, setUserId] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState(defaultCurrency);
@@ -16,8 +16,7 @@ export default function PaymentsForm({ adminUserId, defaultCurrency = "EGP" }: {
     setLoading(true);
     setMsg(null);
     const res = await recordPayment(
-      { userId, amount: Number(amount), currency, method, note },
-      adminUserId
+      { userId, amount: Number(amount), currency, method, note }
     );
     setMsg(res.message);
     setLoading(false);

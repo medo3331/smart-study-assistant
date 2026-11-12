@@ -1,7 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
-import { hasPermission } from "@/lib/auth-roles";
+import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 
 /**
  * 📥 تصدير CSV حقيقي لنتائج بحث المستخدمين — Phase 4.4.
@@ -18,15 +18,18 @@ function csvCell(v: string | null | undefined): string {
 }
 
 export async function exportUsersCsv(
-  filters: { q?: string; plan?: string; status?: string; code?: string; after?: string | null; before?: string | null },
-  adminUserId: string,
-  adminEmail: string | null
+  filters: { q?: string; plan?: string; status?: string; code?: string; after?: string | null; before?: string | null }
 ): Promise<{ ok: boolean; csv?: string; count?: number; message?: string }> {
-  const service = createServiceClient();
-  const allowed = await hasPermission(service, adminUserId, adminEmail, "users.read");
-  if (!allowed) {
-    return { ok: false, message: "غير مصرح — تحتاج صلاحية users.read" };
+  // ⚠️ الهوية من الجلسة — الباراميترات القديمة (adminUserId/adminEmail) كانت
+  // بتخلّي أي حد يبعت id المالك ويصدّر كل الإيميلات.
+  try {
+    await requireAdminActor("users.read");
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { ok: false, message: e.message };
+    throw e;
   }
+
+  const service = createServiceClient();
 
   const q = (filters.q || "").trim();
   let query = service

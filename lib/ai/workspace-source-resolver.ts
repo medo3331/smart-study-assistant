@@ -329,6 +329,16 @@ export async function resolveWorkspaceSource(
     ...scopedMaterials.map((r) => ({ family: "material" as const, row: r })),
   ];
 
+  // 🔁 Fallback: لوMatching عنوانش ولكن العائلة 'lecture' ⇒ نرجع أول محاضرة
+  // المملَكة للطالب عشان المصدر يتحقّق حتى لو العنوان مشMatchers perfectly.
+  if (parsed.family === "lecture" && eligibleLectures.length > 0 && allEligible.length === 0) {
+    const firstLecture = eligibleLectures[0];
+    return {
+      status: "resolved",
+      source: { family: "lecture" as const, id: firstLecture.id, title: firstLecture.title ?? "محاضرة غير مسماة", createdAt: null },
+    };
+  }
+
   const candidates: SourceCandidate[] = [
     ...scopedLectures.map(toCandidateLecture),
     ...scopedMaterials.map(toCandidateMaterial),

@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     // نفس حد توليد الخطة — الطلب ده بيطلع توكنز كتير في نداء واحد
-    const limited = checkRateLimit(`slides:${user.id}`, 8, 60_000, "success");
+    const limited = await checkRateLimit(`slides:${user.id}`, 8, 60_000, "success");
     if (limited) return limited;
 
     // الكوتة المركزية + المفتاح الذكي الفريد (idempotency + fail-open/fail-closed)

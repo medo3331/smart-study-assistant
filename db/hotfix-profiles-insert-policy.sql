@@ -23,15 +23,18 @@ CREATE POLICY "profiles: owner insert"
   ON public.profiles FOR INSERT
   WITH CHECK (auth.uid() = id);
 
--- 3) التأكد من وجود SELECT policy (للقراءة العامة - leaderboard)
--- economy-phase-b.sql لم يمسها، لكن نتأكد من وجودها
+-- 3) التأكد من وجود SELECT policy (لصاحب الصف فقط)
+-- ⚠️ أمان (2026-11): كانت `USING (true)` — أي زائر يقرأ كل الصفوف بما فيها
+-- email. دلوقتي صاحب الصف فقط. اللوحة العامة (leaderboard) تقرأ من الـview
+-- الآمن `public.public_profiles` (db/2026-11-security-rls-hardening.sql).
 DROP POLICY IF EXISTS "profiles: public read" ON public.profiles;
-CREATE POLICY "profiles: public read"
+DROP POLICY IF EXISTS "profiles: owner read" ON public.profiles;
+CREATE POLICY "profiles: owner read"
   ON public.profiles FOR SELECT
-  USING (true);
+  USING (auth.uid() = id);
 
 -- ملاحظات:
 -- - INSERT policy تسمح للمستخدم بإنشاء صف واحد فقط (id = auth.uid())
 -- - Trigger set_public_user_code() سيشتغل تلقائيًا عند INSERT
 -- - Trigger protect_profiles_xp لن يتدخل في INSERT (يعمل على UPDATE فقط)
--- - SELECT policy عامة (true) تسمح بقراءة جميع profiles (للـleaderboard)
+-- - SELECT لصاحب الصف فقط — لا قراءة عامة، ولا عمود email للزوار.

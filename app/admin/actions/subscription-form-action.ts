@@ -29,9 +29,7 @@ export async function subscriptionActivationFormAction(formData: FormData) {
     }
 
     return await activateSubscription(
-      { email: recipientEmail || undefined, userCode: userCode || undefined, planKey, durationDays, note },
-      user.id,
-      user.email ?? null
+      { email: recipientEmail || undefined, userCode: userCode || undefined, planKey, durationDays, note }
     );
   } catch (e: any) {
     return { ok: false, message: "خطأ في التفعيل: " + (e?.message || String(e)), error: String(e) };

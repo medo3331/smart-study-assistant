@@ -10,6 +10,13 @@ import { filterAccessibleModels } from "@/lib/ai/model-access";
 const ACTIONS = ["summarize", "extract", "analyze", "question"] as const;
 type Action = (typeof ACTIONS)[number];
 
+/**
+ * ⏱ **مهلة التنفيذ** — نداء موديل واحد بس (نص مستخرَج)، بس الموديل
+ * استدلال (gpt-oss) ⇒ بيلزم وقت. من غيرها Vercel بيقتله عند ١٠-١٥
+ * ثانية ⇒ 502.
+ */
+export const maxDuration = 120;
+
 export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");

@@ -52,6 +52,14 @@ import { findModel } from "@/lib/ai/models";
 import { isModelRuntimeEnabled, refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import type { AiUsageContext } from "@/lib/ai/usage-context";
+import { aiRouter } from "@/lib/ai/router";
+import {
+  addCoveragePrefix,
+  buildSummaryInput,
+  getSummaryAction,
+  stampLegacyCoverage,
+} from "@/lib/magic/summary";
 import type { AiTaskType } from "@/lib/ai/types";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import {
@@ -112,6 +120,90 @@ function clampTask(input: unknown): AiTaskType | undefined {
   const t = input.trim() as AiTaskType;
   if (VALID_TASKS.has(t)) return t;
   return undefined;
+}
+
+/**
+ * 🔁 ملخّص المحادثة (Sprint 2b.1 / 2b.1.3) — best-effort بالكامل.
+ *
+ * - بيتنادى **بعد** نجاح الرد الأساسي وحفظ الرسائل، فالفشل هنا مايضرّش الرد.
+ * - `stamp` للملخصات القديمة/بادئة مشوّهة: تحديث metadata واحد بلا أي نداء AI.
+ * - `generate`/`refresh`: نداء تلخيص واحد، ثم كتابة CAS على قيمة الملخص
+ *   القديمة بالظبط — عشان ما نكتبش فوق تحديث متزامن لطلب تاني.
+ * - مفتاح الاستخدام بياخد لاحقة `-summary` عشان مايتعارضش مع الطلب الأساسي.
+ */
+async function updateConversationSummary(params: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  userId: string;
+  conversationId: string;
+  prompt: string;
+  usage?: AiUsageContext;
+}): Promise<void> {
+  const { supabase, userId, conversationId, prompt, usage } = params;
+
+  const { count, error: countError } = await supabase
+    .from("chat_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId);
+  if (countError) return;
+
+  const totalMsgs = count ?? 0;
+  const { data: conv, error: convError } = await supabase
+    .from("chat_conversations")
+    .select("summary")
+    .eq("id", conversationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (convError) return;
+
+  const previousSummary = (conv as { summary: string | null } | null)?.summary ?? null;
+  const action = getSummaryAction(totalMsgs, previousSummary);
+  if (action === "none") return;
+
+  let nextSummary: string | null = null;
+
+  if (action === "stamp") {
+    nextSummary = stampLegacyCoverage(previousSummary ?? "", totalMsgs);
+    if (!nextSummary) return;
+  } else {
+    const { data: history, error: historyError } = await supabase
+      .from("chat_messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (historyError) return;
+
+    const summaryInput = buildSummaryInput(
+      previousSummary,
+      (history ?? []) as Array<{ role: string; content: string }>,
+      prompt
+    );
+
+    const summaryUsage = usage
+      ? { ...usage, idempotencyKey: `${usage.idempotencyKey}-summary` }
+      : undefined;
+
+    const response = await aiRouter.completeChat("chat", {
+      messages: [{ role: "user", content: summaryInput }],
+      ...(summaryUsage ? { usage: summaryUsage } : {}),
+    });
+
+    nextSummary = addCoveragePrefix(String(response?.content ?? ""), totalMsgs);
+    if (!nextSummary) return;
+  }
+
+  // Compare-and-swap: نكتب فقط لو الملخص لسه زي ما قرأناه.
+  let write = supabase
+    .from("chat_conversations")
+    .update({ summary: nextSummary, updated_at: new Date().toISOString() })
+    .eq("id", conversationId)
+    .eq("user_id", userId);
+
+  write = previousSummary === null ? write.is("summary", null) : write.eq("summary", previousSummary);
+
+  // نتيجة CAS مرفوضة (null) بتتجاهل بسكوت — بلا إعادة محاولة.
+  await write.select("id").maybeSingle();
 }
 
 export async function POST(req: Request) {
@@ -549,7 +641,9 @@ export async function POST(req: Request) {
         input.system = personaPrompt
           ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${magiclySystem}`
           : magiclySystem;
-        void rememberSessionContext(supabase, userId, studentContext, prompt);
+        void rememberSessionContext(supabase, userId, studentContext, prompt).catch((e) => {
+          console.warn("[unified-ai] memory save failed (non-blocking):", e);
+        });
       } catch (e) {
         console.warn("[unified-ai] student context build failed, continuing without it:", e);
       }
@@ -659,6 +753,21 @@ export async function POST(req: Request) {
         }
       } catch (saveError) {
         console.warn("[unified-ai] could not save conversation", saveError);
+      }
+
+      // ---- Conversation summary — بعد الحفظ، best-effort ----
+      if (savedConversationId) {
+        try {
+          await updateConversationSummary({
+            supabase,
+            userId,
+            conversationId: savedConversationId,
+            prompt,
+            usage: input.usage,
+          });
+        } catch (summaryError) {
+          console.warn("[unified-ai] conversation summary failed (non-blocking):", summaryError);
+        }
       }
     }
     const uiResponse = {

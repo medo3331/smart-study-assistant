@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     const { user, supabase, response: authError } = await requireUser("message");
     if (authError) return authError;
 
-    const limited = checkRateLimit(`file-generate:${user.id}`, 5, 60_000, "message");
+    const limited = await checkRateLimit(`file-generate:${user.id}`, 5, 60_000, "message");
     if (limited) return limited;
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

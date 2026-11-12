@@ -61,8 +61,11 @@ export function LectureDeckPanel({
         if (res.ok && body?.document?.deck) {
           const stored = body.document.deck as DeckState;
           setDeck(stored);
+          // ⚠️ **نفتح على أول جزء متولّد** (مش أول جزء ناقص) — عشان
+          //    الطالب يشوف المحتوى الموجود فوراً بدل رسالة «ولّد».
+          const ready = stored.parts.find((p) => p.status === "ready");
           const pending = stored.parts.find((p) => p.status !== "ready");
-          setCurrent(pending ? pending.index : 0);
+          setCurrent(ready ? ready.index : (pending ? pending.index : 0));
         }
       } catch {
         /* مفيش deck محفوظ — تمام. */

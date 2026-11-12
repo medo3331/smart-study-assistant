@@ -33,6 +33,15 @@ import { extractSegments, formatTimestamp } from "@/lib/ai/lecture-intensive";
    للمحاضرة** مهما كان عدد الأجزاء (idempotent على `p_ref_id`).
    ========================================================================== */
 
+/**
+ * ⏱ **مهلة التنفيذ**.
+ *
+ * ⚠️ **لازم!** من غيرها Vercel بيقتل الطلب عند ١٠-١٥ ثانية (الافتراضي)
+ *    والتوليد بياخد ~١٠ ثواني ⇒ **502/504** للمستخدم.
+ * (الشرح المكثف بيستخدم نفس القيمة.)
+ */
+export const maxDuration = 300;
+
 export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -134,6 +143,8 @@ export async function POST(
       userId: user.id,
       pages,
       unit: "segment",
+      // ⚠️ **المصدر تفريغ صوتي** ⇒ تعليمات تنظيف الـ ASR + إعادة الصياغة.
+      sourceKind: "transcript",
       fileName,
       title,
       ...(partIndex !== undefined ? { partIndex } : {}),

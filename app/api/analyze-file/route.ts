@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (authError) return authError;
 
     // ٢) حدّ استخدام: تحليل الملفات غالي (OCR + توكنز)
-    const limited = checkRateLimit(`analyze:${user.id}`, 10, 60_000, 'flat');
+    const limited = await checkRateLimit(`analyze:${user.id}`, 10, 60_000, 'flat');
     if (limited) return limited;
 
     const formData = await request.formData();
