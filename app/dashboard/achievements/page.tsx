@@ -21,13 +21,16 @@ import {
    تلات حاجات في صفحة واحدة:
      المستوى   → من XP (كل ٢٠٠ نقطة مستوى)، نفس حساب الداشبورد بالظبط
      الأوسمة   → من جدول badges، BossFight هو اللي بيكتب فيه
-     المراحل   → مش في الداتابيز، متحسوبة من أرقامك (أول درس، ١٠ أيام…)
+     المراحل   → محفوظة في `user_achievements` بعد Phase 3
 
-   ⚠️ الصفحة دي **قراءة بس**. مافيش أي زرار بيمنح إنجاز — الإنجاز بيتكسب
-   من المذاكرة نفسها. لو ضفت مرحلة جديدة تحت، هي بتحسب نفسها من الأرقام
-   اللي موجودة خلاص فمش محتاجة migration.
+   ⚠️ Phase 3: المراحل بقت **محفوظة ومكافأة**. الصفحة بتنادي RPC
+   `sync_achievements` مرة عند الفتح: السيرفر بيتحقق من الشروط (مراحل مكتملة،
+   سلسلة، مستوى، أوسمة، تراك كامل)، بيسجّل الجديد في `user_achievements`
+   مرة واحدة، وبيمنح كوينز/XP.
 
-   ⚠️ محتاج جدول badges — db/pages.sql (سطر ١٣٦).
+   الترتيب مهم: عرض المرحلة مش هو اللي بيمنحها — الحساب على السيرفر. الواجهة
+   بس بتعرض اللي رجع، ولو الـ RPC مش متطبّق (الميجريشن لسه) بترجع للحساب
+   المحلي القديم عشان الصفحة ماتبقاش فاضية.
    ========================================================================== */
 
 import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
@@ -51,6 +54,48 @@ interface Milestone {
   isUnlocked: boolean;
   /** التقدّم الحالي ناحية الهدف، للمقفولة بس */
   progress?: { current: number; target: number };
+  /** مكافأة الإنجاز (من كتالوج السيرفر) — undefined لو الحساب محلي */
+  coins?: number;
+  xp?: number;
+}
+
+/** صف RPC `sync_achievements` — أسماء الأعمدة زي ما راجعة من الداتابيز. */
+type ServerAchievement = {
+  achievement_id: string;
+  icon: string;
+  title: string;
+  requirement: string;
+  target: number | string;
+  progress: number | string;
+  coins: number | string;
+  xp: number | string;
+  unlocked: boolean;
+  unlocked_at: string | null;
+  newly: boolean;
+  sort_order: number | string;
+};
+
+function toNumber(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** تحويل صفوف السيرفر لنفس شكل المرحلة اللي الواجهة بترسمه. */
+function milestonesFromServer(rows: ServerAchievement[]): Milestone[] {
+  return rows.map((row) => {
+    const target = toNumber(row.target);
+    const progress = toNumber(row.progress);
+    return {
+      id: row.achievement_id,
+      icon: row.icon,
+      title: row.title,
+      requirement: row.requirement,
+      isUnlocked: row.unlocked === true || progress >= target,
+      progress: { current: progress, target },
+      coins: toNumber(row.coins),
+      xp: toNumber(row.xp),
+    };
+  });
 }
 
 function buildMilestones(stats: ProfileStats, courses: CourseSummary[], badgeCount: number): Milestone[] {
@@ -115,8 +160,9 @@ function StatCard({
 }
 
 function MilestoneRow({ milestone, accentBg }: { milestone: Milestone; accentBg: string }) {
-  const { icon, title, requirement, isUnlocked, progress } = milestone;
+  const { icon, title, requirement, isUnlocked, progress, coins, xp } = milestone;
   const percent = progress ? Math.min(100, Math.round((progress.current / progress.target) * 100)) : 100;
+  const hasReward = (coins ?? 0) > 0 || (xp ?? 0) > 0;
 
   return (
     <div className="flex items-start gap-3 py-3 border-b border-rule last:border-b-0">
@@ -152,6 +198,25 @@ function MilestoneRow({ milestone, accentBg }: { milestone: Milestone; accentBg:
             </div>
           </>
         )}
+
+        {/* المكافأة ظاهرة قبل الفتح — ده اللي بيخلّي الإنجاز حاجة تتستحق */}
+        {hasReward && (
+          <p className="text-[11px] text-ink-soft flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className={isUnlocked ? "text-ink" : ""}>
+              {isUnlocked ? "مكافأتها اتحفظت:" : "مكافأتها:"}
+            </span>
+            {(coins ?? 0) > 0 && (
+              <span className="mono ltr-num" aria-label={`${coins} كوينز`}>
+                +{arNum(coins ?? 0)} 🪙
+              </span>
+            )}
+            {(xp ?? 0) > 0 && (
+              <span className="mono ltr-num" aria-label={`${xp} نقطة خبرة`}>
+                +{arNum(xp ?? 0)} XP
+              </span>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -167,6 +232,8 @@ export default function AchievementsPage() {
   const [stats, setStats] = useState<ProfileStats>({ xp: 0, streak: 1 });
   const [badges, setBadges] = useState<Badge[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
+  const [serverAchievements, setServerAchievements] = useState<ServerAchievement[] | null>(null);
+  const [freshlyUnlocked, setFreshlyUnlocked] = useState<ServerAchievement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -199,6 +266,32 @@ export default function AchievementsPage() {
       if (badgesRes.data) setBadges(badgesRes.data);
       if (coursesRes.data) setCourses(coursesRes.data);
 
+      /* ---- Phase 3: تسجيل الإنجازات على السيرفر ----
+         النداء ده هو اللي بيفتح الإنجاز ويمنح مكافأته. لو الميجريشن
+         (`db/45-...`) لسه ما اتشغلش، الخطأ بيتجاهَل بهدوء والصفحة بترجع
+         للحساب المحلي — مفيش رسالة خطأ في وش الطالب عشان حاجة جانبية. */
+      const { data: achData, error: achError } = await supabase.rpc("sync_achievements");
+      if (!achError && achData) {
+        const rows = (Array.isArray(achData) ? achData : [achData]) as ServerAchievement[];
+        setServerAchievements(rows);
+        const fresh = rows.filter((row) => row.newly === true);
+        if (fresh.length > 0) {
+          setFreshlyUnlocked(fresh);
+          // نفس قناة التوست المستخدمة لمكافآت الدخول — إشعار لحظة الفتح
+          const awarded = fresh.reduce((sum, row) => sum + toNumber(row.coins), 0);
+          if (awarded > 0) {
+            window.dispatchEvent(
+              new CustomEvent("foundation:coins", {
+                detail: { source: "achievement", awarded, balance: 0 },
+              })
+            );
+          }
+          // المكافأة فيها XP، فالأرقام اللي فوق بقت قديمة
+          const refreshed = await fetchProfileStats(supabase, userId);
+          if (refreshed.data) setStats(refreshed.data);
+        }
+      }
+
       const firstError = statsRes.error ?? badgesRes.error ?? coursesRes.error;
       if (firstError) setNotice(firstError.message);
 
@@ -212,8 +305,11 @@ export default function AchievementsPage() {
   const levelPercent = Math.round((xpInLevel / XP_PER_LEVEL) * 100);
 
   const milestones = useMemo(
-    () => buildMilestones(stats, courses, badges.length),
-    [stats, courses, badges.length]
+    () =>
+      serverAchievements && serverAchievements.length > 0
+        ? milestonesFromServer(serverAchievements)
+        : buildMilestones(stats, courses, badges.length),
+    [serverAchievements, stats, courses, badges.length]
   );
 
   const unlockedCount = milestones.filter((m) => m.isUnlocked).length;
@@ -222,11 +318,42 @@ export default function AchievementsPage() {
     <PageShell
       eyebrow="الإنجازات"
       title="اللي جمعته"
-      lede="كل حاجة هنا اتكسبت من المذاكرة نفسها — مافيش زرار بيمنح إنجاز. الأوسمة بتيجي من معارك البوس، والمراحل بتفتح لوحدها لما أرقامك توصلها."
+      lede="كل حاجة هنا اتكسبت من المذاكرة نفسها — مافيش زرار بيمنح إنجاز. الأوسمة بتيجي من معارك البوس، والمراحل بتفتح لوحدها لما أرقامك توصلها وتتحفظ في حسابك بمكافأتها."
       feedbackPage="achievements"
       feedbackLabel="صفحة الإنجازات"
     >
       {notice && <DataNotice message={notice} />}
+
+      {/* إشعار لحظة الفتح — بيظهر مرة واحدة بعد ما السيرفر يسجّل الإنجاز */}
+      {freshlyUnlocked.length > 0 && (
+        <div className="sheet-card sheet-card-live p-4 flex items-start gap-3" role="status" aria-live="polite">
+          <span className="text-xl leading-none shrink-0" aria-hidden>🎉</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-ink">
+              إنجاز جديد: {freshlyUnlocked.map((row) => row.title).join(" · ")}
+            </p>
+            <p className="text-[11px] text-ink-soft mt-1">
+              استلمت{" "}
+              <span className="mono ltr-num">
+                +{arNum(freshlyUnlocked.reduce((sum, row) => sum + toNumber(row.coins), 0))}
+              </span>{" "}
+              كوين و{" "}
+              <span className="mono ltr-num">
+                +{arNum(freshlyUnlocked.reduce((sum, row) => sum + toNumber(row.xp), 0))}
+              </span>{" "}
+              XP — محفوظة في حسابك دلوقتي.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFreshlyUnlocked([])}
+            className="mono text-ink-soft hover:text-ink px-2 py-1 rounded-[6px] transition-colors shrink-0"
+            aria-label="إغلاق إشعار الإنجاز"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <LoadingSheets count={3} />
