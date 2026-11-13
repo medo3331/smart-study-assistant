@@ -224,6 +224,9 @@ self.addEventListener("push", (event) => {
     body: data.body || "لسه ما ذاكرتش النهارده... خلي السلسلة ماتنكسرش!",
     icon: data.icon || "/favicon.ico",
     badge: "/favicon.ico",
+    /* التاج من السيرفر: إشعار جديد بنفس التاج بيستبدل القديم بدل ما يكوم
+       فوقه. مهم لتذكير السلسلة (cron يومي + إشعار محلي من نفس الصفحة). */
+    ...(data.tag ? { tag: String(data.tag) } : {}),
     data: { url: data.url || "/dashboard" },
   };
 

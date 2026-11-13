@@ -38,6 +38,14 @@ export type CoinSource = {
   live: boolean;
   /** سقف يومي — `null` معناها مفيش سقف (الأحداث اللي بطبيعتها مرة واحدة) */
   dailyCap: number | null;
+  /**
+   * محطة سلسلة: مش كسب يومي عادي — بتتصرف يوم المحطة بس (٣/٧/٣٠).
+   *
+   * ⚠️ بتتستبعد من `maxDailyCoins()` عن قصد: الرقم ده هو أساس تسعير
+   * الكتالوج، ودخول بونص متقطّع فيه بيخلّي التسعير غلط (بيوعد بكسب يومي
+   * مش موجود). المبالغ بتتعدّل في `coin_source_rules` في
+   * `db/44-retention-phase-2-tiers.sql`، والرقم هنا مرآة. */
+  streakTier?: boolean;
 };
 
 export const COIN_SOURCES = {
@@ -97,6 +105,26 @@ export const COIN_SOURCES = {
     amount: 120,
     live: true,
     dailyCap: 1,
+  },
+  // ── Phase 2 — محطات السلسلة (Retention) ──────────────────────────────
+  /* بتتصرف من `_streak_apply` لما الطالب يوصل اليوم ٣/٣٠ بالظبط — مش كل
+     يوم. الـ XP المرافق (١٥ / ٢٠٠) مكتوب في الدالة نفسها، والواجهة بتقرا
+     نفس الأرقام من `lib/retention/streak-tiers.ts`. */
+  streak_tier_3: {
+    id: "streak_tier_3",
+    label: "بونص ٣ أيام",
+    amount: 15,
+    live: true,
+    dailyCap: 1,
+    streakTier: true,
+  },
+  streak_tier_30: {
+    id: "streak_tier_30",
+    label: "بونص الشهر",
+    amount: 250,
+    live: true,
+    dailyCap: 1,
+    streakTier: true,
   },
   // ⇩ مصادر لسه ما اتبنتش — المبلغ محسوب، والتوصيل بعدين
   escape_room: {
@@ -163,7 +191,8 @@ export function isCoinSource(v: string): v is CoinSourceId {
  */
 export function maxDailyCoins(): number {
   return Object.values(COIN_SOURCES)
-    .filter((s) => s.live)
+    // محطات السلسلة متقطّعة (يوم ٣/٧/٣٠) — مش كسب يومي، فمش داخلة في الأساس.
+    .filter((s) => s.live && !("streakTier" in s && s.streakTier))
     .reduce((sum, s) => sum + s.amount * (s.dailyCap ?? 1), 0);
 }
 

@@ -57,6 +57,7 @@ import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
+import { TodayMissionsCard } from "./components/TodayMissionsCard";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
 // ًں§© سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
@@ -857,6 +858,18 @@ export default function DashboardPage() {
     }
     if (notificationsEnabled) {
       setNotificationsEnabled(false);
+      /* Phase 2: القفل لازم يشيل الاشتراك من السيرفر كمان — من غيره
+         cron تذكير السلسلة كان هيفضل يبعت إشعارات رغم إن الطالب قفلها. */
+      void (async () => {
+        try {
+          const registration = await navigator.serviceWorker?.getRegistration("/sw.js");
+          const subscription = await registration?.pushManager.getSubscription();
+          await subscription?.unsubscribe();
+          await fetch("/api/push/subscribe", { method: "DELETE" });
+        } catch (err) {
+          console.warn("push unsubscribe failed (متجاهَل):", err);
+        }
+      })();
       return;
     }
     const permission = await Notification.requestPermission();
@@ -1669,6 +1682,12 @@ export default function DashboardPage() {
             }}
             onOpenAiAssistant={handleOpenAiAssistant}
           />
+          {/* Phase 2 — مهام النهاردة: سطح المهام اليومية (gamification) في وش
+              الطالب بدل ما تكون مدفونة في القائمة الجانبية. الأرقام من
+              daily_missions على السيرفر، والاستلام من claim_daily_mission.
+              ⚠️ مش نفس DailyMissionsCard القديمة (دي كارت أهداف المخطط). */}
+          <TodayMissionsCard streak={streak} />
+
           {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
           <EconomyStrip />
           <PlanQuotaCard />
