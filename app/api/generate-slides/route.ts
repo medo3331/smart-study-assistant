@@ -8,6 +8,17 @@ import { resolveActor } from "@/lib/policy";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
 import { GROQ_MODELS } from "@/lib/ai-config";
 import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
+import { orderedGroqKeys, reportGroqKeyOutcome } from "@/lib/ai/groq";
+import type { ChatCompletion } from "groq-sdk/resources/chat/completions";
+
+/**
+ * مهلة Vercel للراوت (ثانية).
+ *
+ * ⚠️ من غيرها المهلة الافتراضية (10–15 ثانية) بتكمّل الطلب في نص
+ * توليد ٤٠٠٠ توكن → ديليفري504/503 من المنصة ومش من كودنا — نفس
+ * نمط باقي راوتات AI في المشروع (chat/curriculum/unified-ai = 60).
+ */
+export const maxDuration = 60;
 
 /* ==========================================================================
    توليد عرض تقديمي
@@ -132,17 +143,19 @@ export async function POST(req: Request) {
         ? rawCount
         : 8;
 
-    const apiKey = process.env.GROQ_API_KEY?.trim();
-    if (!apiKey) {
-      console.error("generate-slides: GROQ_API_KEY غير معرف");
+    // تدوير المفاتيح (نفس ترتيب باقي راوتات AI): مفتاح واحد مشترك بين كل
+    // المستخدمين كان بيطلع 429 أول ما حد يضغط — دلوقتي المفتاح المفضّل
+    // أولًا والمحظور مؤقتًا في الآخر، واللي بيرجع 429/401/403 بيتسجّل
+    // ويتخطّى جوه نفس الطلب.
+    const groqKeys = orderedGroqKeys();
+    if (groqKeys.length === 0) {
+      console.error("generate-slides: لا يوجد GROQ_API_KEY معرف");
       await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ""), (guard as any)?.refId ?? "");
       return NextResponse.json(
         { success: false, error: "الخدمة غير متاحة حالياً." },
         { status: 503 }
       );
     }
-
-    const groq = new Groq({ apiKey });
 
     const system = `أنت بتجهّز عرض تقديمي تعليمي. أخرج JSON فقط.
 
@@ -162,31 +175,52 @@ export async function POST(req: Request) {
       : `اعمل عرض من ${slideCount} شرايح عن "${topic}".`;
 
     const usage = resolveUsageRequestContext(req, __hUser?.id ?? null, { feature: "slides" });
-    // C4 (shadow): one event per ACTUAL provider request (this route has no loop -> attemptNo 0).
+    // C4 (shadow): حدث واحد لكل طلب **فعلي** للمزوّد — الدوران فوق بيولّد
+    // أكتر من طلب، فالـ attemptNo بقى رقم المحاولة مش ثابت 0.
     const doneMs = startProviderAttempt();
-    const completion = await groq.chat.completions.create({
-      model: GROQ_MODELS.advanced,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.5,
-      max_tokens: 4000,
-      response_format: { type: "json_object" },
-    })
-      .catch(async (err) => {
-        // C4.1: the provider request itself failed -> no response at all.
-        // Rethrow so the route keeps its EXACT existing error behaviour.
-        // ⚠️ `async` + `await`: land the write BEFORE the rethrow.
-        await recordDirectProviderAttempt({
-          usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced,
-          status: "failed_no_response", latencyMs: doneMs(),
+    let completion: ChatCompletion | null = null;
+    let successAttemptNo = 0;
+    let lastError: unknown = null;
+
+    for (let attemptNo = 0; attemptNo < groqKeys.length; attemptNo++) {
+      const attemptMs = startProviderAttempt();
+      // maxRetries: 0 — الدوران على المفاتيح شغلنا إحنا؛ الـ retry التلقائي
+      // كان هيفضل يضغط نفس المفتاح المرفوض 429 قبل ما ننتقل للتالي.
+      // timeout: المهلة داخل حدود maxDuration (60s) عشان ما نوصلش لقتل الدالة.
+      const groq = new Groq({ apiKey: groqKeys[attemptNo], maxRetries: 0, timeout: 45_000 });
+      try {
+        completion = await groq.chat.completions.create({
+          model: GROQ_MODELS.advanced,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.5,
+          max_tokens: 4000,
+          response_format: { type: "json_object" },
         });
-        throw err;
-      });
+        successAttemptNo = attemptNo;
+        reportGroqKeyOutcome(groqKeys[attemptNo], { ok: true });
+        break;
+      } catch (err) {
+        lastError = err;
+        const status = (err as { status?: number })?.status;
+        // C4.1: the provider request itself failed -> no response at all.
+        // ⚠️ `async` + `await`: land the write BEFORE any follow-up.
+        await recordDirectProviderAttempt({
+          usage, feature: "slides", attemptNo, provider: "groq", model: GROQ_MODELS.advanced,
+          status: "failed_no_response", latencyMs: attemptMs(),
+        });
+        reportGroqKeyOutcome(groqKeys[attemptNo], { ok: false, status: status ?? 0 });
+        const keyRejected = status === 429 || status === 401 || status === 403;
+        if (keyRejected && attemptNo < groqKeys.length - 1) continue; // المفتاح ده مرفوض — جرب التالي.
+        throw err; // آخر مفتاح أو خطأ مش متعلّق بالمفتاح — نفس سلوك الرنات القديم.
+      }
+    }
+    if (!completion) throw lastError; // مستحيل: الحلقة إمّا تكسر بالنجاح إمّا ترمي.
 
     const rawContent = completion.choices[0]?.message?.content ?? "";
-    await recordDirectProviderAttempt({ usage, feature: "slides", attemptNo: 0, provider: "groq", model: GROQ_MODELS.advanced, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
+    await recordDirectProviderAttempt({ usage, feature: "slides", attemptNo: successAttemptNo, provider: "groq", model: GROQ_MODELS.advanced, status: rawContent ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     if (!rawContent) {
       await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
       await refundSubscriptionQuota(user.id, "message", quota?.idempotencyKey);
@@ -233,15 +267,33 @@ export async function POST(req: Request) {
     try { if (guard && (guard as any)?.refId) await refundAiCreditIfNeeded(__hSupabase, (__hUser?.id ?? ''), (guard as any).refId); } catch {}
     console.error("generate-slides error:", error);
     const status = (error as { status?: number })?.status;
+    const name = (error as { name?: string })?.name;
     const isRate = status === 429 || status === 413;
+    // مهلة المزوّد (SDK) — بنميّزها عشان الطالب يعرف إنها مش مشكلة منه.
+    const isTimeout = name === "APIConnectionTimeoutError" || name === "TimeoutError";
+    // كل المفاتيح اترفضت (401/403) = تهيئة غلط —503 مش 500.
+    const isUnavailable = status === 401 || status === 403;
+    if (isRate) {
+      return NextResponse.json(
+        { success: false, error: "الخدمة مشغولة دلوقتي. حاول تاني بعد دقيقة." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
+    if (isTimeout) {
+      return NextResponse.json(
+        { success: false, error: "التوليد أخد وقت أطول من المتوقع. جرّب تاني — أو استخدم عدد شرايح أقل." },
+        { status: 504 }
+      );
+    }
+    if (isUnavailable) {
+      return NextResponse.json(
+        { success: false, error: "الخدمة غير متاحة حالياً. جرّب بعد شوية." },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
-      {
-        success: false,
-        error: isRate
-          ? "الخدمة مشغولة دلوقتي. حاول تاني بعد دقيقة."
-          : "حصل خطأ أثناء توليد العرض. حاول تاني.",
-      },
-      { status: isRate ? 429 : 500 }
+      { success: false, error: "حصل خطأ أثناء توليد العرض. حاول تاني." },
+      { status: 500 }
     );
   }
 }

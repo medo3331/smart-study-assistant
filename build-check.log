@@ -1,0 +1,235 @@
+
+> smart-study-assistant@0.1.0 build
+> next build
+
+▲ Next.js 16.2.10 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 31.9s
+  Running TypeScript ...
+  Finished TypeScript in 23.1s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/167) ...
+  Generating static pages using 7 workers (41/167) 
+  Generating static pages using 7 workers (83/167) 
+  Generating static pages using 7 workers (125/167) 
+✓ Generating static pages using 7 workers (167/167) in 10.8s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /admin/ai-costs
+├ ƒ /admin/ai-overview
+├ ƒ /admin/ai-telemetry
+├ ƒ /admin/ai-usage
+├ ƒ /admin/alerts
+├ ƒ /admin/analytics
+├ ƒ /admin/announcement-emails
+├ ƒ /admin/announcements
+├ ƒ /admin/audit-log
+├ ƒ /admin/db-backup
+├ ƒ /admin/files
+├ ƒ /admin/grants
+├ ƒ /admin/messaging
+├ ƒ /admin/models
+├ ƒ /admin/payments
+├ ƒ /admin/plans
+├ ƒ /admin/rewards
+├ ƒ /admin/runtime-errors
+├ ƒ /admin/settings
+├ ƒ /admin/subscriptions
+├ ƒ /admin/support
+├ ƒ /admin/tickets
+├ ƒ /admin/tickets/[id]
+├ ƒ /admin/users
+├ ƒ /admin/users/[id]
+├ ƒ /admin/users/analytics
+├ ○ /ai-studio
+├ ○ /ai-study-assistant
+├ ƒ /api/admin/add-credits
+├ ƒ /api/admin/ai-overview
+├ ƒ /api/admin/alerts/evaluate
+├ ƒ /api/admin/is-owner
+├ ƒ /api/admin/manage-roles
+├ ƒ /api/admin/support/tickets
+├ ƒ /api/admin/support/tickets/[id]
+├ ƒ /api/admin/support/tickets/[id]/messages
+├ ƒ /api/admin/user-ai-status
+├ ƒ /api/admin/users/export
+├ ƒ /api/agents/generate
+├ ƒ /api/agents/history
+├ ƒ /api/ai
+├ ƒ /api/ai/costs
+├ ƒ /api/ai/diagram
+├ ƒ /api/ai/file
+├ ƒ /api/ai/file-analysis
+├ ƒ /api/ai/file/generate
+├ ƒ /api/ai/generate
+├ ƒ /api/ai/image
+├ ƒ /api/ai/image-analysis
+├ ƒ /api/ai/image-gen
+├ ƒ /api/ai/memory
+├ ƒ /api/ai/plan
+├ ƒ /api/ai/usage
+├ ƒ /api/analyze-file
+├ ƒ /api/announcement-email-campaigns
+├ ƒ /api/announcement-email-campaigns/[id]
+├ ƒ /api/announcement-email-campaigns/[id]/send
+├ ƒ /api/announcement-email-campaigns/recipients
+├ ƒ /api/announcements
+├ ƒ /api/announcements/[id]
+├ ƒ /api/announcements/[id]/read
+├ ƒ /api/announcements/unread-count
+├ ƒ /api/auth/mag/request
+├ ƒ /api/auth/mag/verify
+├ ƒ /api/baccalaureate/goal
+├ ƒ /api/chat
+├ ƒ /api/chat/context
+├ ƒ /api/chat/conversations
+├ ƒ /api/chat/conversations/[id]
+├ ƒ /api/config/public
+├ ƒ /api/cron/daily-maintenance
+├ ƒ /api/cron/downgrade-expired
+├ ƒ /api/curriculum-coverage
+├ ƒ /api/curriculum/expand
+├ ƒ /api/curriculum/generate
+├ ƒ /api/demo
+├ ƒ /api/diagnostic/start
+├ ƒ /api/diagnostic/submit
+├ ƒ /api/documents
+├ ƒ /api/documents/[id]/slides
+├ ƒ /api/exam-bank/questions
+├ ƒ /api/exam-countdown
+├ ƒ /api/exam-plan
+├ ƒ /api/exam-sessions
+├ ƒ /api/exam-sessions/[id]
+├ ƒ /api/exam-sessions/[id]/items/[itemId]/process
+├ ƒ /api/feedback
+├ ƒ /api/generate-game-questions
+├ ƒ /api/generate-plan
+├ ƒ /api/generate-plan/add-day
+├ ƒ /api/generate-plan/generate_day
+├ ƒ /api/generate-slides
+├ ƒ /api/islamic/prayer-times
+├ ƒ /api/lecture-transcription
+├ ƒ /api/lecture-transcription/transcribe
+├ ƒ /api/lecture-transcription/upload-url
+├ ƒ /api/lectures/[id]/ask
+├ ƒ /api/lectures/[id]/export
+├ ƒ /api/lectures/[id]/intensive
+├ ƒ /api/lectures/[id]/process
+├ ƒ /api/lectures/[id]/slides
+├ ƒ /api/lectures/[id]/transcript
+├ ƒ /api/lectures/[id]/transcript/detect-suspects
+├ ƒ /api/lectures/[id]/transcript/review-state
+├ ƒ /api/lectures/[id]/transcript/reviewed-text
+├ ƒ /api/lectures/[id]/transcript/submit-review
+├ ƒ /api/lesson-quiz
+├ ƒ /api/lesson/video
+├ ƒ /api/live-e2e
+├ ƒ /api/magic-assistant/chat
+├ ƒ /api/me/credit-status
+├ ƒ /api/me/plan-quota
+├ ƒ /api/notifications
+├ ƒ /api/plans/settings
+├ ƒ /api/preparatory/goal
+├ ƒ /api/primary/goal
+├ ƒ /api/push/subscribe
+├ ƒ /api/quran/reciters
+├ ƒ /api/referrals/attribute
+├ ƒ /api/referrals/entry
+├ ƒ /api/referrals/mine
+├ ƒ /api/secondary/goal
+├ ƒ /api/support/tickets
+├ ƒ /api/support/tickets/[id]
+├ ƒ /api/support/tickets/[id]/messages
+├ ƒ /api/unified-ai
+├ ƒ /api/university/goal
+├ ƒ /api/upload
+├ ƒ /api/usage
+├ ƒ /api/voice/speak
+├ ƒ /api/worship/prayer-times
+├ ○ /assessment
+├ ƒ /auth/callback
+├ ○ /break
+├ ƒ /chat
+├ ƒ /checkout/[plan]
+├ ○ /community
+├ ○ /dashboard
+├ ƒ /dashboard/[role]
+├ ○ /dashboard/achievements
+├ ○ /dashboard/agents
+├ ○ /dashboard/balance
+├ ○ /dashboard/calendar
+├ ○ /dashboard/career
+├ ○ /dashboard/courses
+├ ○ /dashboard/create
+├ ○ /dashboard/mentor
+├ ○ /dashboard/planner
+├ ○ /dashboard/profile
+├ ○ /dashboard/progress
+├ ○ /dashboard/referrals
+├ ○ /dashboard/slides
+├ ƒ /dashboard/support
+├ ○ /dashboard/workspace
+├ ○ /dashboard/workspace/home
+├ ○ /dashboard/workspace/inbox
+├ ƒ /dashboard/workspace/subjects/[id]
+├ ○ /demo
+├ ƒ /diagnostic
+├ ○ /escape-room
+├ ƒ /exams
+├ ƒ /exams/[examId]
+├ ○ /faq
+├ ○ /features
+├ ○ /icon.svg
+├ ○ /inbox
+├ ○ /inventory
+├ ○ /lecture-transcription
+├ ƒ /lectures
+├ ƒ /lectures/[id]/review
+├ ○ /lesson
+├ ƒ /lesson/[dayId]
+├ ○ /lessons
+├ ƒ /lessons/[configId]
+├ ○ /login
+├ ○ /login/mag
+├ ○ /manifest.webmanifest
+├ ○ /missions
+├ ○ /onboarding
+├ ƒ /plans
+├ ○ /preview/design-system
+├ ƒ /pricing
+├ ○ /privacy
+├ ○ /programming
+├ ○ /register
+├ ○ /rewards
+├ ○ /robots.txt
+├ ○ /shop
+├ ○ /sitemap.xml
+├ ○ /store
+├ ○ /study-tools
+├ ○ /subjects
+├ ○ /subscriptions
+├ ○ /support
+├ ○ /terms
+├ ƒ /u/[code]
+├ ○ /university
+├ ƒ /university/[subjectId]
+├ ○ /university/review
+├ ○ /welcome
+├ ○ /worship
+├ ○ /worship/adhkar
+├ ○ /worship/prayer-times
+├ ○ /worship/quran
+└ ○ /worship/settings
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

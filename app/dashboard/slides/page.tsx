@@ -7,6 +7,7 @@ import { THEME_STYLES } from "../components/theme-helpers";
 import { takeSlidesSeed } from "../components/nav-config";
 import { ReadAloud } from "@/components/ReadAloud";
 import { FeatureGuide } from "@/components/FeatureGuide";
+import { MagiclyLoader } from "@/components/ui/MagiclyLoader";
 import { guides } from "@/lib/guides";
 
 /* ==========================================================================
@@ -35,6 +36,42 @@ interface Slide {
 }
 
 const SLIDE_COUNTS = [6, 8, 10, 12];
+
+/**
+ * رسالة وضّحة لكل حالة فشل من `/api/generate-slides`.
+ *
+ * في الإنتاج بنشوف 429 (كوتة المستخدم + حدود Groq المشتركة) و503
+ * (المفتاح ناقص أو الخدمة واقفة) و504 (مهلة السيرفر)، فالطالب لازم
+ * يعرف بالظبط يستنى كام بدل ما يحاول في حلقة من غير ما يفهم السبب.
+ */
+function generateErrorMessage(
+  status: number,
+  serverError: string | null,
+  retryAfter: string | null
+): string {
+  if (status === 429) {
+    // الرسالة الجاية من السيرفر بتبقى فيها المدة بالفعل (مثال: "استنى 42 ثانية").
+    if (serverError) return serverError;
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return `وصلت للحد الأقصى مؤقتًا. استنى ${seconds} ثانية وجرّب تاني.`;
+    }
+    return "وصلت للحد الأقصى لطلبات التوليد. استنى دقيقة وجرّب تاني.";
+  }
+  if (status === 503) {
+    return "السيرفر مشغول حالياً أو خدمة الذكاء الاصطناعي غير متاحة. جرّب بعد شوية.";
+  }
+  if (status === 504 || status === 502) {
+    return "التوليد أخد وقت أطول من المتوقع. جرّب تاني — ولو استمرت استخدم عدد شرايح أقل.";
+  }
+  if (status === 401 || status === 403) {
+    return serverError ?? "انتهت صلاحيتك لاستخدام الخدمة. جدّد الاشتراك وحاول تاني.";
+  }
+  if (status >= 500) {
+    return "حصل خطأ في السيرفر أثناء توليد العرض. جرّب تاني بعد شوية.";
+  }
+  return serverError ?? "حصل خطأ أثناء توليد العرض. حاول تاني.";
+}
 
 /**
  * مقاس ورقة التصدير بالبكسل (A4 landscape عند 96dpi).
@@ -283,15 +320,33 @@ export default function SlidesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), source: source.trim(), slideCount }),
       });
-      const json = await res.json();
+
+      // وقت الأخطاء من طرف Vercel (502/504/…) الرد بيجي HTML مش JSON،
+      // و`res.json()` بيرمي — فلازم نمسكه ونختار الرسالة من الـ status.
+      let json: {
+        success?: boolean;
+        error?: string;
+        data?: { slides?: Slide[]; topic?: string };
+      } | null = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
 
       if (!res.ok || !json?.success) {
-        setError(json?.error ?? "حصل خطأ أثناء توليد العرض. حاول تاني.");
+        setError(generateErrorMessage(res.status, json?.error ?? null, res.headers.get("Retry-After")));
         return;
       }
 
-      setSlides(json.data.slides as Slide[]);
-      setDeckTopic(json.data.topic as string);
+      const dataSlides = json?.data?.slides;
+      if (!Array.isArray(dataSlides) || dataSlides.length === 0) {
+        setError("العرض رجع فاضي. جرّب تاني أو وضّح الموضوع أكتر.");
+        return;
+      }
+
+      setSlides(dataSlides);
+      setDeckTopic(json?.data?.topic ?? topic.trim());
       setCurrent(0);
     } catch {
       setError("مقدرتش أوصل للخدمة. اتأكد من الاتصال وحاول تاني.");
@@ -468,10 +523,12 @@ export default function SlidesPage() {
           </button>
         </div>
 
+        {/* الشاشة الموحّدة للتحميل — الـ loading.tsx مش بيشتغل هنا لأن
+            الصفحة Client Component بتعمل fetch بنفسها، فالظهور لازم
+            يبقى على الـ state بتاع التوليد. */}
         {isGenerating && (
-          <div className="sheet-card p-8 flex flex-col items-center gap-3" aria-busy="true">
-            <span className="w-5 h-5 border-2 border-rule border-t-redpen rounded-full animate-spin" />
-            <p className="tag justify-center">بيكتب الشرائح</p>
+          <div className="sheet-card overflow-hidden" aria-busy="true">
+            <MagiclyLoader label="بنجهّز عرض الشرائح…" size={72} />
           </div>
         )}
 

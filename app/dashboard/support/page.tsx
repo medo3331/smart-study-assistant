@@ -1,5 +1,6 @@
 import { listMyTickets, createTicket, getMyTicketWithReplies, addMyReply } from "@/app/dashboard/actions/support";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
+import Link from "next/link";
 import { Search, MessageSquare, Send, Plus, CheckCircle } from "lucide-react";
 
 type Ticket = { id: string; subject: string; description: string; status: string; priority: string; created_at: string; updated_at: string };
@@ -16,14 +17,34 @@ async function getSessionUser() {
   return user;
 }
 
-export default async function DashboardSupportPage({ searchParams }: { searchParams: { ticket?: string } }) {
-  const user = await getSessionUser();
-  const activeTicketId = searchParams.ticket || null;
+export default async function DashboardSupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ticket?: string }>;
+}) {
+  // في Next 15+ الـ searchParams بيعدّي Promise — القراءة من غير await
+  // بترجّع undefined (يعني الروابط ?ticket= كانت بتتجاهل).
+  const { ticket: ticketQuery } = await searchParams;
+  const activeTicketId = ticketQuery || null;
 
-  const { data: tickets } = await listMyTickets();
-  const { ticket, replies } = activeTicketId
-    ? await getMyTicketWithReplies(activeTicketId)
-    : { ticket: null, replies: [] };
+  // ⚠️ أي فشل هنا (مفتاح الخدمة ناقص في البيئة، قاعدة بيانات واقفة…)
+  // كان بيكسر الصفحة كلها بـ500 — بنمسكه ونعرض رسالة بدل كسر الشاشة.
+  let tickets: Ticket[] = [];
+  let ticket: Ticket | null = null;
+  let replies: Reply[] = [];
+  let loadError: string | null = null;
+  try {
+    const list = await listMyTickets();
+    tickets = (list.data as Ticket[]) ?? [];
+    if (activeTicketId) {
+      const active = await getMyTicketWithReplies(activeTicketId);
+      ticket = (active.ticket as Ticket | null) ?? null;
+      replies = (active.replies as Reply[]) ?? [];
+    }
+  } catch (err) {
+    console.error("dashboard/support: failed to load tickets", err);
+    loadError = "مقدرنا نحمّل تذاكرك دلوقتي. جرّب تاني بعد شوية.";
+  }
 
   async function createAction(formData: FormData) {
     "use server";
@@ -36,18 +57,31 @@ export default async function DashboardSupportPage({ searchParams }: { searchPar
     "use server";
     const u = await getSessionUser();
     if (!u || !activeTicketId) return;
-    await addMyReply(activeTicketId, String(formData.get("message") ?? ""));
+    // فشل الخدمة هنا (زي مفتاح ناقص) كان هيطلع لحدود الخطأ العليا —
+    // بنمسكه ونسجّله عشان الرد ما يكسرش الصفحة.
+    try {
+      await addMyReply(activeTicketId, String(formData.get("message") ?? ""));
+    } catch (err) {
+      console.error("dashboard/support: replyAction failed", err);
+    }
   }
 return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <AnnouncementBanner />
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-600">
+          {loadError}
+        </div>
+      )}
       <div className="flex flex-col lg:flex-row gap-6">
         <aside className="lg:w-80 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-extrabold">تذاكري</h2>
-            <button onClick={() => { window.location.href = "/dashboard/support"; }} className="flex items-center gap-2 rounded bg-marker px-3 py-1.5 text-xs font-bold text-[var(--on-marker)]">
+            {/* الصفحة Server Component — الأحداث زي onClick ممنوعة فيها
+                (React بيرمي خطأ وده كان سبب الـ500). التنقل بـLink. */}
+            <Link href="/dashboard/support" className="flex items-center gap-2 rounded bg-marker px-3 py-1.5 text-xs font-bold text-[var(--on-marker)]">
               <Plus className="w-4 h-4" /> تذكرة جديدة
-            </button>
+            </Link>
           </div>
           <div className="relative mb-4">
             <Search className="absolute left-2 top-2.5 w-4 h-4 text-ink-soft" />
@@ -58,7 +92,7 @@ return (
               const isActive = activeTicketId === t.id;
               const isResolved = t.status === "resolved" || t.status === "closed";
               return (
-                <button key={t.id} onClick={() => { window.location.href = `/dashboard/support?ticket=${t.id}`; }} className={`w-full flex items-center justify-between p-3 rounded-xl border transition ${isActive ? "bg-marker text-[var(--on-marker)] border-marker" : "bg-paper-2 border-rule text-ink hover:bg-paper-3 hover:border-marker/50"}`}>
+                <Link key={t.id} href={`/dashboard/support?ticket=${t.id}`} className={`w-full flex items-center justify-between p-3 rounded-xl border transition ${isActive ? "bg-marker text-[var(--on-marker)] border-marker" : "bg-paper-2 border-rule text-ink hover:bg-paper-3 hover:border-marker/50"}`}>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between mb-1">
                       <span className={`font-bold ${isActive ? "text-[var(--on-marker)]" : "text-ink"}`}>{t.subject}</span>
@@ -69,10 +103,10 @@ return (
                     <p className="text-[11px] text-ink-soft truncate">{t.description}</p>
                   </div>
                   <span className="text-[10px] text-ink-soft">{new Date(t.updated_at).toLocaleDateString("ar-SA")}</span>
-                </button>
+                </Link>
               );
             })}
-            {tickets.length === 0 && (
+            {!loadError && tickets.length === 0 && (
               <div className="text-center py-8 text-ink-soft text-sm">
                 لا توجد محادثات بعد. ابدأ محادثة جديدة أعلاه.
               </div>
@@ -80,7 +114,7 @@ return (
           </div>
         </aside>
         <main className="flex-1 flex flex-col min-h-[600px]">
-          {!activeTicketId ? (
+          {!activeTicketId || loadError ? (
             <div className="flex flex-col items-center justify-center h-full text-ink-soft">
               <MessageSquare className="w-16 h-16 mb-3 opacity-30" />
               <h3 className="font-bold">اختر محادثة للبدء</h3>
