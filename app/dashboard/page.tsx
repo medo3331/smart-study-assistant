@@ -58,6 +58,7 @@ import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
 import { TodayMissionsCard } from "./components/TodayMissionsCard";
+import { MotivationNudge } from "@/components/MotivationNudge";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
 // ًں§© سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
@@ -1682,6 +1683,10 @@ export default function DashboardPage() {
             }}
             onOpenAiAssistant={handleOpenAiAssistant}
           />
+          {/* Phase 4 — رسالة تحفيز واحدة مبنية على حالة الطالب الحقيقية
+              (الترتيب/الكونز/السلسلة/المهام) — المنطق في lib/retention/nudges.ts */}
+          <MotivationNudge streak={streak} />
+
           {/* Phase 2 — مهام النهاردة: سطح المهام اليومية (gamification) في وش
               الطالب بدل ما تكون مدفونة في القائمة الجانبية. الأرقام من
               daily_missions على السيرفر، والاستلام من claim_daily_mission.

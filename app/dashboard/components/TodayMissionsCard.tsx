@@ -6,6 +6,7 @@ import { CheckCircle2, Flame, Gift, Target } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { nextStreakBonus } from "@/lib/retention/streak-tiers";
+import { missionsSmartHint } from "@/lib/retention/nudges";
 
 /* ==========================================================================
    كارت «مهام النهاردة» — سطح المهام في أعلى الداشبورد
@@ -168,6 +169,13 @@ export function TodayMissionsCard({ streak, className }: TodayMissionsCardProps)
           style={{ width: `${progressPct}%`, backgroundColor: "var(--accent)" }}
         />
       </div>
+
+      {/* التذكير الذكي: «فاضل مهمة واحدة بس…» — نفس النص اللي في /missions */}
+      {missionsSmartHint(done, total) && (
+        <p className="mt-2 text-[11px] font-semibold" style={{ color: "var(--text)" }} role="status">
+          {missionsSmartHint(done, total)}
+        </p>
+      )}
 
       {/* المحطة الجاية للسلسلة — الرقم من نفس منطق السيرفر */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px]">

@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { LeaderboardEntry, ThemeStyles } from "../types";
+import { HowToWinGuide } from "@/components/HowToWinGuide";
 
 interface LeaderboardModalProps {
   isOpen: boolean;
@@ -28,9 +29,14 @@ export function LeaderboardModal({
             <p className="eyebrow eyebrow-flush mb-1.5">الترتيب</p>
             <h3 className="h3">أعلى ١٠ على المنصة</h3>
           </div>
-          <button onClick={onClose} aria-label="إغلاق" className="mono text-ink-soft hover:text-ink px-2 py-1 rounded-[6px] hover:bg-paper-3 transition">
-            ✕
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* دليل «إزاي تتصدّر وتكسب» — الصفحة اللي فيها الترتيب هي أحسن
+                مكان لسؤال «إزاي أطلع فوق؟» */}
+            <HowToWinGuide />
+            <button onClick={onClose} aria-label="إغلاق" className="mono text-ink-soft hover:text-ink px-2 py-1 rounded-[6px] hover:bg-paper-3 transition">
+              ✕
+            </button>
+          </div>
         </div>
 
         <p className="text-[11px] text-ink-soft leading-relaxed">

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { PageShell, DataNotice, LoadingSheets } from '@/app/dashboard/components/PageShell';
 import { useAuthUser } from '@/app/dashboard/components/use-page-data';
+import { missionsSmartHint } from '@/lib/retention/nudges';
 
 type Mission = { mission: string; label: string; done: boolean; claimed: boolean; coins: number; xp: number };
 
@@ -67,9 +68,22 @@ export default function MissionsPage() {
  const weeklyStepsPct = weekly ? Math.min(100, Math.round((Number(weekly.steps_done) / Math.max(1, Number(weekly.steps_target))) * 100)) : 0;
  const weeklyDaysPct = weekly ? Math.min(100, Math.round((Number(weekly.days_done) / Math.max(1, Number(weekly.days_target))) * 100)) : 0;
 
+ /* التذكير الذكي (Phase 4): «فاضل مهمة واحدة بس» — نفس النص بيظهر في
+    كارت الداشبورد، عشان الطالب مايقراش كلامين مختلفين لنفس الحالة. */
+ const dailyDone = (items ?? []).filter((m) => m.done).length;
+ const dailyTotal = (items ?? []).length;
+ const dailyHint = missionsSmartHint(dailyDone, dailyTotal);
+
  return (
   <PageShell eyebrow="Gamification" title="المهام اليومية" lede="المهام تتأكد من نشاطك الحقيقي. كل مهمة تمنح ٥ كوين و١٠ XP مرة واحدة فقط.">
    {note && <DataNotice message={note} />}
+
+   {/* التذكير الذكي: أقرب لما يخلص — أوضح *قبل* ما يبدأ أحسن من بعده */}
+   {dailyHint && (
+     <p className="text-sm font-semibold" style={{ color: 'var(--text)' }} role="status">
+       {dailyHint}
+     </p>
+   )}
 
    {/* ── المهمة الأسبوعية: مكافأة كبيرة على سلوك مستمر، مش على خطوة واحدة ── */}
    {weekly && (
