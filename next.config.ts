@@ -46,12 +46,17 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  // صور يوتيوب (thumbnails) + أي https عام — ytimg/img.youtube مذكورين صراحةً
+  // عشان لو الـ https: العام اتشال بعدين، المصغّرات ما تبقاش broken.
+  "img-src 'self' data: blob: https: https://i.ytimg.com https://img.youtube.com",
   "font-src 'self' data:",
   "media-src 'self' blob: data:",
   `connect-src ${connectSrc}`,
   "worker-src 'self' blob:",
-  "frame-src 'self'",
+  // ✅ مشغّل يوتيوب داخل الصفحة (LessonVideoPlayer + HowItWorksVideo).
+  // بدون السطر ده المتصفح بيرفض الـ iframe ويطلع Broken Image:
+  // "Refused to frame 'https://www.youtube-nocookie.com/' ... frame-src 'self'"
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
