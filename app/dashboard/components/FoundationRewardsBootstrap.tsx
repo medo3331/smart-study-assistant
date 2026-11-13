@@ -11,7 +11,7 @@ import { claimFoundationRewards } from "@/lib/shop/foundation-rewards";
  *   User opens authenticated app → Server checks today's reward → grant if needed
  *
  * - Signup +20: مرة/عمر (ref=user_id) — trigger يمنح تلقائياً، هذا fallback idempotent
- * - Daily Login +10: مرة/يوم UTC (ref=YYYY-MM-DD)
+ * - Daily Login +10: مرة/يوم بتوقيت القاهرة (ref=YYYY-MM-DD)
  *
  * آمن ضد: refresh / double click / multiple tabs / concurrent requests
  * السيرفر يضمن idempotency عبر unique index + FOR UPDATE.

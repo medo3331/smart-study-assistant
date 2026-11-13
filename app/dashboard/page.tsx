@@ -57,6 +57,7 @@ import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
+import { TodayMissionsCard } from "./components/TodayMissionsCard";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
 // ًں§© سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
@@ -453,49 +454,18 @@ export default function DashboardPage() {
                 // المستوى الدراسي (للطالب عليه) — بيفضل null لغيرهم، والمساعد بيلفه بسهولة.
                 setStudentLevel((profile?.student_level as string) ?? null);
 
-        let currentStreak = profile?.streak || 1;
         if (profile) {
           setXp(profile.xp || 0);
           setTheme((profile.theme as ThemeColor) || "amber");
 
-          const today = new Date().toDateString();
-          const lastVisit = profile.last_study_day ? new Date(profile.last_study_day).toDateString() : null;
-          if (lastVisit !== today) {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const streakGrew = lastVisit === yesterday.toDateString();
-            currentStreak = streakGrew ? currentStreak + 1 : lastVisit ? 1 : currentStreak;
-            await supabase
-              .from("profiles")
-              .update({ streak: currentStreak, last_study_day: new Date().toISOString().slice(0, 10) })
-              .eq("id", currentUser.id);
+          /* 🔥 السلسلة بقت سيرفر-أوثوريتاتيف: بتزيد من `_streak_apply` جوه
+             `complete_study_day` لما مرحلة مذاكرة تخلص فعلاً — مش لما الصفحة
+             تفتح. الكلاينت ممنوع يكتب `streak`/`last_study_day` (trigger
+             `protect_profiles_streak`)، وبنقرا الرقم زي ما هو من البروفايل.
 
-            /* ًںھ™ كوينز أول زيارة في اليوم. الفرع ده بيتنفّذ مرة واحدة يومياً
-               (`lastVisit !== today`) فهو بالظبط معنى آ«دخول يوميآ».
-
-               âڑ ï¸ڈ مش بـ await: ده جوه مسار تحميل الداشبورد، والانتظار على
-               نداءين RPC بيأخّر أول رسم. الكوينز إضافة، فبتروح لوحدها
-               والصفحة تكمّل. أي فشل (db/shop.sql لسه ما اتشغّلش) بيتسجّل
-               في الكونسول وخلاص — التقدّم نفسه اتحفظ فوق.
-
-               `streak_day` عند النمو بس: لو السلسلة اتصفّرت لـ ١ يبقى
-               مافيش سلسلة تتكافأ عليها. */
-            void (async () => {
-              try {
-                await awardCoins(supabase, "daily_login");
-                if (streakGrew) {
-                  await awardCoins(supabase, "streak_day");
-                  /* كل ٧ أيام متواصلة = أسبوع كامل. نفس عدّاد إنجاز
-                     آ«week-streakآ» في صفحة الإنجازات، فالمستخدم بيشوف
-                     الوسام والكوينز في نفس اليوم مش في يومين مختلفين. */
-                  if (currentStreak % 7 === 0) await awardCoins(supabase, "perfect_week");
-                }
-              } catch (coinErr) {
-                console.error("award daily coins failed (متجاهَل):", coinErr);
-              }
-            })();
-          }
-          setStreak(currentStreak);
+             كوينز `daily_login` بقت من `FoundationRewardsBootstrap`،
+             و`streak_day`/`perfect_week` بقوا من السيرفر جوه نفس الـ RPC. */
+          setStreak(profile.streak || 1);
         }
 
         // ًں“ڑ التراك المفتوح: صفحة الكورسات بتكتب اختيارك في
@@ -653,12 +623,13 @@ export default function DashboardPage() {
   }, []);
 
   // Phase B: XP محمي — لا تحديث مباشر لـ profiles.xp (يمر عبر increment_xp RPC فقط)
-  // هذا الـ effect يحفظ streak/theme فقط. الـ XP يُحفظ عبر increment_xp عند كسبه.
+  // Phase P0: السلسلة كمان بقت سيرفر-أوثوريتاتيف — الكلاينت بيحفظ theme بس.
+  // أي محاولة لكتابة streak/last_study_day بترفض من trigger protect_profiles_streak.
   useEffect(() => {
     if (isInitialized && authUser) {
-      supabase.from("profiles").update({ streak, theme }).eq("id", authUser.id).then();
+      supabase.from("profiles").update({ theme }).eq("id", authUser.id).then();
     }
-  }, [streak, theme, isInitialized, authUser]);
+  }, [theme, isInitialized, authUser]);
 
   /* ًں“– تصفير الفتحة الموجّهة عند قفل الدرج.
      كارت القرآن بيقول آ«افتح على الصوتآ»، والدرج بيفتح القسم ده. لو القيمة
@@ -743,19 +714,31 @@ export default function DashboardPage() {
   }, [isInitialized, activityLog]);
 
   // ✅ جلب لوحة متصدرين حقيقية من قاعدة البيانات
+  // ⚠️ P0: لازم `public_profiles` مش `profiles`. من `db/2026-11-security-rls-hardening.sql`
+  //    سياسة profiles بقت «صاحب الصف بس»، فالقراءة المباشرة كانت بترجّع صفّك
+  //    لوحده واللوحة تبان فاضية. الـview بياخد نفس الأعمدة العامة (بدون email)
+  //    ونفس اللي `/community` بتستخدمه.
   useEffect(() => {
     if (!showLeaderboard) return;
     setIsLoadingLeaderboard(true);
     supabase
-      .from("profiles")
-      .select("id, xp, streak")
+      .from("public_profiles")
+      .select("id, xp, streak, display_name")
       .order("xp", { ascending: false })
       .limit(10)
       .then(({ data, error }) => {
         if (!error && data) {
-          const entries: LeaderboardEntry[] = data.map((row: any) => ({
+          const entries: LeaderboardEntry[] = data.map((row: {
+            id: string;
+            xp: number | null;
+            streak: number | null;
+            display_name: string | null;
+          }) => ({
             id: row.id,
-            name: row.id === authUser?.id ? "أنت" : `لاعب #${String(row.id).slice(0, 4)}`,
+            name:
+              row.id === authUser?.id
+                ? "أنت"
+                : row.display_name?.trim() || `لاعب #${String(row.id).slice(0, 4)}`,
             xp: row.xp || 0,
             streak: row.streak || 0,
             isYou: row.id === authUser?.id,
@@ -875,6 +858,18 @@ export default function DashboardPage() {
     }
     if (notificationsEnabled) {
       setNotificationsEnabled(false);
+      /* Phase 2: القفل لازم يشيل الاشتراك من السيرفر كمان — من غيره
+         cron تذكير السلسلة كان هيفضل يبعت إشعارات رغم إن الطالب قفلها. */
+      void (async () => {
+        try {
+          const registration = await navigator.serviceWorker?.getRegistration("/sw.js");
+          const subscription = await registration?.pushManager.getSubscription();
+          await subscription?.unsubscribe();
+          await fetch("/api/push/subscribe", { method: "DELETE" });
+        } catch (err) {
+          console.warn("push unsubscribe failed (متجاهَل):", err);
+        }
+      })();
       return;
     }
     const permission = await Notification.requestPermission();
@@ -1081,6 +1076,17 @@ export default function DashboardPage() {
           if (row.xp_awarded > 0) setXp((prev) => prev + row.xp_awarded);
           // الكوينز تُقرأ من coin_balance عبر الهوك الحالي — لا حاجة لتحديث يدوي
         }
+        /* 🔥 السلسلة بتتحدّث على السيرفر جوه نفس الاستدعاء. النداء ده
+           بيقرا الرقم الجديد بس (idempotent) — عشان العدّاد يتحرك في نفس
+           اللحظة بدل ما يستنى refresh. لو الـRPC لسه مش متطبّقة، بنسيب
+           الحالة كما هي من غير أي كسر. */
+        void supabase
+          .rpc("touch_streak")
+          .then(({ data: streakData, error: streakError }) => {
+            if (streakError) return;
+            const streakRow = Array.isArray(streakData) ? streakData[0] : streakData;
+            if (streakRow && typeof streakRow.streak === "number") setStreak(streakRow.streak);
+          });
       });
   };
 
@@ -1090,20 +1096,6 @@ export default function DashboardPage() {
       return () => clearTimeout(timer);
     }
   }, [celebration]);
-
-  const handleBuyStreakFreeze = () => {
-    if (xp >= 200) {
-      setXp((prev) => prev - 200);
-      // Phase B: خصم XP عبر RPC محمي
-      supabase.rpc("increment_xp", { p_delta: -200 }).then(({ error }) => {
-        if (error) console.warn("increment_xp (-200) failed:", error.message);
-      });
-      alert("تم شراء تجميد الستريك بنجاح! ًںژ‰ تم خصم 200 XP.");
-      setShowShopModal(false);
-    } else {
-      alert("عذراً، لا تمتلك رصيد كافي من النقاط! ًںک…");
-    }
-  };
 
   const handleShareReport = async () => {
     const text = `ًں“ٹ تقريري في ${config?.subject || "خطتي"}\nالمستوى: L${level}\nالنقاط: ${xp} XP\nالمهام المنجزة: ${completedCount} من ${days.length}\nالسلسلة: ًں”¥ ${streak} يوم`;
@@ -1690,6 +1682,12 @@ export default function DashboardPage() {
             }}
             onOpenAiAssistant={handleOpenAiAssistant}
           />
+          {/* Phase 2 — مهام النهاردة: سطح المهام اليومية (gamification) في وش
+              الطالب بدل ما تكون مدفونة في القائمة الجانبية. الأرقام من
+              daily_missions على السيرفر، والاستلام من claim_daily_mission.
+              ⚠️ مش نفس DailyMissionsCard القديمة (دي كارت أهداف المخطط). */}
+          <TodayMissionsCard streak={streak} />
+
           {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
           <EconomyStrip />
           <PlanQuotaCard />
@@ -2057,7 +2055,6 @@ export default function DashboardPage() {
         isOpen={showShopModal}
         onClose={() => setShowShopModal(false)}
         xp={xp}
-        onBuyStreakFreeze={handleBuyStreakFreeze}
         canUnlockNextDayEarly={canUnlockNextDayEarly}
         nextLockedDay={nextLockedDay}
         uiText={uiText}

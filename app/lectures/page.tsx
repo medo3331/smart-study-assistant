@@ -189,7 +189,7 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                «الشرح المكثف» (في قسم) بـ «التفريغ» (في قسم تاني).
                من غيره مفيش طريقة الـ chips تعرف تفتح قسم وتبرز مقطع. */
             <LectureCitationProvider key={lecture.id}>
-            <article key={lecture.id} className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm transition hover:shadow-md">
+            <article key={lecture.id} className="card-interactive rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm">
               <details>
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
