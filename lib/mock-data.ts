@@ -171,7 +171,7 @@ export const mockLesson: Lesson = {
   category: "رياضيات",
   completionPct: 33,
   durationMinutes: 20,
-  xpReward: 100,
+  xpReward: 150,
   lessonType: "عملي",
   description:
     "مدخل بصري وأكاديمي وتطبيقي للدوال المثلثية sine و cosine و tangent.",

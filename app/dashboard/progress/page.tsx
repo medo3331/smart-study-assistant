@@ -138,7 +138,7 @@ export default function ProgressExperiencePage() {
         topic: (r.topic as string) ?? "",
         description: (r.description as string) ?? "",
         isCompleted: Boolean(r.is_completed),
-        xpReward: (r.xp_reward as number) ?? 100,
+        xpReward: (r.xp_reward as number) ?? 150,
         learningStyle: (r.learning_style as StudyDay["learningStyle"]) ?? "practical",
       }));
 

@@ -17,7 +17,7 @@ import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
 import { MagicAvatar } from "@/components/MagicAvatar";
 import { awardCoins } from "@/lib/shop/shop-data";
-import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
+import { levelFromXp, XP_PER_LEVEL, STUDY_DAY_XP_REWARD } from "@/lib/shop/economy";
 
 import type {
   ActivityLog,
@@ -347,7 +347,7 @@ export default function DashboardPage() {
       topic: `${uiText.stepPrefix} ${i + 1}: في ${parsedConfig.subject}`,
       description: `${uiText.taskDescPrefix} ${parsedConfig.subject}.`,
       isCompleted: false,
-      xpReward: 100,
+      xpReward: STUDY_DAY_XP_REWARD,
       learningStyle: "practical",
     }));
     setDays(generatedDays);
@@ -1012,7 +1012,7 @@ export default function DashboardPage() {
         topic: payload.data.topic,
         description: payload.data.description,
         isCompleted: false,
-        xpReward: 100,
+        xpReward: STUDY_DAY_XP_REWARD,
         learningStyle: days.at(-1)?.learningStyle || "practical",
       };
       const { data, error } = await supabase.from("study_days").insert({

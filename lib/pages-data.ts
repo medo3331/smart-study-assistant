@@ -425,7 +425,7 @@ export async function fetchCourseLessons(
     topic: day.topic ?? day.title ?? "درس",
     description: day.description ?? "",
     isCompleted: Boolean(day.is_completed),
-    xpReward: day.xp_reward ?? 100,
+    xpReward: day.xp_reward ?? 150,
     learningStyle: day.learning_style ?? "practical",
   }));
 
