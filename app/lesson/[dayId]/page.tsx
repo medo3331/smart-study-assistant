@@ -24,6 +24,9 @@ import { LessonProgressPanel } from "./components/LessonProgressPanel";
 import LessonVideoPlayer from "@/components/lesson/LessonVideoPlayer";
 import { VideoCandidate } from "@/lib/lesson/video-server";
 import { SpecializationTools } from "@/components/lesson/SpecializationTools";
+import { LectureLinkModal, type LinkLectureOption, type LinkSuggestion } from "@/components/lesson/LectureLinkModal";
+import { LessonCitedExplanationView } from "@/components/lesson/LessonCitations";
+import type { LessonCitedExplanation } from "@/lib/lesson/citations";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -147,6 +150,24 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   // حماية من تشغيل مزدوج (StrictMode في dev) — التوليد لازم يحصل مرة واحدة.
   const bootRef = useRef(false);
 
+  // 🔗 ربط المحاضرة بالدرس (الخطوة 3) — الحالة بتيجي من GET مباشرة.
+  const [link, setLink] = useState<{ lectureId: string; lectureTitle: string } | null>(null);
+  const [lectureOptions, setLectureOptions] = useState<LinkLectureOption[]>([]);
+  const [suggestion, setSuggestion] = useState<LinkSuggestion | null>(null);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  // الشرح المبني على التفريغ (citations) — جاهز من الكاش أو بييتولّد.
+  const [cited, setCited] = useState<LessonCitedExplanation | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+
+  /** تطبيق حالة الربط من رد الراوت (GET أو فعل الربط/الفصل). */
+  const applyLinkState = (data: any) => {
+    setLink(data?.link ?? null);
+    setLectureOptions(Array.isArray(data?.lectures) ? data.lectures : []);
+    setSuggestion(data?.suggestion ?? null);
+  };
+
   /** جلب وضع واحد — السيرفر بيرجعه من الكاش أو بيولّده ويحفظه في lesson_content. */
   const fetchContent = async (mode: NonNullable<SmartViewMode>) => {
     setActiveMode(mode);
@@ -171,6 +192,94 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     }
   };
 
+  /** توليد الشرح المبني على التفريغ + الملخص (لما الدرس يكون مربوط). */
+  const generateCited = async (force = false) => {
+    setContentError(null);
+    setLoading(true);
+    try {
+      const response = await fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, force }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error?.message || "لم نتمكن من توليد الشرح، حاول تاني.");
+      }
+      if (data.linked && data.cited) {
+        setCited(data.cited);
+        setSummary(typeof data.summary === "string" ? data.summary : null);
+      } else if (data.noTranscript) {
+        setContentError("المحاضرة المرتبطة مالهاش تفريغ — افصلها أو فرّغها الأول.");
+      } else {
+        throw new Error("الرد جه بدون شرح مرتبط بالتفريغ. حاول تاني.");
+      }
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "حصل خطأ أثناء توليد الشرح، حاول تاني.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** ربط المحاضرة بالدرس — الراوت بيحفظ التفريغ وينفي أي محتوى قديم. */
+  const handleLink = async (lectureId: string) => {
+    setLinkBusy(true);
+    setLinkError(null);
+    try {
+      const response = await fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, action: "link", lectureId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error?.message || "مقدرنش نربط المحاضرة، حاول تاني.");
+      }
+      applyLinkState(data);
+      setCited(null);
+      setSummary(null);
+      setLinkModalOpen(false);
+      // توليد فوري للشرح الجديد من التفريغ المرتبط.
+      void generateCited();
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : "حصل خطأ أثناء الربط.");
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  /** فصل المحاضرة — الدرس يرجع لمسار الأوضاع الأربعة القديم. */
+  const handleUnlink = async () => {
+    setLinkBusy(true);
+    setLinkError(null);
+    try {
+      const response = await fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, action: "link", lectureId: null }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error?.message || "مقدرنش نفصل المحاضرة، حاول تاني.");
+      }
+      applyLinkState(data);
+      setCited(null);
+      setSummary(null);
+      setLinkModalOpen(false);
+      // نرجع لمسار الأوضاع — لو مفيش محتوى محلي نجيب «الشرح» الأساسي.
+      if (modeContent.simple) {
+        setActiveMode("simple");
+        setContentError(null);
+      } else {
+        void fetchContent("simple");
+      }
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : "حصل خطأ أثناء الفصل.");
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
   const handleModeClick = (mode: NonNullable<SmartViewMode>) => {
     // اتحمّل قبل كده في نفس الزيارة → عرض فوري من الكاش المحلي.
     if (modeContent[mode]) {
@@ -185,13 +294,37 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     void fetchContent(activeMode ?? "simple");
   };
 
-  // أول فتح للدرس: الشرح الأساسي يظهر لوحده — من الكاش لو متحفظ قبل كده،
-  // وإلا بييتولّد **مرة واحدة** ويتحفظ في `lesson_content` (مش كل زيارة).
+  // أول فتح للدرس: نجيب حالة الربط + المحتوى المحفوظ (مرة واحدة)، وبعدها
+  // نقرر: مربوط ⇒ الشرح المبني على التفريغ، غير مربوط ⇒ «الشرح» الأساسي.
   useEffect(() => {
     if (!dayId || bootRef.current) return;
     bootRef.current = true;
-    void fetchContent("simple");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchContent بتتغير هويتها كل رندر؛ التشغيل المقصود مرة واحدة عند فتح الدرس.
+    void (async () => {
+      try {
+        const response = await fetch(`/api/lesson-content?dayId=${encodeURIComponent(dayId)}`);
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.ok) throw new Error("READ_FAILED");
+        applyLinkState(data);
+        const stored = data.content ?? {};
+        if (data.link) {
+          if (stored.cited) {
+            setCited(stored.cited);
+            setSummary(typeof stored.summary === "string" ? stored.summary : null);
+          } else {
+            void generateCited();
+          }
+        } else if (typeof stored.modes?.simple === "string") {
+          setModeContent({ simple: stored.modes.simple });
+          setActiveMode("simple");
+        } else {
+          void fetchContent("simple");
+        }
+      } catch {
+        // فشل قراءة الحالة — نرجع لسلوك المحتوى العادي (كاش محلي/توليد).
+        void fetchContent("simple");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- كل الدوال بتتغير هوية كل رندر؛ التشغيل المقصود مرة واحدة عند فتح الدرس.
   }, [dayId]);
 
   const content = activeMode ? (modeContent[activeMode] ?? null) : null;
@@ -204,28 +337,75 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     { id: "academic", label: "أكاديمي" },
   ];
 
+  const panelVisible = link
+    ? Boolean(cited || contentError || loading)
+    : Boolean(activeMode);
+
   return (
     <div dir="rtl">
-      {/* التاب المفتوح بيتعلّم بالحبر: bg-ink — الأصفر مش لون "المختار" */}
-      <div className="flex items-center gap-1 bg-paper border border-rule p-1 rounded-[var(--r-sm)]">
-        {tabs.map((tab) => (
+      {link ? (
+        /* 🔗 الدرس مربوط بمحاضرة — بديل التابات: مصدر واحد + إجراءاته */
+        <div className="flex flex-wrap items-center gap-2 bg-paper border border-rule p-2 rounded-[var(--r-sm)]">
+          <span className="tag tag-quiet inline-flex items-center gap-1.5 min-w-0">
+            <span aria-hidden>🎙️</span>
+            <span className="truncate max-w-[14rem]">مبني على: {link.lectureTitle}</span>
+          </span>
+          <div className="flex items-center gap-1.5 ms-auto">
+            <button
+              onClick={() => setLinkModalOpen(true)}
+              disabled={loading || linkBusy}
+              className="btn btn-quiet text-xs px-2.5 py-1.5"
+            >
+              غيّر المحاضرة
+            </button>
+            <button
+              onClick={() => void generateCited(true)}
+              disabled={loading || linkBusy}
+              className="btn btn-quiet text-xs px-2.5 py-1.5"
+            >
+              أعد التوليد
+            </button>
+            <button
+              onClick={() => void handleUnlink()}
+              disabled={loading || linkBusy}
+              className="btn btn-quiet text-xs px-2.5 py-1.5"
+            >
+              افصل
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* التاب المفتوح بيتعلّم بالحبر: bg-ink — الأصفر مش لون "المختار" */
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-paper border border-rule p-1 rounded-[var(--r-sm)] flex-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleModeClick(tab.id)}
+                aria-pressed={activeMode === tab.id}
+                className={`mono flex-1 px-2 py-2 rounded-[6px] transition ${
+                  activeMode === tab.id ? "bg-ink text-paper-2" : "text-ink-soft hover:text-ink hover:bg-paper-3"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           <button
-            key={tab.id}
-            onClick={() => handleModeClick(tab.id)}
-            aria-pressed={activeMode === tab.id}
-            className={`mono flex-1 px-2 py-2 rounded-[6px] transition ${
-              activeMode === tab.id ? "bg-ink text-paper-2" : "text-ink-soft hover:text-ink hover:bg-paper-3"
-            }`}
+            onClick={() => setLinkModalOpen(true)}
+            disabled={loading}
+            className="btn btn-quiet text-xs px-3 py-2 shrink-0"
+            title="اربط المحاضرة بالدرس"
           >
-            {tab.label}
+            🔗 اربط بمحاضرة
           </button>
-        ))}
-      </div>
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
-        {activeMode && (
+        {panelVisible && (
           <motion.div
-            key={activeMode}
+            key={link ? "cited" : activeMode}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -235,8 +415,24 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
             {loading ? (
               <div className="py-8 text-center flex flex-col items-center gap-2.5">
                 <span className="w-4 h-4 border-2 border-rule border-t-redpen rounded-full animate-spin" />
-                <p className="tag justify-center">بيجهّز الشرح</p>
+                <p className="tag justify-center">{link ? "بيجهّز الشرح من التفريغ" : "بيجهّز الشرح"}</p>
               </div>
+            ) : link ? (
+              cited ? (
+                <LessonCitedExplanationView cited={cited} lectureId={link.lectureId} summary={summary} />
+              ) : contentError ? (
+                <div className="py-6 text-center space-y-3">
+                  <p className="text-[12.5px] text-ink-soft">{contentError}</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => void generateCited()} className="btn btn-quiet text-xs px-3.5 py-2">
+                      جرّب تاني
+                    </button>
+                    <button onClick={() => setLinkModalOpen(true)} className="btn btn-quiet text-xs px-3.5 py-2">
+                      غيّر المحاضرة
+                    </button>
+                  </div>
+                </div>
+              ) : null
             ) : contentError && !content ? (
               <div className="py-6 text-center space-y-3">
                 <p className="text-[12.5px] text-ink-soft">{contentError}</p>
@@ -271,6 +467,22 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           </motion.div>
         )}
       </AnimatePresence>
+
+      <LectureLinkModal
+        open={linkModalOpen}
+        onClose={() => {
+          setLinkModalOpen(false);
+          setLinkError(null);
+        }}
+        subjectName={subject}
+        lectures={lectureOptions}
+        suggestion={suggestion}
+        currentLectureId={link?.lectureId ?? null}
+        onLink={(lectureId) => void handleLink(lectureId)}
+        onUnlink={() => void handleUnlink()}
+        busy={linkBusy}
+        error={linkError}
+      />
     </div>
   );
 }
