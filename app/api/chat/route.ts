@@ -67,10 +67,21 @@ export async function POST(req: Request) {
       mode?: unknown;
       context?: MagiclyContextInput;
       conversationId?: unknown;
+      systemInstruction?: unknown;
     };
     const conversationId = typeof (body as { conversationId?: unknown }).conversationId === "string"
       ? clampText((body as { conversationId: string }).conversationId, 80)
       : "";
+
+    // systemInstruction اختياري (الكويزات: BossFight/CommunityQuiz بيبعتوه) —
+    // مهمّة خاصة تُلحق بعد برومبت الشخصية والسياق، **مش بديل** ليهم.
+    // سقف2000 حرف + تنظيف أحرف التحكم (بيتبعت من كودنا لكن نحمّي الحدود).
+    const systemInstruction =
+      typeof (body as { systemInstruction?: unknown }).systemInstruction === "string"
+        ? clampText((body as { systemInstruction: string }).systemInstruction, 2000)
+            .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+            .trim()
+        : "";
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -166,12 +177,17 @@ export async function POST(req: Request) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
     const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
+    // systemInstruction (اختياري) — يُلحق هنا قبل محتوى المصدر عشان المصدر
+    // يفضل آخر حاجة يقرأها الموديل (قرار محفوظ في السطر اللي بعده).
+    const systemWithInstruction = systemInstruction
+      ? `${combinedSystem}\n\n--- مهمة خاصة ---\n${systemInstruction}`
+      : combinedSystem;
     // ⚠️ **محتوى المصدر** — بيتحقن **بعد** البرومبت الأساسي عشان يبقى
     //    آخر حاجة يقرأها الموديل (أقرب للرد) ⇒ بيلغي «المعلومة دي مش
     //    موجودة عندي» حتى لو موجودة في المصدر.
     const systemWithSource = sourceContext
-      ? `${combinedSystem}\n\n---\n\nمحتوى المصدر المطلوب (من حساب الطالب — استخدمه في إجابتك):\n${sourceContext}`
-      : combinedSystem;
+      ? `${systemWithInstruction}\n\n---\n\nمحتوى المصدر المطلوب (من حساب الطالب — استخدمه في إجابتك):\n${sourceContext}`
+      : systemWithInstruction;
     void rememberSessionContext(supabase, user.id, studentContext, safeMessages.at(-1)?.content ?? "");
 
     // Phase H: entitlement filter + 1 credit gate (403 before reserve)

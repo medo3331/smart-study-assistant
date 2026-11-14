@@ -1017,6 +1017,7 @@ export default function LessonDetailPage() {
             isFavorite={isBookmarked}
             onToggleFavorite={() => setIsBookmarked((v) => !v)}
             onShare={handleShareLesson}
+            examHref={`/exams?gen=1${config?.subject ? `&subject=${encodeURIComponent(config.subject)}` : ""}&dayId=${encodeURIComponent(dayId)}`}
           />
         </Reveal>
 

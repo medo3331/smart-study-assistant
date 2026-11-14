@@ -10,6 +10,7 @@ import {
   Bookmark,
   Heart,
   Share2,
+  ClipboardCheck,
 } from "lucide-react";
 import { GlassCard } from "./LessonChrome";
 
@@ -35,6 +36,8 @@ interface LessonHeroProps {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onShare: () => void;
+  /** رابط اختبار سريع للدرس — يظهر كزر دائمًا لو موجود (الخطوة3). */
+  examHref?: string;
 }
 
 export function LessonHero({
@@ -49,6 +52,7 @@ export function LessonHero({
   isFavorite,
   onToggleFavorite,
   onShare,
+  examHref,
 }: LessonHeroProps) {
   const ctaLabel =
     state === "review" ? "راجع الدرس" : state === "continue" ? "تابع الدرس" : "ابدأ الدرس";
@@ -104,6 +108,16 @@ export function LessonHero({
 
             {/* ---- إجراءات ثانوية بنفس مكتبة الأيقونات ---- */}
             <div className="flex flex-wrap items-center gap-1.5 sm:ms-auto">
+              {/* 🧪 اختبر فهمك — يودّي على المولّد بالمادة والدرس محدَّدين */}
+              {examHref && (
+                <a
+                  href={examHref}
+                  className="inline-flex h-[38px] items-center gap-1.5 rounded-[13px] border border-[rgba(245,222,114,0.35)] bg-[rgba(245,222,114,0.08)] px-3 text-[12.5px] font-semibold text-[#F5A25C] transition-colors hover:bg-[rgba(245,222,114,0.16)]"
+                >
+                  <ClipboardCheck size={15} aria-hidden />
+                  اختبر فهمك في الدرس ده
+                </a>
+              )}
               <SecondaryAction
                 icon={<Bookmark size={15} aria-hidden />}
                 active={isSaved}

@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
+import { Zap } from "lucide-react";
 import {
   getPersonalAssistantBriefing,
   type BriefingResult,
@@ -220,6 +222,26 @@ export function PersonalAssistant({
         {/* سطر الدور */}
         {briefing.roleMessage && (
           <RoleLine message={briefing.roleMessage} />
+        )}
+
+        {/* إجراءات مقترحة — بيانات منفصلة عن البريفينج (بيتعرضوا لو موجودين) */}
+        {briefing.actions.length > 0 && (
+          <div className="mt-3.5">
+            <p className="eyebrow eyebrow-flush mb-1.5">إجراءات مقترحة</p>
+            <div className="flex flex-wrap gap-2">
+              {briefing.actions.map((action) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className="inline-flex items-center gap-1.5 rounded-[var(--r-sm)] border border-[rgba(226,201,92,0.45)] bg-[rgba(245,222,114,0.16)] px-3 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-[rgba(245,222,114,0.26)]"
+                >
+                  <Zap size={14} aria-hidden />
+                  {action.label}
+                  <span className="font-normal text-ink-soft">— {ctx.subject}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* التذييل — Phase 4: duplicate CTA removed, briefing only. */}
