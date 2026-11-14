@@ -5,9 +5,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { PERSONA_NAME } from "@/lib/persona";
 import { ReadAloud } from "@/components/ReadAloud";
-import { MicButton } from "@/components/MicButton";
 import { setSlidesSeed } from "@/app/dashboard/components/nav-config";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { StudyTutorWidget } from "@/components/StudyTutorWidget";
@@ -138,63 +136,68 @@ function renderMarkdownLite(text: string) {
 }
 
 
-function SmartContentViewer({ topic, subject, edu }: { topic: string; subject: string; edu?: { stage?: string; grade?: string; track?: string; faculty?: string } }) {
+function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; subject: string; edu?: { stage?: string; grade?: string; track?: string; faculty?: string }; dayId: string }) {
   const router = useRouter();
   const [activeMode, setActiveMode] = useState<SmartViewMode>(null);
   const [loading, setLoading] = useState(false);
-  const [content, setContent] = useState<string | null>(null);
+  // كاش الزيارة الحالية — الحفظ الدائم في `lesson_content` على السيرفر
+  // (نفس الوضع بيتعاد عرضه فورًا من غير أي نداء).
+  const [modeContent, setModeContent] = useState<Partial<Record<NonNullable<SmartViewMode>, string>>>({});
+  const [contentError, setContentError] = useState<string | null>(null);
+  // حماية من تشغيل مزدوج (StrictMode في dev) — التوليد لازم يحصل مرة واحدة.
+  const bootRef = useRef(false);
 
-  const eduLine = (() => {
-    const parts: string[] = [];
-    if (edu?.stage) {
-      const m: Record<string,string> = {PRIMARY:"ابتدائي",PREPARATORY:"إعدادي",SECONDARY:"ثانوي",BACCALAUREATE:"بكالوريا",UNIVERSITY:"جامعة"};
-      parts.push(m[edu.stage] || edu.stage);
-    }
-    if (edu?.grade) parts.push(edu.grade);
-    if (edu?.track) parts.push(edu.track);
-    if (edu?.faculty) parts.push(edu.faculty);
-    return parts.length ? `سياق الطالب: ${parts.join(" — ")}.` : "";
-  })();
-
-  const handleModeClick = async (mode: SmartViewMode) => {
+  /** جلب وضع واحد — السيرفر بيرجعه من الكاش أو بيولّده ويحفظه في lesson_content. */
+  const fetchContent = async (mode: NonNullable<SmartViewMode>) => {
     setActiveMode(mode);
+    setContentError(null);
     setLoading(true);
-    setContent(null);
-
-    const modePrompt = {
-      simple: `اشرح مفهوم "${topic}" (جزء من مادة ${subject}) بشكل مبسط في نقاط واضحة، مع مثال بسيط يوضح الفكرة. ${eduLine} اكتب الشرح بالعربي، لكن حافظ على المصطلحات التقنية بالإنجليزية بين قوسين أو مباشرة (زي: Signal, System, Frequency) لأنها المصطلحات المستخدمة في المراجع والامتحانات.`,
-      academic: `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب أكاديمي متعمق: عرّف المفهوم بدقة، اذكر القوانين/المعادلات الأساسية لو موجودة، وضّح الفروق بين الأنواع المختلفة لو فيه، واختم بملخص سريع. ${eduLine} اكتب بالعربي مع الإبقاء على المصطلحات التقنية والرموز بالإنجليزية زي المراجع الأكاديمية القياسية.`,
-      visual: `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب مرئي وتخيلي: استخدم تشبيهات من الحياة اليومية، وارسم بالكلمات مخططات نصية بسيطة (زي رسم موجة أو رسم بياني في شكل نصي) توضح الفكرة بصريًا. ${eduLine} اكتب بالعربي مع إبقاء المصطلحات التقنية بالإنجليزية.`,
-      practical: `اديني مثال تطبيقي حقيقي أو تمرين محلول خطوة بخطوة على "${topic}" (جزء من مادة ${subject})، زي مسألة أو سيناريو عملي بيوضح إزاي المفهوم بيتطبق فعليًا. ${eduLine} اكتب بالعربي مع إبقاء المصطلحات والمعادلات بالإنجليزية.`,
-    }[mode as "simple" | "academic" | "visual" | "practical"];
-
     try {
-      const response = await fetch("/api/ai/generate", {
+      const response = await fetch("/api/lesson-content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // NOTE: /api/ai/generate does NOT read `systemInstruction` from the request body —
-          // it builds the system prompt server-side (lib/ai/prompt-builder.ts +
-          // lib/magicly-ai.ts). This string is currently dead weight. It is kept in
-          // sync with the server tone so the two do not drift apart, but changing it
-          // alone changes nothing about the model's behaviour.
-          systemInstruction:
-            "أنت مساعد تعليمي يكتب شرحاً واضحاً للمادة. اكتب بالعربية الفصحى المبسطة، مع الإبقاء على المصطلحات التقنية والمعادلات والرموز بالإنجليزية زي ما هي متعارف عليها في المراجع العلمية (متكتبش المصطلح العلمي بالعربي لو مفيش ترجمة شائعة ليه). استخدم تنسيق Markdown بسيط: **نص عريض** للمصطلحات المهمة، وقوائم نقطية (- أو *) للنقاط، وعناوين فرعية لو الشرح طويل. أسلوبك: هدوء واحترام ووضوح، بلا مبالغة ولا ألقاب حماسية ولا ختام تشجيعي ثابت. خلي الشرح عملي ومفيد فعلاً مش سطحي، لكن من غير حشو زيادة عن اللزوم.",
-          messages: [{ role: "user", content: modePrompt }],
-        }),
+        body: JSON.stringify({ dayId, mode, edu }),
       });
-      const data = await response.json();
-      const reply = data?.choices?.[0]?.message?.content || "لم نتمكن من توليد المحتوى، حاول تاني.";
-      setContent(reply);
-    } catch {
-      setContent("حصل خطأ أثناء توليد المحتوى، حاول تاني.");
+      const data = await response.json().catch(() => null);
+      const text = typeof data?.content === "string" && data.content.trim() ? data.content : null;
+      if (!response.ok || !text) {
+        throw new Error(data?.error?.message || "لم نتمكن من توليد المحتوى، حاول تاني.");
+      }
+      setModeContent((prev) => ({ ...prev, [mode]: text }));
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "حصل خطأ أثناء توليد المحتوى، حاول تاني.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleModeClick = (mode: NonNullable<SmartViewMode>) => {
+    // اتحمّل قبل كده في نفس الزيارة → عرض فوري من الكاش المحلي.
+    if (modeContent[mode]) {
+      setActiveMode(mode);
+      setContentError(null);
+      return;
+    }
+    void fetchContent(mode);
+  };
+
+  const retryFetch = () => {
+    void fetchContent(activeMode ?? "simple");
+  };
+
+  // أول فتح للدرس: الشرح الأساسي يظهر لوحده — من الكاش لو متحفظ قبل كده،
+  // وإلا بييتولّد **مرة واحدة** ويتحفظ في `lesson_content` (مش كل زيارة).
+  useEffect(() => {
+    if (!dayId || bootRef.current) return;
+    bootRef.current = true;
+    void fetchContent("simple");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchContent بتتغير هويتها كل رندر؛ التشغيل المقصود مرة واحدة عند فتح الدرس.
+  }, [dayId]);
+
+  const content = activeMode ? (modeContent[activeMode] ?? null) : null;
+
   // أربع طرق لشرح نفس الحاجة — مش تسلسل، فمفيش أرقام ولا أيقونات، الاسم لوحده كفاية
-  const tabs: { id: SmartViewMode; label: string }[] = [
+  const tabs: { id: NonNullable<SmartViewMode>; label: string }[] = [
     { id: "simple", label: "شرح" },
     { id: "practical", label: "عملي" },
     { id: "visual", label: "مرئي" },
@@ -233,6 +236,13 @@ function SmartContentViewer({ topic, subject, edu }: { topic: string; subject: s
               <div className="py-8 text-center flex flex-col items-center gap-2.5">
                 <span className="w-4 h-4 border-2 border-rule border-t-redpen rounded-full animate-spin" />
                 <p className="tag justify-center">بيجهّز الشرح</p>
+              </div>
+            ) : contentError && !content ? (
+              <div className="py-6 text-center space-y-3">
+                <p className="text-[12.5px] text-ink-soft">{contentError}</p>
+                <button onClick={retryFetch} className="btn btn-quiet text-xs px-3.5 py-2">
+                  جرّب تاني
+                </button>
               </div>
             ) : (
               <>
@@ -359,12 +369,6 @@ export default function LessonDetailPage() {
      المتجر لسه ما اتعملتش) — والاحتفال ساعتها بيعدّي من غير ما يذكرها. */
   const [coinsWon, setCoinsWon] = useState(0);
 
-  // 🤖 محادثة الـ AI التفاعلية
-  const [chatMessages, setChatMessages] = useState<{ sender: "user" | "ai"; text: string }[]>([]);
-  const [userInput, setUserInput] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-
   // ✅ إضافة: مرجع لقسم العارض الذكي عشان زر "ابدأ الدرس" في الـ Hero يعمل scroll ليه
   const smartViewerRef = useRef<HTMLDivElement | null>(null);
 
@@ -484,11 +488,6 @@ export default function LessonDetailPage() {
     if (dayId) load();
   }, [dayId, supabase, router]);
 
-  // 🔽 سكرول تلقائي لآخر رسالة في الشات
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, isAiLoading]);
-
   // 🎨 تغيير نمط التعلم لهذا الدرس
   const changeLearningStyle = async (style: LearningStyle) => {
     if (!dayRow) return;
@@ -572,57 +571,6 @@ export default function LessonDetailPage() {
       alert("حصل خطأ أثناء توليد الاختبار، حاول تاني.");
     } finally {
       setQuizLoading(false);
-    }
-  };
-
-  // 🤖 إرسال رسالة للمساعد الذكي والحصول على رد
-  const handleSendMessage = async () => {
-    if (!userInput.trim() || !dayRow || !config || isAiLoading) return;
-    const userText = userInput;
-    const updatedMessages = [...chatMessages, { sender: "user" as const, text: userText }];
-    setChatMessages(updatedMessages);
-    setUserInput("");
-    setIsAiLoading(true);
-
-    try {
-      const styleGuide = {
-        practical: "اشرح بالسرعة والأمثلة المباشرة والتشبيهات العملية.",
-        visual: "اشرح باستخدام المخططات النصية والتجسيم والتخيل.",
-        academic: "اشرح بالتعاريف العلمية والدقيقة مع تفكيك المفاهيم.",
-      }[dayRow.learning_style];
-
-      const eduParts: string[] = [];
-      if (eduVideoCtx.stage) { const m: Record<string,string>={PRIMARY:"ابتدائي",PREPARATORY:"إعدادي",SECONDARY:"ثانوي",BACCALAUREATE:"بكالوريا",UNIVERSITY:"جامعة"}; eduParts.push(m[eduVideoCtx.stage]||eduVideoCtx.stage); }
-      if (eduVideoCtx.grade) eduParts.push(eduVideoCtx.grade);
-      if (eduVideoCtx.track) eduParts.push(eduVideoCtx.track);
-      if (eduVideoCtx.faculty) eduParts.push(eduVideoCtx.faculty);
-      const eduCtx = eduParts.length ? ` | سياق الطالب: ${eduParts.join(" — ")}` : "";
-
-      // NOTE: /api/chat does NOT read `systemInstruction` from the request body — the
-      // system prompt is built server-side (lib/ai/prompt-builder.ts + lib/magicly-ai.ts).
-      // Kept in sync with the server tone so the two do not drift, but changing it
-      // alone changes nothing about the model's behaviour.
-      const systemInstruction = `أنت مساعد تعليمي تجيب على أسئلة الطالب في مادة "${config.subject}" | الدرس الحالي: "${dayRow.topic}" (${dayRow.description})${eduCtx}. النمط المطلوب: ${styleGuide} اكتب بالعربية مع الإبقاء على المصطلحات والمعادلات التقنية بالإنجليزية زي المراجع العلمية. استخدم **نص عريض** وقوائم نقطية لو الإجابة فيها أكتر من نقطة، وكن دقيقًا ومفيدًا فعليًا مش سطحيًا. أسلوبك: هدوء واحترام ووضوح، بلا مبالغة ولا ألقاب حماسية ولا ختام تشجيعي ثابت.`;
-
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction,
-          messages: updatedMessages.map((m) => ({ role: m.sender === "user" ? "user" : "assistant", content: m.text })),
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error?.message || "خطأ في الاتصال");
-
-      const aiReply = data?.choices?.[0]?.message?.content || "لم يتم استقبال رد.";
-      setChatMessages([...updatedMessages, { sender: "ai", text: aiReply }]);
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : "حدث خطأ غير معروف";
-      setChatMessages([...updatedMessages, { sender: "ai", text: `خطأ: ${errorMsg}` }]);
-    } finally {
-      setIsAiLoading(false);
     }
   };
 
@@ -813,7 +761,6 @@ export default function LessonDetailPage() {
   }
 
   const suggestedResources = getSuggestedResources(dayRow.topic, config?.subject || "", dayRow.learning_style);
-  const styleLabel = { practical: "عملي", visual: "مرئي", academic: "أكاديمي" }[dayRow.learning_style];
   const overallPercent = planProgress && planProgress.total > 0 ? Math.round((planProgress.completed / planProgress.total) * 100) : 0;
   // 🧩 أيام نفس الخطة للشريط المجزّأ — من حالة الصفحة المحفوظة (مفيش استعلام جديد)
   const unitDays: UnitDayLite[] = (planDays ?? [])
@@ -944,7 +891,7 @@ export default function LessonDetailPage() {
                 <p className="eyebrow eyebrow-flush mb-1.5">الشرح</p>
                 <h2 className="h3">اقرا الدرس بالطريقة اللي تعجبك</h2>
               </div>
-              <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} edu={eduVideoCtx} />
+              <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} edu={eduVideoCtx} dayId={dayId} />
             </div>
           </Reveal>
 
@@ -955,7 +902,7 @@ export default function LessonDetailPage() {
               xpReward={dayRow.xp_reward}
               sections={[
                 { label: "الشرح", state: "current" },
-                { label: "سؤال وجواب", state: "todo" },
+                { label: "محادثة الدرس", state: "todo" },
                 { label: "موارد الدرس", state: "todo" },
                 {
                   label: dayRow.is_completed ? "الاختبار — مكتمل ✓" : "الاختبار القصير",
@@ -965,71 +912,6 @@ export default function LessonDetailPage() {
             />
           </Reveal>
         </div>
-
-        {/* المحادثة: نص مكتوب بأسماء المتكلمين، مش بابلز */}
-        <Reveal delay={0.12}>
-          <div className="sheet-card p-5 sm:p-6 space-y-4">
-            <div>
-              <p className="eyebrow eyebrow-flush mb-1.5">سؤال وجواب</p>
-              <h2 className="h3">اسأل أي حاجة في الدرس</h2>
-            </div>
-
-            <div className="bg-paper border border-rule rounded-[var(--r-sm)] p-4 max-h-80 overflow-y-auto space-y-3.5">
-              {chatMessages.length === 0 && (
-                <p className="text-[11px] text-ink-soft leading-relaxed text-center max-w-xs mx-auto py-8">
-                  اسأل أي سؤال عن «{dayRow.topic}» وهيجيلك الرد على طول، مظبوط على نمط ({styleLabel}) اللي مختاره فوق.
-                </p>
-              )}
-              {chatMessages.map((msg, index) => (
-                <div key={index}>
-                  <p className="tag mb-1">{msg.sender === "user" ? "أنت" : PERSONA_NAME}</p>
-                  <div
-                    className={`text-xs leading-relaxed text-ink p-3 rounded-[var(--r-sm)] border ${
-                      msg.sender === "user"
-                        ? "bg-paper-3 border-rule-strong whitespace-pre-wrap"
-                        : "bg-paper-2 border-rule border-s-[3px] border-s-redpen"
-                    }`}
-                  >
-                    {msg.sender === "ai" ? renderMarkdownLite(msg.text) : msg.text}
-                  </div>
-                </div>
-              ))}
-              {isAiLoading && (
-                <div>
-                  <p className="tag mb-1">{PERSONA_NAME}</p>
-                  <div className="bg-paper-2 border border-rule border-s-[3px] border-s-redpen rounded-[var(--r-sm)] px-4 py-3 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-ink-soft rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1.5 h-1.5 bg-ink-soft rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1.5 h-1.5 bg-ink-soft rounded-full animate-bounce" />
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                placeholder="اكتب سؤالك أو اسأل بالصوت"
-                className="field flex-1 py-2.5 text-xs"
-              />
-              {/* المايك بيكتب في نفس الحقل — مش بيبعت لوحده عن قصد،
-                  عشان المستخدم يراجع النص قبل الإرسال (التعرّف مش مظبوط ١٠٠٪). */}
-              <MicButton onText={setUserInput} disabled={isAiLoading} />
-              <button
-                onClick={handleSendMessage}
-                disabled={isAiLoading || !userInput.trim()}
-                aria-label="ابعت السؤال"
-                className="btn bg-ink text-paper-2 border-ink hover:opacity-90 text-sm px-4 py-2.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                ←
-              </button>
-            </div>
-          </div>
-        </Reveal>
 
         {/* الموارد: ليستة روابط في ورقة، مش كروت أيقونات */}
         <Reveal delay={0.14}>
