@@ -13,6 +13,16 @@ import { createServiceClient } from "@/lib/supabase/admin";
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * مهلة Vercel للراوت (ثانية).
+ *
+ * ⚠️ Fluid Compute مفعّل على المشروع، بس من غير السطر ده الراوت بيرجع
+ * للمهلة الافتراضية (10–15 ثانية) ⇒ 502/504 من المنصة مش من كودنا.
+ * 300 ثانية = سقف Fluid Compute، وبتغطي توليد الأسئلة (نداءات متتابعة:
+ * ملخص لكل قطعة ← دمج ← أسئلة لكل قطعة ← إصلاح).
+ */
+export const maxDuration = 300;
+
 const MODES: readonly ExamSessionMode[] = ["last_minute_review"];
 
 function fail(error: string, status: number, detail?: string) {

@@ -29,7 +29,13 @@ function supportWhatsappHref(code?: string, detail?: string) {
   return buildWhatsAppUrl(phone, msg);
 }
 
-type ChatMsg = { role: "user" | "assistant"; content: string; attachmentName?: string };
+type ChatMsg = {
+  role: "user" | "assistant";
+  content: string;
+  attachmentName?: string;
+  /** إجراءات مقترحة (مثال: زر «افتح مولّد الامتحان»). */
+  actions?: { label: string; href: string; external?: boolean }[];
+};
 
 type Attachment = {
   file: File;
@@ -297,9 +303,13 @@ export function UnifiedChat({
 
        // Show assistant response
        const assistantText = data?.answer || "Unified AI.";
+      // ⚡ إجراءات من السيرفر (مثال: طلب امتحان مكتمل ⇒ رابط المولّد).
+      const replyActions = Array.isArray(data?.actions)
+        ? (data.actions as { label: string; href: string; external?: boolean }[])
+        : undefined;
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: assistantText },
+        { role: "assistant", content: assistantText, ...(replyActions ? { actions: replyActions } : {}) },
       ]);
       removeAttachment();
     } catch {
@@ -441,6 +451,31 @@ export function UnifiedChat({
               )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>
+              )}
+              {(msg.actions?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(msg.actions ?? []).map((action) =>
+                    action.external ? (
+                      <a
+                        key={action.href}
+                        href={action.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-extrabold text-[var(--on-marker)] transition hover:brightness-110"
+                      >
+                        {action.label}
+                      </a>
+                    ) : (
+                      <a
+                        key={action.href}
+                        href={action.href}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-extrabold text-[var(--on-marker)] transition hover:brightness-110"
+                      >
+                        {action.label}
+                      </a>
+                    )
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -115,6 +115,14 @@ export type ExamReviewDeps = {
     messages: AiChatMessage[];
     usage: AiUsageContext;
     temperature: number;
+    /**
+     * 🔢 سقف توكنات المخرج — **مطلوب** للموديلات الاستدلالية (gpt-oss):
+     * من غيره المزوّد بيحط سقف افتراضي صغير، الموديل بيصرفه كله على
+     * التفكير وبيطلع `content` فاضي ⇒ 502 ⇒ «كل المزوّدات فشلوا» (503).
+     */
+    maxTokens?: number;
+    /** ⏱️ مهلة الطلب الواحد (ms) — التوليد الطويل محتاج وقت أكتر. */
+    timeoutMs?: number;
   }) => Promise<{ content: string }>;
   chunk: (text: string, max: number) => string[];
   chunkChars: number;
@@ -142,6 +150,32 @@ export class ExamLeaseLostError extends Error {
 }
 
 /* ═══════════════════════ الميزانية ═══════════════════════ */
+
+/**
+ * سقف توكنات المخرج لكل نداء منطقي.
+ *
+ * ⚠️ **ليه ضروري**: موديلات الاستدلال (gpt-oss) بتبني «تفكيرها» جوه ميزانية
+ *    المخرج. من غير سقف صريح الموديل بيصرفه كله على التفكير وبيطلع
+ *    `content` **فاضي** ⇒ المزوّد بيرمي ⇒ الراوتر بيحاول مزوّد تاني ⇒
+ *    وآخر حاجة 503 «كل المزوّدات فشلوا». ده كان سبب الـ 503 في التوليد.
+ *
+ * الأرقام: 600 توكن/سؤال تقديري (السؤال + الاختيارات + التفسير) مع
+ * حد أدنى 4000 (يسع تفكير الموديل + المخرج) وسقف 16000.
+ */
+export function examMaxTokens(aiTask: ExamAiTask, quota = 1): number {
+  switch (aiTask) {
+    case "summary":
+      return 4_000;
+    case "summary_merge":
+      return 6_000;
+    case "questions":
+    case "questions_repair":
+      return Math.min(16_000, Math.max(4_000, Math.trunc(quota) * 600));
+  }
+}
+
+/** مهلة الطلب الواحد (ms) — التوليد بياخد وقت أطول من الطلبات القصيرة. */
+export const EXAM_CALL_TIMEOUT_MS = 60_000;
 
 /**
  * تقدير ميزانية عنصر واحد **قبل** أي نداء:
@@ -631,12 +665,15 @@ export async function generateExamReview(input: {
   const callTask = async (
     aiTask: ExamAiTask,
     messages: AiChatMessage[],
-    temperature: number
+    temperature: number,
+    quota = 1
   ): Promise<string> => {
     const response = await deps.runTask({
       messages,
       usage: deps.usageFor(aiTask),
       temperature,
+      maxTokens: examMaxTokens(aiTask, quota),
+      timeoutMs: EXAM_CALL_TIMEOUT_MS,
     });
     logicalCalls += 1;
     // التجديد **بعد** كل نداء: لو فشل، الرمي يوقف العمل فورًا بلا كتابة نتيجة.
@@ -677,7 +714,8 @@ export async function generateExamReview(input: {
     const raw = await callTask(
       "questions",
       buildQuestionsMessages({ quota, spec, chunk, index, total: chunks.length }),
-      0.4
+      0.4,
+      quota
     );
     collected.push(...validateItemsLenient(parseQuestionsEnvelope(raw), spec.types));
   }
@@ -694,7 +732,8 @@ export async function generateExamReview(input: {
       const raw = await callTask(
         "questions_repair",
         buildRepairMessages({ summary, need, types: repairTypes, spec }),
-        0.4
+        0.4,
+        need
       );
       final = dedupeQuestions([
         ...final,

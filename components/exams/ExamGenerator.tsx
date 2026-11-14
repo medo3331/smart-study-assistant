@@ -32,6 +32,12 @@ export type ExamGeneratorInitial = {
   subjectId: string;
   lecture: string;
   dayId: string;
+  /** عدد الأسئلة (من المساعد عبر الـURL) — بيتقرا في السلايدر. */
+  count?: number;
+  /** أنواع الأسئلة (من المساعد) — فاضية = الافتراضي. */
+  types?: ExamQuestionType[];
+  /** مستوى الصعوبة (من المساعد) — null = الافتراضي. */
+  difficulty?: ExamDifficulty | null;
 };
 
 type LectureRow = {
@@ -117,9 +123,19 @@ export function ExamGenerator({
   const [notice, setNotice] = useState<string | null>(null);
 
   // شكل الامتحان — تحكم كامل للطالب (بدون نسب مفروضة).
-  const [types, setTypes] = useState<ExamQuestionType[]>(["mcq", "true_false"]);
-  const [difficulty, setDifficulty] = useState<ExamDifficulty>("medium");
-  const [count, setCount] = useState(10);
+  // ⚠️ القيم الابتدائية بتيجي من الـURL (المساعد قدر الطالب قبلها) —
+  //    الطالب لسه قادر يعدّلها قبل ما يولّد.
+  const [types, setTypes] = useState<ExamQuestionType[]>(
+    initial.types && initial.types.length > 0 ? initial.types : ["mcq", "true_false"]
+  );
+  const [difficulty, setDifficulty] = useState(initial.difficulty ?? "medium");
+  const [count, setCount] = useState(
+    typeof initial.count === "number" &&
+      initial.count >= EXAM_MIN_COUNT &&
+      initial.count <= EXAM_MAX_COUNT
+      ? initial.count
+      : 10
+  );
 
   // ── تحميل المحاضرات + كتالوج المواد ──
   useEffect(() => {
@@ -133,7 +149,11 @@ export function ExamGenerator({
             .select("id, title, subject, subject_id, created_at, duration_seconds")
             .order("created_at", { ascending: false })
             .limit(100),
-          supabase.from("lectures").select("id").not("transcript_data", "is", null),
+          // ⚠️ **التنبيه**: بنقرأ `transcript_text` (مش `transcript_data`) لأن
+          //    الراوت بيشترط نص تفريغ غير فاضي (`lectures.transcript_text`).
+          //    الفحص القديم على `transcript_data` كان بيقول «بدون تفريغ»
+          //    لمحاضرة سليمة (TEXT فيها وJSONB فاضي) ⇒ الطالب مشايف محاضرته.
+          supabase.from("lectures").select("id, transcript_text").not("transcript_text", "is", null),
           supabase.from("workspace_subjects").select("id, name").limit(200),
           supabase.from("university_subjects").select("id, name").limit(1000),
         ]);
@@ -141,7 +161,9 @@ export function ExamGenerator({
         if (lecturesRes.error) throw new Error(lecturesRes.error.message);
 
         const transcriptIds = new Set(
-          ((transcriptRes.data ?? []) as Array<{ id: string }>).map((row) => row.id)
+          ((transcriptRes.data ?? []) as Array<{ id: string; transcript_text?: string | null }>)
+            .filter((row) => typeof row.transcript_text === "string" && row.transcript_text.trim().length > 0)
+            .map((row) => row.id)
         );
         const rows = ((lecturesRes.data ?? []) as Array<Omit<LectureRow, "hasTranscript">>).map(
           (row) => ({ ...row, hasTranscript: transcriptIds.has(row.id) })
@@ -207,13 +229,24 @@ export function ExamGenerator({
     return ids;
   }, [subjectName, subjectOptions]);
 
-  const visibleLectures = useMemo(() => {
+  /** المحاضرة بتنتسب للمادة المختارة؟ (المحاضرات غير المصنّفة = دايمًا) */
+  const matchesSubject = useMemo(() => {
     const name = subjectName.trim();
-    if (!name) return lectures;
-    const filtered = lectures.filter((row) => {
+    return (row: LectureRow) => {
+      if (!name) return true;
+      // ⚠️ **المحاضرة غير المصنّفة بتظهر دايمًا** — الطالب رافع ملف ومحاضراته
+      //    مش متصنّفة تحت مادة ⇒ الفلتر كان بيخفيها بالكامل وبيقول له
+      //    «مفيش محاضرات مسجّلة في المادة دي». دلوقتي بتظهر مع علامة
+      //    «بدون تصنيف» (والطالب يقدر يستخدمها أو يسيب الفلتر).
+      const hasSubject = Boolean(row.subject_id) || Boolean(row.subject?.trim());
+      if (!hasSubject) return true;
       if (row.subject_id && matchingSubjectIds.has(row.subject_id)) return true;
       return Boolean(row.subject) && subjectMatches(row.subject ?? "", name);
-    });
+    };
+  }, [subjectName, matchingSubjectIds]);
+
+  const visibleLectures = useMemo(() => {
+    const filtered = lectures.filter(matchesSubject);
     // المحاضرة الجاية من الدرس تفضل ظاهرة حتى لو الفلتر شالها (حالة نادر).
     if (preselectId) {
       const fromLesson = lectures.find((row) => row.id === preselectId);
@@ -223,10 +256,14 @@ export function ExamGenerator({
     }
     return filtered;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial ثابت للشاشة
-  }, [lectures, subjectName, matchingSubjectIds, preselectId]);
+  }, [lectures, matchesSubject, preselectId]);
 
   const selectedRows = lectures.filter((row) => selected.has(row.id));
   const canCreate = selectedRows.length > 0 && selectedRows.length <= MAX_LECTURES && types.length > 0 && !busy;
+  /** محاضرات إخاها فلتر المادة (في مواد تانية) — عشان نقول للطالب صراحةً. */
+  const hiddenBySubject = subjectName.trim()
+    ? lectures.filter((row) => !matchesSubject(row)).length
+    : 0;
 
   function toggleLecture(id: string) {
     setNotice(null);
@@ -369,6 +406,7 @@ export function ExamGenerator({
             {visibleLectures.map((lecture) => {
               const isSelected = selected.has(lecture.id);
               const isFromLesson = Boolean(preselectId) && lecture.id === preselectId;
+              const isUnclassified = !lecture.subject_id && !lecture.subject?.trim();
               const duration = formatDuration(lecture.duration_seconds);
               return (
                 <li key={lecture.id}>
@@ -402,6 +440,7 @@ export function ExamGenerator({
                           </span>
                         )}
                         {!lecture.hasTranscript && <span className="text-red-400">· بدون تفريغ</span>}
+                        {isUnclassified && <span className="text-slate-400">· بدون تصنيف</span>}
                         {isFromLesson && <span className="text-amber-300">· من الدرس</span>}
                       </span>
                     </span>
@@ -412,6 +451,11 @@ export function ExamGenerator({
           </ul>
         )}
         {notice && <p className="text-[11px] text-amber-300">{notice}</p>}
+        {hiddenBySubject > 0 && (
+          <p className="text-[11px] text-slate-500">
+            {hiddenBySubject} محاضرة في مواد تانية مخفية بالفلتر — امسح اسم المادة عشان تشوفها.
+          </p>
+        )}
       </section>
 
       {/*3️⃣ شكل الامتحان */}

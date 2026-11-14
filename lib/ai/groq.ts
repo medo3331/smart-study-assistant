@@ -7,6 +7,21 @@ const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 /** مهلة كل طلب Groq — بعدها بنعتبره TIMEOUT (504) فيسمح بالـ fallback للراوتر. */
 export const GROQ_TIMEOUT_MS = 20_000;
 
+/**
+ * سقف المهلة لما الطلب يطلب مهلة أطول (توليد الامتحان مثلًا).
+ *
+ * ⚠️ **ليه 120 ثانية**: مهلة الـ function على Vercel (مع Fluid Compute)
+ *    300 ثانية. مهلة طلب واحد أعلى من كده معناها إن الطلب كله اتقتل
+ *    من غير فايدة ⇒ بنحدّه تحت السقف.
+ */
+export const GROQ_MAX_TIMEOUT_MS = 120_000;
+
+/** المهلة الفعلية للطلب: طلب المُستدعي (اختياري) أو الافتراضية، محدودة بالسقف. */
+export function resolveGroqTimeoutMs(requested?: number): number {
+  if (typeof requested !== "number" || !Number.isFinite(requested)) return GROQ_TIMEOUT_MS;
+  return Math.min(Math.max(Math.trunc(requested), 5_000), GROQ_MAX_TIMEOUT_MS);
+}
+
 /* ------------------------------------------------------------------ */
 /* تدوير المفاتيح داخل العملية الواحدة                                 */
 /* ------------------------------------------------------------------ */
@@ -85,6 +100,8 @@ export class GroqProvider implements AiTextProvider, AiMediaProvider {
     }
 
     const model = input.model ?? GROQ_MODELS.advanced;
+    // ⏱️ مهلة الطلب: الافتراضية (20s) إلا لو الطلب طلب أطول (توليد امتحان).
+    const timeoutMs = resolveGroqTimeoutMs(input.timeoutMs);
     let sawRateLimit = false;
 
     for (const apiKey of keys) {
@@ -104,7 +121,7 @@ export class GroqProvider implements AiTextProvider, AiMediaProvider {
             //    (gpt-oss) بتصرف كل الميزانية على التفكير وتطلع فاضية.
             ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
           }),
-          signal: AbortSignal.timeout(GROQ_TIMEOUT_MS),
+          signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
         // انتهاء المهلة خطأ شبكة عامًا — تبديل المفتاح مش هيعيد الأنترنت، فبنرمي فورًا.

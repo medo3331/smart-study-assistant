@@ -30,6 +30,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function mapProcessError(status: number, data: { error?: string; detail?: string } | null): string {
   if (status === 429) return "ميزانية الامتحان خلصت — جرّب امتحانًا أصغر أو بكرة.";
+  if (status === 503) return "الخدمة مشغولة دلوقتي (المزوّد اتعيط) — جرّب تاني بعد دقيقة.";
   if (status === 502) return "الخدمة رجعت خطأ أثناء التوليد — جرّب تاني.";
   if (status === 402) return "رصيدك مش كافٍ.";
   if (status === 404) return "الجلسة مش موجودة.";
@@ -121,6 +122,12 @@ export function ExamRunner({
             // (محاولة ثانية ضمن حد attempt_count=2).
             if (processRes.status === 502) {
               await sleep(1200);
+              continue;
+            }
+            //503 = المزوّد مشغول (كل مفاتيح Groq اتعيطت) — قابل لإعادة
+            // المحاولة، بس مش بنلفّ عليه في حلقة لا نهائية.
+            if (processRes.status === 503) {
+              await sleep(2000);
               continue;
             }
             //429 = سقف الميزانية — كله متوقف، الطالب يستنى/يغيّر.

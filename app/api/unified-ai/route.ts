@@ -63,6 +63,12 @@ import {
 import type { AiTaskType } from "@/lib/ai/types";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import {
+  buildExamAnswer,
+  buildExamHref,
+  detectExamRequest,
+  EXAM_REQUEST_PROMPT_RULES,
+} from "@/lib/exam-request";
+import {
   buildMagiclySystemPrompt,
   getStudentContext,
   getStudyToolFacts,
@@ -641,6 +647,9 @@ export async function POST(req: Request) {
         input.system = personaPrompt
           ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${magiclySystem}`
           : magiclySystem;
+        // 📝 قواعد طلب الامتحان — الطلب الناقص (ناقصه العدد مثلاً) بيعدّي
+        //    للموديل، والقواعد بتقولله اسأل سؤالًا واحدًا محددًا مش سلسلة.
+        input.system = `${input.system}\n\n--- قواعد طلب الامتحان ---\n${EXAM_REQUEST_PROMPT_RULES}`;
         void rememberSessionContext(supabase, userId, studentContext, prompt).catch((e) => {
           console.warn("[unified-ai] memory save failed (non-blocking):", e);
         });
@@ -651,6 +660,26 @@ export async function POST(req: Request) {
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
     if (userId && supabase && !isAnonymous) {
+      // ⚡ طلب امتحان **مكتمل** (المادة + العدد) ⇒ تنفيذ فوري: رابط صفحة
+      //    الامتحان من غير نداء موديل ومن غير سؤال توضيحي.
+      //
+      //    ⚠️ **ليه**: المساعد كان بيسأل «5 ولا مجموعتين؟» مع إن الطالب قال
+      //    كل حاجة. الكشف بكود ⇒ فوري ومجاني، وبيعمل قبل الـ intent search
+      //    (لو طلب امتحان في مادة، مش لازم بحث في الملفات).
+      const examRequest = detectExamRequest(prompt);
+      if (examRequest?.complete) {
+        const answer = buildExamAnswer(examRequest, new URL(req.url).origin);
+        if (reserveRef) {
+          try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
+        }
+        return NextResponse.json({
+          ok: true,
+          answer,
+          actions: [{ label: "افتح مولّد الامتحان", href: buildExamHref(examRequest) }],
+          metadata: { modelUsed: modelToUse, resolvedVia },
+          conversationId: incomingConversationId || undefined,
+        });
+      }
       if (intentResult.intent === "CLARIFICATION") {
         const answer = "هل تقصد ملفات Workspace أم المحاضرات المسجلة؟ حدد المصدر أو اسم الملف.";
         if (reserveRef) {

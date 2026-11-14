@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/api-guard";
+import { AiProviderError } from "@/lib/ai/types";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { chunkTranscript, DEFAULT_CHUNK_CHARS } from "@/lib/ai/lecture-prompts";
 import { runAiTask } from "@/lib/ai/tasks/runner";
@@ -24,6 +25,13 @@ import {
  *
  * حصاد واحد لكل نداء: claim → تحقق ميزانية → توليد → تجديد lease بعد كل
  * نداء → حفظ. لا يحجز Credit جديدًا أبدًا (الحجز حدث عند إنشاء الجلسة).
+ */
+/**
+ * مهلة Vercel للراوت (ثانية) — Fluid Compute مفعّل على المشروع.
+ *
+ * ⚠️ من غيرها (الافتراضي 10–15s) الطلب بيتقتل في نص التوليد ⇒ 502/504
+ *    من المنصة مش من كودنا. 300s = سقف Fluid Compute وبتغطي السلسلة
+ *    كلها: ملخص لكل قطعة ← دمج ← أسئلة لكل قطعة ← إصلاح.
  */
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -194,10 +202,16 @@ export async function POST(
   let sequence = 0;
 
   const deps: ExamReviewDeps = {
-    runTask: async ({ messages, usage, temperature }) => {
+    runTask: async ({ messages, usage, temperature, maxTokens, timeoutMs }) => {
       const result = await runAiTask("chat", {
         messages,
-        options: { temperature },
+        options: {
+          temperature,
+          // 🔢 سقف المخرج + ⏱️ مهلة الطلب: من غيرهم الموديلات الاستدلالية
+          //    (gpt-oss) بترجع `content` فاضي أو بتتقطع في النص ⇒ 503.
+          ...(maxTokens !== undefined ? { maxTokens } : {}),
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+        },
         user: { userId: user.id, language: "ar" },
         usage,
       });
@@ -250,6 +264,16 @@ export async function POST(
       "[exam-sessions] generation failed",
       error instanceof Error ? error.message : error
     );
+    // 🔄 429 من المزوّد (كل مفاتيح Groq اتعيطت) — مش خطأ الطالب ولا
+    //    ميزانية الامتحان ⇒ 503 «الخدمة مشغولة» مع إعادة محاولة بعد دقيقة.
+    const providerStatus =
+      error instanceof AiProviderError ? error.status : undefined;
+    if (providerStatus === 429) {
+      return fail("AI_RATE_LIMITED", 503, {
+        detail: "provider rate limited (all keys)",
+        retry_after: 60,
+      });
+    }
     return fail("AI_UNAVAILABLE", 502);
   }
 
