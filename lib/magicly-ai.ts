@@ -37,8 +37,42 @@ function isLearningStyle(value: unknown): value is LearningStyle {
 
 const MAX_CONTEXT_TEXT = 160;
 
-function shortText(value: unknown) {
-  return typeof value === "string" ? value.trim().slice(0, MAX_CONTEXT_TEXT) : "";
+/**
+ * حقول نصية ممكن تيجي جوّه الـ object بدل الـ string.
+ * الـ UnifiedChat بيبعت الدرس كـ object — دي ترتيب الأولوية للاستخراج.
+ */
+const OBJECT_TEXT_FIELDS = ["title", "topic", "name", "label"] as const;
+
+/**
+ * نص قصير للسياق (مادة/درس/…).
+ *
+ * 🐞 إصلاح G4 (Phase 1.1): UnifiedChat بيبعت `lesson` كـ **object**
+ * `{ title, subject, content, description }` — النسخة القديمة كانت بتقبل
+ * strings بس فترجع `""` ون falling-back لـ«درس غير محدد» في كل محادثة
+ * الدرس. دلوقتي بنطلّع أول حقل نصي منطقي من الـ object كمان.
+ */
+function shortText(value: unknown): string {
+  if (typeof value === "string") return value.trim().slice(0, MAX_CONTEXT_TEXT);
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    for (const field of OBJECT_TEXT_FIELDS) {
+      const candidate = record[field];
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim().slice(0, MAX_CONTEXT_TEXT);
+      }
+    }
+  }
+  return "";
+}
+
+/**
+ * حقل نصي محدّد جوّه object (مثال: `lesson.subject`) — بيستخدم كـ fallback
+ * للمادة لما `input.subject` مش مبعوت.
+ */
+function nestedText(value: unknown, field: string): string {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return "";
+  const candidate = (value as Record<string, unknown>)[field];
+  return typeof candidate === "string" ? candidate.trim().slice(0, MAX_CONTEXT_TEXT) : "";
 }
 
 /**
@@ -77,7 +111,9 @@ export async function getStudentContext(
   const configId = shortText(input.configId);
   const lessonDay = typeof input.lessonDay === "number" && Number.isInteger(input.lessonDay) ? input.lessonDay : null;
   const fallback: Pick<StudentContext, "subject" | "lesson" | "learningStyle" | "studyField" | "learningGoal"> = {
-    subject: shortText(input.subject) || FALLBACK_SUBJECT,
+    // المادة: الأول من `subject` مباشرة، وإلا من جوّه كائن الدرس
+    // (UnifiedChat بيبعت `lesson.subject` ومابيبعتش `subject` منفصل).
+    subject: shortText(input.subject) || nestedText(input.lesson, "subject") || FALLBACK_SUBJECT,
     lesson: shortText(input.lesson) || FALLBACK_LESSON,
     learningStyle: isLearningStyle(input.learningStyle) ? input.learningStyle : "practical",
     studyField: shortText(input.studyField) || "",
