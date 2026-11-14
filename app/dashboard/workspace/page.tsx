@@ -101,6 +101,44 @@ function isWorkspaceTab(value: string | null): value is WorkspaceTab {
   return value === "chats" || value === "lectures" || value === "files";
 }
 
+type GroupedItems<T> = { key: string; label: string; items: T[] };
+
+/**
+ * تجميع العناصر حسب المادة — عشان الـ Workspace **مش مبعث**: ملفات/محاضرات
+ * مادة أ في مكان وب مادة ب في مكان. المادة بتتحدد من id مربوط
+ * (`subject_id`) أو من الاسم (لو الربط نصي).
+ *
+ * لو مفيش مادة مسجّلة خالص ⇒ العناصر ترجع زي ما هي والعرض يفضل flat
+ * (السلوك القديم بيفضل ثابت لحد ما الطالب يظبط مسارات المواد).
+ */
+function groupBySubject<T>(
+  items: T[],
+  keyOf: (item: T) => string | null,
+  subjectNames: Map<string, string>,
+): GroupedItems<T>[] {
+  const map = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item) ?? "";
+    const bucket = map.get(key);
+    if (bucket) bucket.push(item);
+    else map.set(key, [item]);
+  }
+
+  const groups: GroupedItems<T>[] = [];
+  for (const [key, groupItems] of map) {
+    if (key === "") continue;
+    groups.push({ key, label: subjectNames.get(key) ?? "مادة مسجّلة", items: groupItems });
+  }
+  const uncategorized = map.get("") ?? [];
+  // مواد مالهاش اسم في القائمة (نادر) — تتجمع مع «من غير مادة» مش تضيع.
+  const orphaned = [...map.entries()]
+    .filter(([key, groupItems]) => key !== "" && !subjectNames.has(key) && groupItems.length > 0)
+    .flatMap(([, groupItems]) => groupItems);
+  const rest = [...orphaned, ...uncategorized];
+  if (rest.length > 0) groups.push({ key: "", label: "من غير مادة", items: rest });
+  return groups;
+}
+
 function formatRelativeTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -183,6 +221,10 @@ export default function WorkspacePage() {
   const [lectures, setLectures] = useState<LectureItem[]>([]);
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [lectureCount, setLectureCount] = useState(0);
+  // 🗂️ تجميع حسب المادة — أسماء المواد + مادة كل ملف (best-effort:
+  //    جدول المواد ناقص ⇒ كل حاجة في «من غير مادة» والعرض يفضل flat).
+  const [subjectNames, setSubjectNames] = useState<Map<string, string>>(new Map());
+  const [materialSubjects, setMaterialSubjects] = useState<Map<string, string>>(new Map());
   const [chatCount, setChatCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -253,7 +295,7 @@ export default function WorkspacePage() {
     (async () => {
       setIsLoading(true);
 
-      const [materialsResult, lecturesResult, chatsResult, documentsResult] =
+      const [materialsResult, lecturesResult, chatsResult, documentsResult, subjectsResult, materialSubjectsResult] =
         await Promise.all([
           fetchMaterials(supabase, userId),
           supabase
@@ -281,6 +323,10 @@ export default function WorkspacePage() {
             )
             .eq("user_id", userId)
             .not("material_id", "is", null),
+          // 🗂️ أسماء المواد + مادة كل ملف — أساس التجميع في العرض.
+          //    best-effort: الجدول غير موجود (migration ناقص) ⇒ flat.
+          supabase.from("workspace_subjects").select("id, name").eq("user_id", userId).limit(200),
+          supabase.from("materials").select("id, subject_id").eq("user_id", userId),
         ]);
 
       if (cancelled) return;
@@ -291,6 +337,24 @@ export default function WorkspacePage() {
         errors.push(materialsResult.error.message);
       } else {
         setMaterials(materialsResult.data);
+      }
+
+      if (!subjectsResult.error) {
+        const map = new Map<string, string>();
+        for (const row of (subjectsResult.data ?? []) as Array<{ id: string; name: string }>) {
+          if (row.name) map.set(row.id, row.name);
+        }
+        setSubjectNames(map);
+      }
+      if (!materialSubjectsResult.error) {
+        const map = new Map<string, string>();
+        for (const row of (materialSubjectsResult.data ?? []) as Array<{
+          id: string;
+          subject_id: string | null;
+        }>) {
+          if (row.subject_id) map.set(row.id, row.subject_id);
+        }
+        setMaterialSubjects(map);
       }
 
       if (!documentsResult.error) {
@@ -707,6 +771,20 @@ export default function WorkspacePage() {
       }
     : null;
 
+  // 🗂️ التجميع حسب المادة — لو مفيش مادة مسجّة خالص ⇒ flat (سلوك ثابت).
+  const materialGroups = groupBySubject(
+    materials,
+    (material) => materialSubjects.get(material.id) ?? null,
+    subjectNames,
+  );
+  const lectureGroups = groupBySubject(
+    lectures,
+    (lecture) => lecture.subjectId,
+    subjectNames,
+  );
+  const filesGrouped = materialGroups.some((group) => group.key !== "");
+  const lecturesGrouped = lectureGroups.some((group) => group.key !== "");
+
   if (isLoading) {
     return (
       <PageShell
@@ -884,8 +962,16 @@ export default function WorkspacePage() {
               }
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {lectures.map((lecture) => (
+            <div className="space-y-6">
+              {lectureGroups.map((group) => (
+                <div key={group.key}>
+                  {lecturesGrouped && (
+                    <p className="eyebrow mb-3">
+                      {group.label} · <span className="ltr-num">{group.items.length}</span>
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {group.items.map((lecture) => (
                 <Link
                   key={lecture.id}
                   href={lecture.subjectId ? `/lectures?subject=${lecture.subjectId}` : "/lectures"}
@@ -920,6 +1006,9 @@ export default function WorkspacePage() {
                     </div>
                   </div>
                 </Link>
+              ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -1081,12 +1170,20 @@ export default function WorkspacePage() {
               action={uploadButton}
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <p className="tag sm:col-span-2">
+            <div className="space-y-6">
+              <p className="tag w-fit">
                 <span className="ltr-num">{materials.length}</span> ملف في مكتبتك
               </p>
 
-              {materials.map((material) => {
+              {materialGroups.map((group) => (
+                <div key={group.key}>
+                  {filesGrouped && (
+                    <p className="eyebrow mb-3">
+                      {group.label} · <span className="ltr-num">{group.items.length}</span>
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {group.items.map((material) => {
                 // 📄 المستند المرتبط بالمادة (معاينة + حالة + عدد صفحات).
                 const doc = documents.get(material.id);
                 const kind = fileKindFor(material.fileType, material.title);
@@ -1215,6 +1312,9 @@ export default function WorkspacePage() {
                 </div>
                 );
               })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </section>

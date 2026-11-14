@@ -27,6 +27,7 @@ type SessionRow = {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  metadata: unknown;
 };
 
 type ItemRow = {
@@ -59,7 +60,7 @@ export async function GET(
   const { data: session, error: sessionError } = await supabase
     .from("exam_sessions")
     .select(
-      "id, mode, status, total_lectures, total_chars, total_chunks, estimated_tokens, logical_calls_used, provider_attempts_used, credit_reserved_at, credit_refunded_at, started_at, completed_at, created_at, updated_at"
+      "id, mode, status, total_lectures, total_chars, total_chunks, estimated_tokens, logical_calls_used, provider_attempts_used, credit_reserved_at, credit_refunded_at, started_at, completed_at, created_at, updated_at, metadata"
     )
     .eq("id", id)
     .eq("user_id", user.id)
@@ -100,6 +101,7 @@ export async function GET(
     id: session.id,
     mode: session.mode,
     status: session.status,
+    metadata: session.metadata ?? null,
     total_lectures: session.total_lectures,
     completed_lectures: completedLectures,
     last_completed_at: lastCompletedAt,

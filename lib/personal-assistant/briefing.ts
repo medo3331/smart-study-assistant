@@ -28,6 +28,15 @@ export interface BriefingResult {
   xpMessage: string | null;
   activityMessage: string | null;
   goalsMessage: string | null;
+  /** إجراءات مقترحة — بيانات **منفصلة** عن النص (الكارت يعرضها أو يتجاهلها). */
+  actions: BriefingAction[];
+}
+
+/** إجراء مقترح — حاليًا: اختبار سريع من مادة الطالب (صدق البيانات إجباري). */
+export interface BriefingAction {
+  kind: "exam";
+  label: string;
+  href: string;
 }
 
 /** مدخلات الدالة — السياق إجباري والباقي محضّر للمراحل الجاية. */
@@ -164,6 +173,23 @@ function buildLaunchMessage(ctx: PersonalAssistantContext): string | null {
   return `خلينا نتقدم في ${ctx.subject} النهارده 🚀`;
 }
 
+/**
+ * الإجراءات المقترحة — بتشتغل **بس** لو في subject حقيقية في السياق
+ * (نفس فلسفة NO FABRICATION: مفيش بيانات ⇒ مفيش اقتراح).
+ * الـhref بياخد المادة من السياق — الامتحان بيتفتح محدَّد الـsubject.
+ */
+function buildActions(ctx: PersonalAssistantContext): BriefingAction[] {
+  const subject = ctx.subject?.trim();
+  if (!subject) return [];
+  return [
+    {
+      kind: "exam",
+      label: "اعمل اختبار سريع",
+      href: `/exams?gen=1&subject=${encodeURIComponent(subject)}`,
+    },
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // الدالة الرئيسية
 // ---------------------------------------------------------------------------
@@ -195,5 +221,6 @@ export function getPersonalAssistantBriefing(input: BriefingContext): BriefingRe
     xpMessage: buildXpMessage(ctx),
     activityMessage: buildActivityMessage(ctx),
     goalsMessage: buildGoalsMessage(ctx),
+    actions: buildActions(ctx),
   };
 }

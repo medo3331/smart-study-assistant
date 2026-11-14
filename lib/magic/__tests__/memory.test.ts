@@ -177,6 +177,24 @@ describe("getStudentContext — retrieval eligibility (P0 #1)", () => {
     expect(readQueries("study_days")).toHaveLength(0);
   });
 
+  it("بيقرأ lesson كـ object (شكل UnifiedChat) بدل ما يقع في «درس غير محدد»", async () => {
+    // 🐞 G4: UnifiedChat بيبعت { title, subject, content, description } —
+    // shortText كانت بتقبل strings بس فالدرس كان دايمًا FALLBACK_LESSON.
+    const ctx = await getStudentContext(
+      h.makeSupabase() as unknown as SupabaseClient,
+      "u1",
+      {
+        lesson: { title: "الحركة الموجية", subject: "فيزياء", content: "…", description: "…" },
+      } as MagiclyContextInput
+    );
+
+    expect(ctx.lesson).toBe("الحركة الموجية");
+    expect(ctx.lesson).not.toBe(FALLBACK_LESSON);
+    // المادة كمان بتتسحب من جوّه الكائن لأن UnifiedChat مش بيبعت subject منفصل.
+    expect(ctx.subject).toBe("فيزياء");
+    expect(ctx.subject).not.toBe(FALLBACK_SUBJECT);
+  });
+
   it("يقرأ ai_memories مرة واحدة فقط مع configId (لا استعلامات مكررة)", async () => {
     h.state.config = { subject: "فيزياء" };
     h.state.days = [{ day_number: 1, topic: "الحركة", learning_style: "visual", is_completed: true }];
