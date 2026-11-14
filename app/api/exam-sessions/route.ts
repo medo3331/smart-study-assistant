@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/api-guard";
+import { requireUser, clampText } from "@/lib/api-guard";
 import { createExamSession, type ExamSessionMode } from "@/lib/ai/exam-sessions";
+import { parseExamSpec, DEFAULT_EXAM_SPEC } from "@/lib/ai/exam-review";
+import { createServiceClient } from "@/lib/supabase/admin";
 
 /**
  * POST /api/exam-sessions — إنشاء جلسة مراجعة + حجز Credit واحد.
@@ -25,7 +27,14 @@ export async function POST(req: Request) {
   if (!user) return fail("UNAUTHORIZED", 401);
 
   const body = (await req.json().catch(() => null)) as
-    | { mode?: unknown; lectureIds?: unknown }
+    | {
+        mode?: unknown;
+        lectureIds?: unknown;
+        spec?: unknown;
+        subject?: unknown;
+        title?: unknown;
+        dayId?: unknown;
+      }
     | null;
   if (!body || typeof body !== "object") return fail("VALIDATION", 400, "body required");
 
@@ -33,6 +42,32 @@ export async function POST(req: Request) {
   if (!MODES.includes(mode as ExamSessionMode)) {
     return fail("VALIDATION", 400, "invalid mode");
   }
+
+  // اختيار الطالب (أنواع/صعوبة/عدد) — تحليل **صارم**: غلط ⇒400 مش تخمين.
+  // من غير spec (جلسات قديمة/مختبرة) → الافتراضي كما هو.
+  const spec =
+    body.spec === undefined || body.spec === null ? { ...DEFAULT_EXAM_SPEC } : parseExamSpec(body.spec);
+  if (!spec) return fail("VALIDATION", 400, "invalid spec (types/difficulty/count)");
+
+  // المادة/اليوم/العنوان — نيّة من الـURL (يُتحقق من ملكية المحاضرات في الـRPC).
+  const rawSubject =
+    body.subject && typeof body.subject === "object" && !Array.isArray(body.subject)
+      ? (body.subject as { id?: unknown; name?: unknown })
+      : null;
+  const subjectId =
+    rawSubject && typeof rawSubject.id === "string" && rawSubject.id.trim()
+      ? clampText(rawSubject.id, 64).trim()
+      : null;
+  const subjectName =
+    rawSubject && typeof rawSubject.name === "string" && rawSubject.name.trim()
+      ? clampText(rawSubject.name, 120).trim()
+      : "";
+  const title = typeof body.title === "string" && body.title.trim()
+    ? clampText(body.title, 120).trim()
+    : "";
+  const dayId = typeof body.dayId === "string" && body.dayId.trim()
+    ? clampText(body.dayId, 64).trim()
+    : null;
 
   if (!Array.isArray(body.lectureIds) || body.lectureIds.length === 0) {
     return fail("VALIDATION", 400, "lectureIds required");
@@ -77,6 +112,31 @@ export async function POST(req: Request) {
 
   const sessionId = created.data.session_id;
 
+  // metadata (المادة + spec الاختيار) — الكتابة service-role لأن RLS
+  // على exam_sessions: المالك يقرأ فقط. best-effort: فشلها ما يوقّعش
+  // الجلسة (الكريدت اتحجز أصلًا) لكن التوليد هيرجع للافتراضي.
+  const metadata = {
+    title: title || (subjectName ? `امتحان ${subjectName}` : "امتحان سريع"),
+    subject_id: subjectId,
+    subject_name: subjectName,
+    day_id: dayId,
+    spec,
+  };
+  try {
+    const admin = createServiceClient();
+    const { error: metaError } = await admin
+      .from("exam_sessions")
+      .update({ metadata })
+      .eq("id", sessionId)
+      .eq("user_id", user.id);
+    if (metaError) console.warn("[exam-sessions] metadata write failed:", metaError.message);
+  } catch (error) {
+    console.warn(
+      "[exam-sessions] metadata write skipped:",
+      error instanceof Error ? error.message : error
+    );
+  }
+
   const { data: session, error: sessionError } = await supabase
     .from("exam_sessions")
     .select(
@@ -114,6 +174,7 @@ export async function POST(req: Request) {
     total_chunks: session.total_chunks,
     estimated_tokens: session.estimated_tokens,
     credit_reserved_at: session.credit_reserved_at,
+    metadata,
     items: lectureItems.map((item) => ({
       id: item.id,
       lecture_id: item.lecture_id,

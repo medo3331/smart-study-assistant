@@ -13,6 +13,7 @@ import {
   type LessonCitedExplanation,
   type TimedSegment,
 } from "@/lib/lesson/citations";
+import { subjectMatches } from "@/lib/academics/subject-match";
 
 /* ==========================================================================
    محتوى الدرس — توليد مرة واحدة + Citations (Phase 1.2 + 1.3)
@@ -96,21 +97,6 @@ const MODE_PROMPTS: Record<ContentMode, (topic: string, subject: string, eduLine
 };
 
 /* ═════════════════════ مطابقة المواد (فلترة) ═════════════════════ */
-
-/**
- * مطابقة اسم مادة الدرس باسم مادة مسجّلة.
- *
- * ⚠️ الربط عندنا **اسم حرفي** (`study_configs.subject`) مش مفتاح، فبنطابق
- * بعد التطبيع العربي (تشكيل/همزات/ء) + السماح بالاشتراك الجزئي عشان
- * «الفيزياء» تطابق «فيزياء» و«فزياء ١».
- */
-function subjectMatches(a: string, b: string): boolean {
-  const x = normalizeForMatch(a);
-  const y = normalizeForMatch(b);
-  if (!x || !y) return false;
-  if (x === y) return true;
-  return x.length >= 3 && y.length >= 3 && (x.includes(y) || y.includes(x));
-}
 
 /** اقتراح ذكي: عنوان المحاضرة ≈ موضوع الدرس بعد التطبيع. */
 function titleMatchesLesson(title: string, topic: string): boolean {

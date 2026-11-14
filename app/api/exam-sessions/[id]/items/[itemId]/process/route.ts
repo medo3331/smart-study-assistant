@@ -15,6 +15,7 @@ import {
   ExamLeaseLostError,
   generateExamReview,
   estimateItemBudget,
+  normalizeExamSpec,
   type ExamReviewDeps,
 } from "@/lib/ai/exam-review";
 
@@ -85,7 +86,7 @@ export async function POST(
   const { data: session, error: sessionError } = await supabase
     .from("exam_sessions")
     .select(
-      "id, status, started_at, total_lectures, logical_calls_used, provider_attempts_used"
+      "id, status, started_at, total_lectures, logical_calls_used, provider_attempts_used, metadata"
     )
     .eq("id", sessionId)
     .eq("user_id", user.id)
@@ -224,9 +225,16 @@ export async function POST(
     },
   };
 
+  // اختيار الطالب (أنواع/صعوبة/عدد) من metadata — قراءة متساهلة:
+  // جلسة من غير metadata تولّد MCQ/متوسط/4 (سلوك المحرك القديم).
+  const spec = normalizeExamSpec((session as { metadata?: unknown }).metadata &&
+    typeof (session as { metadata?: unknown }).metadata === "object"
+    ? ((session as { metadata: { spec?: unknown } }).metadata.spec)
+    : undefined);
+
   let generated;
   try {
-    generated = await generateExamReview({ transcript, deps });
+    generated = await generateExamReview({ transcript, deps, spec });
   } catch (error) {
     if (error instanceof ExamLeaseLostError) {
       // عامل قديم: لا نُفشل البند — قد يستعيده عامل آخر بعد انتهاء الـ lease.
