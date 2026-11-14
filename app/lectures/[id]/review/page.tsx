@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { MagiclyLoader } from "@/components/ui/MagiclyLoader";
 
 type SuspectedTerm = {
   term: string;
@@ -148,7 +149,7 @@ export default function ReviewPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-soft">جاري التحميل…</div>;
+  if (loading) return <MagiclyLoader label="بنجهّز النص للمراجعة…" />;
 
   return (
     <div className="mx-auto max-w-3xl p-6 space-y-6" dir="rtl">

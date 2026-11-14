@@ -7,7 +7,6 @@ interface ShopModalProps {
   isOpen: boolean;
   onClose: () => void;
   xp: number;
-  onBuyStreakFreeze: () => void;
   canUnlockNextDayEarly: boolean;
   nextLockedDay: number;
   uiText: UiText;
@@ -18,7 +17,6 @@ export function ShopModal({
   isOpen,
   onClose,
   xp,
-  onBuyStreakFreeze,
   canUnlockNextDayEarly,
   nextLockedDay,
   uiText,
@@ -44,15 +42,10 @@ export function ShopModal({
           <span className="ltr-num font-display font-extrabold text-xl text-ink tnum">{xp} XP</span>
         </div>
 
-        <div className="bg-paper p-4 rounded-[var(--r-sm)] border border-rule flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h4 className="text-sm font-bold text-ink mb-0.5">تجميد السلسلة</h4>
-            <p className="text-[11px] text-ink-soft leading-relaxed">بيحمي سلسلتك يوم واحد لو غبت.</p>
-          </div>
-          <button onClick={onBuyStreakFreeze} className="btn btn-marker text-xs shrink-0 tnum">
-            200 XP
-          </button>
-        </div>
+        {/* ⛔ «تجميد السلسلة» اتشال (P0): كان بياخد 200 XP ويعرض «تم الشراء»
+            من غير أي صف في الداتابيز ولا منطق بيحترم التجميد — يعني الطالب
+            بيدفع XP حقيقي مقابل لا شيء. مش هيترجع غير لما يبقى له منطق سيرفر
+            (عمود/جدول تجميد + احترامه في _streak_apply). */}
 
         <div
           className={`bg-paper p-4 rounded-[var(--r-sm)] border border-rule flex items-center justify-between gap-3 ${

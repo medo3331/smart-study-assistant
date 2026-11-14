@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Bell } from "lucide-react";
+import { cairoDateString } from "@/lib/time/cairo";
 
 /* Phase 0.2 — Smart Contextual Notifications (IN-APP ONLY; zero new DB; zero push/cron)
 
@@ -58,7 +59,7 @@ useEffect(() => {
   // Note: the full profile data lives in Supabase profiles table; we check via a minimal safe read
   // rather than inventing a streak risk. Since this is in-app and must use real data,
   // we only show streak message when both conditions are genuinely provable:
-  // (a) profile has streak > 0; (b) profile indicates study-day activity missing (derived from last_study_day vs current UTC date matching daily_missions convention).
+  // (a) profile has streak > 0; (b) profile indicates study-day activity missing (derived from last_study_day vs the user's Cairo day — same convention as public.cairo_day()).
   useEffect(() => {
     let cancelled = false;
     async function loadStreak() {
@@ -72,13 +73,12 @@ useEffect(() => {
           .maybeSingle();
         if (cancelled) return;
         if (error || !profile) return;
-        // Existing convention: daily_missions uses UTC; streak risk only shown if today
-        // (UTC) has no study activity evidence (last_study_day not matching today).
-        const todayUtc = new Date().toISOString().slice(0, 10); // YYYY-MM-DD in UTC (matches existing convention)
+        // P0: السلسلة بقت سيرفر-أوثوريتاتيف ويومها هو يوم القاهرة (public.cairo_day)،
+        // فلازم المقارنة هنا تستعمل نفس المسطرة — مش تاريخ UTC.
+        const today = cairoDateString();
         const lastDay = profile.last_study_day ? String(profile.last_study_day).slice(0, 10) : null;
         const hasStreak = typeof profile.streak === "number" && profile.streak > 0;
-        // Only claim "at risk" if user has a positive streak AND has not studied today (per UTC convention).
-        const atRisk = hasStreak && (lastDay !== todayUtc);
+        const atRisk = hasStreak && (lastDay !== today);
         if (!cancelled) setStreakRisk(atRisk);
       } catch {
         // Silent failure: do not invent streak risk.
@@ -94,7 +94,7 @@ useEffect(() => {
   const notifKey = hasPrayerContext && prayerCtx
   ? `prayer:${prayerCtx.arabicName}:${prayerCtx.remainingMinutes}`
   : hasStreakContext
-  ? `streak:${new Date().toISOString().slice(0, 10)}`
+  ? `streak:${cairoDateString()}`
   : null;
 const isDismissed = notifKey ? dismissed.has(notifKey) : false;
 const shouldShow = visible && !isDismissed && (hasPrayerContext || hasStreakContext);

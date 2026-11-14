@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { cairoDateString } from "@/lib/time/cairo";
 
 type RewardDetail = {
   source: string; // "signup_bonus" | "daily_login"
@@ -14,6 +15,18 @@ type ToastItem = {
   source: string;
   awarded: number;
   balance: number;
+};
+
+/**
+ * المصادر اللي ليها توست. أي مصدر جديد لازم يتضاف هنا.
+ * `achievement` (Phase 3) بييجي من صفحة الإنجازات لما السيرفر يسجّل إنجاز
+ * جديد — الـ balance مش معروف عندها فبيتبعت 0، والسطر بيتخفي.
+ */
+const TOAST_TITLES: Record<string, string> = {
+  signup_bonus: "🎉 أهلاً بيك في Magiclly!",
+  daily_login: "☀️ مكافأة الدخول اليومية",
+  achievement: "🏅 إنجاز جديد اتفتح!",
+  weekly_mission: "🔥 مهمة الأسبوع خلصت!",
 };
 
 /**
@@ -66,7 +79,7 @@ export default function RewardToastHost() {
       const d = ce.detail;
       if (!d || typeof d.awarded !== "number" || d.awarded <= 0) return;
       const src = String(d.source || "");
-      if (src !== "signup_bonus" && src !== "daily_login") return;
+      if (!(src in TOAST_TITLES)) return;
 
       // Deduplicate: per source + awarded + balance hash in this session
       const hash = `${src}:${d.awarded}:${d.balance}`;
@@ -82,7 +95,7 @@ export default function RewardToastHost() {
             localStorage.setItem("magicly_signup_toast_done", "1");
           } catch {}
         } else if (src === "daily_login") {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = cairoDateString();
           const key = `magicly_toast_daily_${today}`;
           if (sessionStorage.getItem(key) === hash) return;
           sessionStorage.setItem(key, hash);
@@ -114,10 +127,9 @@ export default function RewardToastHost() {
     );
   }
 
-  const isSignup = current.source === "signup_bonus";
-  const title = isSignup ? "🎉 أهلاً بيك في Magiclly!" : "☀️ مكافأة الدخول اليومية";
+  const title = TOAST_TITLES[current.source] ?? "🎁 مكافأة جديدة";
   const line2 = `+${current.awarded} Coins 🪙`;
-  const line3 = `رصيدك الآن: ${current.balance} Coins`;
+  const line3 = current.balance > 0 ? `رصيدك الآن: ${current.balance} Coins` : "محفوظة في سجلك";
 
   return (
     <div

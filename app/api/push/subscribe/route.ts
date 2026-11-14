@@ -59,3 +59,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "خطأ غير متوقع" }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/push/subscribe — إلغاء الاشتراك (احترام اختيار المستخدم).
+ *
+ * ⚠️ ليه ده مهم بعد ما دخل cron تذكير السلسلة: لو المستخدم قفل التنبيهات
+ * من الإعدادات وكان الاشتراك لسه في الداتابيز، الـ cron كان هيفضل يبعتله
+ * كل يوم — يعني اختياره ملوش معنى. الطالب لما يقفل الزرار = مفيش صف =
+ * مفيش إشعار. (الـ user_id من الجلسة زي الـ POST، مش من الـ body.)
+ */
+export async function DELETE() {
+  try {
+    const { user, supabase, response: authError } = await requireUser("flat");
+    if (authError) return authError;
+
+    const { error } = await supabase.from("push_subscriptions").delete().eq("user_id", user.id);
+    if (error) {
+      console.error("Failed to delete push subscription:", error);
+      return NextResponse.json({ error: "فشل إلغاء الاشتراك" }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("push/unsubscribe error:", err);
+    return NextResponse.json({ error: "خطأ غير متوقع" }, { status: 500 });
+  }
+}

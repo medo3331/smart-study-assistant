@@ -20,6 +20,18 @@ export function levelFromXp(xp: number): number {
   return Math.floor(Math.max(0, xp) / XP_PER_LEVEL) + 1;
 }
 
+/**
+ * عائد المرحلة الواحدة من الخطة — ١٥٠ XP (Phase 3).
+ *
+ * قبل كده كانت ١٠٠، وده كان بيخلّي نشاط جانبي واحد (كويز المجتمع، سقفه ١٥٠
+ * في اليوم) يساوي مرحلة مذاكرة كاملة. المذاكرة لازم تكون أعلى عائد.
+ *
+ * ⚠️ السيرفر بيفرض نفس الأرضية في trigger `normalize_study_day_xp`
+ *    (`db/45-retention-phase-3-achievements.sql`)، فالرقم ده للعرض والتوليد
+ *    المحلي، ومش مصدر الحقيقة — القيمة الفعلية في `study_days.xp_reward`.
+ */
+export const STUDY_DAY_XP_REWARD = 150;
+
 // ============================================================================
 // مصادر الكوينز
 // ============================================================================
@@ -38,6 +50,14 @@ export type CoinSource = {
   live: boolean;
   /** سقف يومي — `null` معناها مفيش سقف (الأحداث اللي بطبيعتها مرة واحدة) */
   dailyCap: number | null;
+  /**
+   * محطة سلسلة: مش كسب يومي عادي — بتتصرف يوم المحطة بس (٣/٧/٣٠).
+   *
+   * ⚠️ بتتستبعد من `maxDailyCoins()` عن قصد: الرقم ده هو أساس تسعير
+   * الكتالوج، ودخول بونص متقطّع فيه بيخلّي التسعير غلط (بيوعد بكسب يومي
+   * مش موجود). المبالغ بتتعدّل في `coin_source_rules` في
+   * `db/44-retention-phase-2-tiers.sql`، والرقم هنا مرآة. */
+  streakTier?: boolean;
 };
 
 export const COIN_SOURCES = {
@@ -97,6 +117,26 @@ export const COIN_SOURCES = {
     amount: 120,
     live: true,
     dailyCap: 1,
+  },
+  // ── Phase 2 — محطات السلسلة (Retention) ──────────────────────────────
+  /* بتتصرف من `_streak_apply` لما الطالب يوصل اليوم ٣/٣٠ بالظبط — مش كل
+     يوم. الـ XP المرافق (١٥ / ٢٠٠) مكتوب في الدالة نفسها، والواجهة بتقرا
+     نفس الأرقام من `lib/retention/streak-tiers.ts`. */
+  streak_tier_3: {
+    id: "streak_tier_3",
+    label: "بونص ٣ أيام",
+    amount: 15,
+    live: true,
+    dailyCap: 1,
+    streakTier: true,
+  },
+  streak_tier_30: {
+    id: "streak_tier_30",
+    label: "بونص الشهر",
+    amount: 250,
+    live: true,
+    dailyCap: 1,
+    streakTier: true,
   },
   // ⇩ مصادر لسه ما اتبنتش — المبلغ محسوب، والتوصيل بعدين
   escape_room: {
@@ -163,7 +203,8 @@ export function isCoinSource(v: string): v is CoinSourceId {
  */
 export function maxDailyCoins(): number {
   return Object.values(COIN_SOURCES)
-    .filter((s) => s.live)
+    // محطات السلسلة متقطّعة (يوم ٣/٧/٣٠) — مش كسب يومي، فمش داخلة في الأساس.
+    .filter((s) => s.live && !("streakTier" in s && s.streakTier))
     .reduce((sum, s) => sum + s.amount * (s.dailyCap ?? 1), 0);
 }
 
@@ -272,7 +313,8 @@ export function rewardEventId(source: string, refId: string): string {
 }
 // XP validation debt المتبقي بعد Phase C:
 // - Boss XP ما زال يُمنح عبر increment_xp من الكلاينت (onWin) — سيُربط بالـ badge في Phase D
-// - profiles.streak/last_study_day ما زال يُكتب من الكلاينت (تسريب 13 كوين/يوم)
+// - ✅ profiles.streak/last_study_day بقوا سيرفر-أوثوريتاتيف (db/43-retention-p0-streak.sql):
+//   _streak_apply هي الوحيدة اللي بتكتبهم، وtrigger protect_profiles_streak بيمنع الكلاينت.
 // - XP_PER_LEVEL مكرر في db/shop.sql:200
 
 // ---------------------------------------------------------------------------
@@ -311,7 +353,7 @@ export type AiCreditLedgerEntry = {
 // Phase 4.0 — Economy Foundation: Signup + Daily Login + Study Rewards
 // ---------------------------------------------------------------------------
 // Signup: +20 مرة واحدة (ref=user_id, unique index يمنع التكرار)
-// Daily Login: +10 مرة/يوم (ref=UTC date, idempotent via unique index + daily cap)
+// Daily Login: +10 مرة/يوم (ref = يوم القاهرة, idempotent via unique index + daily cap)
 // Study: day_done/goal_done/badge عبر complete_study_day / award_coins — موجودة ومثبتة
 // Wheel eligibility: Successful Study Activity (complete_study_day success) → wheel_status.can_spin
 //   لا يُحتسب مجرد فتح صفحة الدرس؛ الشرط هو ledger row لـ day_done/goal_done اليوم.
