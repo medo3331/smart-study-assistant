@@ -79,6 +79,13 @@ export interface ExamRequest {
   difficulty: ExamDifficulty | null;
   /** الطلب مكتمل؟ (المادة + العدد) ⇒ ينفّذ فورًا من غير أسئلة توضيحية. */
   complete: boolean;
+  /**
+   * فيه طلب امتحان **شغّال** في المحادثة (حتى لو ناقصه بيانات).
+   *
+   * ⚠️ الشات مش form: أول ما الطالب يقول «عايز امتحان» بنبعتله زر
+   *    المولّد فورًا، وهو بيكمّل الباقي في الشاشة.
+   */
+  active: boolean;
   /** سبب الكشف — للتشخيص فقط. */
   reason: string;
 }
@@ -114,8 +121,168 @@ export function detectExamRequest(raw: string): ExamRequest | null {
     types,
     difficulty,
     complete: subject !== null && count !== null,
+    active: true,
     reason: "exam-request",
   };
+}
+
+/** دور واحد في المحادثة (رسالة) — بنقرا التاريخ كله مش آخر رسالة. */
+export interface ChatTurn {
+  role?: string | null;
+  content?: string | null;
+}
+
+/**
+ * الرسالة دي فيها **نيّة امتحان**؟ (كلمة امتحان + مفيش كلام عن امتحان فات)
+ *
+ * ⚠️ بتستخدمها الراوتات عشان تقرّر: «محتاج أقرأ تاريخ المحادثة ولا أخلص؟»
+ */
+export function containsExamSignal(raw: string): boolean {
+  if (typeof raw !== "string" || raw.trim().length === 0) return false;
+  const text = loosen(normalizeDigits(raw.slice(0, 500)));
+  const hasExamWord = EXAM_KEYWORDS.some((word) => text.includes(loosen(word)));
+  if (!hasExamWord) return false;
+  return !NEGATIVE_MARKERS.some((word) => text.includes(loosen(word)));
+}
+
+/** أقصى عدد دورات بنقراها من التاريخ (آخر ١٢ رسالة في المحادثة). */
+const MAX_SCANNED_TURNS = 12;
+
+/**
+ * 🔥 كشف **stateful** — بيقرا تاريخ المحادثة ويجمع بيانات طلب الامتحان.
+ *
+ * ⚠️ **ليه تاريخ وليس آخر رسالة**: المساعد كان بيدخل في **حلقة مفرغة**
+ *    («كام سؤال؟» → «5» → «المادة إيه؟» → «عربي» → «كام سؤال؟» تاني).
+ *    السبب إن كل نداء كان بيقرا الرسالة الأخيرة بس ⇒ بيانات الطالب اللي
+ *    قالها في الرسالة السابقة بتضيع ⇒ المساعد بيبدأ من الصفر كل مرة.
+ *
+ * القاعدة: بنمشي على **آخر** رسالة فيها كلمة امتحان (بداية الطلب) وبنجمع
+ * من بعدها لحد الآن: المادة والعدد (آخر قيمة مقروءة هي الفيصل).
+ *
+ * النتيجة `active: true` حتى لو البيانات ناقصة — عشان بنبعت زر المولّد فورًا
+ * (الشات مش form؛ الطالب بيكمّل الباقي في شاشة المولّد).
+ */
+export function detectExamRequestFromHistory(turns: ChatTurn[]): ExamRequest | null {
+  const scanned = (turns ?? [])
+    .filter((turn) => turn && typeof turn.content === "string" && turn.content.trim() !== "")
+    .slice(-MAX_SCANNED_TURNS);
+
+  const userTurns = scanned.filter((turn) => turn.role !== "assistant");
+  if (userTurns.length === 0) return null;
+
+  // ① بداية الطلب = آخر رسالة فيها كلمة امتحان (وليست كلام عن امتحان فات).
+  let startIndex = -1;
+  for (let index = scanned.length - 1; index >= 0; index -= 1) {
+    const turn = scanned[index];
+    if (turn.role === "assistant") continue;
+    const content = String(turn.content);
+    const text = loosen(normalizeDigits(content.slice(0, 500)));
+    const hasExamWord = EXAM_KEYWORDS.some((word) => text.includes(loosen(word)));
+    if (!hasExamWord) continue;
+    if (NEGATIVE_MARKERS.some((word) => text.includes(loosen(word)))) continue;
+    startIndex = index;
+    break;
+  }
+  if (startIndex === -1) return null;
+
+  // ② نجمع البيانات من بداية الطلب لحد الآن (آخر قيمة مقروءة هي الفيصل).
+  let subject: string | null = null;
+  let count: number | null = null;
+  let types: ExamQuestionType[] = [];
+  let difficulty: ExamDifficulty | null = null;
+
+  for (let index = startIndex; index < scanned.length; index += 1) {
+    const turn = scanned[index];
+    if (turn.role === "assistant") continue;
+    const content = String(turn.content);
+
+    const turnSubject = extractSubject(content) ?? extractLooseSubject(content);
+    if (turnSubject) subject = turnSubject;
+
+    const turnCount = extractCount(content) ?? extractBareCount(content);
+    if (turnCount !== null) count = turnCount;
+
+    const text = loosen(normalizeDigits(content.slice(0, 500)));
+    const turnTypes = extractTypes(text);
+    if (turnTypes.length > 0) types = turnTypes;
+    const turnDifficulty = extractDifficulty(text);
+    if (turnDifficulty) difficulty = turnDifficulty;
+  }
+
+  // ③ لو أنا قبل كده بعته نفس الزر بنفس الاختيار ⇒ متكررش نفس الرد.
+  //    (الطالب قال «تمام» بعد ما وصله الزر ⇒ يرد عادي، مش تكرار).
+  const sent = lastSentExamRequest(scanned, startIndex);
+  if (sent && sent.subject === subject && sent.count === count) return null;
+
+  return {
+    subject,
+    count,
+    types,
+    difficulty,
+    complete: subject !== null && count !== null,
+    active: true,
+    reason: "exam-request-history",
+  };
+}
+
+/** آخر زر مولّد بعناه المساعد (بالاختيار اللي فيه) — عشان نعرف بينكرّره ولا لأ. */
+function lastSentExamRequest(
+  scanned: ChatTurn[],
+  startIndex: number
+): { subject: string | null; count: number | null } | null {
+  for (let index = scanned.length - 1; index > startIndex; index -= 1) {
+    const turn = scanned[index];
+    if (turn.role !== "assistant") continue;
+    const content = String(turn.content ?? "");
+    if (!content.includes("/exams?gen=1")) continue;
+    const subject = decodeURIComponent(
+      (content.match(/[?&]subject=([^&\s)"']+)/)?.[1] ?? "").replace(/\+/g, " ")
+    );
+    const countRaw = content.match(/[?&]count=(\d{1,2})/)?.[1];
+    const count = countRaw ? Number(countRaw) : null;
+    return { subject: subject || null, count: count ?? null };
+  }
+  return null;
+}
+
+/**
+ * عدد «مجرّد» — رسالة الطالب كلها رقم («5» جوابًا على «كام سؤال؟»).
+ *
+ * ⚠️ بيتقبل **بس** جوه كشف التاريخ (طلب امتحان شغّال) — مش في الرسالة
+ *    الواحدة، عشان رقم لوحده مش دليل على إنه عدد أسئلة.
+ */
+function extractBareCount(raw: string): number | null {
+  const text = normalizeForCount(normalizeDigits(raw.slice(0, 50))).trim();
+  if (!/^\d{1,2}$/.test(text)) return null;
+  const value = Number(text);
+  if (value < EXAM_MIN_COUNT || value > EXAM_MAX_COUNT) return null;
+  return value;
+}
+
+/** الردود اللي مش مادة («تمام» / «ايوه» / «ماشي» …). */
+const REPLY_NOISE = new Set([
+  "تمام", "ايوه", "ايه", "لا", "ماشي", "شكرا", "شكرا لك", "اهلا", "السلام عليكم",
+  "ok", "okay", "yes", "no", "thanks", "thank you", "hi", "hello",
+  "اكمل", "كمل", "يلا", "برضه", "نفس الشيء", "زي ما قلت", "خلاص",
+]);
+
+/**
+ * مادة «مجرّدة» — رسالة الطالب كلها كلمة («عربي» جوابًا على «المادة إيه؟»).
+ *
+ * ⚠️ بتقبل الكلمة بس لو: قصيرة، مش رقم، ومش من كلام الردود.
+ */
+function extractLooseSubject(raw: string): string | null {
+  const text = raw.trim();
+  if (!text || text.length > 40) return null;
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 3) return null;
+  if (tokens.some((token) => /^\d+$/.test(token))) return null;
+  if (REPLY_NOISE.has(loosen(text))) return null;
+  if (tokens.some((token) => REPLY_NOISE.has(loosen(token)))) return null;
+  if (tokens.some((token) => isNoiseToken(token))) return null;
+  const joined = tokens.join(" ").trim();
+  if (joined.length < 3) return null;
+  return joined;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -210,7 +377,7 @@ export function extractSubject(raw: string): string | null {
 
   // ① «في الفيزياء» / «بمادة الرياضيات» / «مادة الفيزياء»
   const afterIn = text.match(
-    /(?:في|فى|بمادة|مادة)\s+([^\s،.؟!؟]+(?:\s+[^\s،.؟!؟]+)?)/i
+    /(?:في|فى|بمادة|مادة)\s+(?:مادة\s+|بمادة\s+)?([^\s،.؟!؟]+(?:\s+[^\s،.؟!؟]+)?)/i
   );
   if (afterIn) {
     const cleaned = cleanSubject(afterIn[1]);
@@ -300,8 +467,8 @@ export function buildExamHref(request: ExamRequest): string {
  *    ل لينك تلقائي في الـmarkdown، والزر السريع بيعمل الباقي.
  */
 export function buildExamAnswer(request: ExamRequest, origin?: string): string {
-  const subject = request.subject ?? "المادة";
-  const count = request.count ?? "العدد المطلوب";
+  const subject = request.subject;
+  const count = request.count;
   const types =
     request.types.length > 0
       ? ` (${request.types.map((type) => TYPE_LABELS_AR[type]).join(" + ")})`
@@ -312,27 +479,32 @@ export function buildExamAnswer(request: ExamRequest, origin?: string): string {
   const href = buildExamHref(request);
   const link = origin ? `${origin.replace(/\/$/, "")}${href}` : href;
 
+  // الطلب مكتمل ⇒ نحكيله اختياره بالظبط (ومفيش أي سؤال توضيحي).
+  if (subject && count) {
+    return [
+      `تمام — جهّزت لك امتحان ${subject} من ${count} سؤال${types}${difficulty}.`,
+      "افتح مولّد الامتحان وابدأ التوليد (محاضراتك محفوظة جاهزة):",
+      link,
+    ].join("\n\n");
+  }
+
+  // الطلب ناقص ⇒ ما نسألش خالص: نحوّله للشاشة وهيكمّل الباقي بنفسه.
+  const known: string[] = [];
+  if (subject) known.push(`المادة: ${subject}`);
+  if (count) known.push(`${count} سؤال`);
+  if (request.types.length > 0) {
+    known.push(`الأنواع: ${request.types.map((t) => TYPE_LABELS_AR[t]).join(" + ")}`);
+  }
+  if (request.difficulty) known.push(`المستوى: ${DIFFICULTY_LABELS_AR[request.difficulty]}`);
+
   return [
-    `تمام — جهّزت لك امتحان ${subject} من ${count} سؤال${types}${difficulty}.`,
-    "افتح مولّد الامتحان وابدأ التوليد (محاضراتك محفوظة جاهزة):",
+    `تمام — طلب امتحان${known.length > 0 ? ` (${known.join(" · ")})` : ""}.`,
+    "افتح مولّد الامتحان وكمّل باقي الإعدادات فيه (المادة/الأنواع/الصعوبة) — أهو أضمن وأسرع من إكمالها في الشات:",
     link,
   ].join("\n\n");
 }
 
 /** لو الطلب **ناقص** — سؤال واحد محدد عن الناقص بس (مش مقهى أسئلة). */
-export function buildExamClarifyingAnswer(request: ExamRequest): string {
-  const missing: string[] = [];
-  if (!request.subject) missing.push("المادة");
-  if (!request.count) missing.push("عدد الأسئلة");
-  const subjectPart = request.subject ? ` في ${request.subject}` : "";
-  const countPart = request.count ? `${request.count} سؤال` : "";
-  return [
-    "عشان أبدأ معاك فورًا، محتاج منك حاجة واحدة ناقصة:",
-    `• ${missing.join(" و")}${subjectPart}${countPart ? ` (${countPart})` : ""}`,
-    "وبمجرد ما تبعتهالي هفتحلك مولّد الامتحان على طول.",
-  ].join("\n");
-}
-
 const TYPE_LABELS_AR: Record<ExamQuestionType, string> = {
   mcq: "اختيار من متعدد",
   true_false: "صح أو خطأ",
@@ -354,9 +526,9 @@ const DIFFICULTY_LABELS_AR: Record<ExamDifficulty, string> = {
  * توضيحية لما الطلب مكتمل (القواعد دي بتكمّل الكاشف، مش بتغني عنه).
  */
 export const EXAM_REQUEST_PROMPT_RULES = [
-  "طلب امتحان من الطالب — لو قال المادة **و** عدد الأسئلة (أو النمط/الصعوبة):",
-  "- متسألش أي سؤال توضيحي. نفّذ فورًا: افتح له صفحة الامتحانات (/exams?gen=1) واذكر له اختياره.",
-  "- متقترحش تقسيم العدد ولا تسأل «5 ولا مجموعتين؟» — الطالب قال الرقم، خُد بيه.",
-  "- لو ناقص حاجة واحدة بس (المادة أو العدد) اسأل سؤالًا واحدًا محددًا عن الناقص، وبعده نفّذ.",
-  "- متولّدش الأسئلة بنفسك في الشات — المولّد بياخدها من تفريغ محاضراتك، وأنت بتوجّهه.",
+  "لو المستخدم طلب امتحان:",
+  "- متسألش أسئلة توضيحية خالص (ولا سؤالين، ولا «كام سؤال ولا مجموعتين؟»).",
+  "- اعرض زر «افتح مولّد الامتحان» فورًا مع رابط /exams?gen=1 — ولو تعرف المادة أو العدد ضيفهم (?subject=…&count=…).",
+  "- قوله يكمل باقي الإعدادات (المادة/الأنواع/الصعوبة) في شاشة المولّد، لأن الشاشة أسهل وأسرع من الشات.",
+  "- متولّدش الأسئلة بنفسك في الشات — المولّد بياخدها من تفريغ محاضراته.",
 ].join("\n");

@@ -49,19 +49,27 @@ describe("نداءات التوليد — سقف المخرج ومهلة الط�
   });
 });
 
-describe("المساعد — طلب امتحان مكتمل بينفّذ فورًا", () => {
-  it("/api/chat: كشف الطلب + رابط المولّد + قواعد البرومبت", () => {
+describe("المساعد — طلب امتحان بينفّذ فورًا (من غير حلقة مفرغة)", () => {
+  it("/api/chat: الكشف من **التاريخ** مش آخر رسالة", () => {
     const route = read("app/api/chat/route.ts");
-    expect(route).toContain("detectExamRequest(latestMessage)");
+    expect(route).toContain("detectExamRequestFromHistory(safeMessages)");
     expect(route).toContain("buildExamHref(examRequest)");
     expect(route).toContain("EXAM_REQUEST_PROMPT_RULES");
   });
 
-  it("/api/unified-ai: كشف الطلب + زر الإجراء", () => {
+  it("/api/unified-ai: التاريخ من الداتابيز + حفظ الدور (عشان مايضيعش السياق)", () => {
     const route = read("app/api/unified-ai/route.ts");
-    expect(route).toContain("detectExamRequest(prompt)");
+    expect(route).toContain("detectExamRequestFromHistory(examTurns)");
+    expect(route).toContain("loadConversationTurns");
+    expect(route).toContain("saveTurn");
     expect(route).toContain('label: "افتح مولّد الامتحان"');
     expect(route).toContain("EXAM_REQUEST_PROMPT_RULES");
+  });
+
+  it("الطلب الناقص كمان بياخد الزر فورًا (الشات مش form)", () => {
+    const engine = read("lib/exam-request.ts");
+    expect(engine).toContain("active: true");
+    expect(engine).toContain("مولّد الامتحان وكمّل باقي الإعدادات");
   });
 });
 

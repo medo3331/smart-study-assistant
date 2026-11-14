@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 
 import {
   buildExamAnswer,
-  buildExamClarifyingAnswer,
   buildExamHref,
+  containsExamSignal,
   detectExamRequest,
+  detectExamRequestFromHistory,
   extractSubject,
   EXAM_REQUEST_PROMPT_RULES,
 } from "../exam-request";
@@ -20,6 +21,7 @@ describe("detectExamRequest — طلب امتحان مكتمل", () => {
     expect(request?.subject).toBe("الفيزياء");
     expect(request?.count).toBe(10);
     expect(request?.complete).toBe(true);
+    expect(request?.active).toBe(true);
   });
 
   it("يقبل الأرقام الهندية", () => {
@@ -50,11 +52,101 @@ describe("detectExamRequest — طلب امتحان مكتمل", () => {
     expect(request?.count).toBe(10);
     expect(request?.subject).toBeNull();
     expect(request?.complete).toBe(false);
+    // ⚠️ الطلب لسه شغّال — لازم يوصّلنا لزر المولّد فورًا.
+    expect(request?.active).toBe(true);
   });
 
   it("مش بيفتعل طلب امتحان من كلام عادي", () => {
     expect(detectExamRequest("اشرحلي كود الـ SQL")).toBeNull();
     expect(detectExamRequest("امبارح عملت الامتحان")).toBeNull();
+  });
+});
+
+describe("detectExamRequestFromHistory — الكشف الـstateful (إصلاح الحلقة)", () => {
+  it("بيجمع المادة والعدد من رسايل مختلفة", () => {
+    const request = detectExamRequestFromHistory([
+      { role: "user", content: "عايز امتحان في مادة اللغة العربية" },
+      { role: "assistant", content: "كام عدد الأسئلة اللي هتعملها؟" },
+      { role: "user", content: "5" },
+    ]);
+    expect(request?.active).toBe(true);
+    expect(request?.count).toBe(5);
+    expect(request?.subject).toContain("اللغة");
+  });
+
+  it("الرد القصير («عربي») بيتقرا كمادة", () => {
+    const request = detectExamRequestFromHistory([
+      { role: "user", content: "عايز امتحان" },
+      { role: "assistant", content: "المادة إيه؟" },
+      { role: "user", content: "عربي" },
+    ]);
+    expect(request?.subject).toBe("عربي");
+    expect(request?.complete).toBe(false);
+    expect(request?.active).toBe(true);
+  });
+
+  it("الحلقة بتتقفل: آخر رسالة مفيهاش كلمة امتحان بس الطلب لسه شغّال", () => {
+    const request = detectExamRequestFromHistory([
+      { role: "user", content: "عايز امتحان في مادة اللغة العربية" },
+      { role: "assistant", content: "كام عدد الأسئلة اللي هتعملها؟" },
+      { role: "user", content: "5" },
+      { role: "assistant", content: "المادة إيه؟" },
+      { role: "user", content: "عربي" },
+    ]);
+    expect(request?.active).toBe(true);
+    expect(request?.subject).toBeTruthy();
+    expect(request?.count).toBe(5);
+  });
+
+  it("مفيش طلب امتحان في الشات ⇒ مفيش اكتشاف", () => {
+    expect(
+      detectExamRequestFromHistory([
+        { role: "user", content: "اشرحلي كود الـ SQL" },
+        { role: "user", content: "تمام" },
+      ])
+    ).toBeNull();
+  });
+
+  it("كلام عن امتحان فات مش طلب", () => {
+    expect(
+      detectExamRequestFromHistory([{ role: "user", content: "امبارح عملت امتحان الفيزياء" }])
+    ).toBeNull();
+  });
+
+  it("ردود زي «تمام» مش بتتقرا مادة", () => {
+    const request = detectExamRequestFromHistory([
+      { role: "user", content: "عايز امتحان" },
+      { role: "user", content: "تمام" },
+    ]);
+    expect(request?.subject).toBeNull();
+  });
+
+  it("بيتكسر تكرار نفس الزر (الطالب قال «تمام» بعد ما وصله الزر)", () => {
+    const request = detectExamRequestFromHistory([
+      { role: "user", content: "عايز امتحان في مادة اللغة العربية" },
+      {
+        role: "assistant",
+        content:
+          "تمام — طلب امتحان (المادة: اللغة العربية).\n\nافتح مولّد الامتحان:\nhttps://magicly.app/exams?gen=1&subject=%D8%A7%D9%84%D9%84%D8%BA%D8%A9+%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9",
+      },
+      { role: "user", content: "تمام" },
+    ]);
+    expect(request).toBeNull();
+  });
+
+  it("بيرد تاني لو الطالب زوّد بيانات (5 بعد ما وصله الزر)", () => {
+    const request = detectExamRequestFromHistory([
+      { role: "user", content: "عايز امتحان في مادة اللغة العربية" },
+      {
+        role: "assistant",
+        content:
+          "تمام — طلب امتحان (المادة: اللغة العربية).\n\nافتح مولّد الامتحان:\nhttps://magicly.app/exams?gen=1&subject=%D8%A7%D9%84%D9%84%D8%BA%D8%A9+%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9",
+      },
+      { role: "user", content: "5" },
+    ]);
+    expect(request?.active).toBe(true);
+    expect(request?.count).toBe(5);
+    expect(request?.complete).toBe(true);
   });
 });
 
@@ -66,6 +158,10 @@ describe("extractSubject — noises مالهاش مادة", () => {
   it("بيتجاهل الأرقام والكلمات الوظيفية", () => {
     expect(extractSubject("امتحان")).toBeNull();
     expect(extractSubject("اختبار في")).toBeNull();
+  });
+
+  it("«في مادة اللغة العربية» ⇒ المادة كاملة", () => {
+    expect(extractSubject("عايز امتحان في مادة اللغة العربية")).toBe("اللغة العربية");
   });
 });
 
@@ -80,6 +176,12 @@ describe("buildExamHref / buildExamAnswer", () => {
     expect(href).toContain("difficulty=easy");
   });
 
+  it("الرابط بيتكتب مطلق لو الـorigin متاح", () => {
+    const request = detectExamRequest("امتحان في الفيزياء من 10 أسئلة");
+    const answer = buildExamAnswer(request!, "https://magicly.app");
+    expect(answer).toContain("https://magicly.app/exams?gen=1");
+  });
+
   it("الرد المكتمل مفيهوش سؤال توضيحي", () => {
     const request = detectExamRequest("امتحان في الفيزياء من 10 أسئلة");
     const answer = buildExamAnswer(request!);
@@ -88,22 +190,25 @@ describe("buildExamHref / buildExamAnswer", () => {
     expect(answer).not.toContain("؟");
   });
 
-  it("الرابط بيتكتب مطلق لو الـorigin متاح", () => {
-    const request = detectExamRequest("امتحان في الفيزياء من 10 أسئلة");
-    const answer = buildExamAnswer(request!, "https://magicly.app");
-    expect(answer).toContain("https://magicly.app/exams?gen=1");
+  it("الرد الناقص مفيهوش سؤال توضيحي — بيوديه للشاشة", () => {
+    const request = detectExamRequest("عايز امتحان");
+    const answer = buildExamAnswer(request!);
+    expect(answer).toContain("/exams?gen=1");
+    expect(answer).not.toContain("؟");
   });
+});
 
-  it("الرد الناقص بيسأل عن الناقص بس", () => {
-    const request = detectExamRequest("امتحان من 10 أسئلة");
-    const answer = buildExamClarifyingAnswer(request!);
-    expect(answer).toContain("المادة");
-    expect(answer).not.toContain("عدد الأسئلة");
+describe("containsExamSignal", () => {
+  it("بيعرف نية الامتحان من غير نية forensics", () => {
+    expect(containsExamSignal("عايز امتحان")).toBe(true);
+    expect(containsExamSignal("اشرحلي كود")).toBe(false);
+    expect(containsExamSignal("امبارح عملت امتحان")).toBe(false);
   });
 });
 
 describe("EXAM_REQUEST_PROMPT_RULES", () => {
   it("بيمنع الموديل من يسأل أسئلة توضيحية", () => {
-    expect(EXAM_REQUEST_PROMPT_RULES).toContain("متسألش أي سؤال توضيحي");
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("متسألش أسئلة توضيحية");
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("افتح مولّد الامتحان");
   });
 });

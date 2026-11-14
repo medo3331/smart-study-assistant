@@ -20,7 +20,7 @@ import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import {
   buildExamAnswer,
   buildExamHref,
-  detectExamRequest,
+  detectExamRequestFromHistory,
   EXAM_REQUEST_PROMPT_RULES,
 } from "@/lib/exam-request";
 
@@ -124,13 +124,17 @@ export async function POST(req: Request) {
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const latestMessage = safeMessages.at(-1)?.content ?? "";
 
-    // ── طلب امتحان مكتمل ⇒ تنفيذ فوري (من غير سؤال توضيحي ومن غير نداء موديل)
+    // ── طلب امتحان ⇒ تنفيذ فوري (من غير سؤال توضيحي ومن غير نداء موديل)
     //
-    // ⚠️ **ليه**: المساعد كان بيسأل «5 ولا مجموعتين؟» مع إن الطالب قال
-    //    المادة والعدد. الكشف بكود (مش بموديل) ⇒ فوري ومجاني، والطالب
-    //    بياخد رابط صفحة الامتحان فورًا.
-    const examRequest = detectExamRequest(latestMessage);
-    if (examRequest?.complete) {
+    // ⚠️ **التاريخ مش الرسالة الأخيرة**: المساعد كان بيدخل في حلقة مفرغة
+    //    («كام سؤال؟» → «5» → «المادة إيه؟» → «عربي» → «كام سؤال؟» تاني)
+    //    لأن كل نداء كان بيقرا آخر رسالة بس. بنجمع البيانات من كل
+    //    المحادثة: «عايز امتحان» + «5» + «عربي» ⇒ امتحان عربي من 5.
+    //
+    // ⚠️ **الشات مش form**: أول ما الطالب يطلب امتحان (حتى لو ناقصه عدد
+    //    أو مادة) بنبعتله زر المولّد فورًا وهو بيكمّل الباقي في الشاشة.
+    const examRequest = detectExamRequestFromHistory(safeMessages);
+    if (examRequest?.active) {
       const answer = buildExamAnswer(examRequest, new URL(req.url).origin);
       const savedId = await saveTurn(supabase, user.id, conversationId, latestMessage, answer);
       return NextResponse.json({

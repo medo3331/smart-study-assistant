@@ -65,8 +65,10 @@ import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import {
   buildExamAnswer,
   buildExamHref,
-  detectExamRequest,
+  containsExamSignal,
+  detectExamRequestFromHistory,
   EXAM_REQUEST_PROMPT_RULES,
+  type ChatTurn,
 } from "@/lib/exam-request";
 import {
   buildMagiclySystemPrompt,
@@ -126,6 +128,91 @@ function clampTask(input: unknown): AiTaskType | undefined {
   const t = input.trim() as AiTaskType;
   if (VALID_TASKS.has(t)) return t;
   return undefined;
+}
+
+/**
+ * تاريخ المحادثة (آخر ١٢ رسالة) — لازم للكشف **stateful** لطلب الامتحان.
+ *
+ * ⚠️ **ليه من الداتابيز**: UnifiedChat بيبعت آخر رسالة بس في الـrequest،
+ *    فالسجل (بيانات الطالب السابقة) مش موجود في الطلب ⇒ لازم يتقرا من
+ *    `chat_messages` (المحادثة محفوظة أصلاً).
+ *
+ * ⚠️ **ملكية**: الفلتر على `user_id` كمان — محادثة حد تاني ما تتقراش.
+ */
+async function loadConversationTurns(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  conversationId: string
+): Promise<ChatTurn[]> {
+  if (!conversationId) return [];
+  try {
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(12);
+    if (error) return [];
+    const rows = (data ?? []) as Array<{ role: string; content: string }>;
+    return rows.reverse().map((row) => ({ role: row.role, content: row.content }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * حفظ دور المحادثة — best-effort (فشلها ما بيحرمش الطالب من الرد).
+ *
+ * ⚠️ **ليه مهمة في المسار السريع (طلب امتحان)**: لو ما حفظناش الدور،
+ *    الرسالة «عايز امتحان» بتضيع من السجل ⇒ الردود الجاية («5»، «عربي»)
+ *    متبقاش ليها سياق ⇒ المساعد بيرجع يسأل تاني ⇒ **حلقة مفرغة**.
+ */
+async function saveTurn(params: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  userId: string;
+  conversationId: string;
+  userMessage: string;
+  answer: string;
+}): Promise<string> {
+  const { supabase, userId, conversationId, userMessage, answer } = params;
+  if (!answer) return "";
+  try {
+    let savedId = conversationId;
+    if (savedId) {
+      const { data: owned } = await supabase
+        .from("chat_conversations")
+        .select("id")
+        .eq("id", savedId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      // محادثة حد تاني ما تُستخدمش أبدًا (تلويث تاريخ + فقدان contexto).
+      if (!owned) savedId = "";
+    }
+    if (!savedId) {
+      const { data: conversation } = await supabase
+        .from("chat_conversations")
+        .insert({ user_id: userId, title: userMessage.slice(0, 80) || "محادثة جديدة" })
+        .select("id")
+        .single();
+      savedId = conversation?.id ?? "";
+    }
+    if (savedId) {
+      await supabase.from("chat_messages").insert([
+        { conversation_id: savedId, user_id: userId, role: "user", content: userMessage },
+        { conversation_id: savedId, user_id: userId, role: "assistant", content: answer },
+      ]);
+      await supabase
+        .from("chat_conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", savedId)
+        .eq("user_id", userId);
+    }
+    return savedId;
+  } catch (error) {
+    console.warn("[unified-ai] could not save conversation (non-blocking):", error);
+    return "";
+  }
 }
 
 /**
@@ -660,24 +747,44 @@ export async function POST(req: Request) {
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
     if (userId && supabase && !isAnonymous) {
-      // ⚡ طلب امتحان **مكتمل** (المادة + العدد) ⇒ تنفيذ فوري: رابط صفحة
-      //    الامتحان من غير نداء موديل ومن غير سؤال توضيحي.
+      // ⚡ **طلب امتحان ⇒ تحويل فوري للواجهة** (الزر + الرابط).
       //
-      //    ⚠️ **ليه**: المساعد كان بيسأل «5 ولا مجموعتين؟» مع إن الطالب قال
-      //    كل حاجة. الكشف بكود ⇒ فوري ومجاني، وبيعمل قبل الـ intent search
-      //    (لو طلب امتحان في مادة، مش لازم بحث في الملفات).
-      const examRequest = detectExamRequest(prompt);
-      if (examRequest?.complete) {
+      //    ⚠️ **التاريخ مش آخر رسالة**: المساعد كان بيدخل في حلقة مفرغة
+      //    («كام سؤال؟» → «5» → «المادة إيه؟» → «عربي» → «كام سؤال؟» تاني)
+      //    لأن كل نداء كان بيقرا آخر رسالة بس. بنجمع من كل المحادثة.
+      //
+      //    ⚠️ **الشات مش form**: بنبعت الزر أول ما الطالب يطلب امتحان
+      //    (حتى لو ناقصه عدد/مادة) — وهو بيكمّل الباقي في شاشة المولّد.
+      //
+      //    📚 التاريخ بيتقرا من الداتابيز بس لما يكون لائق: إما الرسالة
+      //    نفسها فيها نية امتحان، أو هي قصيرة (رد على سؤال توضيحي).
+      const examTurns: ChatTurn[] = [];
+      if (incomingConversationId && (containsExamSignal(prompt) || prompt.trim().length <= 80)) {
+        examTurns.push(...(await loadConversationTurns(supabase, userId, incomingConversationId)));
+      }
+      examTurns.push({ role: "user", content: prompt });
+
+      const examRequest = detectExamRequestFromHistory(examTurns);
+      if (examRequest?.active) {
         const answer = buildExamAnswer(examRequest, new URL(req.url).origin);
         if (reserveRef) {
           try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
         }
+        // ⚠️ لازم نحفظ الدور: من غيره «عايز امتحان» بتضيع من السجل
+        //    والردود الجاية متبقاش ليها سياق ⇒ حلقة مفرغة.
+        const savedConversationId = await saveTurn({
+          supabase,
+          userId,
+          conversationId: incomingConversationId,
+          userMessage: prompt,
+          answer,
+        });
         return NextResponse.json({
           ok: true,
           answer,
           actions: [{ label: "افتح مولّد الامتحان", href: buildExamHref(examRequest) }],
           metadata: { modelUsed: modelToUse, resolvedVia },
-          conversationId: incomingConversationId || undefined,
+          conversationId: savedConversationId || incomingConversationId || undefined,
         });
       }
       if (intentResult.intent === "CLARIFICATION") {
