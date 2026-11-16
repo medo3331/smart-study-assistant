@@ -30,7 +30,7 @@ export default function NotesPrototypePage() {
   }, []);
 
   // -------------------------------------------------------------------------
-  // Persistence helpers – delegate to the shared storage instance.
+  // Persistence helpers – delegate to the shared storage instance
   // -------------------------------------------------------------------------
 
   async function saveNotebook(notebook: StorageNotebook): Promise<void> {
