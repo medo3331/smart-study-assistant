@@ -18,7 +18,7 @@
 
 import { type Metadata } from "next";
 import Link from "next/link";
-import { Mic } from "lucide-react";
+import { Mic, FileText } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
@@ -41,8 +41,8 @@ import type { IntensiveExplanation } from "@/lib/ai/lecture-intensive";
 import type { TimedSegment } from "@/lib/ai/lecture-intensive-prompts";
 
 export const metadata: Metadata = {
-  title: "محاضراتي — Magicly",
-  description: "كل محاضراتك المحفوظة وتفريغها النصي في مكان واحد.",
+  title: "التسجيلات الصوتية والمستندات — Magicly",
+  description: "تسجيلاتك الصوتية مع تفريغها، ومستنداتك (PDF/Word) — كلهم في مكانين واضحين.",
 };
 
 /** المدة بالثواني → "12:34" أو "1:05:20" (نفس دالة الواجهة). */
@@ -105,9 +105,11 @@ type LectureListItem = {
   transcript_data: unknown;
 };
 
-export default async function MyLecturesPage({ searchParams }: { searchParams: Promise<{ subject?: string }> }) {
+export default async function MyLecturesPage({ searchParams }: { searchParams: Promise<{ subject?: string; tab?: string }> }) {
   const resolved = await searchParams;
   const subjectFilter = resolved?.subject?.trim() || null;
+  // 🔀 التبويب: «recordings» (تسجيلات صوتية) ولا «documents» (مستندات).
+  const activeTab = resolved?.tab === "documents" ? "documents" : "recordings";
   const supabase = await createClient();
 
   // ١) المصادقة — الزائر يروح لصفحة الدخول (بعده = /lectures عشان يرجع).
@@ -131,39 +133,126 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
 
   const lectures = (data ?? []) as LectureListItem[];
 
+  // 📄 المستندات (PDF/PPTX/DOCX) — تبويب مستقل: الطالب لازم يفرق بين
+  //    «الصوتيات اللي بيتفرّغ» و«الملفات».
+  const { data: documentsData } = await supabase
+    .from("documents")
+    .select("id, title, file_type, page_count, status, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  const documents = (documentsData ?? []) as Array<{
+    id: string;
+    title: string | null;
+    file_type: string | null;
+    page_count: number | null;
+    status: string | null;
+    created_at: string;
+  }>;
+
   return (
     <PageShell
-      eyebrow="محاضراتي"
-      title="محاضراتي 📚"
-      lede="كل محاضرة حفظتها في حسابك. افتح أي قسم للقراءة، وصدّر الشرح PDF أو Word."
+      eyebrow="محتواي"
+      title="التسجيلات والملفات 📚"
+      lede="تسجيلاتك الصوتية (اللي بيتفريغ نصها) وملفاتك (PDF و PowerPoint) — كلهم في مكانين واضحين."
     >
       <FeatureGuide {...guides.lectures} storageKey="guide:lectures" />
 
-      {/* 🎙️ زر «ابدأ محاضرة جديدة» — نظير الـ CTA اللي في الداشبورد.
-       *
-       * ⚠️ ليه موجود أصلاً: الصفحة دي للقائمة، الطالب يوصلها من الرابط
-       * أو من الـ Navbar من غير ما يمر على الداشبورد. من غير الزر ده هو
-       * محبوس هنا — مافيش طريق يبدأ تفريغ جديد غير الرجوع للداشبورد.
-       * يبدأ تفريغ جديد غير الرجوع للداشبورد.
-       */}
-      <div className="mb-4 flex justify-end">
+      {/* 🔀 التبويبات — عشان «المحاضرات» ما تبقاش كلمة واحدة بتشيل كل حاجة.
+          *  تبويب 1: تسجيلات صوتية (MP3/MP4) · تبويب 2: مستندات (PDF/PPTX/Word).
+          *  ⚠️ التبويب في الـURL (`?tab=documents`) — قابل للمشاركة وبيشتغل
+          *    من غير JS. */}
+      <nav className="mb-4 flex gap-2" aria-label="نوع المحتوى">
+        <Link
+          href="/lectures"
+          aria-current={activeTab === "recordings" ? "page" : undefined}
+          className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold transition ${
+            activeTab === "recordings"
+              ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+              : "border-[var(--rule)] text-ink-soft hover:text-ink"
+          }`}
+        >
+          <Mic size={15} aria-hidden />
+          المحاضرات الصوتية
+          <span className="text-xs opacity-70 ltr-num">({lectures.length})</span>
+        </Link>
+        <Link
+          href="/lectures?tab=documents"
+          aria-current={activeTab === "documents" ? "page" : undefined}
+          className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold transition ${
+            activeTab === "documents"
+              ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+              : "border-[var(--rule)] text-ink-soft hover:text-ink"
+          }`}
+        >
+          <FileText size={15} aria-hidden />
+          المستندات
+          <span className="text-xs opacity-70 ltr-num">({documents.length})</span>
+        </Link>
+      </nav>
+
+      {/* CTA — بيتغيّر حسب التبويب: رفع تسجيل صوتي ولا رفع مستند. */}
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
         <Link
           href="/lecture-transcription"
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
         >
           <Mic size={16} aria-hidden />
-          <span>ابدأ محاضرة جديدة</span>
+          <span>ابدأ تسجيلًا صوتيًا</span>
+        </Link>
+        <Link
+          href="/dashboard/workspace?tab=files"
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--rule)] px-4 text-sm font-semibold text-ink transition-opacity hover:opacity-80"
+        >
+          <FileText size={16} aria-hidden />
+          <span>ارفع مستند (PDF/Word)</span>
         </Link>
       </div>
 
-      {/* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح، ومش بنعرض
-          قائمة فاضية تخلّي الطالب يفتكر إن مفيش محاضرات. */}
-      {error ? (
-        <DataNotice message="مقدرناش نحمّل محاضراتك دلوقتي. حاول تاني كمان شوية." />
+      {activeTab === "documents" ? (
+        /* 📄 تبويب المستندات */
+        documents.length === 0 ? (
+          <EmptyState
+            icon="📄"
+            title="لسه مفيش مستندات"
+            body="ارفع PDF أو PowerPoint أو Word من مساحة العمل، وهو يتحفظ هنا وتقدر تعمل منه امتحان."
+          />
+        ) : (
+          <section className="grid gap-4">
+            {documents.map((doc) => (
+              <article
+                key={doc.id}
+                className="card-interactive rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-bold text-ink">{doc.title ?? "مستند"}</h2>
+                  <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-ink-soft dark:bg-white/10">
+                    {doc.status === "ready" ? "جاهز" : doc.status === "partial" ? "جزئي" : "مستحيل؟"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-ink-soft">
+                  {formatDate(doc.created_at)}
+                  {doc.file_type ? ` · ${doc.file_type.toUpperCase()}` : ""}
+                  {doc.page_count ? ` · ${doc.page_count} صفحة` : ""}
+                </p>
+                <p className="mt-2 text-xs text-ink-soft">
+                  تقدر تعمل امتحان من الملف ده من{" "}
+                  <Link href="/exams?gen=1" className="underline">
+                    مولّد الامتحانات
+                  </Link>
+                  .
+                </p>
+              </article>
+            ))}
+          </section>
+        )
+      ) : error ? (
+        /* ⚠️ مافيش fake data: لو الاستعلام فشل بنقولّك صريح. */
+        <DataNotice message="مقدرناش نحمّل تسجيلاتك دلوقتي. حاول تاني كمان شوية." />
       ) : lectures.length === 0 ? (
         <EmptyState
           icon="🎙️"
-          title="لسه مفيش محاضرات"
+          title="لسه مفيش تسجيلات صوتية"
           body="ارفع تسجيل محاضرة من صفحة تفريغ المحاضرات، وسجّل دخول الأول — وهي تتحفظ هنا."
         />
       ) : (

@@ -11,8 +11,8 @@ export function WorkspaceTabs({ active, counts }: {
 }) {
   const tabs: Array<{ key: Tab; label: string; count: number }> = [
     { key: "chats", label: "المحادثات", count: counts.chats },
-    { key: "lectures", label: "المحاضرات", count: counts.lectures },
-    { key: "files", label: "الملفات", count: counts.files },
+    { key: "lectures", label: "التسجيلات الصوتية", count: counts.lectures },
+    { key: "files", label: "المستندات", count: counts.files },
   ];
 
   return (

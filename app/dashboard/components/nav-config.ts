@@ -122,7 +122,10 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "courses", icon: "subjects", label: "المواد", latin: "Subjects", href: "/dashboard/courses" },
       { id: "lessons", icon: "lessons", label: "الدروس", latin: "Lessons", href: "/lessons" },
       { id: "workspace", icon: "workspace", label: "مساحة العمل", latin: "Workspace", href: "/dashboard/workspace" },
-      { id: "lectures", icon: "lectures", label: "محاضراتي", latin: "My Lectures", href: "/lectures" },
+      // ⚠️ **التسمية مقصودة**: «التسجيلات الصوتية» مش «محاضراتي» — لأن
+      //    «المحاضرات» كانت بتستخدم لكل حاجة (صوتيات وملفات) وبتخلّي
+      //    الطالب ميتلخبط: فين أرفع الصوت وفين أرفع الـPDF؟
+      { id: "lectures", icon: "lectures", label: "التسجيلات الصوتية", latin: "Audio Lectures", href: "/lectures" },
       { id: "exams", icon: "exams", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
       { id: "slides", icon: "slides", label: "العروض", latin: "Slides", href: "/dashboard/slides" },
     ],

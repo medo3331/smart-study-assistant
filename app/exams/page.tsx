@@ -12,6 +12,13 @@
 import { type Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { ExamsHub } from "@/components/exams/ExamsHub";
+import {
+  EXAM_MAX_COUNT,
+  EXAM_MIN_COUNT,
+  EXAM_QUESTION_TYPES,
+  type ExamDifficulty,
+  type ExamQuestionType,
+} from "@/lib/ai/exam-review";
 
 export const metadata: Metadata = {
   title: "امتحاناتي وبنك الامتحانات — Magicly",
@@ -47,6 +54,12 @@ type ExamsInitial = {
   subjectId: string;
   lecture: string;
   dayId: string;
+  /** عدد الأسئلة (من المساعد) — 5..20. */
+  count: number;
+  /** أنواع الأسئلة المطلوبة (من المساعد) — فاضية = الافتراضي. */
+  types: ExamQuestionType[];
+  /** مستوى الصعوبة (من المساعد) — null = الافتراضي (متوسط). */
+  difficulty: ExamDifficulty | null;
 };
 
 export default async function ExamsPage({
@@ -68,6 +81,9 @@ export default async function ExamsPage({
     subjectId: str("subjectId", 64),
     lecture: str("lecture", 64),
     dayId: str("dayId", 64),
+    count: parseCount(str("count")),
+    types: parseTypes(str("types")),
+    difficulty: parseDifficulty(str("difficulty")),
   };
 
   const d = await getTaxonomyAndExams();
@@ -140,6 +156,36 @@ export default async function ExamsPage({
   );
 
   return <ExamsHub initial={initial}>{bankSlot}</ExamsHub>;
+}
+
+/* ------------------------------------------------------------------ */
+// محلّلات اختيار الطالب من الـURL (من المساعد) — حدود صارمة، من غير تخمين.
+
+/** عدد الأسئلة — عدد صحيح ضمن 5..20 (باقي = الافتراضي 10). */
+function parseCount(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value)) return 10;
+  if (value < EXAM_MIN_COUNT || value > EXAM_MAX_COUNT) return 10;
+  return value;
+}
+
+/** أنواع الأسئلة — قائمة مفصولة بفاصلة، الأنواع المعروفة بس. */
+function parseTypes(raw: string): ExamQuestionType[] {
+  if (!raw) return [];
+  const parts = raw
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter((part): part is ExamQuestionType =>
+      (EXAM_QUESTION_TYPES as readonly string[]).includes(part)
+    );
+  return Array.from(new Set(parts));
+}
+
+/** مستوى الصعوبة — easy/medium/hard بس. */
+function parseDifficulty(raw: string): ExamDifficulty | null {
+  const value = raw.trim().toLowerCase();
+  if (value === "easy" || value === "medium" || value === "hard") return value;
+  return null;
 }
 
 /* ------------------------------------------------------------------ */

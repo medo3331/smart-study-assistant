@@ -42,6 +42,11 @@ export async function runAiTask(taskId: "chat" | "explain" | "tutor", input: AiT
     messages,
     temperature,
     ...(maxTokens !== undefined ? { maxTokens } : {}),
+    // ⏱️ مهلة الطلب الواحد (اختياري) — المسارات الطويلة (توليد امتحان)
+    //    محتاجة مهلة أكبر من الافتراضي (20s). بنحدّها بسقف المنصة (120s).
+    ...(input.options?.timeoutMs !== undefined && Number.isFinite(Number(input.options.timeoutMs))
+      ? { timeoutMs: Math.min(Math.max(Math.floor(Number(input.options.timeoutMs)), 1_000), 120_000) }
+      : {}),
     usage: input.usage,
   });
 

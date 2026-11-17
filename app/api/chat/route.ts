@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser, checkRateLimit, clampText } from "@/lib/api-guard";
 import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
@@ -16,6 +17,12 @@ import { refreshModelStateCache } from "@/lib/ai/model-state";
 import { routeCandidates } from "@/lib/ai/routing";
 import { filterAccessibleModels, CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
+import {
+  buildExamAnswer,
+  buildExamHref,
+  detectExamRequestFromHistory,
+  EXAM_REQUEST_PROMPT_RULES,
+} from "@/lib/exam-request";
 
 export const maxDuration = 60;
 
@@ -116,6 +123,26 @@ export async function POST(req: Request) {
     // مصدر الحقيقة (التقدم والدرس) يُقرأ من حساب المستخدم نفسه.
     const studentContext = await getStudentContext(supabase, user.id, context ?? {});
     const latestMessage = safeMessages.at(-1)?.content ?? "";
+
+    // ── طلب امتحان ⇒ تنفيذ فوري (من غير سؤال توضيحي ومن غير نداء موديل)
+    //
+    // ⚠️ **التاريخ مش الرسالة الأخيرة**: المساعد كان بيدخل في حلقة مفرغة
+    //    («كام سؤال؟» → «5» → «المادة إيه؟» → «عربي» → «كام سؤال؟» تاني)
+    //    لأن كل نداء كان بيقرا آخر رسالة بس. بنجمع البيانات من كل
+    //    المحادثة: «عايز امتحان» + «5» + «عربي» ⇒ امتحان عربي من 5.
+    //
+    // ⚠️ **الشات مش form**: أول ما الطالب يطلب امتحان (حتى لو ناقصه عدد
+    //    أو مادة) بنبعتله زر المولّد فورًا وهو بيكمّل الباقي في الشاشة.
+    const examRequest = detectExamRequestFromHistory(safeMessages);
+    if (examRequest?.active) {
+      const answer = buildExamAnswer(examRequest, new URL(req.url).origin);
+      const savedId = await saveTurn(supabase, user.id, conversationId, latestMessage, answer);
+      return NextResponse.json({
+        choices: [{ message: { content: answer } }],
+        actions: [{ label: "افتح مولّد الامتحان", href: buildExamHref(examRequest) }],
+        ...(savedId ? { conversationId: savedId } : {}),
+      });
+    }
     const intentResult = classifyChatIntent(latestMessage, {});
     console.log("[CHAT DEBUG]", { intent: intentResult.intent, latestMessage: latestMessage.slice(0, 80) });
     const selectedMode = parseMode(mode, latestMessage, intentResult.intent);
@@ -177,11 +204,14 @@ export async function POST(req: Request) {
       console.warn("Persona prompt build failed, falling back to base system prompt:", e);
     }
     const combinedSystem = personaPrompt ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${system}` : system;
+    // 📝 قواعد طلب الامتحان — بتكمّل الكاشف: الطلب الناقص (ناقصه العدد مثلاً)
+    //    بيعدّي للموديل، والقواعد بتقولله اسأل سؤالًا واحدًا محددًا مش سلسلة.
+    const systemWithExamRules = `${combinedSystem}\n\n--- قواعد طلب الامتحان ---\n${EXAM_REQUEST_PROMPT_RULES}`;
     // systemInstruction (اختياري) — يُلحق هنا قبل محتوى المصدر عشان المصدر
     // يفضل آخر حاجة يقرأها الموديل (قرار محفوظ في السطر اللي بعده).
     const systemWithInstruction = systemInstruction
-      ? `${combinedSystem}\n\n--- مهمة خاصة ---\n${systemInstruction}`
-      : combinedSystem;
+      ? `${systemWithExamRules}\n\n--- مهمة خاصة ---\n${systemInstruction}`
+      : systemWithExamRules;
     // ⚠️ **محتوى المصدر** — بيتحقن **بعد** البرومبت الأساسي عشان يبقى
     //    آخر حاجة يقرأها الموديل (أقرب للرد) ⇒ بيلغي «المعلومة دي مش
     //    موجودة عندي» حتى لو موجودة في المصدر.
@@ -245,43 +275,13 @@ export async function POST(req: Request) {
 
     // الحفظ best-effort: لو migration المحادثات لسه ما اتشغلتش، الشات
     // يفضل شغّال ولا نحرم الطالب من الرد بسبب ميزة تاريخ إضافية.
-    let savedConversationId = conversationId;
-    try {
-      if (answer) {
-        if (savedConversationId) {
-          const { data: ownedConversation } = await supabase
-            .from("chat_conversations")
-            .select("id")
-            .eq("id", savedConversationId)
-            .eq("user_id", user.id)
-            .maybeSingle();
-          // معرف محادثة من حساب آخر لا يُستخدم أبدًا، حتى لو عرفه عميل
-          // خبيث؛ ننشئ جلسة جديدة بدل تلويث تاريخ المستخدم الآخر.
-          if (!ownedConversation) savedConversationId = "";
-        }
-        if (!savedConversationId) {
-          const { data: conversation } = await supabase
-            .from("chat_conversations")
-            .insert({ user_id: user.id, title: safeMessages.at(-1)?.content.slice(0, 80) || "محادثة جديدة" })
-            .select("id")
-            .single();
-          savedConversationId = conversation?.id ?? "";
-        }
-        if (savedConversationId) {
-          await supabase.from("chat_messages").insert([
-            { conversation_id: savedConversationId, user_id: user.id, role: "user", content: safeMessages.at(-1)?.content ?? "" },
-            { conversation_id: savedConversationId, user_id: user.id, role: "assistant", content: answer },
-          ]);
-          await supabase
-            .from("chat_conversations")
-            .update({ updated_at: new Date().toISOString() })
-            .eq("id", savedConversationId)
-            .eq("user_id", user.id);
-        }
-      }
-    } catch (saveError) {
-      console.warn("chat: could not save conversation", saveError);
-    }
+    const savedConversationId = await saveTurn(
+      supabase,
+      user.id,
+      conversationId,
+      safeMessages.at(-1)?.content ?? "",
+      answer
+    );
 
     return NextResponse.json({
       ...data,
@@ -294,5 +294,60 @@ export async function POST(req: Request) {
       { error: { message: "حصل خطأ غير متوقع أثناء الاتصال.", code: "INTERNAL_ERROR" } },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * حفظ دور المحادثة — best-effort (فشلها ما بيحرمش الطالب من الرد).
+ *
+ * ⚠️ **ليها دالة مستقلة**: المسار السريع (طلب امتحان مكتمل) بيرجّع من غير
+ *    نداء موديل، فلازم يحفظ الدور بنفس منطق المسار العادي.
+ *
+ * @returns معرف المحادثة بعد الحفظ، أو نص فاضي لو الحفظ فشل.
+ */
+async function saveTurn(
+  supabase: SupabaseClient,
+  userId: string,
+  conversationId: string,
+  userMessage: string,
+  answer: string
+) {
+  if (!answer) return "";
+  try {
+    let savedId = conversationId;
+    if (savedId) {
+      const { data: ownedConversation } = await supabase
+        .from("chat_conversations")
+        .select("id")
+        .eq("id", savedId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      // معرف محادثة من حساب آخر لا يُستخدم أبدًا، حتى لو عرفه عميل
+      // خبيث؛ ننشئ جلسة جديدة بدل تلويث تاريخ المستخدم الآخر.
+      if (!ownedConversation) savedId = "";
+    }
+    if (!savedId) {
+      const { data: conversation } = await supabase
+        .from("chat_conversations")
+        .insert({ user_id: userId, title: userMessage.slice(0, 80) || "محادثة جديدة" })
+        .select("id")
+        .single();
+      savedId = conversation?.id ?? "";
+    }
+    if (savedId) {
+      await supabase.from("chat_messages").insert([
+        { conversation_id: savedId, user_id: userId, role: "user", content: userMessage },
+        { conversation_id: savedId, user_id: userId, role: "assistant", content: answer },
+      ]);
+      await supabase
+        .from("chat_conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", savedId)
+        .eq("user_id", userId);
+    }
+    return savedId;
+  } catch (saveError) {
+    console.warn("chat: could not save conversation", saveError);
+    return "";
   }
 }

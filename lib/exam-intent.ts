@@ -242,7 +242,7 @@ function isSaneDayCount(days: number): boolean {
 }
 
 /** بيلاقي عدد مكتوب كلام جوه شظية. */
-function matchWordNumber(fragment: string): number | null {
+export function matchWordNumber(fragment: string): number | null {
   const f = loosen(fragment);
   for (const key of WORD_NUMBER_KEYS) {
     if (f === loosen(key) || f.startsWith(loosen(key))) return WORD_NUMBERS[key];
@@ -311,6 +311,7 @@ const SUBJECT_STOPWORDS = [
   "جاي", "عندي", "عندى", "ليا", "معايا", "هيكون", "هو", "دلوقتي", "خلال",
   "الخميس", "الجمعة", "الجمعه", "السبت", "الاحد", "الأحد", "الاتنين", "الإتنين",
   "التلات", "الثلاثاء", "الاربع", "الأربع", "الاربعاء", "الأربعاء", "شهر",
+  "من", "عن", "على", "بمادة", "مادة",
 ];
 
 /**
