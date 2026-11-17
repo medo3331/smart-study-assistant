@@ -1,4 +1,4 @@
-// "use client";
+"use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -23,7 +23,6 @@ import type {
   StoragePage,
   NotesOwner,
 } from "@/lib/notes/types";
-import type { Stroke } from "./CanvasInkPrototype";
 
 type Point = { x: number; y: number; pressure?: number };
 
@@ -80,6 +79,7 @@ type Notebook = {
   title: string;
   pages: NotebookPage[];
   currentPageId: string | null;
+  revision: number;
 };
 
 /** Create a new, empty page for the notebook. */
@@ -128,6 +128,7 @@ export default function CanvasInkPrototype({
     title: "My Notebook",
     pages: [],
     currentPageId: null,
+    revision: 0,
   });
 
   // ---- Page navigation state ----
@@ -150,9 +151,6 @@ export default function CanvasInkPrototype({
 
   // ---- canvas & context ----
   const containerRef2 = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const dprRef = useRef(1);
 
   // ---- low-level drawing helpers ----
   const drawSegment = useCallback(
@@ -227,7 +225,7 @@ export default function CanvasInkPrototype({
       };
       currentStrokeRef.current = stroke;
       strokesRef.current.push(stroke);
-      setSaveStatus("saving");
+      saveStatusRef("saving");
     },
     [tool, color, thickness, opacity]
   );
@@ -259,12 +257,12 @@ export default function CanvasInkPrototype({
   const handlePointerUp = useCallback(() => {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
-    setSaveStatus("idle");
+    saveStatusRef("idle");
   }, []);
 
   const handlePointerCancel = useCallback(() => {
     isDrawingRef.current = false;
-    setSaveStatus("idle");
+    saveStatusRef("idle");
   }, []);
 
   // ---- resize observer ----
@@ -281,14 +279,6 @@ export default function CanvasInkPrototype({
     };
   }, [resizeCanvas]);
 
-  // ---- save status effect ----
-  useEffect(() => {
-    if (saveStatus === "saving") {
-      const timer = setTimeout(() => setSaveStatus("saved"), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [saveStatus]);
-
   // ---- Stroke count (derived from strokesRef) ----
   const strokeCount = strokesRef.current.length;
 
@@ -303,31 +293,35 @@ export default function CanvasInkPrototype({
         if (nb) {
           const pagesPromises = nb.pageIds.map((pid) => storage.getPage(pid));
           const pages = await Promise.all(pagesPromises);
-          const renderedPages = pages.map((p) => {
-            const strokes: Stroke[] = (p.persistedSnapshot &&
-              "strokes" in p.persistedSnapshot &&
-              Array.isArray(p.persistedSnapshot.strokes)
-              ? p.persistedSnapshot.strokes
-              : []) as Stroke[];
-            return {
-              id: p.id,
-              template: p.template,
-              strokes,
-            };
-          });
+          const renderedPages = pages
+            .filter((p): p is StoragePage => p != null)
+            .map((p) => {
+              const persisted = p.persistedSnapshot;
+              let strokes: Stroke[] = [];
+              if (persisted != null && typeof persisted === "object" && "strokes" in persisted) {
+                const ps = persisted as { strokes: unknown };
+                if (Array.isArray(ps.strokes)) {
+                  strokes = ps.strokes as Stroke[];
+                }
+              }
+              return {
+                id: p.id,
+                template: p.template,
+                strokes,
+              };
+            });
           setNotebook({
             id: nb.id,
             ownerId: nb.ownerId,
             title: nb.title,
             pages: renderedPages,
             currentPageId: nb.currentPageId || null,
+            revision: nb.revision,
           });
-          if (nb.currentPageId) {
-            setCurrentPageIndex(
-              findPageIndex(nb.pages, nb.currentPageId)
-            );
-          } else if (nb.pages.length > 0) {
-            setCurrentPageIndex(0);
+          if (nb.currentPageId && nb.pageIds.includes(nb.currentPageId)) {
+              setCurrentPageIndex(nb.pageIds.indexOf(nb.currentPageId));
+            } else if (nb.pageIds.length > 0) {
+              setCurrentPageIndex(0);
           }
         } else {
           // No existing notebook – start fresh.
@@ -337,6 +331,7 @@ export default function CanvasInkPrototype({
             title: "My Notebook",
             pages: [],
             currentPageId: null,
+            revision: 0,
           });
         }
       } catch (e) {
@@ -348,6 +343,7 @@ export default function CanvasInkPrototype({
           title: "My Notebook",
           pages: [],
           currentPageId: null,
+          revision: 0,
         });
       }
     }
@@ -363,6 +359,7 @@ export default function CanvasInkPrototype({
       ;(async () => {
         if (!storage) return;
         const existingPage = await storage.getPage(currentPage.id);
+        if (existingPage == null) return;
         existingPage.template = currentPage.template;
         existingPage.persistedSnapshot = pageContentStrokes(
           currentPage.template,
@@ -371,9 +368,15 @@ export default function CanvasInkPrototype({
         existingPage.revision = (existingPage.revision || 0) + 1;
         await storage.putPage(existingPage);
         // Also update notebook page order.
-        const nb = { ...notebook, pageIds: notebook.pages.map((p) => p.id) };
-        await storage.putNotebook(nb as StorageNotebook);
-        setSaveStatus("saved");
+        const nb = {
+              ...notebook,
+              pageIds: notebook.pages.map((p) => p.id),
+              revision: (notebook as any).revision,
+              createdAt: (notebook as any).createdAt,
+              updatedAt: (notebook as any).updatedAt,
+            };
+        await storage.putNotebook(nb as unknown as StorageNotebook);
+        saveStatusRef("saved");
       })();
     }
     setCurrentPageIndex(idx);
@@ -400,6 +403,7 @@ export default function CanvasInkPrototype({
         ...prev,
         pages: newPages,
         currentPageId: newCurrentId,
+        revision: prev.revision,
       };
     });
     // Switch to the new page
@@ -427,9 +431,12 @@ export default function CanvasInkPrototype({
         prev.currentPageId === currentPage.id
           ? prev.pages[0]?.id || null
           : prev.currentPageId,
+      revision: prev.revision,
     }));
     setCurrentPageIndex(
-      findPageIndex(notebook.pages.filter((p) => p.id !== currentPage.id), notebook.currentPageId || null)
+      notebook.currentPageId != null
+        ? findPageIndex(notebook.pages.filter((p) => p.id !== currentPage.id), notebook.currentPageId)
+        : 0
     );
   };
 
@@ -437,10 +444,11 @@ export default function CanvasInkPrototype({
   const persistNotebook = async () => {
     if (!storage) return;
     try {
-      setSaveStatus("saving");
+      saveStatusRef("saving");
       // 1. Persist each page's strokes + template.
       for (const page of notebook.pages) {
         const existingPage = await storage.getPage(page.id);
+        if (existingPage == null) continue;
         existingPage.template = page.template;
         existingPage.persistedSnapshot = pageContentStrokes(
           page.template,
@@ -456,15 +464,16 @@ export default function CanvasInkPrototype({
         ownerId: notebook.ownerId,
         title: notebook.title,
         pageIds: notebook.pages.map((p) => p.id),
+        currentPageId: notebook.currentPageId,
         revision: (notebook.revision || 0) + 1,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       await storage.putNotebook(nb);
-      setSaveStatus("saved");
+      saveStatusRef("saved");
     } catch (e) {
       console.error("Failed to persist notebook:", e);
-      setSaveStatus("error");
+      saveStatusRef("error");
     }
   };
 
@@ -501,7 +510,7 @@ export default function CanvasInkPrototype({
     <button
       key={opt.id}
       type="button"
-      onClick={() => handleToolChange(opt.id)}
+      onClick={() => handleToolChange(opt.id as "pen" | "ink" | "pencil" | "highlighter")}
       className={`rounded px-2 py-1 text-sm ${
         tool === opt.id ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"
       }`}
@@ -539,16 +548,14 @@ export default function CanvasInkPrototype({
       <button
         type="button"
         onClick={() => setThickness((t) => Math.max(1, t - 1))}
-        className="rounded bg-gray-100 px-1 text-xs decrease"
-        decrease
+        className="rounded bg-gray-100 px-1 text-xs"
       >
         -
       </button>
       <button
         type="button"
         onClick={() => setThickness((t) => t + 1)}
-        className="rounded bg-gray-100 px-1 text-xs increase"
-        increase
+        className="rounded bg-gray-100 px-1 text-xs"
       >
         +
       </button>
@@ -587,21 +594,11 @@ export default function CanvasInkPrototype({
     </button>
   );
 
-  // ---- save status ----
-  const saveStatusDisplay = (
-    <div className="mt-2 text-sm">
-      {saveStatus === "saving" && <span className="text-yellow-600">Saving...</span>}
-      {saveStatus === "saved" && <span className="text-green-600">Saved</span>}
-      {saveStatus === "error" && <span className="text-red-500">Error</span>}
-      {saveStatus === "idle" && <span className="text-gray-500">Idle</span>}
-    </div>
-  );
-
   // ---- page navigation ----
   const pageNav = notebook.pages.length > 0 ? (
     <div className="mt-2 flex items-center gap-2">
       <span className="text-xs">
-        Page {findPageIndex(notebook.pages, notebook.currentPageId) + 1} of {notebook.pages.length}
+        Page {findPageIndex(notebook.pages, notebook.currentPageId || "") + 1} of {notebook.pages.length}
       </span>
       <button
         type="button"
@@ -677,9 +674,6 @@ export default function CanvasInkPrototype({
       {/* Eraser button */}
       {eraseBtn}
 
-      {/* Save status */}
-      {saveStatusDisplay}
-
       {/* Action: persist notebook (save button) */}
       {notebook.pages.length > 0 && (
         <button
@@ -690,10 +684,9 @@ export default function CanvasInkPrototype({
         >
           Save Notebook
         </button>
-      )
+      )}
 
-      {/* Drawing surface */}
-      <div className="relative h-[500px] w-full rounded border border-gray-300 bg-white overflow-hidden">
+      <div className="relative h-[500px] w-full rounded">
         <canvas
           ref={canvasRef}
           className="absolute inset-0"
@@ -707,7 +700,7 @@ export default function CanvasInkPrototype({
 
       {/* Instructions */}
       <p className="text-xs text-gray-500">
-        Draw with {tool}. Page {findPageIndex(notebook.pages, notebook.currentPageId) + 1} of{" "}{notebook.pages.length || 1}. Use color {color}, thickness {thickness}, opacity {opacity.toFixed(1)}.
+        Draw with {tool}. Page {findPageIndex(notebook.pages, notebook.currentPageId || "") + 1} of{" "}{notebook.pages.length || 1}. Use color {color}, thickness {thickness}, opacity {opacity.toFixed(1)}.
       </p>
     </div>
   );

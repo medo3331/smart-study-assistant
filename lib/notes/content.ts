@@ -13,7 +13,7 @@
 // This module is shared by the IndexedDB storage and the in-memory double so
 // both make exactly the same decision for the same inputs.
 
-import type { StorageNotebook, StoragePage } from "./types";
+import type { StorageNotebook, StoragePage, Stroke } from "./types";
 
 /** Normalise a revision: legacy records without one are revision 0. */
 export function normalizeRevision(value: unknown): number {
