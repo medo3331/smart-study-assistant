@@ -122,6 +122,32 @@ export async function createExamSession(
     return finishCreate(fallback.data);
   }
 
+  // 🛟 **شبكة أمان**: الـRPC الجديد موجود بس فيه خطأ **مستوى المخطط**
+  //    (مثل bug الـ`array_length` ⇒ 23502 not-null) ⇒ بنرجع للـRPC القديم
+  //    (محاضرات بس) عشان المسار القديم يفضل شغال فورًا.
+  //
+  // ⚠️ الـfallback **للمحاضرات بس**: المستندات محتاجة الـRPC الجديد
+  //    (المصلّح) ⇒ لو المستندات موجودة بنرجع رسالة صريحة مش 500.
+  if (error && isSchemaLevelError(error)) {
+    console.error(
+      '[exam-sessions] create_exam_session_with_sources_reserve failed at schema level —',
+      { code: error.code, message: error.message }
+    );
+    if (documentIds.length > 0) {
+      return {
+        ok: false,
+        error: 'exam documents source is not available yet (migration 49 needs re-apply)',
+        code: 'SOURCES_UNAVAILABLE',
+      };
+    }
+    const fallback = await supabase.rpc('create_exam_session_with_reserve', {
+      p_mode: params.mode,
+      p_lecture_ids: lectureIds,
+    });
+    if (!fallback.error) return finishCreate(fallback.data);
+    return mapCreateError(fallback.error);
+  }
+
   if (error) {
     return mapCreateError(error);
   }
@@ -163,6 +189,37 @@ export function isMissingColumnError(error: { code?: string; message?: string })
   return (
     message.includes('column') &&
     (message.includes('does not exist') || message.includes('not found in schema'))
+  );
+}
+
+/**
+ * خطأ **مستوى المخطط/الدالة** — مش خطأ المستخدم ولا الميزانية.
+ *
+ * ⚠️ **ليه مهم**: الـRPC الجديد (db/49) كان فيه bug في `array_length`
+ *    (بيرجّع NULL للمصفوفة الفاضية) ⇒ `total_lectures` بتبقى NULL ⇒
+ *    انتهاك `not null` ⇒ **500 عند إنشاء أي امتحان**. ده خطأ **مخطط**،
+ *    فبنعرفه وبنتعامل معاه (fallback / رسالة واضحة) بدل 500 غامض.
+ *
+ * ⚠️ **الأكواد**: `23502` (not_null_violation) · `42883` · `42703` ·
+ *    `42P01` (undefined_table) · `PGRST202`/`PGRST204`/`PGRST205`.
+ */
+export function isSchemaLevelError(error: { code?: string; message?: string }): boolean {
+  if (
+    error.code === "23502" ||
+    error.code === "42883" ||
+    error.code === "42703" ||
+    error.code === "42P01" ||
+    error.code === "PGRST202" ||
+    error.code === "PGRST204" ||
+    error.code === "PGRST205"
+  ) {
+    return true;
+  }
+  const message = (error.message ?? "").toLowerCase();
+  return (
+    message.includes("null value in column") ||
+    message.includes("violates not-null constraint") ||
+    message.includes("could not find the function")
   );
 }
 

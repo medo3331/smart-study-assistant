@@ -107,7 +107,12 @@ begin
     into v_document_ids
     from unnest(coalesce(p_document_ids, '{}'::uuid[])) as ids(id);
 
-  v_source_count := array_length(v_lecture_ids, 1) + array_length(v_document_ids, 1);
+  -- ⚠️ **`cardinality` مش `array_length`**: في Postgres `array_length('{}', 1)`
+  --    بترجّع **NULL** (مش 0) ⇒ `NULL + 1 = NULL` ⇒ `total_lectures` بتبقى
+  --    NULL ⇒ انتهاك `not null` على `exam_sessions` ⇒ **500** عند إنشاء
+  --    أي امتحان (محاضرة بس أو مستند بس أو الاتنين).
+  --    `cardinality` بترجّع 0 للمصفوفة الفاضية ⇒ كل الحسابات سليمة.
+  v_source_count := cardinality(v_lecture_ids) + cardinality(v_document_ids);
   if v_source_count < 1 or v_source_count > 3 then
     raise exception 'source count must be 1..3 after dedup, got %', v_source_count;
   end if;
@@ -123,7 +128,9 @@ begin
   where lec.id = any(v_lecture_ids)
     and lec.user_id = v_user_id;
 
-  if v_owned_lectures <> array_length(v_lecture_ids, 1) then
+  -- ⚠️ `cardinality` مش `array_length` — نفس السبب (NULL يخلي الفحص
+  --    `0 <> NULL` ⇒ NULL ⇒ الفحص بيتخطّى والمرور بيتم!).
+  if v_owned_lectures <> cardinality(v_lecture_ids) then
     raise exception 'one or more lectures not found or not owned';
   end if;
 
@@ -136,7 +143,7 @@ begin
   where doc.id = any(v_document_ids)
     and doc.user_id = v_user_id;
 
-  if v_owned_documents <> array_length(v_document_ids, 1) then
+  if v_owned_documents <> cardinality(v_document_ids) then
     raise exception 'one or more documents not found or not owned';
   end if;
 
@@ -199,7 +206,7 @@ begin
     v_user_id,
     null::uuid,
     doc.id,
-    (array_length(v_lecture_ids, 1) + row_number() over (order by d.ordinality))::int,
+    (cardinality(v_lecture_ids) + row_number() over (order by d.ordinality))::int,
     'queued',
     coalesce(kb.total_chars, 0)
   from unnest(v_document_ids) with ordinality as d(id, ordinality)
