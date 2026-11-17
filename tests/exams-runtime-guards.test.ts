@@ -112,8 +112,10 @@ describe("المرونة — تقسيم النداءات وإعادة المحا
 
   it("Groq: withRetry + retry-after + تدوير المفاتيح", () => {
     const groq = read("lib/ai/groq.ts");
-    expect(groq).toContain("export async function withRetry");
-    expect(groq).toContain("export function parseRetryAfterMs");
+    // ⚠️ `withRetry` / `parseRetryAfterMs` بقوا في `provider-retry` (مشترك بين
+    //    المزوّدات) وبيتعاد تصديرهم من `groq.ts` ⇒ نفس الـAPI العام.
+    expect(groq).toContain('from "./provider-retry"');
+    expect(groq).toContain("export { backoffDelayMs, isRetryableProviderStatus, parseRetryAfterMs, withRetry }");
     expect(groq).toContain("GROQ_RETRY_MAX_MS = 30_000");
     expect(groq).toContain('response.headers.get("retry-after")');
     // ⚠️ التدوير لازم يكون **جوه نفس الطلب** (مش طلب جديد).
@@ -212,5 +214,69 @@ describe("التسميات — فصل الصوتيات عن المستندات",
     expect(page).toContain("المحاضرات الصوتية");
     expect(page).toContain("المستندات");
     expect(page).toContain('resolved?.tab === "documents"');
+  });
+});
+
+describe("🔥 الـhotfix — 500/503 في مسار الامتحان", () => {
+  it("راوت الإنشاء: try/catch شامل + لوج مفصّل (error/stack/context)", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("logCrash");
+    expect(route).toContain("stack:");
+    expect(route).toContain("context,");
+    expect(route).toMatch(/catch \(error\) \{/);
+  });
+
+  it("راوت الإنشاء: تحقق من الـbody قبل أي شغل (lectureIds + documentIds)", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("validateCreateBody");
+    expect(route).toContain("lectureIds or documentIds required");
+    expect(route).toContain("max 3 sources");
+    expect(route).toContain("invalid JSON body");
+  });
+
+  it("راوت المعالجة: try/catch شامل + لوج مفصّل", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain("logCrash");
+    expect(route).toContain("summarizeProviderFailure");
+    expect(route).toMatch(/catch \(error\) \{/);
+  });
+
+  it("رسائل الطالب: كودات واضحة بدل 500 غامض", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain("AI_RATE_LIMITED");
+    expect(route).toContain("AI_PROVIDER_UNAVAILABLE");
+    expect(route).toContain("AI_TIMEOUT");
+    expect(route).toContain("retry_after");
+  });
+
+  it("استقلال المسارات عن الـschema (عمود document_id ناقص ⇒ fallback)", () => {
+    const sessions = read("lib/ai/exam-sessions.ts");
+    expect(sessions).toContain("isMissingColumnError");
+    expect(sessions).toContain("PGRST204");
+    expect(sessions).toContain("selectSessionItems");
+    expect(sessions).toContain("selectExamItem");
+    // ⚠️ الـRPC مفقود (PGRST202 = اللي بيرجعه Supabase) ⇒ fallback مش 500.
+    expect(sessions).toContain("PGRST202");
+  });
+
+  it("OpenRouter بقى فيه إعادة محاولة (كان من غيرها ⇒ 503 فوري)", () => {
+    const openrouter = read("lib/ai/openrouter.ts");
+    expect(openrouter).toContain("withRetry");
+    expect(openrouter).toContain("isRetryableProviderStatus");
+  });
+
+  it("المزوّدات بتشارك نفس سياسة الإعادة", () => {
+    const shared = read("lib/ai/provider-retry.ts");
+    expect(shared).toContain("export async function withRetry");
+    expect(shared).toContain("500");
+    const groq = read("lib/ai/groq.ts");
+    expect(groq).toContain('from "./provider-retry"');
+  });
+
+  it("الواجبة: رسالة مختلفة لكل كود + احترام retry_after", () => {
+    const runner = read("components/exams/ExamRunner.tsx");
+    expect(runner).toContain("AI_RATE_LIMITED");
+    expect(runner).toContain("AI_TIMEOUT");
+    expect(runner).toContain("retry_after");
   });
 });

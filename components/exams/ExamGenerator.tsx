@@ -137,6 +137,12 @@ function mapCreateError(
       };
     case "VALIDATION_SPEC":
       return { message: "اختيار شكل الامتحان (أنواع/صعوبة/عدد) غير صالح.", transient: false };
+    case "SOURCES_UNAVAILABLE":
+      // ⚠️ الـmigration 49 لسه متطبّقةش على القاعدة ⇒ المستندات مش متاحة.
+      return {
+        message: "المستندات لسه مفعّلةش على السيرفر — جرّب المحاضرات الصوتية.",
+        transient: false,
+      };
     default:
       return {
         message: data?.error || "حصل خطأ أثناء إنشاء الامتحان — جرّب تاني.",

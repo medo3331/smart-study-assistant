@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/api-guard";
+import { selectSessionItems } from "@/lib/ai/exam-sessions";
 
 /**
  * GET /api/exam-sessions/[id] — حالة الجلسة وبنودها.
@@ -33,7 +34,8 @@ type SessionRow = {
 type ItemRow = {
   id: string;
   lecture_id: string | null;
-  document_id: string | null;
+  // ⚠️ اختياري: بييجي بس لو الـmigration 49 متطبّقة في القاعدة.
+  document_id?: string | null;
   ordinal: number;
   status: string;
   attempt_count: number;
@@ -76,21 +78,29 @@ export async function GET(
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const { data: items, error: itemsError } = await supabase
-    .from("exam_session_items")
-    .select(
-      "id, lecture_id, document_id, ordinal, status, attempt_count, transcript_chars, chunk_count, result_json, error_code, error_message, started_at, completed_at"
-    )
-    .eq("session_id", id)
-    .eq("user_id", user.id)
-    .order("ordinal", { ascending: true });
+  // ⚠️ **مستقل عن الـschema**: لو الـmigration 49 (عمود `document_id`) لسه
+  //    متطبّقةش ⇒ PostgREST بيرجّع 42703 ⇒ كان 500 في صفحة حالة
+  //    الامتحان (وهي الصفحة اللي بتتحدّث كل ثانية). دلوقتي بنرجع
+  //    للاستعلام القديم لو العمود مش موجود.
+  const { rows: items, error: itemsError } = await selectSessionItems(supabase, {
+    sessionId: id,
+    userId: user.id,
+    columns:
+      "id, lecture_id, ordinal, status, attempt_count, transcript_chars, chunk_count, result_json, error_code, error_message, started_at, completed_at",
+  });
 
   if (itemsError) {
-    console.warn("[exam-sessions] state items read failed", itemsError.message);
+    console.error("[exam-sessions] state items read failed", {
+      message:
+        typeof (itemsError as { message?: unknown }).message === "string"
+          ? (itemsError as { message: string }).message
+          : String(itemsError),
+      code: (itemsError as { code?: unknown }).code,
+    });
     return NextResponse.json({ error: "INTERNAL" }, { status: 500 });
   }
 
-  const rows = (items ?? []) as ItemRow[];
+  const rows = items as ItemRow[];
   const completedLectures = rows.filter((item) => item.status === "ready").length;
   const lastCompletedAt = rows.reduce<string | null>((latest, item) => {
     if (!item.completed_at) return latest;
@@ -120,7 +130,7 @@ export async function GET(
     items: rows.map((item) => ({
       id: item.id,
       lecture_id: item.lecture_id,
-      document_id: item.document_id,
+      document_id: item.document_id ?? null,
       // 📄/🎙️ نوع المصدر — عشان الواجهة تقول «مستند ١» مش «محاضرة ١».
       source_kind: item.document_id ? "document" : "recording",
       ordinal: item.ordinal,

@@ -30,10 +30,28 @@ type SessionState = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function mapProcessError(status: number, data: { error?: string; detail?: string } | null): string {
+function mapProcessError(
+  status: number,
+  data: { error?: string; detail?: string; retry_after?: number } | null
+): string {
   if (status === 429) return "ميزانية الامتحان خلصت — جرّب امتحانًا أصغر أو بكرة.";
   // ⚠️ 503 = المزوّد اتعيط (كوتة/ضغط) — مؤقت، والطالب يقدر يعيد المحاولة.
-  if (status === 503) return "السيرفر مشغول جداً حالياً — جرب تاني بعد شوية.";
+  //    كل كود ليه رسالة مختلفة عشان الطالب يعرف يستنى ولا يغيّر المصدر.
+  if (status === 503) {
+    switch (data?.error) {
+      case "AI_RATE_LIMITED":
+        return "الكوتة على مزوّد الذكاء الاصطناعي خلصت — استنى دقيقة وجرّب تاني.";
+      case "AI_TIMEOUT":
+        return "الطلب اتأخر وقت التوليد — جرّب تاني بعد شوية.";
+      case "AI_EMPTY_RESPONSE":
+        return "الموديل رجّع رد فاضي — جرّب تاني.";
+      case "SOURCE_TABLE_MISSING":
+      case "SOURCE_UNAVAILABLE":
+        return "المستندات لسه مفعّلةش على السيرفر — جرّب المحاضرات الصوتية.";
+      default:
+        return "السيرفر مشغول جداً حالياً — جرب تاني بعد شوية.";
+    }
+  }
   if (status === 502) return "الخدمة رجعت خطأ أثناء التوليد — جرّب تاني.";
   if (status === 402) return "رصيدك مش كافٍ.";
   if (status === 404) return "الجلسة مش موجودة.";
@@ -117,6 +135,7 @@ export function ExamRunner({
             const data = (await processRes.json().catch(() => null)) as {
               error?: string;
               detail?: string;
+              retry_after?: number;
             } | null;
 
             //423 = مشغول/lease ضاع (عامل تاني) أو محاولات خلصت — نكمّل الدور.
@@ -140,7 +159,13 @@ export function ExamRunner({
                 setErrorMessage(mapProcessError(processRes.status, data));
                 return;
               }
-              await sleep(2000);
+              // ⏱️ بنحترم `retry_after` اللي السيرفر بيبعته (30–60s) عشان
+              //    من가고ش نعيد الطلب قبل ما المزوّد يforkه كمان.
+              const hint = Math.min(
+                Math.max(Number(data?.retry_after ?? 3), 2),
+                60
+              );
+              await sleep(hint * 1000);
               continue;
             }
             //429 = سقف الميزانية — كله متوقف، الطالب يستنى/يغيّر.

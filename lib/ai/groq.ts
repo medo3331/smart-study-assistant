@@ -1,6 +1,20 @@
 import { GROQ_MODELS } from "../ai-config";
 import type { AiChatPayload, AiChatRequest, AiChatResponse, AiMediaAnalysisRequest, AiMediaProvider, AiTextProvider } from "./types";
 import { AiProviderError } from "./types";
+import {
+  backoffDelayMs,
+  isRetryableProviderStatus,
+  parseRetryAfterMs,
+  withRetry,
+  type WithRetryOptions,
+} from "./provider-retry";
+
+/**
+ * ♻️ إعادة التصدير — الـAPI العام في `provider-retry` (مشترك بين المزوّدات).
+ * التصدير من هنا برضه عشان الـimports القديمة (والاختبارات) تبقى شغالة.
+ */
+export { backoffDelayMs, isRetryableProviderStatus, parseRetryAfterMs, withRetry };
+export type { WithRetryOptions };
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -64,107 +78,11 @@ export class GroqHttpError extends Error {
   }
 }
 
-/**
- * يقرأ هيدر `retry-after` — رقم ثواني أو تاريخ HTTP.
- *
- * ⚠️ **ليه مهم**: المزوّد بيقول us متى نرجع بالظبط. بنستخدم قيمته بدل
- *    الحساب اليدوي (زي ما طلب المواصفات) — بس بنحدّها بسقف 30 ثانية.
- */
-export function parseRetryAfterMs(
-  header: string | null | undefined,
-  now: number = Date.now()
-): number | null {
-  if (typeof header !== "string") return null;
-  const trimmed = header.trim();
-  if (!trimmed) return null;
-
-  const seconds = Number(trimmed);
-  if (Number.isFinite(seconds)) {
-    return Math.max(0, Math.round(seconds * 1000));
-  }
-
-  const date = Date.parse(trimmed);
-  if (Number.isNaN(date)) return null;
-  return Math.max(0, date - now);
-}
-
-/**
- * مدة الانتظار قبل المحاولة رقم `attempt` (1 = بعد أول فشل).
- *
- * - لو فيه `retry-after` ⇒ بنستخدمه (محدود بالسقف).
- * - وإلا ⇒ تباعد أسي: base × 2^(attempt-1) محدود بالسقف (1s, 2s, 4s, … 30s).
- */
-export function backoffDelayMs(
-  attempt: number,
-  retryAfterMs?: number | null,
-  baseMs: number = GROQ_RETRY_BASE_MS,
-  maxMs: number = GROQ_RETRY_MAX_MS
-): number {
-  if (typeof retryAfterMs === "number" && Number.isFinite(retryAfterMs)) {
-    return Math.min(Math.max(retryAfterMs, 0), maxMs);
-  }
-  const exponential = baseMs * 2 ** Math.max(0, attempt - 1);
-  return Math.min(exponential, maxMs);
-}
-
-/** الحالات المؤقتة اللي تستاهل إعادة محاولة: 429 (كوتة) + بوابات 5xx. */
-export function isRetryableProviderStatus(status: number): boolean {
-  return status === 429 || status === 502 || status === 503 || status === 504;
-}
-
-export interface WithRetryOptions {
-  /** عدد المحاولات الكلي (الأولى + الإعادات) — افتراضي 3. */
-  maxAttempts?: number;
-  /** أساس التباعد (ms). */
-  baseDelayMs?: number;
-  /** سقف الانتظار (ms). */
-  maxDelayMs?: number;
-  /** دالة الانتظار (للاختبارات). */
-  sleep?: (ms: number) => Promise<void>;
-  /** هل الخطأ ده مؤقت ويستاهل إعادة محاولة؟ */
-  isRetryable?: (error: unknown) => boolean;
-  /** callback قبل كل إعادة محاولة (لوجز/قياس). */
-  onRetry?: (info: { attempt: number; delayMs: number; error: unknown }) => void;
-}
-
-/**
- * `withRetry` — يلفّ أي استدعاء API بإعادة محاولة وتباعد أسي.
- *
- * ⚠️ **الترتيب مهم**: إعادة المحاولة بتلفّ **نفس الطلب** اللي فيه
- *    تدوير المفاتيح — يعني: 429 على مفتاح ⇒ بنجرب المفتاح التاني **في نفس
- *    الطلب**؛ ولو كل المفاتيح اتعيطت ⇒ بنستنى (retry-after أو 1s/2s/4s)
- *    وبنعيد المحاولة من جديد.
- */
-export async function withRetry<T>(
-  operation: (attempt: number) => Promise<T>,
-  options: WithRetryOptions = {}
-): Promise<T> {
-  const maxAttempts = Math.max(1, Math.trunc(options.maxAttempts ?? GROQ_MAX_ATTEMPTS));
-  const baseDelayMs = Math.max(0, options.baseDelayMs ?? groqRetryBaseMs());
-  const maxDelayMs = Math.max(0, options.maxDelayMs ?? GROQ_RETRY_MAX_MS);
-  const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const isRetryable =
-    options.isRetryable ??
-    ((error: unknown) => {
-      const status = (error as { status?: unknown } | null)?.status;
-      return typeof status === "number" && isRetryableProviderStatus(status);
-    });
-
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      return await operation(attempt);
-    } catch (error) {
-      lastError = error;
-      if (attempt >= maxAttempts || !isRetryable(error)) throw error;
-      const retryAfterMs = (error as { retryAfterMs?: number | null } | null)?.retryAfterMs ?? null;
-      const delayMs = backoffDelayMs(attempt, retryAfterMs, baseDelayMs, maxDelayMs);
-      options.onRetry?.({ attempt, delayMs, error });
-      await sleep(delayMs);
-    }
-  }
-  throw lastError;
-}
+/* ------------------------------------------------------------------
+ * ♻️ `withRetry` / `parseRetryAfterMs` / `backoffDelayMs` /
+ *    `isRetryableProviderStatus` —敗 من `provider-retry` (مشترك بين
+ *    المزوّدات) وبمُصدَّرين فوق. نسخة واحدة من السلوك في كل المشروع.
+ * ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
 /* تدوير المفاتيح داخل العملية الواحدة                                 */
@@ -275,6 +193,9 @@ export class GroqProvider implements AiTextProvider, AiMediaProvider {
     return withRetry(
       async (attempt) => this.callGroqWithKeys({ input, model, timeoutMs, attempt }),
       {
+        // ⚠️ أساس التباعد من البيئة (`GROQ_RETRY_BASE_MS`) — بيخلّي
+        //    الاختبارات سريعة وأي تشغيل بإعدادات مختلفة شغال.
+        baseDelayMs: groqRetryBaseMs(),
         isRetryable: (error) => isRetryableGroqError(error),
         onRetry: ({ attempt: nextAttempt, delayMs, error }) => {
           console.warn("[ai/groq] retrying after transient failure", {

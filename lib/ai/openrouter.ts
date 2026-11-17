@@ -10,6 +10,7 @@ import type {
   AiTextProvider,
 } from "./types";
 import { AiProviderError } from "./types";
+import { withRetry, isRetryableProviderStatus } from "./provider-retry";
 
 /**
  * OpenRouter عبر واجهته المتوافقة مع OpenAI — مزوّد اختياري بالكامل.
@@ -146,6 +147,35 @@ export class OpenRouterProvider implements AiTextProvider, AiMediaProvider {
       console.error("ai/openrouter: OPENROUTER_API_KEY غير معرف");
       throw new AiProviderError("OpenRouter is not configured", 503, this.name);
     }
+
+    // 🔁 إعادة المحاولة: 429/5xx مؤقتة ⇒ نعيد المحاولة بتباعد أسي
+    //    (1s ⇒ 2s) قبل ما نرمي. من غيرها كان أي تعطّل لحظي بيخسر
+    //    الطلب كله وبيطلع «كل المزوّدات فشلوا».
+    return withRetry(
+      async (attempt) => this.completeChatOnce(input, apiKey, attempt),
+      {
+        isRetryable: (error) => {
+          const status = (error as { status?: unknown } | null)?.status;
+          return typeof status === "number" && isRetryableProviderStatus(status);
+        },
+        onRetry: ({ attempt: nextAttempt, delayMs, error }) => {
+          console.warn("[ai/openrouter] retrying after transient failure", {
+            attempt: nextAttempt,
+            delayMs,
+            status: (error as { status?: number }).status,
+          });
+        },
+      }
+    );
+  }
+
+  /** محاولة واحدة لـOpenRouter (من غير إعادة محاولة — دي بتاخد careOfها). */
+  private async completeChatOnce(
+    input: AiChatRequest & { imageDataUrl?: string },
+    apiKey: string,
+    attempt = 1
+  ): Promise<AiChatResponse> {
+    void attempt;
 
     // الرؤية: لو فيه صورة مبعوتة، آخر رسالة user تتحول لمحتوى multimodal.
     let messages: unknown[] = input.messages;

@@ -130,15 +130,158 @@ export async function createExamSession(
 }
 
 /**
- * الـRPC مش موجود في القاعدة (42883) — يعني الـmigration لسه متطبّقةش.
+ * الـRPC مش موجود في القاعدة — يعني الـmigration (49) لسه متطبّقةش.
+ *
+ * ⚠️ **الأكواد اللي بنشوفها**:
+ *   - `42883`  = undefined_function (أораكل/Postgres).
+ *   - `PGRST202` = «Could not find the function … in the schema cache»
+ *     ← ده اللي بيرجعه **Supabase/PostgREST** فعلاً (اللي بنستخدمه).
+ *     ⚠️ لو ما اتعاملناش معاه ⇒ **كل إنشاء امتحان بيرجع 500**-production.
  *
  * ⚠️ **ليه fallback**: المسار القديم (محاضرات بس) لازم يشتغل زي ما كان،
  *    حتى لو الـmigration لسه على الـstaging/production.
  */
 function isMissingRpc(error: { code?: string; message?: string }): boolean {
-  if (error.code === '42883') return true;
+  if (error.code === '42883' || error.code === 'PGRST202') return true;
   const message = (error.message ?? '').toLowerCase();
-  return message.includes('undefined_function') || message.includes('does not exist');
+  return (
+    message.includes('undefined_function') ||
+    message.includes('could not find the function') ||
+    message.includes('does not exist')
+  );
+}
+
+/**
+ * العمود مش موجود في الجدول (schema drift) — الـmigration لسه متطبّقةش.
+ *
+ * ⚠️ **الأكواد**: `42703` (undefined_column) · `PGRST204` («Could not find the
+ *    'document_id' column» من PostgREST).
+ */
+export function isMissingColumnError(error: { code?: string; message?: string }): boolean {
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('column') &&
+    (message.includes('does not exist') || message.includes('not found in schema'))
+  );
+}
+
+/** صف بند جلسة (الحقول الاختياريةDependent على الـmigration). */
+export type ExamSessionItemRow = {
+  id: string;
+  lecture_id: string | null;
+  document_id?: string | null;
+  ordinal: number;
+  status: ExamItemStatus;
+  attempt_count?: number;
+  transcript_chars?: number | null;
+  chunk_count?: number | null;
+  result_json?: unknown;
+  error_code?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+/**
+ * يقرأ بنود الجلسة **بشكل مستقل عن الـschema**.
+ *
+ * ⚠️ **ليه**: بعد إضافة `document_id` (db/49) لازم الاستعلام يفضل شغال
+ *    لو الـmigration لسه متطبّقةش ⇒ PostgREST بيرجّع 42703 ⇒ **500 في كل
+ *    مسار الامتحان** (إنشاء/قراءة/توليد). فبنجرب العمود الأول، ولو مش
+ *    موجود نرجع للاستعلام القديم (محاضرات بس) بدل ما نكسر المسار كله.
+ *
+ * ⚠️ `documentSupport = false` ⇒ الـقاعدة لسه قبل الـmigration ⇒ البنود
+ *    كلها محاضرات (والمستندات مش متاحة).
+ */
+export async function selectSessionItems(
+  supabase: SupabaseClient,
+  params: { sessionId: string; userId: string; columns?: string }
+): Promise<{ rows: ExamSessionItemRow[]; documentSupport: boolean; error: unknown }> {
+  const base = params.columns ?? 'id, lecture_id, ordinal, status';
+
+  const withDocument = await supabase
+    .from('exam_session_items')
+    .select(`${base}, document_id`)
+    .eq('session_id', params.sessionId)
+    .eq('user_id', params.userId)
+    .order('ordinal', { ascending: true });
+
+  if (!withDocument.error) {
+    // ⚠️ cast عبر `unknown`: الـselect مبني من متغير فـTS بيستنتج نوع
+    //    غريب (ParserError[]) — والمشروع مافيش أنواع Supabase مولّدة.
+    return {
+      rows: ((withDocument.data ?? []) as unknown) as ExamSessionItemRow[],
+      documentSupport: true,
+      error: null,
+    };
+  }
+
+  if (isMissingColumnError(withDocument.error)) {
+    // ⚠️ الـmigration (49) لسه متطبّقةش ⇒ بنرجع للاستعلام القديم.
+    console.warn(
+      '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
+      withDocument.error.message
+    );
+    const legacy = await supabase
+      .from('exam_session_items')
+      .select(base)
+      .eq('session_id', params.sessionId)
+      .eq('user_id', params.userId)
+      .order('ordinal', { ascending: true });
+    return {
+      rows: ((legacy.data ?? []) as unknown) as ExamSessionItemRow[],
+      documentSupport: false,
+      error: legacy.error ?? null,
+    };
+  }
+
+  return { rows: [], documentSupport: false, error: withDocument.error };
+}
+
+/**
+ * يقرأ بند واحد (للراوت المعالجة) — **مستقل عن الـschema** مثل الأعلى.
+ */
+export async function selectExamItem(
+  supabase: SupabaseClient,
+  params: { sessionId: string; itemId: string; userId: string }
+): Promise<{ item: ExamSessionItemRow | null; documentSupport: boolean; error: unknown }> {
+  const withDocument = await supabase
+    .from('exam_session_items')
+    .select('id, session_id, lecture_id, document_id, status')
+    .eq('id', params.itemId)
+    .eq('session_id', params.sessionId)
+    .eq('user_id', params.userId)
+    .maybeSingle();
+
+  if (!withDocument.error) {
+    return {
+      item: (withDocument.data ?? null) as ExamSessionItemRow | null,
+      documentSupport: true,
+      error: null,
+    };
+  }
+
+  if (isMissingColumnError(withDocument.error)) {
+    console.warn(
+      '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
+      withDocument.error.message
+    );
+    const legacy = await supabase
+      .from('exam_session_items')
+      .select('id, session_id, lecture_id, status')
+      .eq('id', params.itemId)
+      .eq('session_id', params.sessionId)
+      .eq('user_id', params.userId)
+      .maybeSingle();
+    return {
+      item: (legacy.data ?? null) as ExamSessionItemRow | null,
+      documentSupport: false,
+      error: legacy.error ?? null,
+    };
+  }
+
+  return { item: null, documentSupport: false, error: withDocument.error };
 }
 
 /** ترجمة خطأ الـRPC ل نتيجة typed (نفس خرائط الراوت). */

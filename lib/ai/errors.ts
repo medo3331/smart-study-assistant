@@ -104,6 +104,86 @@ function mediaAwarePublicError(error: unknown): AiPublicError | undefined {
 }
 
 /**
+ * 🧾 ملخّص فشل المزوّدات — بيقول **ليه** فشل بالظبط.
+ *
+ * ⚠️ **ليه محتاج**: الخطأ اللي بيوصل للراوت بعد استنزاف كل المرشحين هو
+ *    `AiRouteError` — وهو **مالوش** `status` (الـstatus جوه `reasons`).
+ *    فالراوت اللي بيفحص `error.status` بيلاقي `undefined` وبيمسب 500/502
+ *    عشوائي. هنا بنستخرج الأرقام الحقيقية.
+ *
+ * ⚠️ `reasons` بتاخد شكل `"HTTP 429"` أو `"EMPTY_RESPONSE"` ⇒ بنحلّلها.
+ */
+export type ProviderFailureSummary = {
+  /** أعلى حالة HTTP شفناها (أول حالة حقيقية). */
+  status?: number;
+  /** سبب أدق لو معروف (EMPTY_RESPONSE / TIMEOUT). */
+  reasonCode?: string;
+  /** كل المحاولات: المزوّد + السبب (آمن للوجز). */
+  attempts: Array<{ provider: string; reason: string }>;
+  /** كل المحاولات كانت 429 (كوتة)؟ */
+  allRateLimited: boolean;
+  /** فيه مهلة (timeout)؟ */
+  hasTimeout: boolean;
+  /** فيه خطأ 5xx من المزوّد؟ */
+  hasServerError: boolean;
+};
+
+/** بيستخرج رقم الحالة من نص زي `"HTTP 429"`. */
+export function parseAttemptStatus(reason: string | undefined): number | undefined {
+  if (!reason) return undefined;
+  const match = /HTTP\s+(\d{3})/i.exec(reason);
+  if (match) return Number(match[1]);
+  if (/TIMEOUT/i.test(reason)) return 504;
+  if (/EMPTY_RESPONSE/i.test(reason)) return 200;
+  return undefined;
+}
+
+/**
+ * يستخلص ملخّص الفشل من أي خطأ (راوتر أو مزوّد).
+ *
+ * ⚠️ **fail-open**: لو الشكل غير معروف ⇒ `status` undefined والراوت
+ *    يتعامل معاه كخطأ عام (مش بنخترع أرقام).
+ */
+export function summarizeProviderFailure(error: unknown): ProviderFailureSummary {
+  const attempts: Array<{ provider: string; reason: string }> = [];
+  let status: number | undefined;
+  let reasonCode: string | undefined;
+
+  if (error instanceof AiRouteError) {
+    for (const attempt of error.reasons) {
+      attempts.push({ provider: attempt.provider, reason: attempt.reason ?? "unknown" });
+    }
+    const failed = error.reasons.find((attempt) => !attempt.ok) ?? error.reasons[0];
+    status = parseAttemptStatus(failed?.reason);
+    if (failed?.reason === "EMPTY_RESPONSE") reasonCode = "EMPTY_RESPONSE";
+  } else if (error instanceof AiProviderError) {
+    status = error.status;
+    reasonCode = error.reasonCode;
+    attempts.push({ provider: error.provider, reason: `HTTP ${error.status}` });
+  } else if (error && typeof error === "object") {
+    const raw = (error as { status?: unknown; reasonCode?: unknown; provider?: unknown });
+    if (typeof raw.status === "number") status = raw.status;
+    if (typeof raw.reasonCode === "string") reasonCode = raw.reasonCode;
+    if (typeof raw.provider === "string") {
+      attempts.push({ provider: raw.provider, reason: `HTTP ${status ?? 500}` });
+    }
+  }
+
+  const statuses = attempts
+    .map((attempt) => parseAttemptStatus(attempt.reason))
+    .filter((value): value is number => typeof value === "number");
+
+  return {
+    status,
+    reasonCode,
+    attempts,
+    allRateLimited: statuses.length > 0 && statuses.every((value) => value === 429),
+    hasTimeout: statuses.some((value) => value === 504 || value === 408) || reasonCode === "TIMEOUT",
+    hasServerError: statuses.some((value) => value >= 500 && value !== 504),
+  };
+}
+
+/**
  * تحويل أي خطأ (من الراوتر أو المزوّدين) إلى الشكل العام الآمن.
  * دي النقطة الوحيدة اللي الراوتات المفروض تستخدمها عند الفشل.
  */
