@@ -33,6 +33,80 @@ function isPayload(value: unknown): value is AiChatPayload {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * خطأ المزوّد جوه الرد (200) — OpenRouter ساعات بيرجّع `error` جسمه
+ * (كوتة/موديل مش متاح/بلوك) من غير status code مناسب.
+ *
+ * ⚠️ **ليه مهم**: الرد ده كان بيتقرا «رد فاضي» ⇒ خطأ 200 ⇒ الراوتر كان
+ *    بيقف عنده. دلوقتي بيبقى خطأ **مؤقت** (429/502) ⇒ الراوتر بينتقل
+ *    للمزوّد اللي بعده زي ما المفروض.
+ */
+export type OpenRouterErrorShape = {
+  code?: unknown;
+  message?: unknown;
+  metadata?: { raw?: unknown };
+};
+
+/** يستخرج تفاصيل الـerror من جسم الرد (لو موجودة). */
+function readOpenRouterError(payload: unknown): { message: string; status: number } {
+  const error = (payload as { error?: OpenRouterErrorShape } | null)?.error;
+  if (!error || typeof error !== "object") {
+    return { message: "OpenRouter returned an invalid response", status: 502 };
+  }
+  const rawMessage =
+    typeof error.message === "string"
+      ? error.message
+      : typeof (error.metadata as { raw?: unknown } | undefined)?.raw === "string"
+        ? String((error.metadata as { raw: string }).raw)
+        : "OpenRouter returned an error payload";
+  const code = typeof error.code === "number" ? error.code : undefined;
+
+  // ⚠️ ترتيب التصنيف: الكوتة (429) قبل auth (401/403) قبل الباقي.
+  if (code === 429 || /rate limit|too many requests|credit|quota/i.test(rawMessage)) {
+    return { message: rawMessage, status: 429 };
+  }
+  if (code === 401 || code === 403) {
+    return { message: rawMessage, status: 401 };
+  }
+  if (code === 404) {
+    return { message: rawMessage, status: 404 };
+  }
+  return { message: rawMessage, status: 502 };
+}
+
+/**
+ * يتحقق من جسم الرد: لازم يكون فيه `choices` **و** مافيش `error`.
+ *
+ * ⚠️ **السلوك**: أي مخالفة ⇒ `AiProviderError` بحالة مؤقتة (502/429) ⇒
+ *    الراوتر بيكمّل على المزوّد اللي بعده (fallback) بدل ما الطلب كله
+ *    يفشل بـ503 «كل المزوّدات فشلوا».
+ */
+export function validateOpenRouterPayload(payload: unknown): AiChatPayload {
+  if (!isPayload(payload)) {
+    throw new AiProviderError("OpenRouter returned an invalid response", 502, "openrouter", "NETWORK");
+  }
+
+  const errorPayload = (payload as { error?: unknown }).error;
+  if (errorPayload) {
+    const { message, status } = readOpenRouterError(payload);
+    console.error("ai/openrouter: error payload", status, message.slice(0, 500));
+    throw new AiProviderError(
+      `OpenRouter returned an error payload: ${message}`,
+      status,
+      "openrouter",
+      status === 429 ? "RATE_LIMIT" : "HTTP_STATUS"
+    );
+  }
+
+  const choices = (payload as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) {
+    console.error("ai/openrouter: response has no choices");
+    throw new AiProviderError("OpenRouter response has no choices", 502, "openrouter", "EMPTY_RESPONSE");
+  }
+
+  return payload;
+}
+
 /** مفتاح OpenRouter من البيئة — بدون قيمة افتراضية أو طباعة. */
 export function openrouterApiKey(): string | undefined {
   return process.env.OPENROUTER_API_KEY?.trim() || undefined;
@@ -127,11 +201,10 @@ export class OpenRouterProvider implements AiTextProvider, AiMediaProvider {
       throw new AiProviderError("OpenRouter returned an error", response.status, this.name);
     }
 
-    const payload = await response.json().catch(() => null);
-    if (!isPayload(payload)) {
-      console.error("ai/openrouter: invalid API response");
-      throw new AiProviderError("OpenRouter returned an invalid response", 502, this.name);
-    }
+    const rawPayload = await response.json().catch(() => null);
+    // ⚠️ **التحقق قبل القراءة**: رد فيه `error` أو من غير `choices` =
+    //    رد غير صالح ⇒ فشل مؤقت ⇒ fallback للمزوّد اللي بعده.
+    const payload = validateOpenRouterPayload(rawPayload);
 
     const content = payload.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
@@ -195,10 +268,9 @@ export class OpenRouterProvider implements AiTextProvider, AiMediaProvider {
       console.error("ai/openrouter: API error", response.status, detail.slice(0, 500));
       throw new AiProviderError("OpenRouter returned an error", response.status, this.name);
     }
-    const payload = await response.json().catch(() => null);
-    if (!payload || typeof payload !== "object") {
-      throw new AiProviderError("OpenRouter returned an invalid response", 502, this.name);
-    }
+    const rawPayload = await response.json().catch(() => null);
+    // نفس التحقق: `error` أو من غير `choices` ⇒ فشل مؤقت (fallback).
+    const payload = validateOpenRouterPayload(rawPayload);
     const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
       throw new AiProviderError("OpenRouter returned an empty response", 200, this.name, "EMPTY_RESPONSE");

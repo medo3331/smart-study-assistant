@@ -40,6 +40,17 @@ const MAX_LOGICAL_CALLS = 15;
 const MAX_PROVIDER_ATTEMPTS = 45;
 const MAX_ITEM_ATTEMPTS = 2;
 
+/**
+ * سقف الميزانية **لكل محاضرة** (بيتضاعف × عدد محاضرات الجلسة).
+ *
+ * ⚠️ **ليه كان السقف ثابت 15**: السقف ده كان محسوب لعنصر واحد بس،
+ *    بينما `logical_calls_used` بينتجمع **على مستوى الجلسة** ⇒ امتحان
+ *    من 3 محاضرات كان بيقع في BUDGET في المحاضرة التانية/التالتة (خطأ
+ *    موجود من قبل التقسيم). دلوقتي السقف = 15 × عدد المحاضرات.
+ */
+const MAX_LOGICAL_CALLS_PER_ITEM = MAX_LOGICAL_CALLS;
+const MAX_PROVIDER_ATTEMPTS_PER_ITEM = MAX_PROVIDER_ATTEMPTS;
+
 function fail(error: string, status: number, extra?: Record<string, unknown>) {
   const body = { error, ...(extra ?? {}) };
   if (status >= 500) console.warn("[exam-sessions] process", error, extra ?? "");
@@ -167,10 +178,26 @@ export async function POST(
     session.started_at ?? new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   // ── ٦) تحقق الميزانية قبل أي نداء AI
-  const chunks = chunkTranscript(transcript, DEFAULT_CHUNK_CHARS);
-  const estimate = estimateItemBudget(chunks.length);
+  //
+  // ⚠️ **ترتيب مهم**: اختيار الطالب (spec) بيتقرا **قبل** التقدير، لأن
+  //    عدد نداءات الأسئلة بقى دالة في **عدد الأسئلة** (تقسيم 5 أسئلة
+  //    لكل نداء) مش في عدد قطع المحاضرة بس.
+  //
+  //    والسقف بيتضاعف × عدد محاضرات الجلسة (كان ثابت فكان بيقع
+  //    BUDGET في المحاضرة التانية من امتحان 3 محاضرات).
+  const spec = normalizeExamSpec((session as { metadata?: unknown }).metadata &&
+    typeof (session as { metadata?: unknown }).metadata === "object"
+    ? ((session as { metadata: { spec?: unknown } }).metadata.spec)
+    : undefined);
 
-  if (session.logical_calls_used + estimate.logical > MAX_LOGICAL_CALLS) {
+  const chunks = chunkTranscript(transcript, DEFAULT_CHUNK_CHARS);
+  const estimate = estimateItemBudget(chunks.length, spec.count);
+
+  const totalLectures = Math.max(1, Number(session.total_lectures) || 1);
+  const sessionLogicalCap = MAX_LOGICAL_CALLS_PER_ITEM * totalLectures;
+  const sessionAttemptsCap = MAX_PROVIDER_ATTEMPTS_PER_ITEM * totalLectures;
+
+  if (session.logical_calls_used + estimate.logical > sessionLogicalCap) {
     await failItem(supabase, {
       itemId,
       claimToken,
@@ -179,7 +206,7 @@ export async function POST(
     });
     return fail("BUDGET", 429, { detail: "logical" });
   }
-  if (session.provider_attempts_used + estimate.attempts > MAX_PROVIDER_ATTEMPTS) {
+  if (session.provider_attempts_used + estimate.attempts > sessionAttemptsCap) {
     await failItem(supabase, {
       itemId,
       claimToken,
@@ -239,12 +266,8 @@ export async function POST(
     },
   };
 
-  // اختيار الطالب (أنواع/صعوبة/عدد) من metadata — قراءة متساهلة:
-  // جلسة من غير metadata تولّد MCQ/متوسط/4 (سلوك المحرك القديم).
-  const spec = normalizeExamSpec((session as { metadata?: unknown }).metadata &&
-    typeof (session as { metadata?: unknown }).metadata === "object"
-    ? ((session as { metadata: { spec?: unknown } }).metadata.spec)
-    : undefined);
+  // ⚠️ اختيار الطالب (spec) اتقرا فوق مع تقدير الميزانية (خطأ 6) —
+  //    عشان التقدير يبقى مطابق لعدد النداءات الفعلي.
 
   let generated;
   try {
@@ -304,8 +327,8 @@ export async function POST(
     sessionId,
     logical: generated.logicalCalls,
     attempts,
-    maxLogical: MAX_LOGICAL_CALLS,
-    maxAttempts: MAX_PROVIDER_ATTEMPTS,
+    maxLogical: sessionLogicalCap,
+    maxAttempts: sessionAttemptsCap,
   });
   if (!incremented.ok) {
     console.warn("[exam-sessions] usage increment failed", incremented.error);

@@ -85,3 +85,59 @@ describe("المولّد — فلترة المحاضرات", () => {
     expect(generator).toContain('row.transcript_text.trim().length > 0');
   });
 });
+
+/**
+ * حارس المرونة (resilience) — يمنع regressions في اللي اتصلّح:
+ *   ٥) تقسيم توليد الأسئلة لـ5 أسئلة كحد أقصى للنداء (منع 429).
+ *   ٦) `withRetry` + `retry-after` + تدوير المفاتيح جوه نفس الطلب.
+ *   ٧) OpenRouter: رد غير صالح ⇒ فشل مؤقت ⇒ fallback للمزوّد اللي بعده.
+ *   ٨) الواجهة: رسالة واضحة + زرار «إعادة المحاولة» (مفيش شاشة معلقة).
+ */
+describe("المرونة — تقسيم النداءات وإعادة المحاولة", () => {
+  it("السقف 5 أسئلة لكل نداء معروف ومطبَّق", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("export const EXAM_QUESTION_CHUNK_SIZE = 5");
+    expect(engine).toContain("splitQuestionQuota(quotas[index])");
+    expect(engine).toContain("splitQuestionQuota(need)");
+  });
+
+  it("تقدير الميزانية بياخد عدد الأسئلة (مش القطع بس)", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("estimateQuestionCalls(chunks, count)");
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain("estimateItemBudget(chunks.length, spec.count)");
+    // ⚠️ السقف لازم يتضاعف × عدد محاضرات الجلسة (كان ثابت 15 ⇒ BUDGET واطي).
+    expect(route).toContain("MAX_LOGICAL_CALLS_PER_ITEM * totalLectures");
+  });
+
+  it("Groq: withRetry + retry-after + تدوير المفاتيح", () => {
+    const groq = read("lib/ai/groq.ts");
+    expect(groq).toContain("export async function withRetry");
+    expect(groq).toContain("export function parseRetryAfterMs");
+    expect(groq).toContain("GROQ_RETRY_MAX_MS = 30_000");
+    expect(groq).toContain('response.headers.get("retry-after")');
+    // ⚠️ التدوير لازم يكون **جوه نفس الطلب** (مش طلب جديد).
+    expect(groq).toContain("callGroqWithKeys");
+    expect(groq).toContain("throw new GroqRateLimitedError(retryAfterMs)");
+  });
+
+  it("OpenRouter: رد فيه error أو من غير choices ⇒ فشل مؤقت", () => {
+    const openrouter = read("lib/ai/openrouter.ts");
+    expect(openrouter).toContain("export function validateOpenRouterPayload");
+    expect(openrouter).toContain("OpenRouter response has no choices");
+    expect(openrouter).toContain("validateOpenRouterPayload(rawPayload)");
+  });
+
+  it("الواجهة: رسالة واضحة + زرار إعادة المحاولة (مفيش شاشة معلقة)", () => {
+    const generator = read("components/exams/ExamGenerator.tsx");
+    expect(generator).toContain("إعادة المحاولة");
+    expect(generator).toContain("السيرفر مشغول جداً");
+    expect(generator).toContain("errorTransient");
+    // ⚠️ الـbusy دايماً بينتهي.
+    expect(generator).toContain("setBusy(false);");
+
+    const runner = read("components/exams/ExamRunner.tsx");
+    expect(runner).toContain("السيرفر مشغول جداً");
+    expect(runner).toContain("جرّب تاني");
+  });
+});

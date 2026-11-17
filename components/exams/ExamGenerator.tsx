@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Clock, Sparkles, Upload } from "lucide-react";
+import { ArrowRight, Check, Clock, RotateCcw, Sparkles, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { subjectMatches } from "@/lib/academics/subject-match";
 import {
@@ -82,20 +82,45 @@ function formatDuration(seconds: number | null): string | null {
   return `${Math.round(seconds / 60)} دقيقة`;
 }
 
-function mapCreateError(data: { error?: string; detail?: string } | null): string {
+/** رسالة موحّدة لخطأ الإنشاء + هل هو مؤقت (يستاهل إعادة المحاولة)؟ */
+function mapCreateError(
+  data: { error?: string; detail?: string } | null,
+  status: number
+): { message: string; transient: boolean } {
+  // 503 = الخدمة (المزوّد/السيرفر) مشغولة — مؤقت، والطالب يقدر يعيد.
+  if (status === 503) {
+    return { message: "السيرفر مشغول جداً حالياً — جرب تاني بعد شوية.", transient: true };
+  }
+  // 429: يا إما سقف الامتحان (مش مؤقت) يا إما كوتة مؤقتة.
+  if (status === 429 && data?.error !== "BUDGET") {
+    return { message: "الخدمة اتزحمت دلوقتي — جرب تاني بعد شوية.", transient: true };
+  }
+
   switch (data?.error) {
     case "INSUFFICIENT_CREDITS":
-      return "رصيدك مش كافٍ لإنشاء الامتحان — جدّد خطتك وجرّب تاني.";
+      return { message: "رصيدك مش كافٍ لإنشاء الامتحان — جدّد خطتك وجرّب تاني.", transient: false };
     case "BUDGET":
-      return data.detail || "حجم المحاضرات المختارة أكبر من سقف الامتحان.";
+      return {
+        message: data.detail || "حجم المحاضرات المختارة أكبر من سقف الامتحان.",
+        transient: false,
+      };
     case "NOT_FOUND":
-      return "واحدة أو أكتر من المحاضرات مش موجودة — حدّث القائمة وجرّب تاني.";
+      return {
+        message: "واحدة أو أكتر من المحاضرات مش موجودة — حدّث القائمة وجرّب تاني.",
+        transient: false,
+      };
     case "VALIDATION":
-      return data.detail || "الاختيارات مش صالحة — راجع النوع والصعوبة والعدد.";
+      return {
+        message: data.detail || "الاختيارات مش صالحة — راجع النوع والصعوبة والعدد.",
+        transient: false,
+      };
     case "VALIDATION_SPEC":
-      return "اختيار شكل الامتحان (أنواع/صعوبة/عدد) غير صالح.";
+      return { message: "اختيار شكل الامتحان (أنواع/صعوبة/عدد) غير صالح.", transient: false };
     default:
-      return data?.error || "حصل خطأ أثناء إنشاء الامتحان — جرّب تاني.";
+      return {
+        message: data?.error || "حصل خطأ أثناء إنشاء الامتحان — جرّب تاني.",
+        transient: false,
+      };
   }
 }
 
@@ -112,6 +137,8 @@ export function ExamGenerator({
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** ⚠️ الخطأ مؤقت (503/كوتة) ⇒ الرسالة بتعرض زرار «إعادة المحاولة». */
+  const [errorTransient, setErrorTransient] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [subjectName, setSubjectName] = useState(presetSubject ?? initial.subject ?? "");
@@ -299,6 +326,7 @@ export function ExamGenerator({
     if (!canCreate) return;
     setBusy(true);
     setError(null);
+    setErrorTransient(false);
     try {
       const name = subjectName.trim();
       const matchedId =
@@ -319,12 +347,18 @@ export function ExamGenerator({
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.sessionId) {
-        throw new Error(mapCreateError(data));
+        const { message, transient } = mapCreateError(data, response.status);
+        // ⚠️ بنميّز الخطأ المؤقت — عشان نعرض زرار «إعادة المحاولة» بدل
+        //    رسالة ميتة. الخطأ مش مؤقت (رصيد/سقف) بيوضّح للطالب الخطوة.
+        throw Object.assign(new Error(message), { transient });
       }
       onCreated(String(data.sessionId));
     } catch (err) {
+      const transient = (err as { transient?: unknown }).transient === true;
+      setErrorTransient(transient);
       setError(err instanceof Error ? err.message : "حصل خطأ — جرّب تاني.");
     } finally {
+      // ⚠️ الـbusy دايماً بينتهي — الشاشة ماتفضلش معلقة مهما كان الخطأ.
       setBusy(false);
     }
   }
@@ -545,9 +579,25 @@ export function ExamGenerator({
 
       {/* الأخطاء + الإنشاء */}
       {error && (
-        <p className="text-sm text-red-400 leading-relaxed" role="alert">
-          {error}
-        </p>
+        <div
+          className="rounded-xl border border-red-900/60 bg-red-950/30 p-4 space-y-3"
+          role="alert"
+        >
+          <p className="text-sm text-red-300 leading-relaxed">{error}</p>
+          {errorTransient && (
+            // ⚠️ خطأ مؤقت (السيرفر مشغول/الكوتة) — ما ن死在ش: بنعرض
+            //    زرار إعادة المحاولة جنب الرسالة.
+            <button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={busy || !canCreate}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/60 px-4 py-2 text-xs font-extrabold text-amber-300 transition hover:bg-amber-400/10 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RotateCcw size={13} aria-hidden />
+              {busy ? "بنعيد المحاولة…" : "إعادة المحاولة"}
+            </button>
+          )}
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

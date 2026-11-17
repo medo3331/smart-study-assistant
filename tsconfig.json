@@ -28,5 +28,12 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "workspace", ".hermes", ".next"]
+  "exclude": [
+    "node_modules",
+    "workspace",
+    ".hermes",
+    ".next",
+    "original_page.tsx",
+    "scripts/browser/notes-storage-smoke.ts"
+  ]
 }
