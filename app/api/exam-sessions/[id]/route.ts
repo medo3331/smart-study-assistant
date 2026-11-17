@@ -32,7 +32,8 @@ type SessionRow = {
 
 type ItemRow = {
   id: string;
-  lecture_id: string;
+  lecture_id: string | null;
+  document_id: string | null;
   ordinal: number;
   status: string;
   attempt_count: number;
@@ -78,7 +79,7 @@ export async function GET(
   const { data: items, error: itemsError } = await supabase
     .from("exam_session_items")
     .select(
-      "id, lecture_id, ordinal, status, attempt_count, transcript_chars, chunk_count, result_json, error_code, error_message, started_at, completed_at"
+      "id, lecture_id, document_id, ordinal, status, attempt_count, transcript_chars, chunk_count, result_json, error_code, error_message, started_at, completed_at"
     )
     .eq("session_id", id)
     .eq("user_id", user.id)
@@ -119,6 +120,9 @@ export async function GET(
     items: rows.map((item) => ({
       id: item.id,
       lecture_id: item.lecture_id,
+      document_id: item.document_id,
+      // 📄/🎙️ نوع المصدر — عشان الواجهة تقول «مستند ١» مش «محاضرة ١».
+      source_kind: item.document_id ? "document" : "recording",
       ordinal: item.ordinal,
       status: item.status,
       attempt_count: item.attempt_count,

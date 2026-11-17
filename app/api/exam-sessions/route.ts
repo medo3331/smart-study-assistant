@@ -25,6 +25,19 @@ export const maxDuration = 300;
 
 const MODES: readonly ExamSessionMode[] = ["last_minute_review"];
 
+/** تنظيف قائمة معرّفات (نصوص) + إزالة التكرار — نفس طبقة التنظيف مرتين. */
+function normalizeIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(
+    new Set(
+      raw
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value !== "")
+    )
+  );
+}
+
 function fail(error: string, status: number, detail?: string) {
   const body = detail ? { error, detail } : { error };
   if (status >= 500) console.warn("[exam-sessions] create", error, detail ?? "");
@@ -40,6 +53,8 @@ export async function POST(req: Request) {
     | {
         mode?: unknown;
         lectureIds?: unknown;
+        /** 📄 مستندات (PDF/PPTX/DOCX) من مساحة العمل — مصدر تاني للامتحان. */
+        documentIds?: unknown;
         spec?: unknown;
         subject?: unknown;
         title?: unknown;
@@ -79,27 +94,21 @@ export async function POST(req: Request) {
     ? clampText(body.dayId, 64).trim()
     : null;
 
-  if (!Array.isArray(body.lectureIds) || body.lectureIds.length === 0) {
-    return fail("VALIDATION", 400, "lectureIds required");
+  // ⚠️ **المصدر ممكن يكون محاضرة أو مستند** — 3 مصادر قصوى (مش 3 محاضرات)،
+  //    والطالب يقدر يخلط الاتنين في نفس الامتحان.
+  const lectureIds = normalizeIds(body.lectureIds);
+  const documentIds = normalizeIds(body.documentIds);
+  if (lectureIds.length === 0 && documentIds.length === 0) {
+    return fail("VALIDATION", 400, "lectureIds or documentIds required");
   }
-  if (body.lectureIds.length > 3) {
-    return fail("VALIDATION", 400, "max 3 lectures");
+  if (lectureIds.length + documentIds.length > 3) {
+    return fail("VALIDATION", 400, "max 3 sources");
   }
-
-  // تنظيف + إزالة التكرار (الـ RPC يزيله أيضًا — طبقتان)
-  const lectureIds = Array.from(
-    new Set(
-      body.lectureIds
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter((value) => value !== "")
-    )
-  );
-  if (lectureIds.length === 0) return fail("VALIDATION", 400, "lectureIds required");
 
   const created = await createExamSession(supabase, {
     mode: mode as ExamSessionMode,
     lectureIds,
+    documentIds,
   });
 
   if (!created.ok) {
@@ -109,12 +118,16 @@ export async function POST(req: Request) {
       case "UNAUTHENTICATED":
         return fail("UNAUTHORIZED", 401);
       case "NOT_OWNED":
-        // 404 لا 403 — لا نكشف وجود محاضرة ليست للمستخدم.
+        // 404 لا 403 — لا نكشف وجود مصدر ليس للمستخدم.
         return fail("NOT_FOUND", 404);
       case "BUDGET":
         return fail("BUDGET", 400, created.error);
       case "INSUFFICIENT_CREDITS":
         return fail("INSUFFICIENT_CREDITS", 402);
+      case "SOURCES_UNAVAILABLE":
+        // ⚠️ الـRPC الجديد (مستندات) لسه متطبّقش في القاعدة — رسالة صريحة
+        //    بدل 500 غامض (والمسار القديم بيشتغل).
+        return fail("SOURCES_UNAVAILABLE", 503, created.error);
       default:
         return fail("INTERNAL", 500, created.error);
     }
@@ -162,16 +175,17 @@ export async function POST(req: Request) {
 
   const { data: items, error: itemsError } = await supabase
     .from("exam_session_items")
-    .select("id, lecture_id, ordinal, status")
+    .select("id, lecture_id, document_id, ordinal, status")
     .eq("session_id", sessionId)
     .eq("user_id", user.id)
     .order("ordinal", { ascending: true });
 
   if (itemsError) return fail("INTERNAL", 500, itemsError.message);
 
-  const lectureItems = (items ?? []) as Array<{
+  const sessionItems = (items ?? []) as Array<{
     id: string;
-    lecture_id: string;
+    lecture_id: string | null;
+    document_id: string | null;
     ordinal: number;
     status: string;
   }>;
@@ -185,9 +199,10 @@ export async function POST(req: Request) {
     estimated_tokens: session.estimated_tokens,
     credit_reserved_at: session.credit_reserved_at,
     metadata,
-    items: lectureItems.map((item) => ({
+    items: sessionItems.map((item) => ({
       id: item.id,
       lecture_id: item.lecture_id,
+      document_id: item.document_id,
       ordinal: item.ordinal,
       status: item.status,
     })),

@@ -50,6 +50,27 @@ type LectureRow = {
   hasTranscript: boolean;
 };
 
+/** 📄 مستند مرفوع (PDF/PPTX/DOCX) — مصدر تاني للامتحان. */
+type DocumentRow = {
+  id: string;
+  title: string | null;
+  file_type: string | null;
+  page_count: number | null;
+  status: string | null;
+  created_at: string;
+};
+
+/** تبويب المصدر: تسجيل صوتي (بنص تفريغ) ولا مستند (ملف). */
+type SourceTab = "recordings" | "documents";
+
+const FILE_TYPE_LABEL: Record<string, string> = {
+  pdf: "PDF",
+  pptx: "PowerPoint",
+  docx: "Word",
+  text: "نص",
+  image: "صورة",
+};
+
 const TYPE_LABELS: Record<ExamQuestionType, string> = {
   mcq: "اختيار من متعدد",
   true_false: "صح أو خطأ",
@@ -144,7 +165,12 @@ export function ExamGenerator({
   const [subjectName, setSubjectName] = useState(presetSubject ?? initial.subject ?? "");
   const [subjectOptions, setSubjectOptions] = useState<{ id: string | null; name: string }[]>([]);
   const [lectures, setLectures] = useState<LectureRow[]>([]);
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** المستندات المختارة (المصادر التانية من نفس المولّد). */
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  /** التبويب المعروض: التسجيلات الصوتية ولا المستندات. */
+  const [sourceTab, setSourceTab] = useState<SourceTab>("recordings");
   /** المحاضرة الجاية من الدرس (?lecture= أو محسوبة من ?dayId=). */
   const [preselectId, setPreselectId] = useState<string>(initial.lecture);
   const [notice, setNotice] = useState<string | null>(null);
@@ -170,10 +196,17 @@ export function ExamGenerator({
     void (async () => {
       const supabase = createClient();
       try {
-        const [lecturesRes, transcriptRes, wsRes, uniRes] = await Promise.all([
+        const [lecturesRes, documentsRes, transcriptRes, wsRes, uniRes] = await Promise.all([
           supabase
             .from("lectures")
             .select("id, title, subject, subject_id, created_at, duration_seconds")
+            .order("created_at", { ascending: false })
+            .limit(100),
+          // 📄 المستندات (PDF/PPTX/DOCX) في مساحة العمل — مصدر تاني
+          //    للامتحان (المستخرج وقت الرفع).
+          supabase
+            .from("documents")
+            .select("id, title, file_type, page_count, status, created_at")
             .order("created_at", { ascending: false })
             .limit(100),
           // ⚠️ **التنبيه**: بنقرأ `transcript_text` (مش `transcript_data`) لأن
@@ -196,6 +229,12 @@ export function ExamGenerator({
           (row) => ({ ...row, hasTranscript: transcriptIds.has(row.id) })
         );
         setLectures(rows);
+
+        // 📄 المستندات — المتاح منها اللي اتقرا (status = ready/partial).
+        const docRows = ((documentsRes.data ?? []) as DocumentRow[]).filter((row) =>
+          row.status === "ready" || row.status === "partial"
+        );
+        setDocuments(docRows);
 
         const options: { id: string | null; name: string }[] = [];
         const seen = new Set<string>();
@@ -286,7 +325,11 @@ export function ExamGenerator({
   }, [lectures, matchesSubject, preselectId]);
 
   const selectedRows = lectures.filter((row) => selected.has(row.id));
-  const canCreate = selectedRows.length > 0 && selectedRows.length <= MAX_LECTURES && types.length > 0 && !busy;
+  const selectedDocRows = documents.filter((row) => selectedDocs.has(row.id));
+  /** 📦 إجمالي المصادر المختارة (تسجيلات + مستندات) — السقف 3. */
+  const selectedCount = selectedRows.length + selectedDocRows.length;
+  const canCreate =
+    selectedCount > 0 && selectedCount <= MAX_LECTURES && types.length > 0 && !busy;
   /** محاضرات إخاها فلتر المادة (في مواد تانية) — عشان نقول للطالب صراحةً. */
   const hiddenBySubject = subjectName.trim()
     ? lectures.filter((row) => !matchesSubject(row)).length
@@ -300,8 +343,26 @@ export function ExamGenerator({
         next.delete(id);
         return next;
       }
-      if (next.size >= MAX_LECTURES) {
-        setNotice(`الحد الأقصى ${MAX_LECTURES} محاضرات في الامتحان الواحد.`);
+      // ⚠️ السقف 3 **مصادر** (تسجيلات + مستندات) — مش 3 محاضرات بس.
+      if (selectedCount >= MAX_LECTURES) {
+        setNotice(`الحد الأقصى ${MAX_LECTURES} مصادر في الامتحان الواحد.`);
+        return prev;
+      }
+      next.add(id);
+      return next;
+    });
+  }
+
+  function toggleDocument(id: string) {
+    setNotice(null);
+    setSelectedDocs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        return next;
+      }
+      if (selectedCount >= MAX_LECTURES) {
+        setNotice(`الحد الأقصى ${MAX_LECTURES} مصادر في الامتحان الواحد.`);
         return prev;
       }
       next.add(id);
@@ -339,6 +400,8 @@ export function ExamGenerator({
         body: JSON.stringify({
           mode: "last_minute_review",
           lectureIds: [...selected],
+          // 📄 المستندات المختارة — مصدر تاني (RPC جديد: بند لكل مستند).
+          documentIds: [...selectedDocs],
           spec: { types, difficulty, count },
           subject: name ? { id: matchedId ?? undefined, name } : undefined,
           title: name ? `امتحان ${name}` : undefined,
@@ -411,81 +474,170 @@ export function ExamGenerator({
         </p>
       </section>
 
-      {/*2️⃣ المحاضرات */}
-      <section className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-5 space-y-3" aria-label="اختيار المحاضرات">
+      {/*2️⃣ المصدر — تسجيل صوتي ولا مستند */}
+      <section className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-5 space-y-3" aria-label="اختيار مصدر الامتحان">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-extrabold text-amber-300">2️⃣ المحاضرات</h3>
+          <h3 className="text-sm font-extrabold text-amber-300">2️⃣ مصدر الامتحان</h3>
           <span className="text-[11px] text-slate-400 ltr-num">
-            {selected.size}/{MAX_LECTURES} محددة
+            {selectedCount}/{MAX_LECTURES} محددة
           </span>
         </div>
 
-        {visibleLectures.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#2A3050] p-6 text-center space-y-3">
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {subjectName.trim()
-                ? "مفيش محاضرات مسجّلة في المادة دي، ارفع محاضرة الأول."
-                : "مفيش محاضرات مسجّلة عندك لسه."}
-            </p>
-            <Link
-              href="/lecture-transcription"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#2A3050] hover:bg-[#3A4060] px-4 py-2 text-sm font-bold transition-colors"
+        {/* 🔀 التبويبات — عشان الطالب يعرف بوضوح: الصوتيات في مكان،
+            والمستندات (PDF/PPTX) في مكان تاني. */}
+        <div className="flex gap-2" role="tablist" aria-label="نوع مصدر الامتحان">
+          {(
+            [
+              { key: "recordings" as const, label: "المحاضرات الصوتية", count: visibleLectures.length },
+              { key: "documents" as const, label: "المستندات", count: documents.length },
+            ]
+          ).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={sourceTab === tab.key}
+              onClick={() => setSourceTab(tab.key)}
+              className={`flex-1 rounded-xl border px-3 py-2 text-xs font-extrabold transition ${
+                sourceTab === tab.key
+                  ? "border-amber-400 bg-amber-400/10 text-amber-300"
+                  : "border-[#2A3050] text-slate-400 hover:text-slate-200"
+              }`}
             >
-              <Upload size={14} aria-hidden />
-              ارفع محاضرة
-            </Link>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {visibleLectures.map((lecture) => {
-              const isSelected = selected.has(lecture.id);
-              const isFromLesson = Boolean(preselectId) && lecture.id === preselectId;
-              const isUnclassified = !lecture.subject_id && !lecture.subject?.trim();
-              const duration = formatDuration(lecture.duration_seconds);
-              return (
-                <li key={lecture.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleLecture(lecture.id)}
-                    disabled={!lecture.hasTranscript}
-                    aria-pressed={isSelected}
-                    className={`w-full text-right rounded-xl border px-4 py-3 flex items-start gap-3 transition ${
-                      isSelected
-                        ? "border-amber-400 bg-amber-400/10"
-                        : "border-[#2A3050] bg-[#0D1029] hover:border-slate-500"
-                    } ${!lecture.hasTranscript ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <span
-                      className={`mt-0.5 w-4 h-4 rounded border shrink-0 grid place-items-center ${
-                        isSelected ? "bg-amber-400 border-amber-400" : "border-slate-600"
-                      }`}
-                      aria-hidden
+              {tab.label}
+              <span className="mr-1.5 text-[10px] text-slate-500 ltr-num">({tab.count})</span>
+            </button>
+          ))}
+        </div>
+
+        {sourceTab === "recordings" ? (
+          visibleLectures.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#2A3050] p-6 text-center space-y-3">
+              <p className="text-sm text-slate-300 leading-relaxed">
+                {subjectName.trim()
+                  ? "مفيش محاضرات صوتية مسجّلة في المادة دي، ارفع تسجيل الأول."
+                  : "مفيش محاضرات صوتية مسجّلة عندك لسه."}
+              </p>
+              <Link
+                href="/lecture-transcription"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#2A3050] hover:bg-[#3A4060] px-4 py-2 text-sm font-bold transition-colors"
+              >
+                <Upload size={14} aria-hidden />
+                ارفع تسجيل صوتي
+              </Link>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {visibleLectures.map((lecture) => {
+                const isSelected = selected.has(lecture.id);
+                const isFromLesson = Boolean(preselectId) && lecture.id === preselectId;
+                const isUnclassified = !lecture.subject_id && !lecture.subject?.trim();
+                const duration = formatDuration(lecture.duration_seconds);
+                return (
+                  <li key={lecture.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggleLecture(lecture.id)}
+                      disabled={!lecture.hasTranscript}
+                      aria-pressed={isSelected}
+                      className={`w-full text-right rounded-xl border px-4 py-3 flex items-start gap-3 transition ${
+                        isSelected
+                          ? "border-amber-400 bg-amber-400/10"
+                          : "border-[#2A3050] bg-[#0D1029] hover:border-slate-500"
+                      } ${!lecture.hasTranscript ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                      {isSelected && <Check size={11} className="text-[#0D1029]" strokeWidth={4} />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-[#F0E6D2] truncate">{lecture.title}</span>
-                      <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                        {lecture.created_at && <span>{shortDate(lecture.created_at)}</span>}
-                        {duration && (
-                          <span className="inline-flex items-center gap-1">
-                            <Clock size={10} aria-hidden />
-                            {duration}
-                          </span>
-                        )}
-                        {!lecture.hasTranscript && <span className="text-red-400">· بدون تفريغ</span>}
-                        {isUnclassified && <span className="text-slate-400">· بدون تصنيف</span>}
-                        {isFromLesson && <span className="text-amber-300">· من الدرس</span>}
+                      <span
+                        className={`mt-0.5 w-4 h-4 rounded border shrink-0 grid place-items-center ${
+                          isSelected ? "bg-amber-400 border-amber-400" : "border-slate-600"
+                        }`}
+                        aria-hidden
+                      >
+                        {isSelected && <Check size={11} className="text-[#0D1029]" strokeWidth={4} />}
                       </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold text-[#F0E6D2] truncate">{lecture.title}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                          {lecture.created_at && <span>{shortDate(lecture.created_at)}</span>}
+                          {duration && (
+                            <span className="inline-flex items-center gap-1">
+                              <Clock size={10} aria-hidden />
+                              {duration}
+                            </span>
+                          )}
+                          {!lecture.hasTranscript && <span className="text-red-400">· بدون تفريغ</span>}
+                          {isUnclassified && <span className="text-slate-400">· بدون تصنيف</span>}
+                          {isFromLesson && <span className="text-amber-300">· من الدرس</span>}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        ) : (
+          documents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#2A3050] p-6 text-center space-y-3">
+              <p className="text-sm text-slate-300 leading-relaxed">
+                مفيش مستندات جاهزة. ارفع PDF أو PowerPoint أو Word من مساحة العمل.
+              </p>
+              <Link
+                href="/dashboard/workspace?tab=files"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#2A3050] hover:bg-[#3A4060] px-4 py-2 text-sm font-bold transition-colors"
+              >
+                <Upload size={14} aria-hidden />
+                ارفع مستند
+              </Link>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {documents.map((doc) => {
+                const isSelected = selectedDocs.has(doc.id);
+                const typeLabel = doc.file_type ? FILE_TYPE_LABEL[doc.file_type] ?? doc.file_type : "ملف";
+                return (
+                  <li key={doc.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggleDocument(doc.id)}
+                      aria-pressed={isSelected}
+                      className={`w-full text-right rounded-xl border px-4 py-3 flex items-start gap-3 transition ${
+                        isSelected
+                          ? "border-amber-400 bg-amber-400/10"
+                          : "border-[#2A3050] bg-[#0D1029] hover:border-slate-500"
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 w-4 h-4 rounded border shrink-0 grid place-items-center ${
+                          isSelected ? "bg-amber-400 border-amber-400" : "border-slate-600"
+                        }`}
+                        aria-hidden
+                      >
+                        {isSelected && <Check size={11} className="text-[#0D1029]" strokeWidth={4} />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold text-[#F0E6D2] truncate">
+                          {doc.title ?? "مستند"}
+                        </span>
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                          <span>{typeLabel}</span>
+                          {doc.created_at && <span>· {shortDate(doc.created_at)}</span>}
+                          {doc.page_count ? (
+                            <span className="ltr-num">· {doc.page_count} صفحة</span>
+                          ) : null}
+                          {doc.status === "partial" && (
+                            <span className="text-amber-300">· في صفحات ما اتقرتش</span>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )
         )}
         {notice && <p className="text-[11px] text-amber-300">{notice}</p>}
-        {hiddenBySubject > 0 && (
+        {sourceTab === "recordings" && hiddenBySubject > 0 && (
           <p className="text-[11px] text-slate-500">
             {hiddenBySubject} محاضرة في مواد تانية مخفية بالفلتر — امسح اسم المادة عشان تشوفها.
           </p>
@@ -585,7 +737,7 @@ export function ExamGenerator({
         >
           <p className="text-sm text-red-300 leading-relaxed">{error}</p>
           {errorTransient && (
-            // ⚠️ خطأ مؤقت (السيرفر مشغول/الكوتة) — ما ن死在ش: بنعرض
+            // ⚠️ خطأ مؤقت (السيرفر مشغول/الكوتة) — ما نوقفش عنده: بنعرض
             //    زرار إعادة المحاولة جنب الرسالة.
             <button
               type="button"
@@ -616,8 +768,10 @@ export function ExamGenerator({
         >
           إلغاء
         </button>
-        {selectedRows.length === 0 && (
-          <span className="text-[11px] text-slate-500">اختار محاضرة واحدة على الأقل.</span>
+        {selectedCount === 0 && (
+          <span className="text-[11px] text-slate-500">
+            اختار مصدر واحد على الأقل (محاضرة صوتية أو مستند).
+          </span>
         )}
       </div>
     </div>

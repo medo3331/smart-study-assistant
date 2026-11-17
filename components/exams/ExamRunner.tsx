@@ -19,6 +19,8 @@ type ItemState = {
   status: string;
   attempt_count: number;
   error_code: string | null;
+  /** 📄 مستند ولا 🎙️ تسجيل صوتي — عشان التسمية تبقى واضحة. */
+  source_kind?: "recording" | "document";
 };
 
 type SessionState = {
@@ -211,7 +213,9 @@ export function ExamRunner({
                 ) : (
                   <span className="w-3.5 h-3.5 border-2 border-slate-600 border-t-amber-300 rounded-full animate-spin shrink-0" aria-hidden />
                 )}
-                <span className="flex-1 text-slate-300">محاضرة {item.ordinal}</span>
+                <span className="flex-1 text-slate-300">
+                  {item.source_kind === "document" ? "مستند" : "محاضرة"} {item.ordinal}
+                </span>
                 <span className="text-[11px] text-slate-500">
                   {item.status === "ready"
                     ? "جاهزة"

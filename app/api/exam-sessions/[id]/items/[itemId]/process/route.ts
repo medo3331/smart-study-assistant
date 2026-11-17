@@ -19,6 +19,11 @@ import {
   normalizeExamSpec,
   type ExamReviewDeps,
 } from "@/lib/ai/exam-review";
+import {
+  buildExamSource,
+  readDocumentText,
+  type ExamSourceKind,
+} from "@/lib/ai/exam-sources";
 
 /**
  * POST /api/exam-sessions/[id]/items/[itemId]/process
@@ -50,6 +55,17 @@ const MAX_ITEM_ATTEMPTS = 2;
  */
 const MAX_LOGICAL_CALLS_PER_ITEM = MAX_LOGICAL_CALLS;
 const MAX_PROVIDER_ATTEMPTS_PER_ITEM = MAX_PROVIDER_ATTEMPTS;
+
+/**
+ * عميل الـservice-role — للقراءة خارج RLS (صفحات `knowledge_base`).
+ *
+ * ⚠️ **ليه service**: صفحات المستند في `knowledge_base` مش مغطّاة بـRLS
+ *    للمستخدم العادي. الملكية **متحقَّق منها قبل القراءة**: المستند نفسه
+ *    بيتقرا بـ`.eq("user_id", user.id)` (RLS + فلتر صريح).
+ */
+function serviceClient() {
+  return createServiceClient();
+}
 
 function fail(error: string, status: number, extra?: Record<string, unknown>) {
   const body = { error, ...(extra ?? {}) };
@@ -117,7 +133,7 @@ export async function POST(
   // ── ٢) البند (لازم يكون داخل نفس الجلسة)
   const { data: item, error: itemError } = await supabase
     .from("exam_session_items")
-    .select("id, session_id, lecture_id, status")
+    .select("id, session_id, lecture_id, document_id, status")
     .eq("id", itemId)
     .eq("session_id", sessionId)
     .eq("user_id", user.id)
@@ -131,19 +147,51 @@ export async function POST(
     return fail("SESSION_CLOSED", 423);
   }
 
-  // ── ٤) المحاضرة (ملكية صريحة) — قبل أي حجز
-  const { data: lecture, error: lectureError } = await supabase
-    .from("lectures")
-    .select("id, transcript_text")
-    .eq("id", item.lecture_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // ── ٤) المصدر — محاضرة (صوت) **أو** مستند (PDF/PPTX/DOCX)
+  //
+  // ⚠️ **ليه اتنين**: المولّد كان مربوط بالمحاضرات بس ⇒ الطالب اللي عنده
+  //    ملفات PDF بس كان بياخد 502/503 من غير سبب حقيقي. دلوقتي البند
+  //    بياخد مصدره من نوعه (محاضرة/مستند).
+  //
+  // ⚠️ **ملكية صريحة** على المصدر في الحالتين.
+  const itemRow = item as {
+    id: string;
+    lecture_id: string | null;
+    document_id: string | null;
+    status: string;
+  };
 
-  if (lectureError) return fail("INTERNAL", 500, { detail: lectureError.message });
-  if (!lecture || typeof lecture.transcript_text !== "string" || !lecture.transcript_text.trim()) {
-    return fail("NO_TRANSCRIPT", 422);
+  let transcript = "";
+  let sourceTitle = "";
+  let sourceKind: ExamSourceKind = "recording";
+
+  if (itemRow.document_id) {
+    // 📄 مستند — النص المستخرج وقت الرفع (صفحات knowledge_base).
+    sourceKind = "document";
+    const document = await readDocumentText(serviceClient(), {
+      documentId: itemRow.document_id,
+      userId: user.id,
+    });
+    if (!document) return fail("NOT_FOUND", 404);
+    transcript = document.text;
+    sourceTitle = document.title;
+  } else {
+    const { data: lecture, error: lectureError } = await supabase
+      .from("lectures")
+      .select("id, title, transcript_text")
+      .eq("id", itemRow.lecture_id ?? "")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (lectureError) return fail("INTERNAL", 500, { detail: lectureError.message });
+    if (!lecture || typeof lecture.transcript_text !== "string" || !lecture.transcript_text.trim()) {
+      return fail("NO_TRANSCRIPT", 422);
+    }
+    transcript = lecture.transcript_text;
+    sourceTitle = lecture.title ?? "محاضرة";
   }
-  const transcript = lecture.transcript_text;
+
+  if (!transcript.trim()) return fail("NO_TRANSCRIPT", 422);
 
   // ── ٥) الاستحواذ
   const claimed = await claimItem(supabase, {
@@ -190,7 +238,13 @@ export async function POST(
     ? ((session as { metadata: { spec?: unknown } }).metadata.spec)
     : undefined);
 
-  const chunks = chunkTranscript(transcript, DEFAULT_CHUNK_CHARS);
+  // ⚠️ **التقطيع (chunking)**: ملف PDF من 50 صفحة نصّه أكبر من أي نداء
+  //    واحد ⇒ بيتقطّع هنا لمجموعات (6 آلاف حرف لكل قطعة) والنداءات
+  //    بتاخد قطعة piece. نفس مسار المحاضرات بالظبط.
+  const source = buildExamSource({ kind: sourceKind, title: sourceTitle, text: transcript });
+  const chunks = source.chunks;
+  if (chunks.length === 0) return fail("NO_TRANSCRIPT", 422);
+
   const estimate = estimateItemBudget(chunks.length, spec.count);
 
   const totalLectures = Math.max(1, Number(session.total_lectures) || 1);
@@ -244,7 +298,9 @@ export async function POST(
       });
       return { content: result.content };
     },
-    chunk: chunkTranscript,
+    // ⚠️ **التقطيع اتعمل فوق** (ملف PDF كبير ⇒ مجموعات) — هنا بنرجّع
+    //    القطع الجاهزة، ومافيش تقطيع تاني جوه المحرك.
+    chunk: () => chunks,
     chunkChars: DEFAULT_CHUNK_CHARS,
     usageFor: (aiTask) => ({
       operationId,

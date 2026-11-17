@@ -141,3 +141,76 @@ describe("المرونة — تقسيم النداءات وإعادة المحا
     expect(runner).toContain("جرّب تاني");
   });
 });
+
+/**
+ * حارس «المصادر والتسميات» — يمنع regressions في:
+ *   ٩) تبويب المصادر في المولّد (تسجيلات صوتية / مستندات).
+ *   ١٠) الباك إند بيقرأ نص المستند (مش بس المحاضرات).
+ *   ١١) التسميات الواضحة (ميفش «المحاضرات» لكل حاجة).
+ */
+describe("مولّد الامتحانات — مصادر المحاضرات والمستندات", () => {
+  it("المولّد بيعرض التبويبين ويبعت documentIds", () => {
+    const generator = read("components/exams/ExamGenerator.tsx");
+    expect(generator).toContain('"المحاضرات الصوتية"');
+    expect(generator).toContain('"المستندات"');
+    expect(generator).toContain('from("documents")');
+    expect(generator).toContain("documentIds:");
+    // ⚠️ السقف 3 **مصادر** (مش 3 محاضرات).
+    expect(generator).toContain("selectedCount");
+  });
+
+  it("راوت الإنشاء بيقبل المستندات + fallback للـRPC القديم", () => {
+    const route = read("app/api/exam-sessions/route.ts");
+    expect(route).toContain("documentIds");
+    expect(route).toContain("max 3 sources");
+
+    const engine = read("lib/ai/exam-sessions.ts");
+    expect(engine).toContain("create_exam_session_with_sources_reserve");
+    expect(engine).toContain("isMissingRpc");
+    expect(engine).toContain("SOURCES_UNAVAILABLE");
+  });
+
+  it("راوت المعالجة بيقرأ نص المستند وبيقطّعه", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain("readDocumentText");
+    expect(route).toContain("buildExamSource");
+    // ⚠️ التقطيع: مافيش «نص المستند كله في نداء واحد».
+    expect(route).toContain("const chunks = source.chunks;");
+    expect(route).toContain("chunk: () => chunks,");
+  });
+
+  it("طبقة المصادر: بتقرا knowledge_base وبتقسّم النص", () => {
+    const sources = read("lib/ai/exam-sources.ts");
+    expect(sources).toContain('from("knowledge_base")');
+    expect(sources).toContain("chunkTranscript");
+    expect(sources).toContain("EXAM_SOURCE_CHUNK_CHARS");
+  });
+
+  it("المهنة موجودة في القاعدة (migration 49) مع قيد «مصدر واحد»", () => {
+    const migration = read("db/49-exam-documents.sql");
+    expect(migration).toContain("create_exam_session_with_sources_reserve");
+    expect(migration).toContain("exam_session_items_exactly_one_source");
+    expect(migration).toContain("document_id");
+  });
+});
+
+describe("التسميات — فصل الصوتيات عن المستندات", () => {
+  it("النافبار: «التسجيلات الصوتية» مش «محاضراتي»", () => {
+    const nav = read("app/dashboard/components/nav-config.ts");
+    expect(nav).toContain('label: "التسجيلات الصوتية"');
+    expect(nav).toContain('href: "/lectures"');
+  });
+
+  it("تبويبات مساحة العمل: تسجيلات صوتية / مستندات", () => {
+    const workspace = read("app/dashboard/workspace/page.tsx");
+    expect(workspace).toContain('label: "التسجيلات الصوتية"');
+    expect(workspace).toContain('label: "المستندات"');
+  });
+
+  it("صفحة /lectures فيها تبويبين (تسجيلات + مستندات)", () => {
+    const page = read("app/lectures/page.tsx");
+    expect(page).toContain("المحاضرات الصوتية");
+    expect(page).toContain("المستندات");
+    expect(page).toContain('resolved?.tab === "documents"');
+  });
+});

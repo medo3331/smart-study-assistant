@@ -1001,7 +1001,7 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
         </div>
       )}
 
-      {/* ���� ���� ����� ������� */}
+      {/* ───────── شريط التقدّم ───────── */}
       {working && (
         <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--card-secondary)]">
           <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--accent)]" />
@@ -1037,7 +1037,7 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
             )}
             {transcript.provider && (
               <p className="text-xs text-[var(--muted)]">
-                �������: {transcript.provider} � {transcript.model}
+                المزوّد: {transcript.provider} · {transcript.model}
               </p>
             )}
           </div>
@@ -1074,7 +1074,7 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
 
                 <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
                   {saveInfo.saved
-                    ? "تقدر ترجعلها في أي وقت من «محاضراتي»."
+                    ? "تقدر ترجعلها في أي وقت من «التسجيلات الصوتية»."
                     : saveInfo.persistCode === "AUTH_REQUIRED"
                       ? "سجّل دخول الأول، وبعدين ارفع المحاضرة تاني وهتتحفظ في حسابك. النص اللي فوق موجود — انسخه أو حمّله دلوقتي."
                       : (saveInfo.persistMessage ??
@@ -1088,7 +1088,7 @@ export function LectureTranscriber({ subjectId }: { subjectId?: string | null } 
                     href="/lectures"
                     className="mt-2 inline-block text-sm font-semibold text-[var(--accent)] underline underline-offset-4"
                   >
-                    افتح محاضراتي
+                    افتح تسجيلاتي الصوتية
                   </Link>
                 )}
               </div>

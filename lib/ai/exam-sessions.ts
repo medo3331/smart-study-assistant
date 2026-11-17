@@ -81,47 +81,92 @@ export interface UsageIncrement {
 // ────────────────────────────────────────────────────────────
 export async function createExamSession(
   supabase: SupabaseClient,
-  params: { mode: ExamSessionMode; lectureIds: string[] }
+  params: { mode: ExamSessionMode; lectureIds: string[]; documentIds?: string[] }
 ): Promise<Result<CreateSessionResult>> {
-  if (!params.lectureIds || params.lectureIds.length === 0) {
-    return { ok: false, error: 'lectureIds required', code: 'VALIDATION' };
+  const lectureIds = (params.lectureIds ?? []).filter((id) => typeof id === 'string' && id.length > 0);
+  const documentIds = (params.documentIds ?? []).filter((id) => typeof id === 'string' && id.length > 0);
+  if (lectureIds.length === 0 && documentIds.length === 0) {
+    return { ok: false, error: 'lectureIds or documentIds required', code: 'VALIDATION' };
   }
-  if (params.lectureIds.length > 3) {
-    return { ok: false, error: 'max 3 lectures per session', code: 'VALIDATION' };
+  // ⚠️ **السقف 3 مصادر** (مش 3 محاضرات) — موزوع بين المحاضرات والمستندات.
+  if (lectureIds.length + documentIds.length > 3) {
+    return { ok: false, error: 'max 3 sources per session', code: 'VALIDATION' };
   }
   if (params.mode !== 'last_minute_review') {
     return { ok: false, error: 'invalid mode', code: 'VALIDATION' };
   }
 
-  const { data, error } = await supabase.rpc('create_exam_session_with_reserve', {
+  // ⚠️ **الـRPC الجديد (محاضرات + مستندات)** بيتبني بـ`db/49-exam-documents.sql`
+  //    (تطبيق يدوي على القاعدة). لو مش موجود ⇒ الخطأ 42883 (undefined_function)
+  //    ⇒ بنرجع للـRPC القديم (محاضرات بس) عشان المسار القديم ما يكسرش.
+  const { data, error } = await supabase.rpc('create_exam_session_with_sources_reserve', {
     p_mode: params.mode,
-    p_lecture_ids: params.lectureIds,
+    p_lecture_ids: lectureIds,
+    p_document_ids: documentIds,
   });
 
-  if (error) {
-    if (error.message.includes('not authenticated')) {
-      return { ok: false, error: error.message, code: 'UNAUTHENTICATED' };
+  if (error && isMissingRpc(error)) {
+    if (documentIds.length > 0) {
+      // مستندات + الـRPC مش موجود ⇒ رسالة صريحة (مش 500 غامض).
+      return {
+        ok: false,
+        error: 'exam documents source is not available yet (migration 49 not applied)',
+        code: 'SOURCES_UNAVAILABLE',
+      };
     }
-    if (error.message.includes('not found or not owned')) {
-      return { ok: false, error: 'one or more lectures not owned', code: 'NOT_OWNED' };
-    }
-    if (
-      error.message.includes('exceeds limit') ||
-      error.message.includes('out of range')
-    ) {
-      return { ok: false, error: error.message, code: 'BUDGET' };
-    }
-    if (error.message.includes('insufficient') || error.message.includes('quota')) {
-      return { ok: false, error: error.message, code: 'INSUFFICIENT_CREDITS' };
-    }
-    return { ok: false, error: error.message, code: 'DB_ERROR' };
+    const fallback = await supabase.rpc('create_exam_session_with_reserve', {
+      p_mode: params.mode,
+      p_lecture_ids: lectureIds,
+    });
+    if (fallback.error) return mapCreateError(fallback.error);
+    return finishCreate(fallback.data);
   }
 
+  if (error) {
+    return mapCreateError(error);
+  }
+
+  return finishCreate(data);
+}
+
+/**
+ * الـRPC مش موجود في القاعدة (42883) — يعني الـmigration لسه متطبّقةش.
+ *
+ * ⚠️ **ليه fallback**: المسار القديم (محاضرات بس) لازم يشتغل زي ما كان،
+ *    حتى لو الـmigration لسه على الـstaging/production.
+ */
+function isMissingRpc(error: { code?: string; message?: string }): boolean {
+  if (error.code === '42883') return true;
+  const message = (error.message ?? '').toLowerCase();
+  return message.includes('undefined_function') || message.includes('does not exist');
+}
+
+/** ترجمة خطأ الـRPC ل نتيجة typed (نفس خرائط الراوت). */
+function mapCreateError(error: { message: string }): Result<CreateSessionResult> {
+  if (error.message.includes('not authenticated')) {
+    return { ok: false, error: error.message, code: 'UNAUTHENTICATED' };
+  }
+  if (error.message.includes('not found or not owned')) {
+    return { ok: false, error: 'one or more sources not owned', code: 'NOT_OWNED' };
+  }
+  if (
+    error.message.includes('exceeds limit') ||
+    error.message.includes('out of range')
+  ) {
+    return { ok: false, error: error.message, code: 'BUDGET' };
+  }
+  if (error.message.includes('insufficient') || error.message.includes('quota')) {
+    return { ok: false, error: error.message, code: 'INSUFFICIENT_CREDITS' };
+  }
+  return { ok: false, error: error.message, code: 'DB_ERROR' };
+}
+
+/** يحوّل رد الـRPC لنتيجة (مع فحص الرد الفاضي). */
+function finishCreate(data: unknown): Result<CreateSessionResult> {
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) {
     return { ok: false, error: 'empty response from RPC', code: 'DB_ERROR' };
   }
-
   return { ok: true, data: row as CreateSessionResult };
 }
 
