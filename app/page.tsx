@@ -5,6 +5,7 @@ import Hero from '@/components/landing/Hero';
 import Roles from '@/components/landing/Roles';
 import Capabilities from '@/components/landing/Capabilities';
 import HowItWorksVideo from '@/components/landing/HowItWorksVideo';
+import ExamShowcase from '@/components/landing/ExamShowcase';
 import FeatureGrid from '@/components/landing/FeatureGrid';
 import ClosingCTA from '@/components/landing/ClosingCTA';
 
@@ -44,6 +45,9 @@ export default function LandingPage() {
 
           {/* Video section — "إزاي بتشتغل ماجيكلي؟" */}
           <HowItWorksVideo />
+
+          {/* عرض ميزة الامتحانات — سكرينات بتتحرك ورا بعض */}
+          <ExamShowcase />
 
           {/* Feature grid section */}
           <FeatureGrid />

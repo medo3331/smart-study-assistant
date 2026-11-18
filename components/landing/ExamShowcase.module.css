@@ -1,0 +1,519 @@
+/* ═══════════════════════════════════════════════════════════════
+   ExamShowcase — سكرينات ميزة الامتحانات (لاندينج)
+   ═══════════════════════════════════════════════════════════════ */
+
+.section {
+  padding: 7vh 6vw;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.head {
+  text-align: center;
+  margin-bottom: 40px;
+}
+.head h2 {
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.35;
+}
+.hl {
+  background: linear-gradient(100deg, var(--ember-bright), var(--gold-soft));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.eyebrow {
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 5px 13px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gold-soft);
+  border: 1px solid rgba(232, 176, 75, 0.28);
+  border-radius: 999px;
+  background: rgba(232, 176, 75, 0.07);
+}
+.lede {
+  max-width: 62ch;
+  margin: 14px auto 0;
+  font-size: 15px;
+  line-height: 1.85;
+  color: var(--muted);
+}
+
+/* ── التخطيط ───────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 34px;
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}
+
+/* ── الخطوات ───────────────────────────────────────────────── */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 11px;
+  align-items: start;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: start;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+.step:hover {
+  border-color: var(--line);
+  background: var(--panel-tint-2);
+}
+.stepActive {
+  border-color: rgba(232, 176, 75, 0.34);
+  background: linear-gradient(100deg, rgba(232, 176, 75, 0.09), rgba(200, 30, 58, 0.05));
+}
+.num {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--gold-soft);
+  border: 1px solid rgba(232, 176, 75, 0.3);
+  background: rgba(232, 176, 75, 0.08);
+}
+.stepTitle {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+.stepDesc {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ── الإطار ───────────────────────────────────────────────── */
+.stage {
+  min-width: 0;
+}
+.frame {
+  padding: 10px;
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.16));
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.012));
+  box-shadow: 0 40px 90px -50px rgba(0, 0, 0, 0.95);
+}
+.chrome {
+  display: flex;
+  gap: 6px;
+  padding: 2px 4px 10px;
+}
+.chrome span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+}
+.chrome span:first-child {
+  background: rgba(255, 92, 106, 0.55);
+}
+.chrome span:nth-child(2) {
+  background: rgba(232, 176, 75, 0.55);
+}
+
+/* السكرين نفسه — ألوان التطبيق الحقيقية (زي سكرين شوت) */
+.screens {
+  position: relative;
+  min-height: 336px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: radial-gradient(120% 120% at 100% 0%, #151b38 0%, #0d1029 55%, #0a0d22 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #f0e6d2;
+}
+.screen {
+  position: absolute;
+  inset: 0;
+  padding: 20px;
+  opacity: 0;
+  transform: translateY(10px) scale(0.99);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
+}
+.screenActive {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* ── عناصر السكرينات ──────────────────────────────────────── */
+.mock {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 10px;
+}
+.mTitle {
+  font-size: 14px;
+  font-weight: 800;
+}
+.mSub {
+  margin-top: -4px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #9aa3c0;
+}
+.mLabel {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c7cdea;
+}
+.mHint {
+  margin-top: auto;
+  font-size: 10.5px;
+  color: #7f88a8;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px;
+  font-size: 11.5px;
+  color: #9aa3c0;
+  border: 1px dashed rgba(232, 176, 75, 0.35);
+  border-radius: 12px;
+  background: rgba(232, 176, 75, 0.05);
+}
+.dropIcon {
+  font-size: 18px;
+  color: var(--gold-soft);
+}
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  font-size: 11.5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.fileName {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fileDone {
+  margin-inline-start: auto;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #6ee7a8;
+}
+.prog {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.progFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ember-bright), var(--gold-soft));
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  padding: 5px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b9c0dc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.chipOn {
+  color: #1a1405;
+  border-color: transparent;
+  background: linear-gradient(100deg, var(--gold-soft), #f7dfa8);
+}
+
+.slider {
+  position: relative;
+  height: 6px;
+  margin: 14px 0 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.sliderFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ember-bright), var(--gold-soft));
+}
+.sliderKnob {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #1a1405;
+  background: var(--gold-soft);
+  border-radius: 999px;
+}
+
+.qHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.qMeta {
+  font-size: 11px;
+  color: #9aa3c0;
+}
+.qPill {
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #ffd9a1;
+  border: 1px solid rgba(232, 176, 75, 0.35);
+  border-radius: 999px;
+  background: rgba(232, 176, 75, 0.1);
+}
+.qText {
+  margin: 6px 0 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.opts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.opt {
+  position: relative;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  color: #c7cdea;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.028);
+}
+.optOn {
+  color: #eafff1;
+  border-color: rgba(110, 231, 168, 0.5);
+  background: rgba(110, 231, 168, 0.12);
+}
+.optMark {
+  position: absolute;
+  inset-inline-end: 10px;
+  font-weight: 800;
+  color: #6ee7a8;
+}
+.qFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+}
+.saveChip {
+  font-size: 10.5px;
+  color: #6ee7a8;
+}
+.dotsSmall {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.scoreHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.score {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1;
+  background: linear-gradient(100deg, var(--gold-soft), #ffe6b5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.scoreMeta {
+  font-size: 11px;
+  color: #9aa3c0;
+}
+.bars {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 11px;
+}
+.barRow {
+  display: grid;
+  grid-template-columns: 92px 1fr 38px;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+}
+.barName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #dfe3f5;
+  font-weight: 700;
+}
+.bar {
+  display: block;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.barGood {
+  background: #34d399;
+}
+.barMid {
+  background: var(--gold-soft);
+}
+.barLow {
+  background: #fb7185;
+}
+.barPct {
+  text-align: end;
+  font-weight: 800;
+  color: #c7cdea;
+}
+
+/* ── التحكم ───────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+.nav {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel-tint-2);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.nav:hover {
+  border-color: var(--line-strong, rgba(255, 255, 255, 0.3));
+}
+.nav:focus-visible {
+  outline: 2px solid var(--gold-soft);
+  outline-offset: 3px;
+}
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  cursor: pointer;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  transition: background 0.2s ease, width 0.2s ease;
+}
+.dotActive {
+  width: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-soft), var(--ember-bright));
+}
+
+.ctaRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 26px;
+}
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 26px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #1a1405;
+  border-radius: 999px;
+  background: linear-gradient(100deg, var(--gold-soft), #ffe6b5);
+  box-shadow: 0 18px 40px -22px rgba(232, 176, 75, 0.9);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 46px -20px rgba(232, 176, 75, 0.95);
+}
+
+/* ♿ حركة أقل: مفيش انتقالات، السكرين بيتغيّر فوراً */
+@media (prefers-reduced-motion: reduce) {
+  .screen,
+  .step,
+  .nav,
+  .dot,
+  .cta {
+    transition: none;
+  }
+  .screen {
+    transform: none;
+  }
+  .cta:hover {
+    transform: none;
+  }
+}

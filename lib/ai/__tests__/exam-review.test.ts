@@ -8,6 +8,8 @@ import {
   normalizeExamSpec,
   validateExamMcqs,
   validateExamQuestion,
+  extractSectionTitles,
+  snapTopic,
   dedupeQuestions,
   extractKeyPoints,
   ExamReviewError,
@@ -645,5 +647,55 @@ describe('helpers', () => {
     const points = extractKeyPoints(SUMMARY_MD);
     expect(points).toContain('الفصل الأول');
     expect(points.some((p) => p.includes('تعريف مهم'))).toBe(true);
+  });
+});
+
+/**
+ * 🏷️ تقييم الأجزاء: العناوين لازم تتجمّع على أقسام المحاضرة الحقيقية.
+ * الحالة اللي كشفت المشكلة: ٢٠ سؤال ⇒ ١٧ «جزء» كل واحد سؤال.
+ */
+describe('extractSectionTitles + snapTopic', () => {
+  const summary = [
+    '## Initial Access',
+    '### Password Attacks',
+    '- نقطة',
+    '## Phishing',
+    '## Phishing',
+    '## Security Controls',
+  ].join('\n');
+
+  it('بيستخرج عناوين الأقسام بلا تكرار وبالترتيب', () => {
+    expect(extractSectionTitles(summary)).toEqual([
+      'Initial Access',
+      'Password Attacks',
+      'Phishing',
+      'Security Controls',
+    ]);
+  });
+
+  it('بيحدد العدد الأقصى', () => {
+    expect(extractSectionTitles(summary, 2)).toHaveLength(2);
+  });
+
+  it('ملخّص من غير عناوين ⇒ مصفوفة فاضية', () => {
+    expect(extractSectionTitles('- نقطة\n- نقطة تانية')).toEqual([]);
+  });
+
+  it('snapTopic: مطابقة تامة (بغض النظر عن الحالة والتشكيل)', () => {
+    expect(snapTopic('phishing', ['Initial Access', 'Phishing'])).toBe('Phishing');
+  });
+
+  it('snapTopic: احتواء — اسم قصير جوه اسم طويل', () => {
+    expect(snapTopic('Phishing Email Indicators', ['Phishing'])).toBe('Phishing');
+    expect(snapTopic('Access', ['Initial Access'])).toBe('Initial Access');
+  });
+
+  it('snapTopic: مفيش تطابق ⇒ بيسيب عنوان الموديل', () => {
+    expect(snapTopic('Malware Types', ['Phishing'])).toBe('Malware Types');
+  });
+
+  it('snapTopic: label فاضي ⇒ undefined', () => {
+    expect(snapTopic(undefined, ['Phishing'])).toBeUndefined();
+    expect(snapTopic('   ', ['Phishing'])).toBeUndefined();
   });
 });

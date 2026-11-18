@@ -197,6 +197,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ar"
       dir="rtl"
       className={`${display.variable} ${body.variable} ${mono.variable}`}
+      /* ⚠️ سكريبت منع الوميض (تحت) بيحط `data-theme` **قبل** الترطيب،
+         فـSSR مابيبعتش نفس الـattribute ⇒ React بيسجل hydration mismatch
+         على <html> ويظهر «1 Issue» في overlay التطوير. الـattribute ده
+         بيتحدد على العميل بالتصميم، فهو mismatch متوقع ومقصود. */
+      suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashTheme }} />

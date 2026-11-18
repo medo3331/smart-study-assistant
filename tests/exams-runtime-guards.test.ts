@@ -589,8 +589,11 @@ describe("تقييم الأجزاء — ربط السؤال بالجزء", () =>
     expect(engine).toContain("function readTopic");
   });
 
-  it("المولّد بيحط بديل حتمي لو الموديل نسي الجزء", () => {
-    expect(read("lib/ai/exam-review.ts")).toContain("topic: `الجزء ${index + 1}`");
+  it("المولّد بيربط كل سؤال بقسم من الملخص، وبيحط بديل حتمي لو الموديل نساه", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("extractSectionTitles(summary)");
+    expect(engine).toContain("snapTopic(question.topic, sections)");
+    expect(engine).toContain("`الجزء ${index + 1}`");
   });
 
   it("واجهة النتيجة بتعرض أضعف جزء", () => {
