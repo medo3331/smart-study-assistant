@@ -79,10 +79,27 @@ type KnowledgePageRow = {
  * ⚠️ **الترتيب**: `source_page` (رقم الصفحة) وبعده `chunk_index` (القطعة
  *    جوه الصفحة) — عشان النص يطلع بترتيب القراءة، مش عشوائي.
  */
+/**
+ * نص مستند جاهز للتوليد + معلومات القصّ.
+ *
+ * ⚠️ **`truncated` جوه الـreturn مش لوج**: الراوت بيبني منه إشعار
+ *    للطالب («الملف كبير، التوليد هيغطي أول جزء»). من غير العلم ده
+ *    الطالب بيفتكر إن الامتحان غطّى الملف كله وهو غطّى جزء منه بس.
+ */
+export type DocumentText = {
+  title: string;
+  /** النص بعد القصّ (≤ EXAM_SOURCE_MAX_CHARS). */
+  text: string;
+  /** عدد الحروف المتاح فعلاً قبل القصّ. */
+  totalChars: number;
+  /** true ⇒ النص اتقصّ عند السقف والتوليد هيغطي جزء منه بس. */
+  truncated: boolean;
+};
+
 export async function readDocumentText(
   supabase: SupabaseClient,
   args: { documentId: string; userId: string }
-): Promise<{ title: string; text: string } | null> {
+): Promise<DocumentText | null> {
   const { documentId, userId } = args;
 
   // ① المستند نفسه (ملكية + العنوان).
@@ -110,12 +127,17 @@ export async function readDocumentText(
 
   if (!pageError && Array.isArray(pageData)) {
     const pages = pageData as KnowledgePageRow[];
-    const text = pages
+    const full = pages
       .map((page) => (typeof page.content === "string" ? page.content : ""))
       .join("\n\n")
       .trim();
-    if (text) {
-      return { title: doc.title ?? "مستند", text: text.slice(0, EXAM_SOURCE_MAX_CHARS) };
+    if (full) {
+      return {
+        title: doc.title ?? "مستند",
+        text: full.slice(0, EXAM_SOURCE_MAX_CHARS),
+        totalChars: full.length,
+        truncated: full.length > EXAM_SOURCE_MAX_CHARS,
+      };
     }
   }
 
@@ -135,6 +157,8 @@ export async function readDocumentText(
       return {
         title: doc.title ?? material?.title ?? "مستند",
         text: content.slice(0, EXAM_SOURCE_MAX_CHARS),
+        totalChars: content.length,
+        truncated: content.length > EXAM_SOURCE_MAX_CHARS,
       };
     }
   }

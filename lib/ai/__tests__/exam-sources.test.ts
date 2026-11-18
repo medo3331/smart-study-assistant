@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { buildExamSource, readDocumentText, EXAM_SOURCE_CHUNK_CHARS } from "../exam-sources";
+import { buildExamSource, readDocumentText, EXAM_SOURCE_CHUNK_CHARS, EXAM_SOURCE_MAX_CHARS } from "../exam-sources";
 
 /**
  * مصادر الامتحان — المستندات (PDF/PPTX) كـsource حقيقي جنب المحاضرات.
@@ -74,6 +74,51 @@ describe("readDocumentText — نص المستند", () => {
 
     const result = await readDocumentText(client, { documentId: "doc-2", userId: "user-1" });
     expect(result?.text).toBe("نص مدمج من الاستخراج");
+  });
+
+  /**
+   * ✂️ القصّ: التوليد بيقرا أول `EXAM_SOURCE_MAX_CHARS` بس — والراوت
+   *    بيبني إشعار للطالب من `truncated`. من غير الفلاج ده الطالب
+   *    بيفتكر إن الامتحان غطّى الملف كله.
+   */
+  it("نص أطول من السقف ⇒ مقصوص + truncated=true + totalChars الحقيقي", async () => {
+    const long = "ا".repeat(EXAM_SOURCE_MAX_CHARS + 5_000);
+    const { client } = fakeSupabase({
+      documents: { data: [{ id: "doc-3", title: "كتاب كبير", material_id: null, status: "ready" }] },
+      knowledge_base: { data: [{ source_page: 1, chunk_index: 0, content: long }] },
+    });
+
+    const result = await readDocumentText(client, { documentId: "doc-3", userId: "user-1" });
+
+    expect(result?.text.length).toBe(EXAM_SOURCE_MAX_CHARS);
+    expect(result?.totalChars).toBe(long.length);
+    expect(result?.truncated).toBe(true);
+  });
+
+  it("نص أقل من السقف ⇒ truncated=false", async () => {
+    const { client } = fakeSupabase({
+      documents: { data: [{ id: "doc-4", title: "ملخص", material_id: null, status: "ready" }] },
+      knowledge_base: { data: [{ source_page: 1, chunk_index: 0, content: "نص قصير" }] },
+    });
+
+    const result = await readDocumentText(client, { documentId: "doc-4", userId: "user-1" });
+
+    expect(result?.truncated).toBe(false);
+    expect(result?.totalChars).toBe("نص قصير".length);
+  });
+
+  it("نص احتياطي (materials) أطول من السقف ⇒ بيتقصّ ويتعلم truncated", async () => {
+    const long = "ب".repeat(EXAM_SOURCE_MAX_CHARS + 1);
+    const { client } = fakeSupabase({
+      documents: { data: [{ id: "doc-5", title: "ملف", material_id: "mat-5", status: "ready" }] },
+      knowledge_base: { data: [] },
+      materials: { data: [{ id: "mat-5", title: "ملف", content: long }] },
+    });
+
+    const result = await readDocumentText(client, { documentId: "doc-5", userId: "user-1" });
+
+    expect(result?.text.length).toBe(EXAM_SOURCE_MAX_CHARS);
+    expect(result?.truncated).toBe(true);
   });
 });
 

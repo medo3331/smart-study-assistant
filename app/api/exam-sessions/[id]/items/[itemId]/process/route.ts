@@ -25,6 +25,7 @@ import {
   buildExamSource,
   readDocumentText,
   EXAM_SOURCE_CHUNK_CHARS,
+  EXAM_SOURCE_MAX_CHARS,
   type ExamSourceKind,
 } from "@/lib/ai/exam-sources";
 
@@ -313,7 +314,10 @@ export async function POST(
     if (!lecture || typeof lecture.transcript_text !== "string" || !lecture.transcript_text.trim()) {
       return fail("NO_TRANSCRIPT", 422);
     }
-    transcript = lecture.transcript_text;
+    // ✂️ نفس سقف المستندات: التوليد بيغطّي أول `EXAM_SOURCE_MAX_CHARS`
+    //    حرف. من غير القَصّ ده محاضرة ٢٠٠ ألف حرف بتتولّد بالكامل ⇒
+    //    نداءات ووقت وتكلفة أكتر بكتير من المتوقع.
+    transcript = lecture.transcript_text.slice(0, EXAM_SOURCE_MAX_CHARS);
     sourceTitle = lecture.title ?? "محاضرة";
   }
 

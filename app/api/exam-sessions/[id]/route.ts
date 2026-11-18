@@ -115,10 +115,13 @@ export async function GET(
     mode: session.mode,
     status: session.status,
     metadata: session.metadata ?? null,
-    // 🌍 إشعار «موضوع عام» — الطالب لازم يعرف مصدر أسئلته.
-    notice: rows.some((item) => item.topic)
-      ? "الامتحان ده مبني على معلومات عامة في الموضوع. لو عايز امتحان مخصص لمحاضرتك، ارفع الملف أو اختار من محاضراتك."
-      : null,
+    // 🌍 إشعار المصدر: «موضوع عام» أو «المحتوى اتقصّ» (من metadata
+    //    اللي كتبها الراوت وقت الإنشاء — عشان يفضل مع الجلسة).
+    notice:
+      (session.metadata as { notice?: unknown } | null)?.notice ??
+      (rows.some((item) => item.topic)
+        ? "الامتحان ده مبني على معلومات عامة في الموضوع. لو عايز امتحان مخصص لمحاضرتك، ارفع الملف أو اختار من محاضراتك."
+        : null),
     total_lectures: session.total_lectures,
     completed_lectures: completedLectures,
     last_completed_at: lastCompletedAt,

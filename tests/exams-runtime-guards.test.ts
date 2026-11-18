@@ -467,3 +467,83 @@ describe("🔥 تخصيص الموديل لكل ميزة (Task-Specific Models)"
     expect(engine).toContain("Array.isArray(parsed)");
   });
 });
+
+/**
+ * ✂️ ميزانية المصادر + إشعار القصّ.
+ *
+ * العَرَض الأصلي: `total chunks 69 exceeds limit 9` على ملف 69 صفحة
+ * صغيرة (≈35 ألف حرف — أقل من سقف الـ60 ألف) ⇒ منع إنشاء الامتحان.
+ * السبب: `sum(ceil(len/12000))` لكل صف بدل حساب الإجمالي.
+ */
+describe("ميزانية المصادر — القطع من الإجمالي وإلغاء الرفض", () => {
+  const DB51 = "db/51-exam-source-budget.sql";
+
+  it("db/51 بيعيد تعريف الدالتين (نفس التواقيع)", () => {
+    const sql = read(DB51);
+    expect(sql).toContain(
+      "create or replace function public.create_exam_session_with_sources_reserve"
+    );
+    expect(sql).toContain("create or replace function public.create_exam_session_with_reserve");
+    expect(sql).toContain("grant execute on function public.create_exam_session_with_reserve(text, uuid[]) to authenticated;");
+  });
+
+  it("القطع بيتحسب من الإجمالي مش مجموع ceil لكل صف", () => {
+    const sql = read(DB51);
+    expect(sql).toContain("v_total_chunks := ceil(v_total_chars::numeric / 12000)::int;");
+  });
+
+  it("مافيش رفض على عدد القطع أو على 60 ألف حرف", () => {
+    const sql = read(DB51);
+    expect(sql).not.toMatch(/raise exception 'total chunks/);
+    expect(sql).not.toMatch(/raise exception 'total chars/);
+  });
+
+  it("سقف حماية من الإساءة لسه موجود", () => {
+    expect(read(DB51)).toContain("source too large: % chars");
+  });
+
+  it("الراوت بيجهّز إشعار قصّ عربي", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("truncatedSources");
+    expect(route).toContain("هيغطي أول");
+    expect(route).toContain("notice: truncationNotice");
+  });
+
+  it("خطأ الميزانية الخام مايوصلش للطالب بإنجليزي", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("budgetDetail(created.error)");
+    expect(route).not.toContain('return fail("BUDGET", 400, created.error)');
+  });
+});
+
+describe("GET /api/exam-sessions — قائمة «امتحاناتي»", () => {
+  it("الراوت فيه GET بحد أقصى للقائمة", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toMatch(/export async function GET\(req: Request\)/);
+    expect(route).toContain("Math.min(50");
+  });
+
+  it("الهَب بيقرا من الـAPI بدل استعلامين في المتصفح", () => {
+    const hub = read("components/exams/ExamsHub.tsx");
+    expect(hub).toContain('fetch("/api/exam-sessions?limit=20"');
+    expect(hub).not.toContain('from("exam_session_answers")');
+  });
+
+  it("الـGET بيرجّع عدد الإجابات جوه كل جلسة", () => {
+    expect(read(CREATE_ROUTE)).toContain("answered: answered.get(row.id) ?? 0");
+  });
+});
+
+describe("قصّ المصادر — نفس السقف للمحاضرات والمستندات", () => {
+  it("المحاضرة بتتقصّ عند EXAM_SOURCE_MAX_CHARS وقت المعالجة", () => {
+    expect(read(PROCESS_ROUTE)).toContain(
+      "transcript = lecture.transcript_text.slice(0, EXAM_SOURCE_MAX_CHARS);"
+    );
+  });
+
+  it("نص المستند بيتقصّ في exam-sources", () => {
+    const sources = read("lib/ai/exam-sources.ts");
+    expect(sources).toContain("truncated: full.length > EXAM_SOURCE_MAX_CHARS");
+    expect(sources).toContain("totalChars: full.length");
+  });
+});
