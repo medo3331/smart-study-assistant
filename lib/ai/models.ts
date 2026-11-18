@@ -68,6 +68,31 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     enabled: true,
   },
   {
+    /**
+     * 🔥 **Llama 3.3 70B** — مرشّح ممتاز لتوليد الـJSON الطويل (سريع جدًا
+     * على Groq ومتاح على النقطة المجانية).
+     *
+     * ⚠️ **ليه `enabled: false`**: ما قدرناش نتحقق حيًا إن الحساب الحالي
+     *    مفعّل له الموديل (فحص `/v1/models` محتاج تشغيل
+     *    `node scripts/test-ai-providers.mjs groq:models`). **ممنوع نفعّله
+     *    قبل الفحص** — لو مش موجود عند المزوّد كل نداء هيرجع 404 وهيحرق
+     *    وقت التوليد. بعد الفحص: بدّل `enabled` لـ true يدويًا.
+     *
+     * ⚠️ **ليه مش هو الأساسي**: خط التوليد الأساسي ما بيتغيّرش — التوليد شغال
+     *    على `openai/gpt-oss-20b` (متحقَّق منه في المشروع) لحد ما يتأكد.
+     */
+    id: "llama-3.3-70b-versatile",
+    provider: "groq",
+    displayName: "Llama 3.3 70B Versatile (Groq)",
+    capabilities: ["text", "streaming"],
+    contextWindow: 131_072,
+    priority: 4,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: false,
+  },
+  {
     id: "llama-3.2-11b-vision-preview",
     provider: "groq",
     displayName: "Llama 3.2 11B Vision (Groq)",

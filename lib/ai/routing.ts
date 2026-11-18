@@ -99,6 +99,11 @@ export const AI_PROVIDER_BY_TASK: Readonly<Record<AiTaskType, AiProviderName>> =
   image_edit: "gemini",
   video_generation: "gemini",
   rag_embeddings: "nvidia",
+  /**
+   * 🔥 **توليد الامتحانات** — Groq (مجاني + سريع + JSON موثوق).
+   * الموديل السريع المفضّل: `openai/gpt-oss-20b` (من غير استدلال).
+   */
+  exam_generation: "groq",
 };
 
 /**
@@ -137,6 +142,13 @@ const TASK_CAPABILITIES: Readonly<Record<AiTaskType, AiCapability[]>> = {
   image_edit: ["vision", "image_generation"],
   video_generation: ["video_generation"],
   rag_embeddings: ["embeddings"],
+  /**
+   * 🔥 **توليد الامتحانات**: القدرة `text` بس (مش structured_output) —
+   * لأن الـJSON بيتحقّق منه **بتطبيقنا** (parse + validate + إصلاح)،
+   * فمش محتاجين capability القاسية — وبكده موديل الاستدلال
+   * (gpt-oss-120b) يفضل متاح كـ**بديل أخير** لو كل الب-fast وقعوا.
+   */
+  exam_generation: ["text"],
 };
 
 /**
@@ -145,15 +157,55 @@ const TASK_CAPABILITIES: Readonly<Record<AiTaskType, AiCapability[]>> = {
  * المفتاح = معرّف موديل مسجّل في MODEL_REGISTRY (بيترمى خطأ لو اتغيّر غلط).
  */
 export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]>> = {
+  /**
+   * 🔥 **الدردشة** — موديل **سريع** أولاً.
+   *
+   * ⚠️ **ليه تغيير**: `gpt-oss-120b` موديل **استدلال** ⇒ بطيء، وبيحرق
+   *    توكنز تفكير مع كل رسالة، وبيضرب سقف الـrate limit على الشات.
+   *    `gpt-oss-20b` أسرع بكتير وبيجيب نفس الجودة للمحادثة العادية،
+   *    والقوي (`120b`) فضل **بديل** لو وحد برد بشكل سيء.
+   */
   chat: [
-    "openai/gpt-oss-120b",            // Groq أولاً (أسرع)
+    "openai/gpt-oss-20b",             // Groq — سريع (من غير استدلال)
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "openai/gpt-oss-120b",            // Groq كمان احتياطي (استدلال)
     "deepseek-ai/deepseek-v4-flash-0731",
   ],
+  /**
+   * 🔥 **توليد الامتحانات** — سريع + JSON موثوق (و**مش** استدلال).
+   *
+   * ⚠️ **ليه**: التوليد = نداءات JSON طويلة متتابعة (ملخص + أسئلة لكل
+   *    قطعة). موديل الاستدلال بيرemd وقت ⇒ مهلة 60s ⇒ 504 ثم 502 من
+   *    المنصة. الترتيب: سريع ⇒ سريع-متوسط ⇒ قوي ⇒ استدلال (آخر أمل).
+   *
+   * ⚠️ **الترتيب مهم**: كل موديل بيتجَرّب لو前面的ه فشل (429/5xx) ⇒
+   *    فلو `gpt-oss-20b` اتعيط، بينزل追記 للـNVIDIA ومن بعده للـOpenRouter.
+   */
+  exam_generation: [
+    "openai/gpt-oss-20b",             // Groq — سريع + structured_output ✓
+    "nvidia/nemotron-3.5-lightning-30b-a3b", // سريع جداً (لو مفتاح NVIDIA صالح)
+    "nvidia/nemotron-3-super-120b-a12b",
+    "openai/gpt-oss-120b",            // آخر resort (استدلال — أبطأ)
+  ],
+  /**
+   * 🔥 **الشرح** — الموديل القوي (استدلال) كما هو.
+   *
+   * ⚠️ **ليه**: الشرح محتاج تفكير وربط، ووقته قصير (مش نداءات متتابعة
+   *    زي التوليد) ⇒ مفيش سبب نستخدمه موديل خفيف.
+   */
+  explain: [
+    "openai/gpt-oss-120b",            // Groq — استدلال (الشرح محتاج تفكير)
+    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+  ],
   coding: [
-    "deepseek-ai/deepseek-v4-flash-0731",
+    // ⚠️ **`deepseek-v4-flash` اتشال من.Primary**: الموديل ده معطّل في
+    //    السجل (بيرجّع 404 فعليًا على حساب NVIDIA — اتأكد مرتين).
+    //    الأساسي لازم يكون موديل **مفعّل** فعلاً؛ وإلا كل نداء بيبدأ
+    //   Trying موديل محجوب وبيستهلك وقت قبل ما ينتقل للتاني.
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "openai/gpt-oss-120b",            // Groq كمان احتياطي
+    "deepseek-ai/deepseek-v4-flash-0731",
   ],
   agent: [
     "nvidia/nemotron-3.5-lightning-30b-a3b",

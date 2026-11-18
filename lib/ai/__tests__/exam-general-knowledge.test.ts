@@ -125,3 +125,60 @@ describe("generateExamReview — الوضع العام (معلومات عامة)
     ).rejects.toThrow();
   });
 });
+
+/**
+ * 🛟 **مرونة التوليد**: لو جزء من الأسئلة فشل (كل الموديلات اتعيطت)،
+ * المحرك **بيكمّل** باقي الأجزاء بدل ما يرمي والامتحان كله يضيع.
+ */
+describe("generateExamReview — جزء بيفشل مابيترميش", () => {
+  it("فشل نداء الأسئلة ⇒ المحرك بيكمّل والامتحان بيطلع ناقص شوية", async () => {
+    const { generateExamReview } = await import("../exam-review");
+    const { chunkTranscript } = await import("../lecture-prompts");
+
+    let questionsCalls = 0;
+    const deps = {
+      runTask: vi.fn(async (args: { messages: AiChatMessage[]; usage: AiUsageContext }) => {
+        const aiTask = String(args.usage.diagnostics?.ai_task ?? "");
+        if (aiTask === "questions" || aiTask === "questions_repair") {
+          questionsCalls += 1;
+          // ⚠️ أول نداء أسئلة بيفشل (429 متكرر) ⇒ لازم تتجرب تاني
+          //    وتكمّل بعدين.
+          if (questionsCalls === 1) {
+            const error = new Error("429 rate limited") as Error & { status: number };
+            error.status = 429;
+            throw error;
+          }
+          return {
+            content: JSON.stringify({
+              questions: [
+                {
+                  type: "mcq",
+                  question: "سؤال بعد إعادة المحاولة؟",
+                  options: ["أ", "ب", "ج", "د"],
+                  correctAnswer: 0,
+                  explanation: "لأنه معروف.",
+                },
+              ],
+            }),
+          };
+        }
+        return { content: "## ملخص\n- نقطة" };
+      }),
+      chunk: chunkTranscript,
+      chunkChars: 12_000,
+      usageFor: (task: string) => usageForTask(task),
+      afterCall: async () => {},
+    };
+
+    const result = await generateExamReview({
+      transcript: "البناء الضوئي",
+      deps: deps as never,
+      mode: "general",
+      spec: { types: ["mcq"], difficulty: "medium", count: 5 },
+    });
+
+    expect(result.review.questions.length).toBeGreaterThan(0);
+    // ⚠️ النداء الثاني حصل فعلاً (إعادة المحاولة).
+    expect(questionsCalls).toBeGreaterThanOrEqual(2);
+  });
+});

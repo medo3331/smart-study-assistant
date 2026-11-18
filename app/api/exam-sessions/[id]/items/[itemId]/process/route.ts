@@ -367,7 +367,10 @@ export async function POST(
 
   const deps: ExamReviewDeps = {
     runTask: async ({ messages, usage, temperature, maxTokens, timeoutMs }) => {
-      const result = await runAiTask("chat", {
+      // 🔥 **مهمة `exam_generation` مش `chat`**: التوليد نداءات JSON طويلة
+      //    متتابعة — والموديل السريع (gpt-oss-20b) بيخلّيها ضمن المهلة
+      //    بدل ما تستنزف الوقت على استدلال زي gpt-oss-120b (502/503).
+      const result = await runAiTask("exam_generation", {
         messages,
         options: {
           temperature,
@@ -378,6 +381,20 @@ export async function POST(
         },
         user: { userId: user.id, language: "ar" },
         usage,
+      });
+      // 🧾 **لوج الموديل المنفّذ**: مع كل موديل بنعرفه نعرف مين تعطّل
+      //    (GROQ/NVIDIA/OpenRouter) — ده أول حاجة تبصّها لو في 502/503.
+      console.info("[exam-sessions] exam_generation call", {
+        provider: result.provider,
+        model: result.model,
+        // ⚠️ `fallback.attempts` = المحاولات الفاشلة قبل النجاح ⇒ بتقول
+        //    أي موديل اتعيط وباي حالة.
+        attempts: result.fallback?.attempts?.map((attempt) => ({
+          provider: attempt.provider,
+          model: attempt.model,
+          ok: attempt.ok,
+          reason: attempt.reason,
+        })),
       });
       return { content: result.content };
     },

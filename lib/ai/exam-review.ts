@@ -805,7 +805,7 @@ export async function generateExamReview(input: {
     return response.content;
   };
 
-  // ١) ملخص كل قطعة
+  // ①) ملخص كل قطعة
   const notes: string[] = [];
   for (const [index, chunk] of chunks.entries()) {
     const content = await callTask(
@@ -816,7 +816,7 @@ export async function generateExamReview(input: {
     notes.push(stripCodeFence(content));
   }
 
-  // ٢) الدمج عند القطع المتعددة
+  // ②) الدمج عند القطع المتعددة
   let summary = notes[0] ?? "";
   if (chunks.length > 1) {
     summary = stripCodeFence(
@@ -838,15 +838,38 @@ export async function generateExamReview(input: {
   const quotas = distributeQuotas(want, chunks.length);
 
   const collected: ExamQuestion[] = [];
+  // 🛟 **أجزاء فشلَت**: بنكمل من غيرها بدل ما نرمي (الامتحان بيطلع ناقص
+  //    شوية وبيتكمّل بعدين بنداء الإصلاح) — بدل ما الخسارة تكون كاملة.
+  let failedParts = 0;
   for (const [index, chunk] of chunks.entries()) {
     const parts = splitQuestionQuota(quotas[index]);
     for (const part of parts) {
-      const raw = await callTask(
-        "questions",
-        buildQuestionsMessages({ quota: part, spec, chunk, index, total: chunks.length, mode }),
-        0.4,
-        part
-      );
+      // ⚠️ **محاولتان للجزء الواحد**: النداء بيرمي بعد ما الراوتر يستنزف
+      //    كل الموديلات (بما فيها الـfallback) — فبنعيد مرة واحدة:
+      //    الكوتة (429) ممكن تكون انتهت، والراوتر بيبدأ من أول مرشح ⇒
+      //    ممكن يوصل لموديل تاني مختلف.
+      let raw: string | null = null;
+      for (let attempt = 1; attempt <= 2 && raw === null; attempt += 1) {
+        try {
+          raw = await callTask(
+            "questions",
+            buildQuestionsMessages({ quota: part, spec, chunk, index, total: chunks.length, mode }),
+            0.4,
+            part
+          );
+        } catch (error) {
+          // ⚠️ ضياع الـlease = عامل تاني ⇒ خطأ قاتل (مش بنحاول تاني).
+          if (error instanceof ExamLeaseLostError) throw error;
+          if (attempt >= 2) {
+            failedParts += 1;
+            console.warn(
+              `[exam-review] جزء الأسئلة فشل بعد محاولتين — بنكمل الباقي (${failedParts})`,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+        }
+      }
+      if (raw === null) continue;
       collected.push(...validateItemsLenient(parseQuestionsEnvelope(raw), spec.types));
     }
   }

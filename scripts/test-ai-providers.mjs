@@ -84,9 +84,55 @@ async function testGemini() {
   console.log("Gemini: OK");
 }
 
+/**
+ * 📋 قائمة موديلات Groq المتاحة فعليًا على الحساب (read-only).
+ *
+ * ⚠️ **ليه**: قبل ما نضيف موديل لسجل المشروع (MODEL_REGISTRY) لازم نتأكد
+ *    إنه موجود عند المزوّد فعلاً — مش من الذاكرة (ممنوع التخمّن).
+ *
+ * ⚠️ **مفيش أي secret بيتطبع** — أسماء الموديلات فقط.
+ */
+async function listGroqModels() {
+  const apiKey =
+    process.env.GROQ_API_KEY_1?.trim() ||
+    process.env.GROQ_API_KEY_2?.trim() ||
+    process.env.GROQ_API_KEY_3?.trim() ||
+    process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) throw new Error("GROQ_API_KEY is missing");
+
+  const response = await fetch("https://api.groq.com/openai/v1/models", {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`Groq models list failed (${response.status})`);
+  const data = await response.json();
+  const models = (data.data ?? []).map((m) => m.id).sort((a, b) => a.localeCompare(b));
+  console.log(`Groq models: ${models.length}`);
+  for (const id of models) console.log("  •", id);
+
+  // ⚠️ الموديلات المرشّحة للتوليد السريع — نتأكد من وجودها.
+  const wanted = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+  ];
+  console.log("\n=== المرشّحات ===");
+  for (const id of wanted) {
+    console.log(`${models.includes(id) ? "AVAILABLE" : "MISSING  "} — ${id}`);
+  }
+}
+
 const provider = process.argv[2];
-if (provider && !["groq", "nvidia", "gemini"].includes(provider)) {
-  console.error("Usage: npm run test:ai [-- groq|nvidia|gemini]");
+if (provider === "groq:models") {
+  try {
+    await listGroqModels();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "Groq models list failed");
+    process.exitCode = 1;
+  }
+} else if (provider && !["groq", "nvidia", "gemini"].includes(provider)) {
+  console.error("Usage: npm run test:ai [-- groq|nvidia|gemini|groq:models]");
   process.exitCode = 1;
 } else {
   try {

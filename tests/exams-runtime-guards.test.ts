@@ -339,3 +339,52 @@ describe("🌍 المولّد الذكي — مصدر «موضوع عام» + ر
     expect(sessions).toContain("topicSupport");
   });
 });
+
+describe("🔥 تخصيص الموديل لكل ميزة (Task-Specific Models)", () => {
+  it("مهمة مستقلة لتوليد الامتحانات (مش chat)", () => {
+    const types = read("lib/ai/types.ts");
+    expect(types).toContain('"exam_generation"');
+    const routing = read("lib/ai/routing.ts");
+    expect(routing).toContain("exam_generation:");
+    expect(routing).toContain("AI_PROVIDER_BY_TASK");
+  });
+
+  it("خريطة التوجيه: التوليد⇒سريع، الشرح⇒قوي، الشات⇒سريع", () => {
+    const routing = read("lib/ai/routing.ts");
+    // ⚠️ الموديل الأساسي للتوليد لازم يكون سريع (مش استدلال).
+    expect(routing).toMatch(/exam_generation:\s*\[\s*"openai\/gpt-oss-20b"/);
+    expect(routing).toMatch(/explain:\s*\[\s*"openai\/gpt-oss-120b"/);
+    expect(routing).toMatch(/chat:\s*\[\s*"openai\/gpt-oss-20b"/);
+  });
+
+  it("المهمة الجديدة مسجّلة في سجل المهام والـrunner", () => {
+    const tasks = read("lib/ai/tasks/chat.ts");
+    expect(tasks).toContain("EXAM_GENERATION_TASK");
+    expect(tasks).toContain('id: "exam_generation"');
+    const runner = read("lib/ai/tasks/runner.ts");
+    expect(runner).toContain('"exam_generation"');
+  });
+
+  it("مسار الامتحان بينادي المهمة الجديدة", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain('runAiTask("exam_generation"');
+    expect(route).not.toContain('runAiTask("chat"');
+  });
+
+  it("المحرك: جزء بيفشل ⇒ يكمل بدل ما يرمي", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("failedParts");
+    expect(engine).toContain("محاولتين");
+  });
+
+  it("السجل: llama-3.3-70b مسجّل بس **معطّل** لحد الفحص الحي", () => {
+    const models = read("lib/ai/models.ts");
+    expect(models).toContain("llama-3.3-70b-versatile");
+    // ⚠️ موديل محجوب (404) في التفضيلات = كل نداء بيضيع وقته.
+    expect(models).toMatch(/id: "llama-3\.3-70b-versatile"[\s\S]{0,600}?enabled: false/);
+    const routing = read("lib/ai/routing.ts");
+    // ⚠️ قائمة تفضيلات التوليد ما فيهاش الموديل المحجوب.
+    const block = routing.slice(routing.indexOf("exam_generation: ["), routing.indexOf("]", routing.indexOf("exam_generation: [")));
+    expect(block).not.toContain("llama-3.3-70b-versatile");
+  });
+});
