@@ -83,12 +83,17 @@ export function pageContentStrokes(
   strokes: Stroke[],
   texts: NoteText[] = [],
   images: NoteImage[] = [],
+  /** Pristine strokes preserved when the student adopts a beautified copy. */
+  originalStrokes?: Stroke[],
 ): unknown {
   return {
     template,
     strokes,
     texts,
     images,
+    ...(originalStrokes && originalStrokes.length > 0
+      ? { originalStrokes }
+      : {}),
   };
 }
 

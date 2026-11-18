@@ -87,6 +87,11 @@ export type PageContent = {
   strokes: Stroke[];
   texts: NoteText[];
   images: NoteImage[];
+  /**
+   * Pristine strokes kept when the student adopts a beautified copy — the
+   * "back to my handwriting" path. Empty/absent for never-beautified pages.
+   */
+  originalStrokes?: Stroke[];
 };
 
 /** Storage record for a notebook. */

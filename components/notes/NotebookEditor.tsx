@@ -20,6 +20,7 @@ import {
   textAt,
   textBounds,
 } from "@/lib/notes/canvas";
+import { beautifyStrokes } from "@/lib/notes/beautify";
 import { UndoStack } from "@/lib/notes/history";
 import {
   buildEmptyPage,
@@ -216,6 +217,18 @@ export default function NotebookEditor({
 
   // ---- Split-screen mode (opened beside a lesson) ----
   const [besideMode, setBesideMode] = useState(false);
+
+  // ---- Handwriting beautify (Natural mode) ----
+  const [beautifyOpen, setBeautifyOpen] = useState(false);
+  const [beautifyStrength, setBeautifyStrength] = useState(0.6);
+  const [beautifyRows, setBeautifyRows] = useState(true);
+
+  // ---- Focus mode / collapsible toolbar / remembered view ----
+  const [focusMode, setFocusMode] = useState(false);
+  const [toolbarsCollapsed, setToolbarsCollapsed] = useState(false);
+  const savedViewRef = useRef<{ zoom?: number; collapsed?: boolean; focus?: boolean } | null>(null);
+  const originalPreviewRef = useRef<HTMLCanvasElement>(null);
+  const beautifiedPreviewRef = useRef<HTMLCanvasElement>(null);
 
   // ---- Refs: the drawing hot path must not depend on render closures ----
   const containerRef = useRef<HTMLDivElement>(null);
@@ -417,6 +430,51 @@ export default function NotebookEditor({
     [paint],
   );
 
+  // Restore the remembered view (zoom, collapsed toolbar, focus mode).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const saved = (await repo.getMeta("notes:view")) as
+          | { zoom?: unknown; collapsed?: unknown; focus?: unknown }
+          | null;
+        if (cancelled || !saved || typeof saved !== "object") return;
+        const savedZoom =
+          typeof saved.zoom === "number" ? clamp(saved.zoom, MIN_ZOOM, MAX_ZOOM) : null;
+        savedViewRef.current = {
+          zoom: savedZoom ?? undefined,
+          collapsed: saved.collapsed === true,
+          focus: saved.focus === true,
+        };
+        if (savedViewRef.current.collapsed) setToolbarsCollapsed(true);
+        if (savedViewRef.current.focus) setFocusMode(true);
+        if (savedZoom != null && fittedRef.current) {
+          applyView(savedZoom, panRef.current);
+        }
+      } catch {
+        /* best-effort restore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [repo, applyView]);
+
+  // Persist view changes (debounced) so the editor reopens the way it was left.
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      void repo
+        .putMeta("notes:view", {
+          zoom: zoomRef.current,
+          collapsed: toolbarsCollapsed,
+          focus: focusMode,
+        })
+        .catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [loaded, view.zoom, toolbarsCollapsed, focusMode, repo]);
+
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -431,7 +489,12 @@ export default function NotebookEditor({
 
     if (!fittedRef.current && rect.width > 0) {
       fittedRef.current = true;
-      const fit = clamp((rect.width - 64) / PAGE_WIDTH, MIN_ZOOM, MAX_ZOOM);
+      const remembered = savedViewRef.current?.zoom;
+      const fit = clamp(
+        remembered ?? (rect.width - 64) / PAGE_WIDTH,
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
       zoomRef.current = fit;
       panRef.current = { x: (rect.width - PAGE_WIDTH * fit) / 2, y: 24 };
       setView({ zoom: fit, panX: panRef.current.x, panY: 24 });
@@ -1683,6 +1746,7 @@ export default function NotebookEditor({
       const shortcut = TOOL_OPTIONS.find((option) => option.key === event.key.toLowerCase());
       if (shortcut) setTool(shortcut.id);
       if (event.key.toLowerCase() === "t") setTool("text");
+      if (event.key.toLowerCase() === "f") setFocusMode((value) => !value);
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -1901,6 +1965,84 @@ export default function NotebookEditor({
     syncHistory,
   ]);
 
+  // ---- Handwriting beautify ----
+
+  // Render the side-by-side preview whenever the dialog opens or the
+  // strength changes. The "original" side shows the pristine strokes when
+  // the page was already beautified once.
+  useEffect(() => {
+    if (!beautifyOpen) return;
+    const draw = (canvas: HTMLCanvasElement | null, strokes: readonly Stroke[]) => {
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const scale = canvas.width / PAGE_WIDTH;
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+      for (const stroke of strokes) {
+        if (stroke.shape) paintShapeStroke(ctx, stroke);
+        else paintStroke(ctx, stroke);
+      }
+    };
+    const content = contentRef.current;
+    const originals = content.originalStrokes?.length
+      ? content.originalStrokes
+      : content.strokes;
+    draw(originalPreviewRef.current, originals);
+    draw(
+      beautifiedPreviewRef.current,
+      beautifyStrokes(content.strokes, {
+        strength: beautifyStrength,
+        straightenRows: beautifyRows,
+      }),
+    );
+  }, [beautifyOpen, beautifyStrength, beautifyRows, loaded]);
+
+  const adoptBeautified = useCallback(() => {
+    if (!canWrite) return;
+    const content = contentRef.current;
+    if (content.strokes.length === 0) {
+      setBeautifyOpen(false);
+      return;
+    }
+    const originals = content.originalStrokes?.length
+      ? content.originalStrokes
+      : content.strokes;
+    const beautified = beautifyStrokes(content.strokes, {
+      strength: beautifyStrength,
+      straightenRows: beautifyRows,
+    });
+    setContent({ ...content, strokes: beautified, originalStrokes: originals });
+    selectElement(null);
+    commitHistory();
+    setBeautifyOpen(false);
+  }, [
+    beautifyRows,
+    beautifyStrength,
+    canWrite,
+    commitHistory,
+    selectElement,
+    setContent,
+  ]);
+
+  const revertToOriginal = useCallback(() => {
+    if (!canWrite) return;
+    const content = contentRef.current;
+    if (!content.originalStrokes?.length) return;
+    setContent({
+      ...content,
+      strokes: content.originalStrokes,
+      originalStrokes: [],
+    });
+    selectElement(null);
+    commitHistory();
+    setBeautifyOpen(false);
+  }, [canWrite, commitHistory, selectElement, setContent]);
+
+  const activeStatePage = currentPageId ? pages.find((page) => page.id === currentPageId) : null;
+  const hasOriginalStrokes = (activeStatePage?.content.originalStrokes?.length ?? 0) > 0;
+
   // ---- Derived UI ----
 
   const currentIndex = currentPageId
@@ -1948,7 +2090,7 @@ export default function NotebookEditor({
     : undefined;
 
   return (
-    <div className="notes-page">
+    <div className="notes-page" data-focus={focusMode ? "true" : undefined}>
       <header className="notes-header">
         <Link href="/notes" className="notes-btn notes-btn-sm">
           → دفاتري
@@ -1994,6 +2136,16 @@ export default function NotebookEditor({
             📌 وضع التقسيم
           </NotesChip>
         ) : null}
+        <button
+          type="button"
+          onClick={() => setFocusMode((value) => !value)}
+          data-active={focusMode}
+          title="وضع التركيز (F) — إخفاء كل حاجة غير الورقة"
+          aria-pressed={focusMode}
+          className="notes-btn notes-btn-sm"
+        >
+          ⛶ تركيز
+        </button>
         <NotesThemeToggle />
       </header>
 
@@ -2122,9 +2274,23 @@ export default function NotebookEditor({
             </div>
           </>
         ) : null}
+
+        <span className="notes-sep" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={() => setToolbarsCollapsed((value) => !value)}
+          data-active={toolbarsCollapsed}
+          title={toolbarsCollapsed ? "إظهار أدوات التنسيق" : "إخفاء أدوات التنسيق"}
+          aria-expanded={!toolbarsCollapsed}
+          className="notes-btn notes-icon-btn"
+        >
+          {toolbarsCollapsed ? "▾" : "▴"}
+        </button>
       </div>
 
-      {/* Row 2 — style: colors, thickness, opacity, text font */}
+      {/* Row 2 — style: colors, thickness, opacity, text font (collapsible) */}
+      {!toolbarsCollapsed ? (
+      <>
       <div className="notes-toolbar">
         <div className="notes-group" role="group" aria-label="الألوان">
           {PALETTE.map((swatch) => (
@@ -2243,6 +2409,15 @@ export default function NotebookEditor({
           >
             تفريغ الصفحة
           </button>
+          <button
+            type="button"
+            onClick={() => setBeautifyOpen(true)}
+            disabled={!canWrite || pages.length === 0}
+            title="تحسين خط اليد (مع معاينة وبدون مسح الأصل)"
+            className="notes-btn"
+          >
+            ✍️ تحسين الخط
+          </button>
         </div>
 
         <span className="notes-sep" aria-hidden="true" />
@@ -2316,6 +2491,8 @@ export default function NotebookEditor({
           </button>
         </div>
       </div>
+      </>
+      ) : null}
 
       {/* Canvas */}
       <div
@@ -2692,6 +2869,89 @@ export default function NotebookEditor({
                 className="notes-btn"
               >
                 {exportingPdf ? "بنجهّز الملف…" : `تصدير (${pdfSelected.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Handwriting beautify dialog */}
+      {beautifyOpen ? (
+        <div
+          className="notes-modal-backdrop"
+          onClick={() => setBeautifyOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="notes-modal notes-modal-wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="تحسين خط اليد"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="notes-modal-title">✍️ تحسين الخط</h2>
+            <p className="notes-modal-sub">
+              بنحسّن انحناءات وتعرجات خطك مع الحفاظ على شكل كتابتك — والأصل
+              بيفضل محفوظ وتقدترجعله في أي وقت.
+            </p>
+            <div className="notes-beautify-previews">
+              <figure className="notes-beautify-preview">
+                <figcaption>{hasOriginalStrokes ? "الخط الحالي (المحسّن)" : "خطك الأصلي"}</figcaption>
+                <canvas ref={originalPreviewRef} width={280} height={396} />
+              </figure>
+              <figure className="notes-beautify-preview">
+                <figcaption>بعد التحسين</figcaption>
+                <canvas ref={beautifiedPreviewRef} width={280} height={396} />
+              </figure>
+            </div>
+            <label className="notes-label">
+              قوة التحسين
+              <input
+                type="range"
+                min={0.2}
+                max={1}
+                step={0.1}
+                value={beautifyStrength}
+                onChange={(event) => setBeautifyStrength(Number(event.target.value))}
+                className="notes-range"
+              />
+            </label>
+            <label className="notes-label">
+              <input
+                type="checkbox"
+                checked={beautifyRows}
+                onChange={(event) => setBeautifyRows(event.target.checked)}
+              />
+              ضبط استقامة السطور
+            </label>
+            <div className="notes-modal-actions">
+              {hasOriginalStrokes ? (
+                <button
+                  type="button"
+                  onClick={revertToOriginal}
+                  disabled={!canWrite}
+                  className="notes-btn"
+                  title="رجّع خطك الأصلي زي ما كان"
+                >
+                  ↩ رجوع للأصل
+                </button>
+              ) : null}
+              <div className="notes-spacer" />
+              <button
+                type="button"
+                onClick={() => setBeautifyOpen(false)}
+                className="notes-btn notes-btn-sm"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={adoptBeautified}
+                disabled={!canWrite}
+                data-tone="primary"
+                className="notes-btn"
+              >
+                اعتماد
               </button>
             </div>
           </div>

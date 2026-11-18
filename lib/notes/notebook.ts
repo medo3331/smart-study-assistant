@@ -112,12 +112,13 @@ export function strokesFromSnapshot(snapshot: unknown): Stroke[] {
  */
 export function contentFromSnapshot(snapshot: unknown): PageContent {
   if (snapshot == null || typeof snapshot !== "object") {
-    return { strokes: [], texts: [], images: [] };
+    return { strokes: [], texts: [], images: [], originalStrokes: [] };
   }
   const candidate = snapshot as {
     strokes?: unknown;
     texts?: unknown;
     images?: unknown;
+    originalStrokes?: unknown;
   };
 
   const strokes = strokesFromSnapshot(snapshot);
@@ -150,7 +151,12 @@ export function contentFromSnapshot(snapshot: unknown): PageContent {
       )
     : [];
 
-  return { strokes, texts, images };
+  // Beautified pages keep the pristine strokes next to the enhanced copy.
+  const originalStrokes = Array.isArray(candidate.originalStrokes)
+    ? strokesFromSnapshot({ strokes: candidate.originalStrokes })
+    : [];
+
+  return { strokes, texts, images, originalStrokes };
 }
 
 /** A brand-new empty page record, revision 1. */

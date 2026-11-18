@@ -446,6 +446,51 @@
 
 .notes-assistant-input .notes-input { flex: 1; }
 
+/* ---- Beautify dialog previews ---- */
+.notes-modal-wide { width: min(640px, 100%); }
+
+.notes-beautify-previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.notes-beautify-preview {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notes-beautify-preview figcaption {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.notes-beautify-preview canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: #ffffff;
+}
+
+@media (max-width: 520px) {
+  .notes-beautify-previews { grid-template-columns: 1fr; }
+}
+
+/* ---- Focus mode: the sheet is the whole show ---- */
+.notes-page[data-focus="true"] .notes-help,
+.notes-page[data-focus="true"] .notes-hint,
+.notes-page[data-focus="true"] .notes-thumbs {
+  display: none;
+}
+
+.notes-page[data-focus="true"] .notes-canvas-wrap {
+  height: calc(100vh - 210px) !important;
+}
+
 /* ---- Visual page navigator ---- */
 .notes-thumbs {
   display: flex;

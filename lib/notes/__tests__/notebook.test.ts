@@ -396,7 +396,17 @@ describe("contentFromSnapshot", () => {
   });
 
   it("tolerates junk snapshots", () => {
-    expect(contentFromSnapshot(null)).toEqual({ strokes: [], texts: [], images: [] });
-    expect(contentFromSnapshot(42)).toEqual({ strokes: [], texts: [], images: [] });
+    expect(contentFromSnapshot(null)).toEqual({
+      strokes: [],
+      texts: [],
+      images: [],
+      originalStrokes: [],
+    });
+    expect(contentFromSnapshot(42)).toEqual({
+      strokes: [],
+      texts: [],
+      images: [],
+      originalStrokes: [],
+    });
   });
 });
