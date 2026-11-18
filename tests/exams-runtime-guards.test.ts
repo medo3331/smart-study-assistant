@@ -196,6 +196,42 @@ describe("مولّد الامتحانات — مصادر المحاضرات وا
     expect(migration).toContain("exam_session_items_exactly_one_source");
     expect(migration).toContain("document_id");
   });
+
+  it("db/49 ما يهدّش قيد db/50 (٣ مصادر) — عشان ما يفشلش بـ23514", () => {
+    // ⚠️ **اللي حصل فعليًا في الإنتاج**: `db/50` اتطبّق قبل `db/49` ⇒
+    //    القيد بقى 3 مصادر (lecture/document/topic) ⇒ لما `db/49` حاول
+    //    يرجّعه 2 مصادر ⇒ بنود «موضوع عام» خالفت ⇒ **23514** والـapply
+    //    كله تراجع ⇒ الـRPC المصلّح مااتطبّقش ⇒ 500 مستمر.
+    const migration = read("db/49-exam-documents.sql");
+    // لازم يختار شكل القيد حسب وجود عمود topic.
+    expect(migration).toContain("information_schema.columns");
+    expect(migration).toContain("num_nonnulls(lecture_id, document_id, topic)");
+    // ⚠️ والقيد القديم (٢ مصادر) يبقى **جوّه الـelse** بس (مش top-level)
+    //    ⇒ متى ما الـtopic موجود يبقى ٣ مصادر (ومنود «موضوع عام» ماتخالفش).
+    const elseIndex = migration.indexOf("else");
+    const oldRuleIndex = migration.indexOf("(lecture_id is not null and document_id is null)");
+    expect(elseIndex).toBeGreaterThan(-1);
+    expect(oldRuleIndex).toBeGreaterThan(elseIndex);
+    // }));
+
+    // والقيد التلاتة (المعتمد) لازم يبقى **قبل** الـelse (الفرع الأساسي).
+    const threeWayIndex = migration.indexOf(
+      "num_nonnulls(lecture_id, document_id, topic)"
+    );
+    expect(threeWayIndex).toBeGreaterThan(-1);
+    expect(threeWayIndex).toBeLessThan(elseIndex);
+  });
+
+  it("db/49 يصلّح الـRPC القديم كمان (fallback) — مافيش array_length فيه", () => {
+    const migration = read("db/49-exam-documents.sql");
+    expect(migration).toContain("create or replace function public.create_exam_session_with_reserve");
+    // ⚠️ `array_length` مسموح في **التعليق** بس — مافيش usage فعلي.
+    const withoutComments = migration
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+    expect(withoutComments).not.toContain("array_length(");
+  });
 });
 
 describe("التسميات — فصل الصوتيات عن المستندات", () => {

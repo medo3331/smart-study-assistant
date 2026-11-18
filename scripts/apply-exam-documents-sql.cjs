@@ -40,12 +40,57 @@ async function main() {
   await client.connect();
   console.log("✅ connected");
 
+  /**
+   * 🔍 **فحص مسبق** — لو فيه صفوف بتخالف قيد «مصدر واحد بالظبط»
+   *    بنقول بالظبط كام صف وليه، بدل ما الـADD CONSTINCT يفشل بـ23514
+   *    والـtransaction كله يتراجع.
+   */
+  const { rows: preCols } = await client.query(`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'exam_session_items'
+      and column_name in ('document_id', 'topic');
+  `);
+  const hasDocument = preCols.some((c) => c.column_name === "document_id");
+  const hasTopic = preCols.some((c) => c.column_name === "topic");
+  const sourceExpr = hasTopic
+    ? "num_nonnulls(lecture_id, document_id, topic)"
+    : hasDocument
+      ? "num_nonnulls(lecture_id, document_id)"
+      : "num_nonnulls(lecture_id)";
+  const { rows: badRows } = await client.query(`
+    select i.id, i.session_id, i.ordinal, i.status, i.lecture_id
+    from public.exam_session_items i
+    where (${sourceExpr}) <> 1
+    order by i.created_at desc nulls last
+    limit 20;
+  `);
+  if (badRows.length > 0) {
+    console.error(
+      `❌ فيه ${badRows.length} بند مخالف لقيد «مصدر واحد بالظبط» — القيد مش هيتطبّق.`
+    );
+    for (const r of badRows) {
+      console.error(
+        `   • item=${r.id} session=${r.session_id} ordinal=${r.ordinal} status=${r.status} lecture=${r.lecture_id ?? "NULL"}`
+      );
+    }
+    console.error("   (المعامل: num_nonnulls(...) <> 1) — راجع db/49 + db/50.");
+    await client.end();
+    process.exit(1);
+  }
+  console.log(
+    `✅ pre-check: مفيش بنود مخالفة (${sourceExpr} = 1 لكل البنود) · topic=${hasTopic} document=${hasDocument}`
+  );
+
   try {
     await client.query(sql);
     console.log("✅ 49-exam-documents.sql applied OK");
   } catch (err) {
     console.error("❌ APPLY FAILED:", err.message);
     console.error("   code:", err.code);
+    if (err.code === "23514") {
+      console.error("   ⓘ 23514 = قيد «مصدر واحد بالظبط» اتكسر بصف مخالف.");
+      console.error("   ⓘ rerun the pre-check above (أو node scripts/diag-exam-constraint.cjs).");
+    }
     await client.end();
     process.exit(1);
   }
@@ -68,6 +113,43 @@ async function main() {
     console.log("✅ verify: الـfunction بقت تستخدم cardinality (مفيش array_length)");
   } else {
     console.log("⚠️ verify: الـfunction لسه فيها array_length — راجع الـmigration.");
+  }
+
+  // ── التحقق: الـRPC القديم (fallback) اتصلّح برضه.
+  const { rows: legacy } = await client.query(`
+    select
+      position('cardinality(' in pg_get_functiondef(p.oid)) > 0 as uses_cardinality,
+      position('array_length(' in pg_get_functiondef(p.oid)) > 0 as uses_array_length
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'create_exam_session_with_reserve';
+  `);
+  if (legacy[0]?.uses_cardinality && !legacy[0]?.uses_array_length) {
+    console.log("✅ verify: الـRPC القديم (fallback) بقى cardinality كمان");
+  } else if (legacy[0]) {
+    console.log("⚠️ verify: الـRPC القديم لسه فيه array_length.");
+  }
+
+  // ── التحقق: شكل قيد «مصدر واحد بالظبط» مطابق للأعمدة الموجودة.
+  const { rows: constraint } = await client.query(`
+    select pg_get_constraintdef(con.oid) as def
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace n on n.oid = rel.relnamespace
+    where n.nspname = 'public' and rel.relname = 'exam_session_items'
+      and con.conname = 'exam_session_items_exactly_one_source';
+  `);
+  const def = constraint[0]?.def ?? "";
+  if (def) {
+    const mentionsTopic = def.includes("topic");
+    if (hasTopic && !mentionsTopic) {
+      console.error("⚠️ القيد مش بيغطي عمود topic — بنود «موضوع عام» هتتكسر.");
+    } else {
+      console.log(`✅ verify: القيد = ${def}`);
+    }
+  } else {
+    console.log("⚠️ القيد مش موجود.");
   }
 
   // ── التحقق: قيود الـschema سليمة.
