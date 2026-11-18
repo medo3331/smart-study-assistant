@@ -18,6 +18,7 @@ import { ExamGenerator, type ExamGeneratorInitial } from "./ExamGenerator";
 import { ExamRunner } from "./ExamRunner";
 import { ExamPaper } from "./ExamPaper";
 import { ExamResults } from "./ExamResults";
+import type { TopicScore } from "@/lib/ai/exam-topics";
 
 export type ExamsInitial = ExamGeneratorInitial & { tab: "my" | "bank"; gen: boolean };
 
@@ -40,6 +41,8 @@ export type ExamResultPayload = {
   auto: { correct: number; total: number };
   essay: { score: number; max: number };
   total: { score: number; max: number; percent: number };
+  /** 🏷️ نتيجة كل جزء من المحاضرة (الأضعف أولاً) — من `summarizeByTopic`. */
+  weaknesses?: TopicScore[];
 };
 
 const STATUS_LABELS: Record<string, string> = {

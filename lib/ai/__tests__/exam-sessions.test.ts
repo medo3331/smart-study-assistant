@@ -7,6 +7,7 @@ import {
   failItem,
   incrementUsage,
   getItemState,
+  isSessionExhausted,
 } from '../exam-sessions';
 
 // ────────────────────────────────────────────────────────────
@@ -506,5 +507,56 @@ describe('getItemState', () => {
       expect(r.data.status).toBe('ready');
       expect(r.data.is_ready).toBe(true);
     }
+  });
+});
+
+/**
+ * 🛟 حاكم استرجاع الكريدت — الشرط ده بيتحكم في فلوس الطالب، فهو مُختبر
+ * صراحةً: أي حالة غير «كل البنود فشلت واستنفدت محاولاتها» = مفيش استرجاع.
+ */
+describe('isSessionExhausted', () => {
+  it('كل البنود فشلت واستنفدت المحاولات ⇒ الجلسة ميتة', () => {
+    expect(
+      isSessionExhausted([
+        { status: 'failed', attempt_count: 2 },
+        { status: 'failed', attempt_count: 3 },
+      ])
+    ).toBe(true);
+  });
+
+  it('بند واحد ناجح ⇒ مفيش استرجاع', () => {
+    expect(
+      isSessionExhausted([
+        { status: 'ready', attempt_count: 1 },
+        { status: 'failed', attempt_count: 2 },
+      ])
+    ).toBe(false);
+  });
+
+  it('بند فشل لكن لسه له محاولات ⇒ مفيش استرجاع (الـrunner هيعيد)', () => {
+    expect(isSessionExhausted([{ status: 'failed', attempt_count: 1 }])).toBe(false);
+  });
+
+  it('بند لسه بيتعالج أو في الطابور ⇒ مفيش استرجاع', () => {
+    expect(
+      isSessionExhausted([
+        { status: 'queued', attempt_count: 0 },
+        { status: 'processing', attempt_count: 1 },
+      ])
+    ).toBe(false);
+  });
+
+  it('attempt_count ناقص بيتعامل كصفر (مش استنفاد)', () => {
+    expect(isSessionExhausted([{ status: 'failed' }])).toBe(false);
+    expect(isSessionExhausted([{ status: 'failed', attempt_count: null }])).toBe(false);
+  });
+
+  it('جلسة من غير بنود مش ميتة', () => {
+    expect(isSessionExhausted([])).toBe(false);
+  });
+
+  it('سقف المحاولات قابل للتغيير', () => {
+    expect(isSessionExhausted([{ status: 'failed', attempt_count: 2 }], 3)).toBe(false);
+    expect(isSessionExhausted([{ status: 'failed', attempt_count: 3 }], 3)).toBe(true);
   });
 });

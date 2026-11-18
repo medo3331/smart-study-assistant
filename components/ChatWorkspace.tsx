@@ -1,13 +1,18 @@
 "use client";
 /* eslint-disable react-hooks/exhaustive-deps -- see exhaustive-deps note; will address with useCallback in follow-up */
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BookOpen, Bot, ClipboardCheck, LoaderCircle, Send, Sparkles, Target } from "lucide-react";
+import { ArrowRight, BookOpen, Bot, ClipboardCheck, FileUp, LoaderCircle, Send, Sparkles, Target } from "lucide-react";
 import { MicButton } from "@/components/MicButton";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  /** 📄 مستند اترفع في الشات — بيظهر معاه زر «اعمل منه امتحان». */
+  document?: { id: string; title: string };
+};
 type SuggestedAgent = "marketing" | "research" | "content";
 type ChatContext = {
   name: string;
@@ -28,6 +33,8 @@ export function ChatWorkspace() {
   const [contextError, setContextError] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [suggestedAgent, setSuggestedAgent] = useState<SuggestedAgent | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -118,6 +125,66 @@ export function ChatWorkspace() {
     void send();
   }
 
+  /**
+   * 📄 **رفع ملف من الشات** — الملف بيتحفظ في مساحة العمل (نفس
+   * `/api/documents` اللي صفحة الامتحانات بتستخدمه)، وبيتقترح على
+   * الطالب يعمل منه امتحان على طول.
+   *
+   * ⚠️ ليه مش بنرفعه للـAI مباشرة: استخراج النص بيحصل وقت الرفع
+   *    (`knowledge_base`) والتوليد بيقرا من هناك — فالامتحان بيجي
+   *    **من نفس الملف** بلا رفع تاني ولا تكلفة إضافية.
+   */
+  async function handleFile(file: File) {
+    if (uploading || loading) return;
+    setUploading(true);
+    setMessages((previous) => [
+      ...previous,
+      { role: "user", content: `📎 رفعت ملف: ${file.name}` },
+    ]);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/documents", { method: "POST", body: form });
+      const data = await response.json().catch(() => null);
+
+      if (response.status === 401) {
+        setMessages((previous) => [
+          ...previous,
+          { role: "assistant", content: "سجّل دخولك الأول عشان أقدر أحفظ الملف في مساحة عملك." },
+        ]);
+        return;
+      }
+      if (!response.ok || !data?.document?.id) {
+        const message =
+          (data?.error as { message?: string } | null)?.message ?? "مقدرناش نرفع الملف. جرّب تاني.";
+        setMessages((previous) => [...previous, { role: "assistant", content: message }]);
+        return;
+      }
+
+      const document = data.document as { id: string; title?: string | null };
+      const title = document.title ?? file.name;
+      setMessages((previous) => [
+        ...previous,
+        {
+          role: "assistant",
+          content: `تم رفع «${title}» وحفظه في مساحة عملك ✓\nتحب أعمل منه امتحان؟ هختار الملف كمصدر وأجهّز الأسئلة على طول.`,
+          document: { id: document.id, title },
+        },
+      ]);
+    } catch (error) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          role: "assistant",
+          content: error instanceof Error ? error.message : "مقدرناش نرفع الملف. جرّب تاني.",
+        },
+      ]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <main className="min-h-screen bg-paper text-ink" dir="rtl">
       <header className="border-b border-rule bg-paper/95 px-4 py-4 backdrop-blur sm:px-7">
@@ -156,6 +223,14 @@ export function ChatWorkspace() {
                 <article key={`${message.role}-${index}`} className={`flex gap-3 ${message.role === "user" ? "justify-start" : "justify-end"}`}>
                   {message.role === "assistant" && <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-paper-2"><Bot size={18} /></span>}
                   <p className={`max-w-[85%] whitespace-pre-wrap rounded-[var(--r-md)] px-4 py-3 text-sm leading-7 ${message.role === "user" ? "bg-marker text-onmarker" : "border border-rule bg-paper-2"}`}>{message.content}</p>
+                  {message.document && (
+                    <Link
+                      href={`/exams?gen=1&document=${encodeURIComponent(message.document.id)}`}
+                      className="btn btn-marker shrink-0 self-center text-xs"
+                    >
+                      اعمل منه امتحان
+                    </Link>
+                  )}
                 </article>
               ))}
               {suggestedAgent && !loading && (
@@ -171,6 +246,28 @@ export function ChatWorkspace() {
           <form onSubmit={submit} className="border-t border-rule bg-paper p-4 sm:px-8">
             <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-[var(--r-md)] border border-rule bg-paper-2 p-2 shadow-sm">
               <MicButton variant="square" disabled={loading} onText={setInput} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                aria-hidden
+                tabIndex={-1}
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleFile(file);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || uploading}
+                className="btn btn-quiet grid h-10 w-10 place-items-center rounded-full p-0"
+                aria-label="ارفع ملف لعمل امتحان منه"
+                title="ارفع ملف لعمل امتحان منه"
+              >
+                {uploading ? <LoaderCircle className="animate-spin" size={17} /> : <FileUp size={17} />}
+              </button>
               <label className="sr-only" htmlFor="chat-message">اكتب سؤالك</label>
               <input id="chat-message" value={input} onChange={(event) => setInput(event.target.value)} placeholder="اكتب سؤالك هنا…" className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-ink-soft" disabled={loading} />
               <button type="submit" className="btn btn-marker grid h-10 w-10 place-items-center rounded-full p-0" disabled={loading || !input.trim()} aria-label="إرسال السؤال"><Send size={17} /></button>

@@ -639,3 +639,23 @@ export async function getItemState(
   }
   return { ok: true, data: row as ItemState };
 }
+
+/**
+ * 🛟 هل الجلسة **ميتة** (كل بنودها استنفدت محاولاتها وفشلت)؟
+ *
+ * الأساس لاسترجاع الكريدت: الجلسة بتدفع كريدت مرة واحدة عند الإنشاء،
+ * فلو مفيش بند واحد ناجح يبقى الطالب دفع على امتحان مش موجود.
+ *
+ * ⚠️ **ليه دالة نقيّة**: الشرط ده حاكم على فلوس الطالب — لازم يتختبر
+ *    (حالة `ready` واحدة بتلغي الاسترجاع، و`attempt_count` ناقص ميعنيش
+ *    استنفاد).
+ */
+export function isSessionExhausted(
+  items: readonly { status: string; attempt_count?: number | null }[],
+  maxAttempts = 2
+): boolean {
+  if (items.length === 0) return false;
+  return items.every(
+    (item) => item.status === 'failed' && Number(item.attempt_count ?? 0) >= maxAttempts
+  );
+}

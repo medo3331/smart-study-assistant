@@ -575,6 +575,58 @@ describe('validateExamQuestion — الأنواع الجديدة', () => {
     );
     expect(q.type).toBe('mcq');
   });
+
+  // 🏷️ اساس تقييم نقاط الضعف: الجزء اللي السؤال بيقيسه
+  it('accepts and normalizes the topic label', () => {
+    const q = validateExamQuestion(
+      {
+        type: 'mcq',
+        topic: '  القلب   والأوعية  ',
+        question: 'س؟',
+        options: ['أ', 'ب', 'ج', 'د'],
+        correctAnswer: 0,
+        explanation: 'لأن',
+      },
+      ['mcq']
+    );
+    expect(q.topic).toBe('القلب والأوعية');
+  });
+
+  it('topic is optional — a question without it is still valid', () => {
+    const q = validateExamQuestion(
+      { type: 'true_false', question: 'س؟', correct: false, explanation: 'لأن' },
+      ['true_false']
+    );
+    expect(q.topic).toBeUndefined();
+  });
+
+  it('ignores a non-string topic instead of dropping the question', () => {
+    const q = validateExamQuestion(
+      {
+        type: 'true_false',
+        topic: 42,
+        question: 'س؟',
+        correct: true,
+        explanation: 'لأن',
+      },
+      ['true_false']
+    );
+    expect(q.topic).toBeUndefined();
+  });
+
+  it('caps a runaway topic label at 80 chars', () => {
+    const q = validateExamQuestion(
+      {
+        type: 'true_false',
+        topic: 'ط'.repeat(200),
+        question: 'س؟',
+        correct: true,
+        explanation: 'لأن',
+      },
+      ['true_false']
+    );
+    expect(q.topic).toHaveLength(80);
+  });
 });
 
 describe('helpers', () => {
