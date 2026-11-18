@@ -44,14 +44,84 @@ alter table public.exam_session_items
 alter table public.exam_session_items
   add constraint exam_session_items_session_document_unique unique (session_id, document_id);
 
-alter table public.exam_session_items
-  drop constraint if exists exam_session_items_exactly_one_source;
-alter table public.exam_session_items
-  add constraint exam_session_items_exactly_one_source
-  check (
-    (lecture_id is not null and document_id is null)
-    or (lecture_id is null and document_id is not null)
-  );
+-- ⚠️ **ليه DO block مش ADD CONSTRAINT عادي؟**
+--    `db/50-exam-topic.sql` (اللي بيتطبّق قبل `db/49` أحيانًا) بيربط
+--    القيد **التلاتة**:
+--      check (num_nonnulls(lecture_id, document_id, topic) = 1)
+--    فلو `db/49` رجّع القيد لشكله **الاثنين** (محاضرة/مستند بس) =>
+--    **بنود «موضوع عام»** (topic = نص، lecture/document = NULL) بتخالف
+--    ⇒ Postgres يرفض الـADD ⇒ **23514** والـmigration كلها بتتراجع
+--    (والـRPC-fixed مايتطبّقش ⇒ 500 مستمر).
+--    ⇒ هنا بنختار شكل القيد حسب الأعمدة الموجودة فعليًا ✓ (idempotent
+--    في أي ترتيب تطبيق).
+--
+-- ⚠️ **ولماذا `not valid`**: الـADD بيكسر لو فيه **صفوف قديمة** مخالفة
+--    (حتى لو القيد نفسه صح) ⇒ الـmigration بترجع وتتراجع ⇒ الـRPC
+--    المصلّح مايتطبّقش ⇒ 500 مستمر. مع `not valid`:
+--      • الـADD **مش بيفشل** أبداً ✓
+--      • والصفوف **الجديدة** بتخضع للقيد ✓ (ده المهم)
+--      • والصفوف القديمة بتتخقّق بـ`validate constraint` بعدين (تحت) ✓
+do $$
+begin
+  -- ① تنظيف: بنود مالها **أي مصدر** (لا محاضرة ولا مستند ولا موضوع).
+  --    دي البنود الميتة اللي ممكن تكسر القيد ⇒ نحذفها (ملهاش معنى:
+  --    مفيش مصدر نتولّد منه أسئلة).
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'exam_session_items'
+      and column_name = 'topic'
+  ) then
+    delete from public.exam_session_items
+     where lecture_id is null
+       and document_id is null
+       and (topic is null or btrim(topic) = '');
+  else
+    delete from public.exam_session_items
+     where lecture_id is null
+       and document_id is null;
+  end if;
+
+  -- ② القيد: 3 مصادر لو فيه topic، 2 غير كده.
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'exam_session_items'
+      and column_name = 'topic'
+  ) then
+    -- └─ فيه عمود topic ⇒ القيد التلاتة (محاضرة | مستند | موضوع عام).
+    alter table public.exam_session_items
+      drop constraint if exists exam_session_items_exactly_one_source;
+    alter table public.exam_session_items
+      add constraint exam_session_items_exactly_one_source
+      check (num_nonnulls(lecture_id, document_id, topic) = 1) not valid;
+  else
+    -- └─ مفيش topic (قاعدة لسه على `db/49` بس) ⇒ القيد الاتنين.
+    alter table public.exam_session_items
+      drop constraint if exists exam_session_items_exactly_one_source;
+    alter table public.exam_session_items
+      add constraint exam_session_items_exactly_one_source
+      check (
+        (lecture_id is not null and document_id is null)
+        or (lecture_id is null and document_id is not null)
+      ) not valid;
+  end if;
+end
+$$;
+
+-- ③ التحقق من القيد على الصفوف القديمة — **بأمان**: لو فيه صفوف قديمة
+--    مخالفة ما نبقاش مانحينهاش (الـconstraint بيفضل NOT VALID، بس
+--    الصفوف الجديدة متحكمش بيها ✓).
+do $$
+begin
+  begin
+    alter table public.exam_session_items
+      validate constraint exam_session_items_exactly_one_source;
+  exception when others then
+    raise notice 'القيد اتضاف (NOT VALID) — فيه صفوف قديمة مخالفة، الـvalidation اتخطّت.';
+  end;
+end
+$$;
 
 -- ═══════════════════════════════════════════════════════════
 -- 3) RPC: create_exam_session_with_sources_reserve
@@ -250,3 +320,134 @@ revoke all on function public.create_exam_session_with_sources_reserve(text, uui
 revoke all on function public.create_exam_session_with_sources_reserve(text, uuid[], uuid[]) from anon;
 grant execute on function public.create_exam_session_with_sources_reserve(text, uuid[], uuid[]) to authenticated;
 grant execute on function public.create_exam_session_with_sources_reserve(text, uuid[], uuid[]) to service_role;
+
+-- ═══════════════════════════════════════════════════════════
+-- 4) إصلاح الـRPC القديم (محاضرات بس) — نفس bug الـ`array_length`
+-- ═══════════════════════════════════════════════════════════
+-- ⚠️ **ليه**: `create_exam_session_with_reserve` (القديم) لسه فيه
+--    `array_length` ⇒ بيرجّع NULL للمصفوفة الفاضية ⇒
+--    `total_lectures` بتبقى NULL ⇒ انتهاك `not null` ⇒ **500**.
+--    وهو ده **الـfallback** اللي بنستخدموه لما الـRPC الجديد يفشل ⇒
+--    فلازم يتصلّح معاه (من غيره البقاء خطأ 500 زي ما كان).
+--
+-- ⚠️ **التوقيع والسلوك ما اتغيّروش** (نفس الـsignature + نفس الـcolumns)
+--    ⇒ مافيش كسر لمنافس.
+create or replace function public.create_exam_session_with_reserve(
+  p_mode text,
+  p_lecture_ids uuid[]
+)
+returns table (
+  session_id uuid,
+  status text,
+  credit_reserved_at timestamptz,
+  total_chars int,
+  total_chunks int,
+  estimated_tokens int
+)
+language plpgsql
+security definer
+set search_path = public, pg_catalog
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_session_id uuid;
+  v_reserved_at timestamptz;
+  v_lecture_count int;
+  v_total_chars int;
+  v_total_chunks int;
+  v_estimated_tokens int;
+  v_deduped_ids uuid[];
+  v_owned_count int;
+begin
+  if v_user_id is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_mode is distinct from 'last_minute_review' then
+    raise exception 'invalid mode: %', p_mode;
+  end if;
+
+  -- ⚠️ `cardinality` مش `array_length`: في Postgres `array_length('{}', 1)`
+  --    بترجّع **NULL** (مش 0) ⇒ `NULL + 1 = NULL` ⇒ `total_lectures` NULL
+  --    ⇒ انتهاك `not null` ⇒ **500** عند إنشاء أي امتحان.
+  if p_lecture_ids is null or cardinality(p_lecture_ids) = 0 then
+    raise exception 'lecture_ids required';
+  end if;
+
+  -- إزالة التكرار داخل الـ RPC (العميل قد يرسل نفس المعرّف مرتين)
+  select coalesce(array_agg(distinct ids.id), '{}'::uuid[]) into v_deduped_ids
+  from unnest(p_lecture_ids) as ids(id);
+
+  v_lecture_count := cardinality(v_deduped_ids);
+  if v_lecture_count < 1 or v_lecture_count > 3 then
+    raise exception 'lecture count must be 1..3 after dedup, got %', v_lecture_count;
+  end if;
+
+  -- الملكية + الميزانية تُحسب من القاعدة لا من العميل
+  select
+    count(*),
+    coalesce(sum(length(lec.transcript_text)), 0),
+    coalesce(sum(ceil(length(lec.transcript_text)::numeric / 12000)), 0)
+  into v_owned_count, v_total_chars, v_total_chunks
+  from public.lectures as lec
+  where lec.id = any(v_deduped_ids)
+    and lec.user_id = v_user_id;
+
+  if v_owned_count <> v_lecture_count then
+    raise exception 'one or more lectures not found or not owned';
+  end if;
+  if v_total_chars > 60000 then
+    raise exception 'total chars % exceeds limit 60000', v_total_chars;
+  end if;
+  if v_total_chunks > 9 then
+    raise exception 'total chunks exceeds limit 9';
+  end if;
+
+  v_estimated_tokens := v_total_chars / 4;
+
+  insert into public.exam_sessions (
+    user_id, mode, status,
+    total_lectures, total_chars, total_chunks, estimated_tokens
+  ) values (
+    v_user_id, p_mode, 'created',
+    v_lecture_count, v_total_chars, v_total_chunks, v_estimated_tokens
+  ) returning id into v_session_id;
+
+  insert into public.exam_session_items (
+    session_id, user_id, lecture_id, ordinal, status, transcript_chars
+  )
+  select
+    v_session_id, v_user_id, l.id, l.ordinality, 'queued', length(lec.transcript_text)
+  from unnest(v_deduped_ids) with ordinality as l(id, ordinality)
+  join public.lectures as lec on lec.id = l.id and lec.user_id = v_user_id;
+
+  -- ⚠️ مؤهَّل بـ i. : بدونه يتقاطع session_id مع OUT-param ⇒ 42702
+  if (select count(*) from public.exam_session_items as i where i.session_id = v_session_id)
+     <> v_lecture_count then
+    raise exception 'one or more lectures not found or not owned';
+  end if;
+
+  -- حجز كريدت واحد للجلسة كلها (idempotent عبر ref_id الثابت)
+  perform public.reserve_ai_credit(
+    v_user_id,
+    'exam_session:' || v_session_id::text,
+    1,
+    'text',
+    null,
+    'exam_review'
+  );
+
+  update public.exam_sessions as s
+     set credit_reserved_at = now()
+   where s.id = v_session_id
+  returning s.credit_reserved_at into v_reserved_at;
+
+  return query select
+    v_session_id, 'created'::text, v_reserved_at,
+    v_total_chars, v_total_chunks, v_estimated_tokens;
+end;
+$$;
+
+revoke all on function public.create_exam_session_with_reserve(text, uuid[]) from public;
+revoke all on function public.create_exam_session_with_reserve(text, uuid[]) from anon;
+grant execute on function public.create_exam_session_with_reserve(text, uuid[]) to authenticated;
+grant execute on function public.create_exam_session_with_reserve(text, uuid[]) to service_role;

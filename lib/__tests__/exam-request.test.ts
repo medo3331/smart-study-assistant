@@ -212,3 +212,39 @@ describe("EXAM_REQUEST_PROMPT_RULES", () => {
     expect(EXAM_REQUEST_PROMPT_RULES).toContain("افتح مولّد الامتحان");
   });
 });
+
+/**
+ * 🌍 «موضوع عام» — المساعد لازم يقترح بدل ما يقول «مفيش محاضرات».
+ */
+describe("المساعد — اقتراح الموضوع العام", () => {
+  const request = detectExamRequest("اعمللي امتحان في الفيزياء من 10 أسئلة")!;
+
+  it("مافيش ملفات ⇒ الرابط فيه topic والمولّد يفتح على تاب الموضوع", () => {
+    const href = buildExamHref(request, { topic: true });
+    expect(href).toContain("/exams?");
+    expect(href).toContain("topic=");
+    expect(href).toContain("subject=");
+  });
+
+  it("مافيش ملفات ⇒ الرسالة بتقول «معلومات عامة» ومش «مفيش محاضرات»", () => {
+    const answer = buildExamAnswer(request, "https://app.example", { hasSources: false });
+    expect(answer).toContain("معلومات عامة");
+    expect(answer).not.toContain("مفيش محاضرات");
+    expect(answer).toContain("/exams?");
+    expect(answer).toContain("topic=");
+  });
+
+  it("فيه ملفات ⇒ المسار العادي (محاضرات/مستندات) من غير topic", () => {
+    const href = buildExamHref(request, { topic: false });
+    expect(href).not.toContain("topic=");
+
+    const answer = buildExamAnswer(request, "https://app.example", { hasSources: true });
+    expect(answer).not.toContain("معلومات عامة");
+    expect(answer).toContain("محاضراتك محفوظة جاهزة");
+  });
+
+  it("قواعد البرومبت بتقول صراحةً: متقولش «مفيش محاضرات»", () => {
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("موضوع عام");
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("مفيش محاضرات");
+  });
+});

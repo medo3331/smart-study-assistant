@@ -7,6 +7,7 @@ import { recordAiOperation } from "@/lib/ai/operations";
 import { suggestAgentFromText } from "@/lib/ai/agents";
 import { buildMagiclySystemPrompt, getStudentContext, getStudyToolFacts, parseMode, rememberSessionContext, type MagiclyContextInput } from "@/lib/magicly-ai";
 import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
+import { userHasExamSources } from "@/lib/ai/exam-sources";
 import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
@@ -135,11 +136,20 @@ export async function POST(req: Request) {
     //    أو مادة) بنبعتله زر المولّد فورًا وهو بيكمّل الباقي في الشاشة.
     const examRequest = detectExamRequestFromHistory(safeMessages);
     if (examRequest?.active) {
-      const answer = buildExamAnswer(examRequest, new URL(req.url).origin);
+      // 🌍 عنده ملفات؟ ⇒ «موضوع عام» مش الخيار الأفضل (نفتح تاب الملفات).
+      //    مافيش ملفات ⇒ نفتح المولّد على تاب «موضوع عام» بمفرغ.
+      const hasSources = await userHasExamSources(supabase, user.id);
+      const topicMode = !hasSources && Boolean(examRequest.subject);
+      const answer = buildExamAnswer(examRequest, new URL(req.url).origin, { hasSources });
       const savedId = await saveTurn(supabase, user.id, conversationId, latestMessage, answer);
       return NextResponse.json({
         choices: [{ message: { content: answer } }],
-        actions: [{ label: "افتح مولّد الامتحان", href: buildExamHref(examRequest) }],
+        actions: [
+          {
+            label: topicMode ? "افتح مولّد موضوع عام" : "افتح مولّد الامتحان",
+            href: buildExamHref(examRequest, { topic: topicMode }),
+          },
+        ],
         ...(savedId ? { conversationId: savedId } : {}),
       });
     }

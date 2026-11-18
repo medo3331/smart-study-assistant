@@ -31,7 +31,16 @@ export type AiTaskType =
   | "roadmap"
   | "image_generation"
   | "image_edit"
-  | "video_generation";
+  | "video_generation"
+  /**
+   * 🔥 **توليد الامتحانات** — مهمة مخصوصة (مش `chat`).
+   *
+   * ⚠️ **ليه مهمة مستقلة**: التوليد = نداءات **JSON طويلة متتابعة**
+   *    (ملخص + أسئلة لكل قطعة). الموديلات الاستدلالية (gpt-oss-120b) بطيئة
+   *    فيها ⇒ مهلة + توكنز محروقة + 502/503. فالتوليد له موديلاته
+   *    السريعة (gpt-oss-20b ← Groq) والشرح له موديلاته القوية.
+   */
+  | "exam_generation";
 
 export type AiChatMessageContentPart =
   | { type: "text"; text: string }

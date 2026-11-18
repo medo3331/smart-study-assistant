@@ -24,11 +24,27 @@ import { chunkTranscript } from "./lecture-prompts";
 /** أقصى عدد حروف لكل مصدر (متوافق مع سقف الجلسة في القاعدة: 60 ألف). */
 export const EXAM_SOURCE_MAX_CHARS = 60_000;
 
-/** طول القطعة الواحدة (نفس `DEFAULT_CHUNK_CHARS` بتاع المحاضرات). */
-export const EXAM_SOURCE_CHUNK_CHARS = 6_000;
+/**
+ * طول القطعة الواحدة (حرف) — 3000.
+ *
+ * ⚠️ **ليه 3000**: كل نداءة بتروح لنص أطول = وقت + توكنز أكتر. النداء
+ *    الواحد بقى أسرع ملحوظ (1.3s بدل 12s على gpt-oss-20b) وبقلّة حجم
+ *    كل نداء احتمال الفشل (JSON مبتور/مهلات) بتقلّ.
+ *
+ * ⚠️ **الside effect**: قطع أكتر = نداءات أكتر ⇒ **ميزانية_SESSION لازم
+ *    تتحسب من عدد القطع** (مش رقم ثابت) — وإلا امتحان طويل هيقع في
+ *    BUDGET (429) وميتولّدش.
+ */
+export const EXAM_SOURCE_CHUNK_CHARS = 3_000;
 
 /** نوع مصدر البند. */
-export type ExamSourceKind = "recording" | "document";
+export type ExamSourceKind = "recording" | "document" | "topic";
+
+/** 🌍 أقصى طول للموضوع العام (نص) — نفس سقف الـRPC (300 حرف). */
+export const EXAM_TOPIC_MAX_CHARS = 300;
+
+/** 🌍 أدنى طول للموضوع العام — أقل منه مش «موضوع». */
+export const EXAM_TOPIC_MIN_CHARS = 3;
 
 export type ExamSource = {
   kind: ExamSourceKind;
@@ -63,10 +79,27 @@ type KnowledgePageRow = {
  * ⚠️ **الترتيب**: `source_page` (رقم الصفحة) وبعده `chunk_index` (القطعة
  *    جوه الصفحة) — عشان النص يطلع بترتيب القراءة، مش عشوائي.
  */
+/**
+ * نص مستند جاهز للتوليد + معلومات القصّ.
+ *
+ * ⚠️ **`truncated` جوه الـreturn مش لوج**: الراوت بيبني منه إشعار
+ *    للطالب («الملف كبير، التوليد هيغطي أول جزء»). من غير العلم ده
+ *    الطالب بيفتكر إن الامتحان غطّى الملف كله وهو غطّى جزء منه بس.
+ */
+export type DocumentText = {
+  title: string;
+  /** النص بعد القصّ (≤ EXAM_SOURCE_MAX_CHARS). */
+  text: string;
+  /** عدد الحروف المتاح فعلاً قبل القصّ. */
+  totalChars: number;
+  /** true ⇒ النص اتقصّ عند السقف والتوليد هيغطي جزء منه بس. */
+  truncated: boolean;
+};
+
 export async function readDocumentText(
   supabase: SupabaseClient,
   args: { documentId: string; userId: string }
-): Promise<{ title: string; text: string } | null> {
+): Promise<DocumentText | null> {
   const { documentId, userId } = args;
 
   // ① المستند نفسه (ملكية + العنوان).
@@ -94,12 +127,17 @@ export async function readDocumentText(
 
   if (!pageError && Array.isArray(pageData)) {
     const pages = pageData as KnowledgePageRow[];
-    const text = pages
+    const full = pages
       .map((page) => (typeof page.content === "string" ? page.content : ""))
       .join("\n\n")
       .trim();
-    if (text) {
-      return { title: doc.title ?? "مستند", text: text.slice(0, EXAM_SOURCE_MAX_CHARS) };
+    if (full) {
+      return {
+        title: doc.title ?? "مستند",
+        text: full.slice(0, EXAM_SOURCE_MAX_CHARS),
+        totalChars: full.length,
+        truncated: full.length > EXAM_SOURCE_MAX_CHARS,
+      };
     }
   }
 
@@ -119,6 +157,8 @@ export async function readDocumentText(
       return {
         title: doc.title ?? material?.title ?? "مستند",
         text: content.slice(0, EXAM_SOURCE_MAX_CHARS),
+        totalChars: content.length,
+        truncated: content.length > EXAM_SOURCE_MAX_CHARS,
       };
     }
   }
@@ -148,7 +188,54 @@ export function buildExamSource(input: {
   };
 }
 
-/** تسمية المصدر في الواجهة (الفرق بين «محاضرة» و«مستند»). */
+/** تسمية المصدر في الواجهة (الفرق بين «محاضرة» و«مستند» و«موضوع»). */
 export function examSourceLabel(kind: ExamSourceKind): string {
-  return kind === "document" ? "مستند" : "محاضرة";
+  if (kind === "document") return "مستند";
+  if (kind === "topic") return "موضوع عام";
+  return "محاضرة";
+}
+
+/**
+ * 🌍 هل عند الطالب مصادر-file قابلة للاستخدام في الامتحان؟
+ *
+ * ⚠️ **ليه**: عشان المساعد يقترح «موضوع عام» (امتحان من معلومات الـAI)
+ *    بدل ما يقول «مفيش محاضرات» — ودي استعلامات cheap بـhead (بلا صفوف).
+ *
+ * ⚠️ **محاضرة بلا تفريغ مش مصدر**: من غير تفريغ مينفعش توليد ⇒ بنحسبها
+ *    زي ما المولّد بيحسبها (بيطلب transcript_text غير فاضي).
+ */
+export async function userHasExamSources(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const { count: lectureCount } = await supabase
+    .from("lectures")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .not("transcript_text", "is", null);
+
+  if (typeof lectureCount === "number" && lectureCount > 0) return true;
+
+  const { count: documentCount } = await supabase
+    .from("documents")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  return typeof documentCount === "number" && documentCount > 0;
+}
+
+/**
+ * 🌍 ينضّف نص الموضوع العام (طبقة السيرفر — مش في المتصفح).
+ *
+ * ⚠️ **ليه**: النص جاي من المستخدم ⇒ لازم تنظيف (مسافات/تحكّم) قبل ما
+ *    يتبعت للـAI أو يتحفظ في القاعدة.
+ */
+export function normalizeTopic(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < EXAM_TOPIC_MIN_CHARS) return null;
+  return cleaned.slice(0, EXAM_TOPIC_MAX_CHARS);
 }

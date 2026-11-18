@@ -45,11 +45,30 @@ export const TUTOR_TASK: AiTaskDefinition = {
   },
 };
 
+/**
+ * 🔥 **توليد الامتحانات** — مهمة مستقلة عن `chat`.
+ *
+ * ⚠️ **ليه مش `chat`**: التوليد نداءات JSON طويلة متتابعة (ملخص + أسئلة
+ *    لكل قطعة). لو مشي على موديلات المحادثة (chat) كان بياخد
+ *    موديل استدلال ⇒ بطيء + توكنز محروقة + 502/503. وللمهمة دي
+ *    موديلاتها السريعة في `TASK_MODEL_PREFERENCE`.
+ *
+ * ⚠️ **مافيش buildSystemPrompt**: كل نداء في محرك الامتحان بيبعت رسالة
+ *    نظامه الخاصة (المبرمبت الكامل) ⇒ أي رسالة نظام عامة كانت هتبوظ.
+ */
+export const EXAM_GENERATION_TASK: AiTaskDefinition = {
+  id: "exam_generation",
+  label: "توليد امتحان",
+  implemented: true,
+  temperature: 0.3,
+};
+
 /** السجل الكامل — أي مهمة جديدة بتتمركز هنا الأول قبل أي استخدام. */
 export const AI_TASK_REGISTRY = {
   chat: CHAT_TASK,
   explain: EXPLAIN_TASK,
   tutor: TUTOR_TASK,
+  exam_generation: EXAM_GENERATION_TASK,
 } as const satisfies Record<string, AiTaskDefinition>;
 
 export type ImplementedAiTaskId = keyof typeof AI_TASK_REGISTRY;

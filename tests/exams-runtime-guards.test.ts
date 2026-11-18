@@ -53,7 +53,7 @@ describe("المساعد — طلب امتحان بينفّذ فورًا (من �
   it("/api/chat: الكشف من **التاريخ** مش آخر رسالة", () => {
     const route = read("app/api/chat/route.ts");
     expect(route).toContain("detectExamRequestFromHistory(safeMessages)");
-    expect(route).toContain("buildExamHref(examRequest)");
+    expect(route).toContain("buildExamHref(examRequest");
     expect(route).toContain("EXAM_REQUEST_PROMPT_RULES");
   });
 
@@ -62,7 +62,7 @@ describe("المساعد — طلب امتحان بينفّذ فورًا (من �
     expect(route).toContain("detectExamRequestFromHistory(examTurns)");
     expect(route).toContain("loadConversationTurns");
     expect(route).toContain("saveTurn");
-    expect(route).toContain('label: "افتح مولّد الامتحان"');
+    expect(route).toContain("افتح مولّد الامتحان");
     expect(route).toContain("EXAM_REQUEST_PROMPT_RULES");
   });
 
@@ -106,8 +106,10 @@ describe("المرونة — تقسيم النداءات وإعادة المحا
     expect(engine).toContain("estimateQuestionCalls(chunks, count)");
     const route = read(PROCESS_ROUTE);
     expect(route).toContain("estimateItemBudget(chunks.length, spec.count)");
-    // ⚠️ السقف لازم يتضاعف × عدد محاضرات الجلسة (كان ثابت 15 ⇒ BUDGET واطي).
-    expect(route).toContain("MAX_LOGICAL_CALLS_PER_ITEM * totalLectures");
+    // ⚠️ السقف لازم يتحسب من **عدد قطع الجلسة** (كان ثابت 15 ⇒ BUDGET واطي
+    //    لما القطع بقت أصغر = نداءات أكتر).
+    expect(route).toContain("estimateItemBudget(sessionChunks, spec.count).logical");
+    expect(route).toContain("EXAM_SOURCE_CHUNK_CHARS");
   });
 
   it("Groq: withRetry + retry-after + تدوير المفاتيح", () => {
@@ -194,6 +196,57 @@ describe("مولّد الامتحانات — مصادر المحاضرات وا
     expect(migration).toContain("exam_session_items_exactly_one_source");
     expect(migration).toContain("document_id");
   });
+
+  it("db/49 ما يهدّش قيد db/50 (٣ مصادر) — عشان ما يفشلش بـ23514", () => {
+    // ⚠️ **اللي حصل فعليًا في الإنتاج**: `db/50` اتطبّق قبل `db/49` ⇒
+    //    القيد بقى 3 مصادر (lecture/document/topic) ⇒ لما `db/49` حاول
+    //    يرجّعه 2 مصادر ⇒ بنود «موضوع عام» خالفت ⇒ **23514** والـapply
+    //    كله تراجع ⇒ الـRPC المصلّح مااتطبّقش ⇒ 500 مستمر.
+    const migration = read("db/49-exam-documents.sql");
+    // لازم يختار شكل القيد حسب وجود عمود topic.
+    expect(migration).toContain("information_schema.columns");
+    expect(migration).toContain("num_nonnulls(lecture_id, document_id, topic)");
+    // ⚠️ والقيد القديم (٢ مصادر) يبقى **جوّه الـelse** بس (مش top-level)
+    //    ⇒ متى ما الـtopic موجود يبقى ٣ مصادر (ومنود «موضوع عام» ماتخالفش).
+    const elseIndex = migration.indexOf("else");
+    const oldRuleIndex = migration.indexOf("(lecture_id is not null and document_id is null)");
+    expect(elseIndex).toBeGreaterThan(-1);
+    expect(oldRuleIndex).toBeGreaterThan(elseIndex);
+    // }));
+
+    // والقيد التلاتة (المعتمد) لازم يبقى **قبل** الـelse (الفرع الأساسي).
+    const threeWayIndex = migration.indexOf(
+      "num_nonnulls(lecture_id, document_id, topic)"
+    );
+    expect(threeWayIndex).toBeGreaterThan(-1);
+    expect(threeWayIndex).toBeLessThan(elseIndex);
+  });
+
+  it("db/49 وصلّح الـRPC القديم كمان (fallback) — مافيش array_length فيه", () => {
+    const migration = read("db/49-exam-documents.sql");
+    expect(migration).toContain("create or replace function public.create_exam_session_with_reserve");
+    // ⚠️ `array_length` مسموح في **التعليق** بس — مافيش usage فعلي.
+    const withoutComments = migration
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+    expect(withoutComments).not.toContain("array_length(");
+  });
+
+  it("القيد بيتضاف NOT VALID ⇒ الـapply مايفشلش بـ23514 أبداً", () => {
+    const migration = read("db/49-exam-documents.sql");
+    const withoutComments = migration
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+    // ⚠️ `not valid` = الصفوف الجديدة متحكمش بيها، والقديمة ماتكسرش الـapply.
+    expect(withoutComments).toContain("not valid;");
+    // وبيتحقق بعدين ببلوك آمن (لو فيه صفوف قديمة ⇒ يتخطّى).
+    expect(withoutComments).toContain("validate constraint exam_session_items_exactly_one_source");
+    expect(withoutComments).toContain("exception when others then");
+    // + تنظيف البنود اللي مالها أي مصدر (اللي بتكسر القيد).
+    expect(withoutComments).toContain("delete from public.exam_session_items");
+  });
 });
 
 describe("التسميات — فصل الصوتيات عن المستندات", () => {
@@ -229,7 +282,7 @@ describe("🔥 الـhotfix — 500/503 في مسار الامتحان", () => {
   it("راوت الإنشاء: تحقق من الـbody قبل أي شغل (lectureIds + documentIds)", () => {
     const route = read(CREATE_ROUTE);
     expect(route).toContain("validateCreateBody");
-    expect(route).toContain("lectureIds or documentIds required");
+    expect(route).toContain("lectureIds, documentIds or topic required");
     expect(route).toContain("max 3 sources");
     expect(route).toContain("invalid JSON body");
   });
@@ -278,5 +331,219 @@ describe("🔥 الـhotfix — 500/503 في مسار الامتحان", () => {
     expect(runner).toContain("AI_RATE_LIMITED");
     expect(runner).toContain("AI_TIMEOUT");
     expect(runner).toContain("retry_after");
+  });
+});
+
+describe("🌍 المولّد الذكي — مصدر «موضوع عام» + رفع ملف مباشر", () => {
+  it("الـmigration 50: عمود topic + قيد «مصدر واحد» + RPC جديد", () => {
+    const migration = read("db/50-exam-topic.sql");
+    expect(migration).toContain("topic text");
+    expect(migration).toContain("num_nonnulls(lecture_id, document_id, topic)");
+    expect(migration).toContain("create_exam_session_with_topic_reserve");
+  });
+
+  it("الـAPI يقبل topic (وبيمنع الخلط مع الملفات)", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("normalizeTopic");
+    expect(route).toContain("topic cannot be combined with other sources");
+    expect(route).toContain("TOPIC_UNAVAILABLE");
+    // ⚠️ الإشعار اللي بيقول للطالب إن الامتحان عام.
+    expect(route).toContain("مبني على معلومات عامة");
+  });
+
+  it("المحرك بيفرق بين وضع التفريغ ووضع المعلومات العامة", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("GROUNDING_GENERAL");
+    expect(engine).toContain("groundingFor(mode)");
+    expect(engine).toContain("mode?: ExamKnowledgeMode");
+    // ⚠️ الوضع العام بيم��نع التفاصيل النادرة (ضوابط دقة مختلفة).
+    expect(engine).toContain("ممنوع التفاصيل النادرة أو غير المؤكدة");
+  });
+
+  it("راوت المعالجة: بند الموضوع ⇒ مصدر topic + وضع عام", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain('itemRow.topic');
+    expect(route).toContain('knowledgeMode = "general"');
+    expect(route).toContain("mode: knowledgeMode");
+  });
+
+  it("الواجهة: تاب ثالث + خانة موضوع + رفع ملف", () => {
+    const ui = read("components/exams/ExamGenerator.tsx");
+    expect(ui).toContain('"topic" as const');
+    expect(ui).toContain("موضوع عام");
+    expect(ui).toContain('id="exam-topic"');
+    expect(ui).toContain('fetch("/api/documents"');
+  });
+
+  it("المساعد: مافيش ملفات ⇒ اقتراح موضوع عام (مش «مفيش محاضرات»)", () => {
+    const request = read("lib/exam-request.ts");
+    expect(request).toContain("topicMode");
+    const sources = read("lib/ai/exam-sources.ts");
+    expect(sources).toContain("userHasExamSources");
+    const chat = read("app/api/chat/route.ts");
+    expect(chat).toContain("userHasExamSources");
+    const unified = read("app/api/unified-ai/route.ts");
+    expect(unified).toContain("userHasExamSources");
+  });
+
+  it("قاعدة البيانات: استعلامات مستقلة عن الـschema (topic ناقص ⇒ fallback)", () => {
+    const sessions = read("lib/ai/exam-sessions.ts");
+    expect(sessions).toContain("topic column missing");
+    expect(sessions).toContain("topicSupport");
+  });
+});
+
+describe("🔥 تخصيص الموديل لكل ميزة (Task-Specific Models)", () => {
+  it("مهمة مستقلة لتوليد الامتحانات (مش chat)", () => {
+    const types = read("lib/ai/types.ts");
+    expect(types).toContain('"exam_generation"');
+    const routing = read("lib/ai/routing.ts");
+    expect(routing).toContain("exam_generation:");
+    expect(routing).toContain("AI_PROVIDER_BY_TASK");
+  });
+
+  it("خريطة التوجيه: التوليد⇒سريع، الشرح⇒قوي، الشات⇒سريع", () => {
+    const routing = read("lib/ai/routing.ts");
+    // ⚠️ الموديل الأساسي للتوليد لازم يكون سريع (مش استدلال).
+    expect(routing).toMatch(/exam_generation:\s*\[\s*"openai\/gpt-oss-20b"/);
+    expect(routing).toMatch(/explain:\s*\[\s*"openai\/gpt-oss-120b"/);
+    expect(routing).toMatch(/chat:\s*\[\s*"openai\/gpt-oss-20b"/);
+  });
+
+  it("المهمة الجديدة مسجّلة في سجل المهام والـrunner", () => {
+    const tasks = read("lib/ai/tasks/chat.ts");
+    expect(tasks).toContain("EXAM_GENERATION_TASK");
+    expect(tasks).toContain('id: "exam_generation"');
+    const runner = read("lib/ai/tasks/runner.ts");
+    expect(runner).toContain('"exam_generation"');
+  });
+
+  it("مسار الامتحان بينادي المهمة الجديدة", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain('runAiTask("exam_generation"');
+    expect(route).not.toContain('runAiTask("chat"');
+  });
+
+  it("المحرك: جزء بيفشل ⇒ يكمل بدل ما يرمي", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("failedParts");
+    expect(engine).toContain("محاولتين");
+  });
+
+  it("السجل: llama-3.3-70b مسجّل بس **معطّل** لحد الفحص الحي", () => {
+    const models = read("lib/ai/models.ts");
+    expect(models).toContain("llama-3.3-70b-versatile");
+    // ⚠️ موديل محجوب (404) في التفضيلات = كل نداء بيضيع وقته.
+    expect(models).toMatch(/id: "llama-3\.3-70b-versatile"[\s\S]{0,600}?enabled: false/);
+    const routing = read("lib/ai/routing.ts");
+    // ⚠️ قائمة تفضيلات التوليد ما فيهاش الموديل المحجوب.
+    const block = routing.slice(routing.indexOf("exam_generation: ["), routing.indexOf("]", routing.indexOf("exam_generation: [")));
+    expect(block).not.toContain("llama-3.3-70b-versatile");
+  });
+
+  it("الـ404 المؤقت (تأخّر الـreplica) بيتعالج، مش خطأ نهائي", () => {
+    const route = read(PROCESS_ROUTE);
+    // ⚠️ قراءة واحدة + إعادة محاولة واحدة قبل «مش موجودة».
+    expect(route).toContain("REPLICA_RETRY_DELAY_MS");
+    const runner = read("components/exams/ExamRunner.tsx");
+    expect(runner).toContain("missingSessionTries");
+    expect(runner).toContain("stateRes.status === 404");
+  });
+
+  it("مصدر بلا نص ⇒ 422 (مش 404 و.message واضحة)", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain('fail("NO_TEXT", 422');
+    const createRoute = read("app/api/exam-sessions/route.ts");
+    expect(createRoute).toContain('fail("SOURCE_WITHOUT_TEXT", 422');
+    // ⚠️ الفحص المسبق لازم يكون **قبل** إنشاء الجلسة (مش بعده) عشان
+    //    الكريدت ما يتحجزش ل.session ميتة.
+    expect(createRoute.indexOf("SOURCE_WITHOUT_TEXT")).toBeLessThan(
+      createRoute.indexOf("createExamSession(supabase")
+    );
+  });
+
+  it("المحرك بيقبل Array مباشر كـJSON للأسئلة", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("Array.isArray(parsed)");
+  });
+});
+
+/**
+ * ✂️ ميزانية المصادر + إشعار القصّ.
+ *
+ * العَرَض الأصلي: `total chunks 69 exceeds limit 9` على ملف 69 صفحة
+ * صغيرة (≈35 ألف حرف — أقل من سقف الـ60 ألف) ⇒ منع إنشاء الامتحان.
+ * السبب: `sum(ceil(len/12000))` لكل صف بدل حساب الإجمالي.
+ */
+describe("ميزانية المصادر — القطع من الإجمالي وإلغاء الرفض", () => {
+  const DB51 = "db/51-exam-source-budget.sql";
+
+  it("db/51 بيعيد تعريف الدالتين (نفس التواقيع)", () => {
+    const sql = read(DB51);
+    expect(sql).toContain(
+      "create or replace function public.create_exam_session_with_sources_reserve"
+    );
+    expect(sql).toContain("create or replace function public.create_exam_session_with_reserve");
+    expect(sql).toContain("grant execute on function public.create_exam_session_with_reserve(text, uuid[]) to authenticated;");
+  });
+
+  it("القطع بيتحسب من الإجمالي مش مجموع ceil لكل صف", () => {
+    const sql = read(DB51);
+    expect(sql).toContain("v_total_chunks := ceil(v_total_chars::numeric / 12000)::int;");
+  });
+
+  it("مافيش رفض على عدد القطع أو على 60 ألف حرف", () => {
+    const sql = read(DB51);
+    expect(sql).not.toMatch(/raise exception 'total chunks/);
+    expect(sql).not.toMatch(/raise exception 'total chars/);
+  });
+
+  it("سقف حماية من الإساءة لسه موجود", () => {
+    expect(read(DB51)).toContain("source too large: % chars");
+  });
+
+  it("الراوت بيجهّز إشعار قصّ عربي", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("truncatedSources");
+    expect(route).toContain("هيغطي أول");
+    expect(route).toContain("notice: truncationNotice");
+  });
+
+  it("خطأ الميزانية الخام مايوصلش للطالب بإنجليزي", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("budgetDetail(created.error)");
+    expect(route).not.toContain('return fail("BUDGET", 400, created.error)');
+  });
+});
+
+describe("GET /api/exam-sessions — قائمة «امتحاناتي»", () => {
+  it("الراوت فيه GET بحد أقصى للقائمة", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toMatch(/export async function GET\(req: Request\)/);
+    expect(route).toContain("Math.min(50");
+  });
+
+  it("الهَب بيقرا من الـAPI بدل استعلامين في المتصفح", () => {
+    const hub = read("components/exams/ExamsHub.tsx");
+    expect(hub).toContain('fetch("/api/exam-sessions?limit=20"');
+    expect(hub).not.toContain('from("exam_session_answers")');
+  });
+
+  it("الـGET بيرجّع عدد الإجابات جوه كل جلسة", () => {
+    expect(read(CREATE_ROUTE)).toContain("answered: answered.get(row.id) ?? 0");
+  });
+});
+
+describe("قصّ المصادر — نفس السقف للمحاضرات والمستندات", () => {
+  it("المحاضرة بتتقصّ عند EXAM_SOURCE_MAX_CHARS وقت المعالجة", () => {
+    expect(read(PROCESS_ROUTE)).toContain(
+      "transcript = lecture.transcript_text.slice(0, EXAM_SOURCE_MAX_CHARS);"
+    );
+  });
+
+  it("نص المستند بيتقصّ في exam-sources", () => {
+    const sources = read("lib/ai/exam-sources.ts");
+    expect(sources).toContain("truncated: full.length > EXAM_SOURCE_MAX_CHARS");
+    expect(sources).toContain("totalChars: full.length");
   });
 });

@@ -9,7 +9,10 @@ import { getAiTask } from "./chat";
  * دي نقطة الدخول الوحيدة للتدفقات الجديدة — التطبيق مايلمسش مزوّدين
  * ولا موديلات من هنا وتحيا: الراوتر هو اللي بيختار وبيعمل fallback.
  */
-export async function runAiTask(taskId: "chat" | "explain" | "tutor", input: AiTaskInput): Promise<AiTaskResult> {
+export async function runAiTask(
+  taskId: "chat" | "explain" | "tutor" | "exam_generation",
+  input: AiTaskInput
+): Promise<AiTaskResult> {
   const task = getAiTask(taskId);
 
   const messages: AiChatMessage[] = [...input.messages];

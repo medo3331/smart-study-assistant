@@ -13,7 +13,6 @@
    ========================================================================== */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Plus, Sparkles } from "lucide-react";
 import { ExamGenerator, type ExamGeneratorInitial } from "./ExamGenerator";
 import { ExamRunner } from "./ExamRunner";
@@ -76,23 +75,33 @@ function MyExamsList({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const supabase = createClient();
       try {
-        const [sessionsRes, answersRes] = await Promise.all([
-          supabase
-            .from("exam_sessions")
-            .select("id, status, metadata, created_at, completed_at")
-            .order("created_at", { ascending: false })
-            .limit(20),
-          supabase.from("exam_session_answers").select("session_id"),
-        ]);
+        /**
+         * ⚠️ القائمة بتيجي من `GET /api/exam-sessions` (سيرفر) مش من
+         *    استعلامين في المتصفح: العدّ بقى على السيرفر، ومفيش سحب
+         *    لكل صفوف `exam_session_answers` عشان نعدّها.
+         */
+        const response = await fetch("/api/exam-sessions?limit=20", { cache: "no-store" });
+        const data = (await response.json().catch(() => null)) as
+          | { sessions?: Array<SessionListItem & { answered?: number }> }
+          | null;
         if (cancelled) return;
-        if (sessionsRes.error) throw new Error(sessionsRes.error.message);
-        setSessions((sessionsRes.data ?? []) as SessionListItem[]);
+        if (!response.ok || !Array.isArray(data?.sessions)) {
+          throw new Error(
+            response.status === 401
+              ? "الجلسة انتهت — سجّل الدخول تاني عشان تشوف امتحاناتك."
+              : "مقدرناش نحمّل امتحاناتك.",
+          );
+        }
+
+        const rows = data.sessions;
+        setSessions(rows);
 
         const counts = new Map<string, number>();
-        for (const row of (answersRes.data ?? []) as Array<{ session_id: string }>) {
-          counts.set(row.session_id, (counts.get(row.session_id) ?? 0) + 1);
+        for (const row of rows) {
+          if (typeof row.answered === "number" && row.answered > 0) {
+            counts.set(row.id, row.answered);
+          }
         }
         setAnsweredBySession(counts);
         setError(null);
