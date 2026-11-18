@@ -52,6 +52,16 @@ export const EXAM_DIFFICULTIES = ["easy", "medium", "hard"] as const;
 export const EXAM_MIN_COUNT = 5;
 export const EXAM_MAX_COUNT = 20;
 
+/**
+ * أقصى عدد أسئلة في **نداء واحد**.
+ *
+ * ⚠️ **ليه 5**: طلب 20 سؤال في نداء واحد = مخرج ضخم = توكنز كتير =
+ *    احتمال 429 أعلى = استجابة أطول وممكن موديل استدلال يقصّ المخرج.
+ *    تقسيم الطلب لـ5 أسئلة لكل نداء بيقلّل ذروة الطلب على المزوّد، وبيخلّي
+ *    جزء من الأسئلة ينجح لو جزء اتعطّل.
+ */
+export const EXAM_QUESTION_CHUNK_SIZE = 5;
+
 /** سؤال اختيار من متعدد — نفس شكل `lectures.mcqs` (بدون type للتوافق). */
 export type ExamMcq = {
   question: string;
@@ -180,16 +190,20 @@ export const EXAM_CALL_TIMEOUT_MS = 60_000;
 /**
  * تقدير ميزانية عنصر واحد **قبل** أي نداء:
  *   summary = chunks + (chunks > 1 ? 1 merge : 0)
- *   questions = chunks  (نداء واحد لكل قطعة — الأنواع جوه نفس النداء)
+ *   questions = عدد المجموعات (كل مجموعة حتى 5 أسئلة)
  *   attempts = logical × 3  (سقف محاولات الراوتر لكل نداء منطقي)
  *
- * قد يُضاف نداء `questions_repair` واحد أثناء التنفيذ (لو نقص نوع مختار)
- * — السقف15 يتسع دائمًا (أقصى حالة:5 قطع →11+1=12).
+ * ⚠️ **ليه `count` بقى مُدخل**: بعد تقسيم الأسئلة لمجموعات 5، عدد نداءات
+ *    الأسئلة بقى دالة في **عدد الأسئلة المطلوب** مش عدد القطع بس.
+ *    مثلاً: قطعة واحدة + 20 سؤال ⇒ 4 نداءات أسئلة (مش واحد).
  */
-export function estimateItemBudget(chunkCount: number): { logical: number; attempts: number } {
+export function estimateItemBudget(
+  chunkCount: number,
+  count: number = DEFAULT_EXAM_SPEC.count
+): { logical: number; attempts: number } {
   const chunks = Math.max(1, Math.trunc(chunkCount) || 1);
   const summaryCalls = chunks + (chunks > 1 ? 1 : 0);
-  const questionCalls = chunks;
+  const questionCalls = estimateQuestionCalls(chunks, count);
   const logical = summaryCalls + questionCalls;
   return { logical, attempts: logical * 3 };
 }
@@ -614,6 +628,46 @@ function distributeQuotas(total: number, parts: number): number[] {
 }
 
 /**
+ * يقسّم حصّة الأسئلة لمجموعات، كل واحدة **حتى 5 أسئلة**.
+ *
+ * ⚠️ **ليه مش بنقسم على القطع الأول**: الحصّة الواحدة (مثلاً 7 أسئلة من
+ *    قطعة واحدة) بتتقسم [5, 2] ⇒ نداءان منفصلان. ده اللي بيقلّل ذروة
+ *    الطلب على المزوّد (سبب الـ429) وبيقلّل حساسية المخرج للـtruncation.
+ *
+ * ⚠️ **ترتيب مقصود**: المجموعات بأكبر حجم الأول (5,5,5,…) عشان لو حصل
+ *    فشل وقت ضيق، يبقى عندنا جزء مكتمل مش جزء ناقص.
+ */
+export function splitQuestionQuota(
+  quota: number,
+  maxPerCall: number = EXAM_QUESTION_CHUNK_SIZE
+): number[] {
+  const total = Math.max(0, Math.trunc(quota) || 0);
+  if (total === 0) return [];
+  const limit = Math.max(1, Math.trunc(maxPerCall) || EXAM_QUESTION_CHUNK_SIZE);
+  const parts: number[] = [];
+  let remaining = total;
+  while (remaining > 0) {
+    const part = Math.min(limit, remaining);
+    parts.push(part);
+    remaining -= part;
+  }
+  return parts;
+}
+
+/**
+ * عدد نداءات الأسئلة المتوقعة — مجموع المجموعات لكل قطعة.
+ *
+ * ⚠️ **مطابق لـgenerateExamReview**: نفس الـdistribute ونفس التقسيم،
+ *    فالتقدير بيبقى مطابق للتنفيذ (مش تقدير متفائل).
+ */
+export function estimateQuestionCalls(chunkCount: number, count: number): number {
+  const chunks = Math.max(1, Math.trunc(chunkCount) || 1);
+  const want = Math.max(1, Math.min(Math.trunc(count) || 1, MAX_MCQ_COUNT));
+  const quotas = distributeQuotas(want, chunks);
+  return quotas.reduce((sum, quota) => sum + splitQuestionQuota(quota).length, 0);
+}
+
+/**
  * قصّ للعدد المطلوب **مع الحفاظ على تغطية كل نوع مختار** — بدونه
  * ممكن سؤال الإصلاح (آخر العنصر) يتقص في الـslice وينسى النوع.
  */
@@ -703,46 +757,57 @@ export async function generateExamReview(input: {
     throw new ExamReviewError("EMPTY_OUTPUT", "الخدمة رجعت ملخصًا فاضي.");
   }
 
-  // ٣) الأسئلة — نداء لكل قطعة ب حصتها من العدد، بأنواع الطالب وصعوبته
+  // ٣) الأسئلة — نداء لكل **مجموعة** (حتى 5 أسئلة) من حصّة كل قطعة،
+  //    بأنواع الطالب وصعوبته.
+  //
+  //    ⚠️ **ليه مش نداء واحد لكل قطعة**: طلب 20 سؤال في نداء واحد = ذروة
+  //    عالية على المزوّد (429/مهلات) ومخرج ممكن يتقصّ. التقسيم بيقلّل
+  //    استهلاك التوكنز في النداء الواحد، وبيخلّي جزء من الأسئلة ينجح لو
+  //    جزء اتعطّل (الخطأ في جزء = جزء من الامتحان جاهز).
   const want = Math.max(1, Math.min(spec.count, MAX_MCQ_COUNT));
   const quotas = distributeQuotas(want, chunks.length);
 
   const collected: ExamQuestion[] = [];
   for (const [index, chunk] of chunks.entries()) {
-    const quota = quotas[index];
-    if (quota <= 0) continue;
-    const raw = await callTask(
-      "questions",
-      buildQuestionsMessages({ quota, spec, chunk, index, total: chunks.length }),
-      0.4,
-      quota
-    );
-    collected.push(...validateItemsLenient(parseQuestionsEnvelope(raw), spec.types));
+    const parts = splitQuestionQuota(quotas[index]);
+    for (const part of parts) {
+      const raw = await callTask(
+        "questions",
+        buildQuestionsMessages({ quota: part, spec, chunk, index, total: chunks.length }),
+        0.4,
+        part
+      );
+      collected.push(...validateItemsLenient(parseQuestionsEnvelope(raw), spec.types));
+    }
   }
 
   let final = dedupeQuestions(collected);
 
-  // ٤) الالتزام بالأنواع والعدد — نداء إصلاح واحد عند النقص
+  // ٤) الالتزام بالأنواع والعدد — نداء إصلاح (أو أكثر) عند النقص
   const missingTypes = () => spec.types.filter((type) => !final.some((q) => q.type === type));
   let missing = missingTypes();
   if (missing.length > 0 || final.length < want) {
     const need = Math.max(want - final.length, missing.length, 1);
     const repairTypes = missing.length > 0 ? missing : spec.types;
-    try {
-      const raw = await callTask(
-        "questions_repair",
-        buildRepairMessages({ summary, need, types: repairTypes, spec }),
-        0.4,
-        need
-      );
-      final = dedupeQuestions([
-        ...final,
-        ...validateItemsLenient(parseQuestionsEnvelope(raw), repairTypes),
-      ]);
-    } catch (error) {
-      // فشل الإصلاح (رد فاسد) لا يوقف التوليد — الفحص تحت هو الحاكم.
-      // لكن أخطاء النظام (lease/provider) تنتشر كما هي.
-      if (!(error instanceof ExamReviewError)) throw error;
+    // ⚠️ الإصلاح بيتم بنفس التقسيم (5 أسئلة لكل نداء) — نداء واحد بـ20
+    //    سؤال هو بالظبط اللي إحنا بنتجنبو في التوليد الأساسي.
+    for (const part of splitQuestionQuota(need)) {
+      try {
+        const raw = await callTask(
+          "questions_repair",
+          buildRepairMessages({ summary, need: part, types: repairTypes, spec }),
+          0.4,
+          part
+        );
+        final = dedupeQuestions([
+          ...final,
+          ...validateItemsLenient(parseQuestionsEnvelope(raw), repairTypes),
+        ]);
+      } catch (error) {
+        // فشل الإصلاح (رد فاسد) لا يوقف التوليد — الفحص تحت هو الحاكم.
+        // لكن أخطاء النظام (lease/provider) تنتشر كما هي.
+        if (!(error instanceof ExamReviewError)) throw error;
+      }
     }
     missing = missingTypes();
     if (missing.length > 0) {

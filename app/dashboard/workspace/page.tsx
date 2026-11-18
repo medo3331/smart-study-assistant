@@ -45,9 +45,9 @@ import {
 /* ==========================================================================
    مساحة العمل — مركز القيادة
 
-   تلات تابات: المحادثات، المحاضرات، الملفات.
-   - الملفات هي materials (النص المستخرج) — عارض المادة القديم محفوظ بالكامل.
-   - المحاضرات من lectures.
+   تلات تابات: المحادثات، التسجيلات الصوتية، المستندات.
+   - المستندات هي materials (النص المستخرج) — عارض المادة القديم محفوظ بالكامل.
+   - التسجيلات الصوتية من lectures.
    - المحادثات من chat_conversations + آخر رسالة من chat_messages.
    - مفيش تغييرات في قاعدة البيانات ولا في APIs المحادثات.
    ========================================================================== */
@@ -82,8 +82,8 @@ const TAB_META: {
   icon: React.ComponentType<{ size?: number; className?: string; "aria-hidden"?: boolean }>;
 }[] = [
   { id: "chats", label: "المحادثات", icon: MessageSquare },
-  { id: "lectures", label: "المحاضرات", icon: Mic },
-  { id: "files", label: "الملفات", icon: FileText },
+  { id: "lectures", label: "التسجيلات الصوتية", icon: Mic },
+  { id: "files", label: "المستندات", icon: FileText },
 ];
 
 const STATUS_LABEL: Record<string, string> = {
@@ -942,7 +942,7 @@ export default function WorkspacePage() {
         </section>
       )}
 
-      {/* ================= المحاضرات ================= */}
+      {/* ================= التسجيلات الصوتية ================= */}
       {tab === "lectures" && (
         <section
           id="workspace-panel-lectures"
@@ -953,11 +953,11 @@ export default function WorkspacePage() {
           {lectures.length === 0 ? (
             <EmptyState
               icon="🎙️"
-              title="مفيش محاضرات لسه"
-              body="ارفع تسجيل محاضرة أو ملف صوتي، وهتلاقي التفريغ وكل محاضراتك هنا."
+              title="مفيش تسجيلات صوتية لسه"
+              body="ارفع تسجيل محاضرة أو ملف صوتي، وهتلاقي التفريغ وكل تسجيلاتك هنا."
               action={
                 <Link href="/lecture-transcription" className="btn btn-marker text-sm">
-                  محاضرة جديدة
+                  تسجيل جديد
                 </Link>
               }
             />
@@ -1015,7 +1015,7 @@ export default function WorkspacePage() {
         </section>
       )}
 
-      {/* ================= الملفات ================= */}
+      {/* ================= المستندات ================= */}
       {tab === "files" && (
         <section
           id="workspace-panel-files"

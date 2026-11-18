@@ -17,6 +17,7 @@ describe("GroqProvider — تدوير المفاتيح", () => {
     delete process.env.GROQ_API_KEY_2;
     delete process.env.GROQ_API_KEY_3;
     delete process.env.GROQ_API_KEY;
+    delete process.env.GROQ_RETRY_BASE_MS;
   });
 
   function okResponse(content: string) {
@@ -61,6 +62,8 @@ describe("GroqProvider — تدوير المفاتيح", () => {
   });
 
   it("كل المفاتيح اتعيّطت ⇒ خطأ 429 واضح (مش 503 غامض)", async () => {
+    // ⏱️ أساس بمليمتر — عشان الاختبار ماب.waitش 1s+2s حقيقي.
+    process.env.GROQ_RETRY_BASE_MS = "1";
     process.env.GROQ_API_KEY_1 = "key-one";
     process.env.GROQ_API_KEY_2 = "key-two";
 

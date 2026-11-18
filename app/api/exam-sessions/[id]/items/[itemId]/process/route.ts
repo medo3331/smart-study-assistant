@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/api-guard";
 import { AiProviderError } from "@/lib/ai/types";
+import { summarizeProviderFailure } from "@/lib/ai/errors";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { chunkTranscript, DEFAULT_CHUNK_CHARS } from "@/lib/ai/lecture-prompts";
 import { runAiTask } from "@/lib/ai/tasks/runner";
@@ -11,6 +12,7 @@ import {
   incrementUsage,
   renewLease,
   saveResult,
+  selectExamItem,
 } from "@/lib/ai/exam-sessions";
 import {
   ExamLeaseLostError,
@@ -19,6 +21,11 @@ import {
   normalizeExamSpec,
   type ExamReviewDeps,
 } from "@/lib/ai/exam-review";
+import {
+  buildExamSource,
+  readDocumentText,
+  type ExamSourceKind,
+} from "@/lib/ai/exam-sources";
 
 /**
  * POST /api/exam-sessions/[id]/items/[itemId]/process
@@ -40,11 +47,68 @@ const MAX_LOGICAL_CALLS = 15;
 const MAX_PROVIDER_ATTEMPTS = 45;
 const MAX_ITEM_ATTEMPTS = 2;
 
+/**
+ * سقف الميزانية **لكل محاضرة** (بيتضاعف × عدد محاضرات الجلسة).
+ *
+ * ⚠️ **ليه كان السقف ثابت 15**: السقف ده كان محسوب لعنصر واحد بس،
+ *    بينما `logical_calls_used` بينتجمع **على مستوى الجلسة** ⇒ امتحان
+ *    من 3 محاضرات كان بيقع في BUDGET في المحاضرة التانية/التالتة (خطأ
+ *    موجود من قبل التقسيم). دلوقتي السقف = 15 × عدد المحاضرات.
+ */
+const MAX_LOGICAL_CALLS_PER_ITEM = MAX_LOGICAL_CALLS;
+const MAX_PROVIDER_ATTEMPTS_PER_ITEM = MAX_PROVIDER_ATTEMPTS;
+
+/**
+ * عميل الـservice-role — للقراءة خارج RLS (صفحات `knowledge_base`).
+ *
+ * ⚠️ **ليه service**: صفحات المستند في `knowledge_base` مش مغطّاة بـRLS
+ *    للمستخدم العادي. الملكية **متحقَّق منها قبل القراءة**: المستند نفسه
+ *    بيتقرا بـ`.eq("user_id", user.id)` (RLS + فلتر صريح).
+ */
+function serviceClient() {
+  return createServiceClient();
+}
+
 function fail(error: string, status: number, extra?: Record<string, unknown>) {
   const body = { error, ...(extra ?? {}) };
   if (status >= 500) console.warn("[exam-sessions] process", error, extra ?? "");
   else console.info("[exam-sessions] process", error, extra ?? "");
   return NextResponse.json(body, { status });
+}
+
+/**
+ * 🧾 لوج تشخيصي مفصّل (نفس مستوى راوت الإنشاء).
+ *
+ * ⚠️ **بيفصل**: خطأ قاعدة (code=42703) / خطأ مزوّد (status=429/503) /
+ *    timeout (TIMEOUT) — عشان Logs تقول السبب الحقيقي مش «500».
+ */
+function logCrash(where: string, error: unknown, context: Record<string, unknown> = {}): void {
+  const err = error as
+    | {
+        message?: unknown;
+        name?: unknown;
+        stack?: unknown;
+        code?: unknown;
+        status?: unknown;
+        statusCode?: unknown;
+        details?: unknown;
+        hint?: unknown;
+        cause?: unknown;
+        reason?: unknown;
+      }
+    | null;
+  console.error(`[exam-sessions] CRASH in ${where}`, {
+    message: typeof err?.message === "string" ? err.message : String(error),
+    name: typeof err?.name === "string" ? err.name : typeof error,
+    stack: typeof err?.stack === "string" ? err.stack : undefined,
+    code: err?.code,
+    status: err?.status ?? err?.statusCode,
+    reason: err?.reason,
+    details: err?.details,
+    hint: err?.hint,
+    cause: err?.cause instanceof Error ? err.cause.message : undefined,
+    context,
+  });
 }
 
 /**
@@ -85,10 +149,16 @@ export async function POST(
   _req: Request,
   ctx: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const startedAt = Date.now();
+  const logContext: Record<string, unknown> = { route: "POST process" };
+
+  try {
   const { user, supabase } = await requireUser();
   if (!user) return fail("UNAUTHORIZED", 401);
 
   const { id: sessionId, itemId } = await ctx.params;
+  logContext.sessionId = sessionId;
+  logContext.itemId = itemId;
 
   // ── ١) الجلسة (ملكية صريحة)
   const { data: session, error: sessionError } = await supabase
@@ -100,19 +170,31 @@ export async function POST(
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (sessionError) return fail("INTERNAL", 500, { detail: sessionError.message });
+  if (sessionError) {
+    logCrash("read session", sessionError, { ...logContext });
+    return fail("INTERNAL", 500, { detail: sessionError.message });
+  }
   if (!session) return fail("NOT_FOUND", 404);
 
   // ── ٢) البند (لازم يكون داخل نفس الجلسة)
-  const { data: item, error: itemError } = await supabase
-    .from("exam_session_items")
-    .select("id, session_id, lecture_id, status")
-    .eq("id", itemId)
-    .eq("session_id", sessionId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  //
+  // ⚠️ **مستقل عن الـschema**: لو الـmigration 49 (عمود `document_id`) لسه
+  //    متطبّقةش ⇒ PostgREST بيرجّع 42703 ⇒ كان 500 في **كل** عملية
+  //    معالجة. دلوقتي بنرجع للاستعلام القديم بدل ما نكسر المسار.
+  const { item, error: itemError, documentSupport } = await selectExamItem(supabase, {
+    sessionId,
+    itemId,
+    userId: user.id,
+  });
 
-  if (itemError) return fail("INTERNAL", 500, { detail: itemError.message });
+  if (itemError) {
+    logCrash("read session item", itemError, { ...logContext });
+    const detail =
+      typeof (itemError as { message?: unknown }).message === "string"
+        ? (itemError as { message: string }).message
+        : "could not read item";
+    return fail("INTERNAL", 500, { detail });
+  }
   if (!item) return fail("NOT_FOUND", 404);
 
   // ── ٣) الجلسة مغلقة؟
@@ -120,19 +202,68 @@ export async function POST(
     return fail("SESSION_CLOSED", 423);
   }
 
-  // ── ٤) المحاضرة (ملكية صريحة) — قبل أي حجز
-  const { data: lecture, error: lectureError } = await supabase
-    .from("lectures")
-    .select("id, transcript_text")
-    .eq("id", item.lecture_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // ── ٤) المصدر — محاضرة (صوت) **أو** مستند (PDF/PPTX/DOCX)
+  //
+  // ⚠️ **ليه اتنين**: المولّد كان مربوط بالمحاضرات بس ⇒ الطالب اللي عنده
+  //    ملفات PDF بس كان بياخد 502/503 من غير سبب حقيقي. دلوقتي البند
+  //    بياخد مصدره من نوعه (محاضرة/مستند).
+  //
+  // ⚠️ **ملكية صريحة** على المصدر في الحالتين.
+  const itemRow = item as {
+    id: string;
+    lecture_id: string | null;
+    document_id?: string | null;
+    status: string;
+  };
 
-  if (lectureError) return fail("INTERNAL", 500, { detail: lectureError.message });
-  if (!lecture || typeof lecture.transcript_text !== "string" || !lecture.transcript_text.trim()) {
-    return fail("NO_TRANSCRIPT", 422);
+  let transcript = "";
+  let sourceTitle = "";
+  let sourceKind: ExamSourceKind = "recording";
+
+  if (itemRow.document_id) {
+    // 📄 مستند — النص المستخرج وقت الرفع (صفحات knowledge_base).
+    sourceKind = "document";
+    let document: Awaited<ReturnType<typeof readDocumentText>> = null;
+    try {
+      document = await readDocumentText(serviceClient(), {
+        documentId: itemRow.document_id,
+        userId: user.id,
+      });
+    } catch (error) {
+      // ⚠️ الجدول مش موجود (migration 36/49 متطبّقةش) ⇒ رسالة واضحة
+      //    بدل 500 مبهم.
+      logCrash("read document text", error, { ...logContext, document_id: itemRow.document_id });
+      const code = (error as { code?: string } | null)?.code;
+      if (code === "42P01" || code === "PGRST205" || code === "PGRST204") {
+        return fail("SOURCE_TABLE_MISSING", 503, {
+          detail: "documents/knowledge_base tables are missing (migrations not applied)",
+        });
+      }
+      return fail("SOURCE_UNAVAILABLE", 503, { detail: "could not read document" });
+    }
+    if (!document) return fail("NOT_FOUND", 404);
+    transcript = document.text;
+    sourceTitle = document.title;
+  } else {
+    const { data: lecture, error: lectureError } = await supabase
+      .from("lectures")
+      .select("id, title, transcript_text")
+      .eq("id", itemRow.lecture_id ?? "")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (lectureError) {
+      logCrash("read lecture", lectureError, { ...logContext, lecture_id: itemRow.lecture_id });
+      return fail("INTERNAL", 500, { detail: lectureError.message });
+    }
+    if (!lecture || typeof lecture.transcript_text !== "string" || !lecture.transcript_text.trim()) {
+      return fail("NO_TRANSCRIPT", 422);
+    }
+    transcript = lecture.transcript_text;
+    sourceTitle = lecture.title ?? "محاضرة";
   }
-  const transcript = lecture.transcript_text;
+
+  if (!transcript.trim()) return fail("NO_TRANSCRIPT", 422);
 
   // ── ٥) الاستحواذ
   const claimed = await claimItem(supabase, {
@@ -167,10 +298,32 @@ export async function POST(
     session.started_at ?? new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   // ── ٦) تحقق الميزانية قبل أي نداء AI
-  const chunks = chunkTranscript(transcript, DEFAULT_CHUNK_CHARS);
-  const estimate = estimateItemBudget(chunks.length);
+  //
+  // ⚠️ **ترتيب مهم**: اختيار الطالب (spec) بيتقرا **قبل** التقدير، لأن
+  //    عدد نداءات الأسئلة بقى دالة في **عدد الأسئلة** (تقسيم 5 أسئلة
+  //    لكل نداء) مش في عدد قطع المحاضرة بس.
+  //
+  //    والسقف بيتضاعف × عدد محاضرات الجلسة (كان ثابت فكان بيقع
+  //    BUDGET في المحاضرة التانية من امتحان 3 محاضرات).
+  const spec = normalizeExamSpec((session as { metadata?: unknown }).metadata &&
+    typeof (session as { metadata?: unknown }).metadata === "object"
+    ? ((session as { metadata: { spec?: unknown } }).metadata.spec)
+    : undefined);
 
-  if (session.logical_calls_used + estimate.logical > MAX_LOGICAL_CALLS) {
+  // ⚠️ **التقطيع (chunking)**: ملف PDF من 50 صفحة نصّه أكبر من أي نداء
+  //    واحد ⇒ بيتقطّع هنا لمجموعات (6 آلاف حرف لكل قطعة) والنداءات
+  //    بتاخد قطعة piece. نفس مسار المحاضرات بالظبط.
+  const source = buildExamSource({ kind: sourceKind, title: sourceTitle, text: transcript });
+  const chunks = source.chunks;
+  if (chunks.length === 0) return fail("NO_TRANSCRIPT", 422);
+
+  const estimate = estimateItemBudget(chunks.length, spec.count);
+
+  const totalLectures = Math.max(1, Number(session.total_lectures) || 1);
+  const sessionLogicalCap = MAX_LOGICAL_CALLS_PER_ITEM * totalLectures;
+  const sessionAttemptsCap = MAX_PROVIDER_ATTEMPTS_PER_ITEM * totalLectures;
+
+  if (session.logical_calls_used + estimate.logical > sessionLogicalCap) {
     await failItem(supabase, {
       itemId,
       claimToken,
@@ -179,7 +332,7 @@ export async function POST(
     });
     return fail("BUDGET", 429, { detail: "logical" });
   }
-  if (session.provider_attempts_used + estimate.attempts > MAX_PROVIDER_ATTEMPTS) {
+  if (session.provider_attempts_used + estimate.attempts > sessionAttemptsCap) {
     await failItem(supabase, {
       itemId,
       claimToken,
@@ -217,7 +370,9 @@ export async function POST(
       });
       return { content: result.content };
     },
-    chunk: chunkTranscript,
+    // ⚠️ **التقطيع اتعمل فوق** (ملف PDF كبير ⇒ مجموعات) — هنا بنرجّع
+    //    القطع الجاهزة، ومافيش تقطيع تاني جوه المحرك.
+    chunk: () => chunks,
     chunkChars: DEFAULT_CHUNK_CHARS,
     usageFor: (aiTask) => ({
       operationId,
@@ -239,12 +394,8 @@ export async function POST(
     },
   };
 
-  // اختيار الطالب (أنواع/صعوبة/عدد) من metadata — قراءة متساهلة:
-  // جلسة من غير metadata تولّد MCQ/متوسط/4 (سلوك المحرك القديم).
-  const spec = normalizeExamSpec((session as { metadata?: unknown }).metadata &&
-    typeof (session as { metadata?: unknown }).metadata === "object"
-    ? ((session as { metadata: { spec?: unknown } }).metadata.spec)
-    : undefined);
+  // ⚠️ اختيار الطالب (spec) اتقرا فوق مع تقدير الميزانية (خطأ 6) —
+  //    عشان التقدير يبقى مطابق لعدد النداءات الفعلي.
 
   let generated;
   try {
@@ -260,21 +411,60 @@ export async function POST(
       errorCode: "PROVIDER_ERROR",
       errorMessage: "ai_provider_exhausted",
     });
-    console.warn(
-      "[exam-sessions] generation failed",
-      error instanceof Error ? error.message : error
-    );
+
+    // 🧾 اللوج الكامل: الـstatus والرسالة من خطأ الـAI SDK (مش مجرد نص).
+    //
+    // ⚠️ **ليه `summarizeProviderFailure`**: الخطأ النهائي بعد استنزاف
+    //    كل المزوّدات هو `AiRouteError` — **مالوش** `status` مباشرة
+    //    (الأرقام جوه `reasons`). فال-raوت اللي بيفحص `error.status`
+    //    كان بيلاقي `undefined` وبيرجّع 502 عشوائي. دلوقتي بنقرا
+    //    الأرقام الحقيقية من المحاولات.
+    const summary = summarizeProviderFailure(error);
+    const providerStatus =
+      summary.status ??
+      (typeof (error as { status?: unknown } | null)?.status === "number"
+        ? ((error as { status: number }).status)
+        : undefined);
+    const providerCode = (error as { code?: unknown } | null)?.code;
+    const providerReason = (error as { reason?: unknown } | null)?.reason;
+    logCrash("generateExamReview", error, {
+      ...logContext,
+      providerStatus,
+      providerCode,
+      providerReason,
+      providerAttempts: summary.attempts,
+      durationMs: Date.now() - startedAt,
+    });
+
     // 🔄 429 من المزوّد (كل مفاتيح Groq اتعيطت) — مش خطأ الطالب ولا
     //    ميزانية الامتحان ⇒ 503 «الخدمة مشغولة» مع إعادة محاولة بعد دقيقة.
-    const providerStatus =
-      error instanceof AiProviderError ? error.status : undefined;
-    if (providerStatus === 429) {
+    if (providerStatus === 429 || summary.allRateLimited) {
       return fail("AI_RATE_LIMITED", 503, {
         detail: "provider rate limited (all keys)",
         retry_after: 60,
       });
     }
-    return fail("AI_UNAVAILABLE", 502);
+    // ⏱️ مهلة الطلب (20–120s) — المزوّد بطيء/محجوب.
+    if (providerStatus === 504 || summary.hasTimeout || providerReason === "TIMEOUT") {
+      return fail("AI_TIMEOUT", 503, { detail: "provider timeout", retry_after: 30 });
+    }
+    // 🖥️ 5xx من المزوّد (500/502/503) بعد كل محاولات الإعادة ⇒
+    //    رسالة صريحة للطالب: «السيرفر مشغول، جرب تاني».
+    if (
+      (typeof providerStatus === "number" && providerStatus >= 500) ||
+      summary.hasServerError
+    ) {
+      return fail("AI_PROVIDER_UNAVAILABLE", 503, {
+        detail: "provider unavailable after retries",
+        provider_status: providerStatus ?? null,
+        retry_after: 30,
+      });
+    }
+    // 📭 استجابة فاضية (نموذج استدلالي خلّص الـbudget من غير مخرجات).
+    if (summary.reasonCode === "EMPTY_RESPONSE") {
+      return fail("AI_EMPTY_RESPONSE", 503, { detail: "empty provider response", retry_after: 20 });
+    }
+    return fail("AI_UNAVAILABLE", 502, { detail: "generation failed" });
   }
 
   // ── ٩) المحاولات الفعلية من ai_usage_events (كل سطر = محاولة مزوّد)
@@ -304,8 +494,8 @@ export async function POST(
     sessionId,
     logical: generated.logicalCalls,
     attempts,
-    maxLogical: MAX_LOGICAL_CALLS,
-    maxAttempts: MAX_PROVIDER_ATTEMPTS,
+    maxLogical: sessionLogicalCap,
+    maxAttempts: sessionAttemptsCap,
   });
   if (!incremented.ok) {
     console.warn("[exam-sessions] usage increment failed", incremented.error);
@@ -322,7 +512,10 @@ export async function POST(
     transcriptChars: transcript.length,
     chunkCount: generated.chunks,
   });
-  if (!saved.ok) return fail("INTERNAL", 500, { detail: saved.error });
+  if (!saved.ok) {
+    logCrash("saveResult", new Error(saved.error), { ...logContext });
+    return fail("INTERNAL", 500, { detail: saved.error });
+  }
   if (!saved.data) return fail("LEASE_LOST", 423);
 
   // ── ١١) حالة الجلسة: ready لو كل البنود جاهزة
@@ -342,6 +535,14 @@ export async function POST(
     startedAt: session.started_at ?? usageSince,
   });
 
+  console.info("[exam-sessions] process — done", {
+    sessionId,
+    itemId,
+    durationMs: Date.now() - startedAt,
+    logicalCalls: generated.logicalCalls,
+    attempts,
+  });
+
   return NextResponse.json({
     status: "ready",
     result: generated.review,
@@ -350,4 +551,13 @@ export async function POST(
       attempts,
     },
   });
+  } catch (error) {
+    // 🧾 أي exception غير متوقع ⇒ 500 **مع تفاصيل كاملة في اللوج**
+    //    (الـstack + كود القاعدة/المزوّد + سياق الجلسة والبند).
+    logCrash("POST /api/exam-sessions/[id]/items/[itemId]/process", error, {
+      ...logContext,
+      durationMs: Date.now() - startedAt,
+    });
+    return fail("INTERNAL", 500, { detail: "processing failed" });
+  }
 }
