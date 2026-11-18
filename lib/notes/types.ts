@@ -64,12 +64,20 @@ export type StorageNotebook = {
   updatedAt: string;
 };
 
+/**
+ * Page background template.
+ *
+ * Stored verbatim, so adding a variant is a backwards-compatible change:
+ * records written with an older variant keep validating.
+ */
+export type NotesTemplate = "lined" | "grid" | "dotted" | "blank";
+
 /** Storage record for a page. */
 export type StoragePage = {
   id: string;
   ownerId: string;
   notebookId: string;
-  template: "lined" | "blank";
+  template: NotesTemplate;
   // Opaque in Phase 1B.1 — validated as object only.
   persistedSnapshot: unknown;
   // Opaque in Phase 1B.1 — validated as array only.

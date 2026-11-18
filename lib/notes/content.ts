@@ -13,7 +13,7 @@
 // This module is shared by the IndexedDB storage and the in-memory double so
 // both make exactly the same decision for the same inputs.
 
-import type { StorageNotebook, StoragePage, Stroke } from "./types";
+import type { NotesTemplate, StorageNotebook, StoragePage, Stroke } from "./types";
 
 /** Normalise a revision: legacy records without one are revision 0. */
 export function normalizeRevision(value: unknown): number {
@@ -67,7 +67,7 @@ export function pageContent(page: StoragePage): unknown {
  * `canonicalJson(pageContent(record))`, so the returned shape must be
  * serializable via `canonicalJson` and stable across sessions.
  */
-export function pageContentStrokes(template: "lined" | "blank", strokes: Stroke[]): unknown {
+export function pageContentStrokes(template: NotesTemplate, strokes: Stroke[]): unknown {
   return {
     template,
     strokes,

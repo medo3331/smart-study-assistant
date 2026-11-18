@@ -21,6 +21,10 @@ function notebook(id: string, ownerId: string): StorageNotebook {
     ownerId,
     title: id,
     pageIds: [],
+
+    currentPageId: null,
+
+    revision: 0,
     createdAt: NOW,
     updatedAt: NOW,
   };
@@ -35,6 +39,8 @@ function page(id: string, ownerId: string, notebookId: string): StoragePage {
     persistedSnapshot: {},
     localJournal: [],
     quarantined: false,
+
+    revision: 0,
     createdAt: NOW,
     updatedAt: NOW,
   };

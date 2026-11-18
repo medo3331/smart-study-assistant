@@ -3,7 +3,22 @@
 // Phase 1B.1 — Structural storage-record validation.
 // Phase 1B.2 adds integrity validation (relationships, checksums, duplicate detection).
 
-import type { StorageNotebook, StoragePage, StorageBackup, StorageMeta, ValidationResult } from "./types";
+import type {
+  NotesTemplate,
+  StorageNotebook,
+  StoragePage,
+  StorageBackup,
+  StorageMeta,
+  ValidationResult,
+} from "./types";
+
+/** Every template value the storage layer accepts. */
+export const VALID_TEMPLATES: readonly NotesTemplate[] = [
+  "lined",
+  "grid",
+  "dotted",
+  "blank",
+];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -51,8 +66,8 @@ export function validatePage(record: unknown): ValidationResult {
   if (!isNonEmptyString(r.id)) errors.push("id must be a non-empty string");
   if (!isNonEmptyString(r.ownerId)) errors.push("ownerId must be a non-empty string");
   if (!isNonEmptyString(r.notebookId)) errors.push("notebookId must be a non-empty string");
-  if (r.template !== "lined" && r.template !== "blank") {
-    errors.push("template must be 'lined' or 'blank'");
+  if (!VALID_TEMPLATES.includes(r.template as NotesTemplate)) {
+    errors.push(`template must be one of: ${VALID_TEMPLATES.join(", ")}`);
   }
   if (!isPlainObject(r.persistedSnapshot)) {
     errors.push("persistedSnapshot must be a plain object");

@@ -11,8 +11,8 @@ import { PageSession } from "../page-session";
 
 // Helper: create a deferred (resolvable) Promise pair
 function createDeferred<T>() {
-  let resolve: (value: T | PromiseLike<T>) => void;
-  let reject: (reason?: any) => void;
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: any) => void;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -30,16 +30,21 @@ describe("PageSession Lifecycle (Phase 1B.2)", () => {
 
   beforeEach(() => {
     session = new PageSession("test-owner", {} as any);
-    // Ensure save() will proceed (not return early with "unchanged").
-    // The save() method returns early when !dirty && !retryPage,
-    // so we must set dirty = true to trigger the write path.
-    session.state.dirty = true;
+    // `state` and `saveQueue` are ECMAScript-private on PageSession. The test
+    // deliberately inspects them to build a realistic in-flight state, so the
+    // access goes through one explicit local widening rather than casts inline.
+    const internals = session as unknown as {
+      state: { dirty: boolean };
+      saveQueue: { pageQueue: Map<string, unknown> };
+    };
+    internals.state.dirty = true;
     // Set up the saveQueue with a pending draft so the session has a
     // realistic in-flight state when save() is called.
-    session.saveQueue.pageQueue.set("test-page", {
+    internals.saveQueue.pageQueue.set("test-page", {
       id: "test-page",
+      ownerId: "test-owner",
+      notebookId: "test-notebook",
       revision: 1,
-      title: "Test Page",
       template: "lined",
       persistedSnapshot: {},
       localJournal: [],

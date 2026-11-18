@@ -30,6 +30,7 @@ import {
   webSiteLd,
 } from '@/lib/seo';
 import './globals.css';
+import './notes.css';
 
 /* العناوين: خط عربي هندسي، متغيّر الأوزان */
 const display = Alexandria({
@@ -197,11 +198,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ar"
       dir="rtl"
       className={`${display.variable} ${body.variable} ${mono.variable}`}
+      suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashTheme }} />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {/* البيانات المنظّمة على مستوى الموقع: الكيان (EducationalOrganization)
             والموقع (WebSite). الاتنين هنا مش في صفحة معيّنة لأنهم بيوصفوا
             الموقع كله، وباقي الصفحات بتشاور عليهم بـ @id بدل ما تكرّرهم. */}

@@ -36,6 +36,8 @@ describe("NoteStorage contract (owner-bound)", () => {
       persistedSnapshot: {},
       localJournal: [],
       quarantined: false,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -49,6 +51,10 @@ describe("NoteStorage contract (owner-bound)", () => {
         ownerId: OWNER_B,
         title: "x",
         pageIds: [],
+
+        currentPageId: null,
+
+        revision: 0,
         createdAt: NOW,
         updatedAt: NOW,
       }),
@@ -61,6 +67,10 @@ describe("NoteStorage contract (owner-bound)", () => {
       ownerId: OWNER_A,
       title: "x",
       pageIds: [],
+
+      currentPageId: null,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -70,6 +80,10 @@ describe("NoteStorage contract (owner-bound)", () => {
       ownerId: OWNER_B,
       title: "y",
       pageIds: [],
+
+      currentPageId: null,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -83,6 +97,10 @@ describe("NoteStorage contract (owner-bound)", () => {
       ownerId: OWNER_A,
       title: "x",
       pageIds: [],
+
+      currentPageId: null,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -95,6 +113,8 @@ describe("NoteStorage contract (owner-bound)", () => {
         persistedSnapshot: {},
         localJournal: [],
         quarantined: false,
+
+        revision: 0,
         createdAt: NOW,
         updatedAt: NOW,
       });
@@ -113,6 +133,10 @@ describe("NoteStorage contract (owner-bound)", () => {
       ownerId: OWNER_A,
       title: "x",
       pageIds: [],
+
+      currentPageId: null,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -124,6 +148,8 @@ describe("NoteStorage contract (owner-bound)", () => {
       persistedSnapshot: {},
       localJournal: [],
       quarantined: false,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -136,6 +162,8 @@ describe("NoteStorage contract (owner-bound)", () => {
       persistedSnapshot: {},
       localJournal: [],
       quarantined: false,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -160,6 +188,8 @@ describe("NoteStorage contract (owner-bound)", () => {
       persistedSnapshot: {},
       localJournal: [],
       quarantined: false,
+
+      revision: 0,
       createdAt: NOW,
       updatedAt: NOW,
     });
