@@ -68,21 +68,37 @@ async function main() {
       ${hasDocument ? "i.document_id," : "null::uuid as document_id,"}
       ${hasTopic ? "i.topic," : "null::text as topic,"}
       i.transcript_chars,
+      s.id as found_session,
       s.status as session_status,
-      s.created_at::text
+      i.created_at::text
     from public.exam_session_items i
-    join public.exam_sessions s on s.id = i.session_id
+    left join public.exam_sessions s on s.id = i.session_id
     where (${sourceExpr}) <> 1
     order by i.created_at desc nulls last
-    limit 50;
+    limit 100;
   `);
   console.log(`  عدد الصفوف المخالفة: ${bad.length}`);
   for (const r of bad) {
     console.log(
       `  • item=${r.id} session=${r.session_id} ordinal=${r.ordinal} status=${r.status} ` +
-        `session_status=${r.session_status} lecture=${r.lecture_id ?? "NULL"} ` +
-        `document=${r.document_id ?? "NULL"} topic=${r.topic ?? "NULL"} chars=${r.transcript_chars}`
+        `session_found=${r.found_session ? "yes" : "NO (يتيم)"} ` +
+        `session_status=${r.session_status ?? "-"} lecture=${r.lecture_id ?? "NULL"} ` +
+        `document=${r.document_id ?? "NULL"} topic=${r.topic ? JSON.stringify(r.topic) : "NULL"} chars=${r.transcript_chars}`
     );
+  }
+
+  // ②ب) بنود يتيمة (الجلسة مش موجودة) — دي اللي الـinner join كان بيخبّيها.
+  const { rows: orphans } = await client.query(`
+    select i.id, i.session_id, i.lecture_id, i.created_at::text
+    from public.exam_session_items i
+    left join public.exam_sessions s on s.id = i.session_id
+    where s.id is null
+    order by i.created_at desc nulls last
+    limit 50;
+  `);
+  console.log(`\n=== بنود يتيمة (الجلسة مش موجودة): ${orphans.length} ===`);
+  for (const o of orphans) {
+    console.log(`  • item=${o.id} session=${o.session_id} lecture=${o.lecture_id ?? "NULL"} at=${o.created_at}`);
   }
 
   // ③ جلسات عدد بنودها مش مطابق لـtotal_lectures.
@@ -101,19 +117,28 @@ async function main() {
   }
 
   // ④ الـRPCs بتاعت إنشاء الجلسات: موجودة؟ وarray_length ولا cardinality؟
+  //
+  // ⚠️ **التعليقات بتكسر الكشف**: `pg_get_functiondef` بيرجّع الكود **مع
+  //    التعليقات** ⇒ لازم نشيلها قبل البحث (وإلا كل دالة فيها ذكر
+  //    `array_length` في تعليق بتطلع "لسه فيها array_length" ✗).
   const { rows: fns } = await client.query(`
-    select p.proname,
-           position('cardinality(' in pg_get_functiondef(p.oid)) > 0 as has_cardinality,
-           position('array_length(' in pg_get_functiondef(p.oid)) > 0 as has_array_length
+    select p.proname, pg_get_functiondef(p.oid) as def
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname like 'create_exam_session%'
     order by p.proname;
   `);
-  console.log("\n=== RPCs بتاعت إنشاء الجلسات ===");
+  console.log("\n=== RPCs بتاعت إنشاء الجلسات (من غير تعليقات) ===");
   for (const f of fns) {
-    console.log(`  - ${f.proname}: cardinality=${f.has_cardinality} array_length=${f.has_array_length}`);
+    const code = f.def
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+    const hasCard = code.includes("cardinality(");
+    const hasArr = code.includes("array_length(");
+    const verdict = hasArr ? "❌ لسه فيها array_length" : hasCard ? "✅ cardinality" : "—";
+    console.log(`  - ${f.proname}: ${verdict}`);
   }
 
   // ⑤ القيود الفريدة (البند/المستند).

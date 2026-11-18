@@ -96,39 +96,64 @@ async function main() {
   }
 
   // ── التحقق: الدالة بقت تستخدم cardinality مش array_length.
+  //
+  // ⚠️ **مهم**: `pg_get_functiondef` بيرجّع الكود **مع التعليقات** ⇒
+  //    لازم نشيلها قبل البحث، وإلا كل دالة فيها ذكر `array_length`
+  //    في تعليق بتطلع «لسه فيها array_length» (نتيجة مضلّلة ✗).
+  const stripComments = (def) =>
+    String(def || "")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+
   const { rows } = await client.query(`
-    select
-      position('cardinality(v_lecture_ids)' in pg_get_functiondef(p.oid)) > 0 as uses_cardinality,
-      position('array_length(v_lecture_ids' in pg_get_functiondef(p.oid)) > 0 as uses_array_length
+    select pg_get_functiondef(p.oid) as def
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname = 'create_exam_session_with_sources_reserve';
   `);
 
-  const fn = rows[0];
-  if (!fn) {
+  const fnCode = rows[0] ? stripComments(rows[0].def) : "";
+  if (!rows[0]) {
     console.log("⚠️ الـfunction مش موجودة — اتأكد إن الـmigration اتطبّقت.");
-  } else if (fn.uses_cardinality && !fn.uses_array_length) {
+  } else if (fnCode.includes("array_length(")) {
+    console.log("⚠️ verify: الـfunction لسه فيها array_length — راجع الـmigration.");
+  } else if (fnCode.includes("cardinality(")) {
     console.log("✅ verify: الـfunction بقت تستخدم cardinality (مفيش array_length)");
   } else {
-    console.log("⚠️ verify: الـfunction لسه فيها array_length — راجع الـmigration.");
+    console.log("⚠️ verify: مقدرناش نقرأ الـfunction — راجع الـmigration.");
   }
 
   // ── التحقق: الـRPC القديم (fallback) اتصلّح برضه.
   const { rows: legacy } = await client.query(`
-    select
-      position('cardinality(' in pg_get_functiondef(p.oid)) > 0 as uses_cardinality,
-      position('array_length(' in pg_get_functiondef(p.oid)) > 0 as uses_array_length
+    select pg_get_functiondef(p.oid) as def
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname = 'create_exam_session_with_reserve';
   `);
-  if (legacy[0]?.uses_cardinality && !legacy[0]?.uses_array_length) {
-    console.log("✅ verify: الـRPC القديم (fallback) بقى cardinality كمان");
-  } else if (legacy[0]) {
+  const legacyCode = legacy[0] ? stripComments(legacy[0].def) : "";
+  if (!legacy[0]) {
+    console.log("⚠️ الـRPC القديم مش موجود.");
+  } else if (legacyCode.includes("array_length(")) {
     console.log("⚠️ verify: الـRPC القديم لسه فيه array_length.");
+  } else if (legacyCode.includes("cardinality(")) {
+    console.log("✅ verify: الـRPC القديم (fallback) بقى cardinality كمان");
+  }
+
+  // ── التحقق: الـRPC بتاع «موضوع عام» موجود (db/50).
+  const { rows: topicFn } = await client.query(`
+    select count(*)::int as n
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'create_exam_session_with_topic_reserve';
+  `);
+  if ((topicFn[0]?.n ?? 0) > 0) {
+    console.log("✅ verify: RPC «موضوع عام» موجود (db/50)");
+  } else {
+    console.log("⚠️ RPC «موضوع عام» مش موجود — شغّل node scripts/apply-exam-topic-sql.cjs");
   }
 
   // ── التحقق: شكل قيد «مصدر واحد بالظبط» مطابق للأعمدة الموجودة.

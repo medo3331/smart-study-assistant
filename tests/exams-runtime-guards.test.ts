@@ -222,7 +222,7 @@ describe("مولّد الامتحانات — مصادر المحاضرات وا
     expect(threeWayIndex).toBeLessThan(elseIndex);
   });
 
-  it("db/49 يصلّح الـRPC القديم كمان (fallback) — مافيش array_length فيه", () => {
+  it("db/49 وصلّح الـRPC القديم كمان (fallback) — مافيش array_length فيه", () => {
     const migration = read("db/49-exam-documents.sql");
     expect(migration).toContain("create or replace function public.create_exam_session_with_reserve");
     // ⚠️ `array_length` مسموح في **التعليق** بس — مافيش usage فعلي.
@@ -231,6 +231,21 @@ describe("مولّد الامتحانات — مصادر المحاضرات وا
       .filter((line) => !line.trim().startsWith("--"))
       .join("\n");
     expect(withoutComments).not.toContain("array_length(");
+  });
+
+  it("القيد بيتضاف NOT VALID ⇒ الـapply مايفشلش بـ23514 أبداً", () => {
+    const migration = read("db/49-exam-documents.sql");
+    const withoutComments = migration
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+    // ⚠️ `not valid` = الصفوف الجديدة متحكمش بيها، والقديمة ماتكسرش الـapply.
+    expect(withoutComments).toContain("not valid;");
+    // وبيتحقق بعدين ببلوك آمن (لو فيه صفوف قديمة ⇒ يتخطّى).
+    expect(withoutComments).toContain("validate constraint exam_session_items_exactly_one_source");
+    expect(withoutComments).toContain("exception when others then");
+    // + تنظيف البنود اللي مالها أي مصدر (اللي بتكسر القيد).
+    expect(withoutComments).toContain("delete from public.exam_session_items");
   });
 });
 

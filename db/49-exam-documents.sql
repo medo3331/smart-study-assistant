@@ -50,12 +50,39 @@ alter table public.exam_session_items
 --      check (num_nonnulls(lecture_id, document_id, topic) = 1)
 --    فلو `db/49` رجّع القيد لشكله **الاثنين** (محاضرة/مستند بس) =>
 --    **بنود «موضوع عام»** (topic = نص، lecture/document = NULL) بتخالف
---    ⇒ Postgres بيرفض الـADD ⇒ **23514** والـmigration كلها بتتراجع
+--    ⇒ Postgres يرفض الـADD ⇒ **23514** والـmigration كلها بتتراجع
 --    (والـRPC-fixed مايتطبّقش ⇒ 500 مستمر).
 --    ⇒ هنا بنختار شكل القيد حسب الأعمدة الموجودة فعليًا ✓ (idempotent
 --    في أي ترتيب تطبيق).
+--
+-- ⚠️ **ولماذا `not valid`**: الـADD بيكسر لو فيه **صفوف قديمة** مخالفة
+--    (حتى لو القيد نفسه صح) ⇒ الـmigration بترجع وتتراجع ⇒ الـRPC
+--    المصلّح مايتطبّقش ⇒ 500 مستمر. مع `not valid`:
+--      • الـADD **مش بيفشل** أبداً ✓
+--      • والصفوف **الجديدة** بتخضع للقيد ✓ (ده المهم)
+--      • والصفوف القديمة بتتخقّق بـ`validate constraint` بعدين (تحت) ✓
 do $$
 begin
+  -- ① تنظيف: بنود مالها **أي مصدر** (لا محاضرة ولا مستند ولا موضوع).
+  --    دي البنود الميتة اللي ممكن تكسر القيد ⇒ نحذفها (ملهاش معنى:
+  --    مفيش مصدر نتولّد منه أسئلة).
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'exam_session_items'
+      and column_name = 'topic'
+  ) then
+    delete from public.exam_session_items
+     where lecture_id is null
+       and document_id is null
+       and (topic is null or btrim(topic) = '');
+  else
+    delete from public.exam_session_items
+     where lecture_id is null
+       and document_id is null;
+  end if;
+
+  -- ② القيد: 3 مصادر لو فيه topic، 2 غير كده.
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public'
@@ -67,7 +94,7 @@ begin
       drop constraint if exists exam_session_items_exactly_one_source;
     alter table public.exam_session_items
       add constraint exam_session_items_exactly_one_source
-      check (num_nonnulls(lecture_id, document_id, topic) = 1);
+      check (num_nonnulls(lecture_id, document_id, topic) = 1) not valid;
   else
     -- └─ مفيش topic (قاعدة لسه على `db/49` بس) ⇒ القيد الاتنين.
     alter table public.exam_session_items
@@ -77,8 +104,22 @@ begin
       check (
         (lecture_id is not null and document_id is null)
         or (lecture_id is null and document_id is not null)
-      );
+      ) not valid;
   end if;
+end
+$$;
+
+-- ③ التحقق من القيد على الصفوف القديمة — **بأمان**: لو فيه صفوف قديمة
+--    مخالفة ما نبقاش مانحينهاش (الـconstraint بيفضل NOT VALID، بس
+--    الصفوف الجديدة متحكمش بيها ✓).
+do $$
+begin
+  begin
+    alter table public.exam_session_items
+      validate constraint exam_session_items_exactly_one_source;
+  exception when others then
+    raise notice 'القيد اتضاف (NOT VALID) — فيه صفوف قديمة مخالفة، الـvalidation اتخطّت.';
+  end;
 end
 $$;
 
