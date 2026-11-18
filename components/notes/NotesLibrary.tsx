@@ -285,6 +285,15 @@ export default function NotesLibrary() {
               >
                 فتح
               </button>
+              <a
+                href={`/notes/${notebook.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="افتح الدفتر في تبويب جديد (البيانات من نفس الجهاز)"
+                className="notes-btn notes-btn-sm"
+              >
+                ↗ تبويب
+              </a>
               <button
                 type="button"
                 disabled={!canWrite}

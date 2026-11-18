@@ -34,11 +34,13 @@ import {
   loadPdfDocument,
   renderPdfPageToImage,
 } from "@/lib/notes/pdf";
+import { SaveCoordinator } from "@/lib/notes/editor-save";
 import type {
   NoteImage,
   NoteText,
   NotesTemplate,
   PageContent,
+  StoragePage,
   Stroke,
   StrokeShape,
 } from "@/lib/notes/types";
@@ -248,7 +250,6 @@ export default function NotebookEditor({
 
   const notebookIdRef = useRef<string | null>(null);
   const currentPageIdRef = useRef<string | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyRef = useRef<UndoStack<PageContent>>(new UndoStack<PageContent>(emptyPageContent()));
   const fittedRef = useRef(false);
   const textDraftRef = useRef<TextDraft | null>(null);
@@ -479,71 +480,103 @@ export default function NotebookEditor({
 
   // ---- Persistence ----
 
-  const saveCurrentPage = useCallback(async () => {
-    const pageId = currentPageIdRef.current;
-    const nbId = notebookIdRef.current;
-    if (!pageId || !nbId) return;
-    if (!repo.canWrite) {
-      setSaveStatus("error");
-      return;
-    }
+  /** Latest record built for a save, so pages state can sync post-write. */
+  const lastRecordRef = useRef<StoragePage | null>(null);
+  const saveCoordinatorRef = useRef<{
+    repo: NoteRepository;
+    coordinator: SaveCoordinator;
+  } | null>(null);
 
-    try {
-      setSaveStatus("saving");
-      const existing = await repo.getPage(pageId);
-      const template = templateRef.current;
-      const content = contentRef.current;
-      const record = buildPageSave({
-        ownerId: repo.ownerId,
-        notebookId: nbId,
-        pageId,
-        template,
-        strokes: content.strokes,
-        persistedSnapshot: pageContentStrokes(
+  /**
+   * Lazily build (and cache) the save coordinator for this screen.
+   *
+   * Everything the coordinator touches lives in refs and is read only inside
+   * its callbacks, so nothing here runs during render.
+   */
+  const getSaveCoordinator = useCallback((): SaveCoordinator => {
+    const cached = saveCoordinatorRef.current;
+    if (cached && cached.repo === repo) return cached.coordinator;
+
+    const coordinator = new SaveCoordinator({
+      repo,
+      buildRecord: async () => {
+        const pageId = currentPageIdRef.current;
+        const nbId = notebookIdRef.current;
+        if (!pageId || !nbId) return null;
+        const existing = await repo.getPage(pageId);
+        const template = templateRef.current;
+        const content = contentRef.current;
+        const record = buildPageSave({
+          ownerId: repo.ownerId,
+          notebookId: nbId,
+          pageId,
           template,
-          content.strokes,
-          content.texts,
-          content.images,
-        ),
-        existing,
-        now: nowIso(),
-      });
-      await repo.savePage(record);
+          strokes: content.strokes,
+          persistedSnapshot: pageContentStrokes(
+            template,
+            content.strokes,
+            content.texts,
+            content.images,
+          ),
+          existing,
+          now: nowIso(),
+        });
+        lastRecordRef.current = record;
+        return record;
+      },
+      onState: (state) => {
+        setSaveStatus(state.status);
+        if (state.status === "error") {
+          setMessage("فشل الحفظ — اضغط «إعادة المحاولة».");
+        }
+        if (state.status === "saved") {
+          setMessage(null);
+          const record = lastRecordRef.current;
+          const pageId = currentPageIdRef.current;
+          const savedContent = contentRef.current;
+          const template = templateRef.current;
+          if (record && pageId) {
+            setPages((previous) =>
+              previous.map((page) =>
+                page.id === pageId
+                  ? { ...page, template, content: savedContent, revision: record.revision }
+                  : page,
+              ),
+            );
+          }
+        }
+      },
+    });
+    saveCoordinatorRef.current = { repo, coordinator };
+    return coordinator;
+  }, [repo]);
 
-      const savedContent = contentRef.current;
-      setPages((previous) =>
-        previous.map((page) =>
-          page.id === pageId
-            ? { ...page, template, content: savedContent, revision: record.revision }
-            : page,
-        ),
-      );
-      setSaveStatus("saved");
-      setMessage(null);
-    } catch (error) {
-      console.error("[notes] save failed", classifyNotesError(error), error);
-      setSaveStatus("error");
-      setMessage(`فشل الحفظ (${classifyNotesError(error)}).`);
-    }
-  }, [repo, setSaveStatus]);
+  /** Persist now (page switching, explicit save button, Ctrl+S). */
+  const saveCurrentPage = useCallback(async () => {
+    await getSaveCoordinator().saveNow();
+  }, [getSaveCoordinator]);
 
+  /** Debounced autosave entry — every content mutation funnels here. */
   const scheduleSave = useCallback(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveTimerRef.current = null;
-      void saveCurrentPage();
-    }, AUTOSAVE_DELAY_MS);
-  }, [saveCurrentPage]);
+    getSaveCoordinator().schedule(AUTOSAVE_DELAY_MS);
+  }, [getSaveCoordinator]);
+
+  /** Re-attempt after a failed save. */
+  const retrySave = useCallback(() => {
+    void getSaveCoordinator().retry();
+  }, [getSaveCoordinator]);
 
   useEffect(() => {
-    const flush = () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-        void saveCurrentPage();
-      }
+    return () => {
+      saveCoordinatorRef.current?.coordinator.cancelScheduled();
     };
+  }, []);
+
+  useEffect(() => {
     // A tab that is hidden or closed must not lose the last stroke.
+    const flush = () => {
+      void getSaveCoordinator().saveNow();
+    };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") flush();
     };
@@ -552,9 +585,8 @@ export default function NotebookEditor({
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flush);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [saveCurrentPage]);
+  }, [getSaveCoordinator]);
 
   const saveNotebookRecord = useCallback(
     async (nbId: string, pageIds: string[], activeId: string | null, title: string) => {
@@ -649,7 +681,9 @@ export default function NotebookEditor({
 
         if (boot.status === "missing") {
           setLoaded(true);
-          setMessage("الدفتر المطلوب مش موجود — يمكن اتحذف. ارجع لدفاتري.");
+          setMessage(
+            "الدفتر ده مش موجود على الجهاز ده — دفاترك متخزنة محلياً في المتصفح، فالرابط لو اتفتح من جهاز أو متصفح تاني مش هيلاقي الدفتر. افتح «دفاتري» واختار دفترك من هناك.",
+          );
           return;
         }
 
@@ -1920,6 +1954,17 @@ export default function NotebookEditor({
           → دفاتري
         </Link>
         <h1 className="notes-title">{notebookTitle}</h1>
+        {notebookId ? (
+          <a
+            href={`/notes/${notebookId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="افتح نفس الدفتر في تبويب جديد (البيانات من نفس الجهاز)"
+            className="notes-btn notes-btn-sm"
+          >
+            ↗ تبويب جديد
+          </a>
+        ) : null}
         <div className="notes-spacer" />
         <NotesChip
           tone={canWrite ? "ok" : "warn"}
@@ -1933,6 +1978,17 @@ export default function NotebookEditor({
         >
           {saveStatus === "idle" ? "جاهز" : saveStatus === "saving" ? "بيحفظ…" : saveStatus === "saved" ? "محفوظ" : "فشل الحفظ"}
         </NotesChip>
+        {saveStatus === "error" ? (
+          <button
+            type="button"
+            onClick={retrySave}
+            className="notes-btn notes-btn-sm"
+            data-tone="primary"
+            title="حاول الحفظ تاني"
+          >
+            ↻ إعادة المحاولة
+          </button>
+        ) : null}
         {besideMode ? (
           <NotesChip tone="ok" title="وضع التقسيم">
             📌 وضع التقسيم
