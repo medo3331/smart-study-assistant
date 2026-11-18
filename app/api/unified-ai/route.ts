@@ -70,6 +70,7 @@ import {
   EXAM_REQUEST_PROMPT_RULES,
   type ChatTurn,
 } from "@/lib/exam-request";
+import { userHasExamSources } from "@/lib/ai/exam-sources";
 import {
   buildMagiclySystemPrompt,
   getStudentContext,
@@ -766,7 +767,11 @@ export async function POST(req: Request) {
 
       const examRequest = detectExamRequestFromHistory(examTurns);
       if (examRequest?.active) {
-        const answer = buildExamAnswer(examRequest, new URL(req.url).origin);
+        // 🌍 عنده ملفات؟ ⇒ «موضوع عام» مش الخيار الأفضل؛ مافيش ⇒ نفتح
+        //    المولّد على تاب «موضوع عام» بمفرغ (مفيش «مفيش محاضرات»).
+        const hasSources = await userHasExamSources(supabase, userId);
+        const topicMode = !hasSources && Boolean(examRequest.subject);
+        const answer = buildExamAnswer(examRequest, new URL(req.url).origin, { hasSources });
         if (reserveRef) {
           try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
         }
@@ -782,7 +787,12 @@ export async function POST(req: Request) {
         return NextResponse.json({
           ok: true,
           answer,
-          actions: [{ label: "افتح مولّد الامتحان", href: buildExamHref(examRequest) }],
+          actions: [
+            {
+              label: topicMode ? "افتح مولّد موضوع عام" : "افتح مولّد الامتحان",
+              href: buildExamHref(examRequest, { topic: topicMode }),
+            },
+          ],
           metadata: { modelUsed: modelToUse, resolvedVia },
           conversationId: savedConversationId || incomingConversationId || undefined,
         });

@@ -19,13 +19,17 @@ type ItemState = {
   status: string;
   attempt_count: number;
   error_code: string | null;
-  /** 📄 مستند ولا 🎙️ تسجيل صوتي — عشان التسمية تبقى واضحة. */
-  source_kind?: "recording" | "document";
+  /** 📄 مستند ولا 🎙️ تسجيل صوتي ولا 🌍 موضوع عام — عشان التسمية تبقى واضحة. */
+  source_kind?: "recording" | "document" | "topic";
+  /** 🌍 نص الموضوع العام (لو المصدر موضوع). */
+  topic?: string | null;
 };
 
 type SessionState = {
   status: string;
   items: ItemState[];
+  /** 🌍 إشعار «موضوع عام» (لو المصدر موضوع). */
+  notice?: string | null;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,16 +49,26 @@ function mapProcessError(
         return "الطلب اتأخر وقت التوليد — جرّب تاني بعد شوية.";
       case "AI_EMPTY_RESPONSE":
         return "الموديل رجّع رد فاضي — جرّب تاني.";
+      case "AI_PROVIDER_UNAVAILABLE":
+        return "مزوّد الذكاء الاصطناعي مش متاح دلوقتي — جرب تاني بعد دقيقة.";
       case "SOURCE_TABLE_MISSING":
       case "SOURCE_UNAVAILABLE":
         return "المستندات لسه مفعّلةش على السيرفر — جرّب المحاضرات الصوتية.";
       default:
-        return "السيرفر مشغول جداً حالياً — جرب تاني بعد شوية.";
+        return "السيرفر مشغول جداً — جرب تاني بعد دقيقة.";
     }
   }
   if (status === 502) return "الخدمة رجعت خطأ أثناء التوليد — جرّب تاني.";
   if (status === 402) return "رصيدك مش كافٍ.";
-  if (status === 404) return "الجلسة مش موجودة.";
+  // ⚠️ 422 = المصدر بلا نص (مستند صور/مشفّر، أو محاضرة من غير تفريغ).
+  if (status === 422) {
+    return data?.error === "NO_TEXT"
+      ? "المستند ده مفيهوش نص قابل للقراءة — ارفع ملف تاني."
+      : data?.detail || "المصدر مفيهوش نص — جرّب مصدر تاني.";
+  }
+  if (status === 404) {
+    return "مقدرناش نلاقي جلسة الامتحان — جرّب تاني بعد ثانية أو ابدأ امتحانًا جديدًا.";
+  }
   return data?.error || "حصل خطأ أثناء التجهيز — جرّب تاني.";
 }
 
@@ -68,6 +82,8 @@ export function ExamRunner({
   onCancel: () => void;
 }) {
   const [items, setItems] = useState<ItemState[]>([]);
+  /** 🌍 إشعار «موضوع عام» — بيقول للطالب مصدر أسئلته. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "running" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0); // إعادة تشغيل الحلقة بعد خطأ قابل للتجربة
@@ -75,6 +91,8 @@ export function ExamRunner({
   // ⚠️ عدّاد ضغط الخدمة: كل 503 متتالي = محاولة تانية مجاندة، بعدين بنوقف
   //    ونعرض رسالة واضحة + زرار إعادة (مش حلقة لا نهائية).
   const busyStreakRef = useRef(0);
+  /** 🔁 عدّاد محاولات البحث عن الجلسة بعد 404 (تأخّر الـreplica). */
+  let missingSessionTries = 0;
 
   useEffect(() => {
     stopRef.current = false;
@@ -90,11 +108,29 @@ export function ExamRunner({
             | (SessionState & { error?: string })
             | null;
           if (cancelled || stopRef.current) return;
+          /**
+           * ⚠️ **404 = تأخّر الـreplica غالباً**: الجلسة اتعملت قبل لحظات
+           *   والقراءة وقعت على replica لسه ماCatchت الكتابة ⇒ 404 مؤقت.
+           *   ⇒ بنستنى ونجرب تاني (3 مرات) بدل ما نعرض «الجلسة مش موجودة»
+           *   ونخسر الطالب امتحانه ✗.
+           */
+          if (stateRes.status === 404 && !state?.error) {
+            missingSessionTries += 1;
+            if (missingSessionTries <= 3) {
+              await sleep(1500);
+              continue;
+            }
+          }
           if (!stateRes.ok || !state) {
-            throw new Error(state?.error || "مقدرناش نقرأ حالة الامتحان.");
+            throw new Error(
+              state?.error === "NOT_FOUND"
+                ? "مقدرناش نلاقي جلسة الامتحان — جرّب تاني أو ابدأ امتحانًا جديدًا."
+                : state?.error || "مقدرناش نقرأ حالة الامتحان."
+            );
           }
 
           setItems(state.items ?? []);
+          setNotice(state.notice ?? null);
           const list = state.items ?? [];
 
           if (state.status === "completed") {
@@ -209,7 +245,9 @@ export function ExamRunner({
       <div className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-6 text-center space-y-4">
         <div className="text-3xl" aria-hidden>⚙️</div>
         <h2 className="text-xl font-extrabold">
-          {phase === "error" ? "التوليد وقف" : `بنجهّز أسئلتك… ${readyCount}/${total || "…"} محاضرات`}
+          {phase === "error"
+            ? "التوليد وقف"
+            : `بنجهّز أسئلتك… ${readyCount}/${total || "…"} ${total === 1 ? "مصدر" : "مصادر"}`}
         </h2>
 
         <div className="h-2 rounded-full bg-[#0D1029] overflow-hidden max-w-md mx-auto">
@@ -223,6 +261,13 @@ export function ExamRunner({
             aria-label="تقدم تجهيز الامتحان"
           />
         </div>
+
+        {/* 🌍 إشعار «موضوع عام» — مصدر الأسئلة معلن للطالب صراحةً. */}
+        {notice && (
+          <p className="max-w-md mx-auto rounded-xl border border-amber-800/40 bg-amber-950/30 px-4 py-3 text-[12px] leading-relaxed text-amber-200">
+            {notice}
+          </p>
+        )}
 
         {total > 0 && (
           <ul className="space-y-2 max-w-md mx-auto text-right">
@@ -239,7 +284,12 @@ export function ExamRunner({
                   <span className="w-3.5 h-3.5 border-2 border-slate-600 border-t-amber-300 rounded-full animate-spin shrink-0" aria-hidden />
                 )}
                 <span className="flex-1 text-slate-300">
-                  {item.source_kind === "document" ? "مستند" : "محاضرة"} {item.ordinal}
+                  {item.source_kind === "document"
+                    ? "مستند"
+                    : item.source_kind === "topic"
+                      ? "موضوع عام"
+                      : "محاضرة"}{" "}
+                  {item.ordinal}
                 </span>
                 <span className="text-[11px] text-slate-500">
                   {item.status === "ready"
