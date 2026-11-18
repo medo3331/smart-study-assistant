@@ -19,6 +19,8 @@ type ItemState = {
   status: string;
   attempt_count: number;
   error_code: string | null;
+  /** 📄 مستند ولا 🎙️ تسجيل صوتي — عشان التسمية تبقى واضحة. */
+  source_kind?: "recording" | "document";
 };
 
 type SessionState = {
@@ -28,9 +30,28 @@ type SessionState = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function mapProcessError(status: number, data: { error?: string; detail?: string } | null): string {
+function mapProcessError(
+  status: number,
+  data: { error?: string; detail?: string; retry_after?: number } | null
+): string {
   if (status === 429) return "ميزانية الامتحان خلصت — جرّب امتحانًا أصغر أو بكرة.";
-  if (status === 503) return "الخدمة مشغولة دلوقتي (المزوّد اتعيط) — جرّب تاني بعد دقيقة.";
+  // ⚠️ 503 = المزوّد اتعيط (كوتة/ضغط) — مؤقت، والطالب يقدر يعيد المحاولة.
+  //    كل كود ليه رسالة مختلفة عشان الطالب يعرف يستنى ولا يغيّر المصدر.
+  if (status === 503) {
+    switch (data?.error) {
+      case "AI_RATE_LIMITED":
+        return "الكوتة على مزوّد الذكاء الاصطناعي خلصت — استنى دقيقة وجرّب تاني.";
+      case "AI_TIMEOUT":
+        return "الطلب اتأخر وقت التوليد — جرّب تاني بعد شوية.";
+      case "AI_EMPTY_RESPONSE":
+        return "الموديل رجّع رد فاضي — جرّب تاني.";
+      case "SOURCE_TABLE_MISSING":
+      case "SOURCE_UNAVAILABLE":
+        return "المستندات لسه مفعّلةش على السيرفر — جرّب المحاضرات الصوتية.";
+      default:
+        return "السيرفر مشغول جداً حالياً — جرب تاني بعد شوية.";
+    }
+  }
   if (status === 502) return "الخدمة رجعت خطأ أثناء التوليد — جرّب تاني.";
   if (status === 402) return "رصيدك مش كافٍ.";
   if (status === 404) return "الجلسة مش موجودة.";
@@ -51,6 +72,9 @@ export function ExamRunner({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0); // إعادة تشغيل الحلقة بعد خطأ قابل للتجربة
   const stopRef = useRef(false);
+  // ⚠️ عدّاد ضغط الخدمة: كل 503 متتالي = محاولة تانية مجاندة، بعدين بنوقف
+  //    ونعرض رسالة واضحة + زرار إعادة (مش حلقة لا نهائية).
+  const busyStreakRef = useRef(0);
 
   useEffect(() => {
     stopRef.current = false;
@@ -111,6 +135,7 @@ export function ExamRunner({
             const data = (await processRes.json().catch(() => null)) as {
               error?: string;
               detail?: string;
+              retry_after?: number;
             } | null;
 
             //423 = مشغول/lease ضاع (عامل تاني) أو محاولات خلصت — نكمّل الدور.
@@ -124,10 +149,23 @@ export function ExamRunner({
               await sleep(1200);
               continue;
             }
-            //503 = المزوّد مشغول (كل مفاتيح Groq اتعيطت) — قابل لإعادة
-            // المحاولة، بس مش بنلفّ عليه في حلقة لا نهائية.
+            //503 = المزوّد مشغول (الكوتة خلصت/ضغط) — بنحاول تاني مرة
+            // واحدة، وبعدها بنوقف ونعرض رسالة واضحة وزرار إعادة
+            // المحاولة (مش بنلفّ في حلقة لا نهائية).
             if (processRes.status === 503) {
-              await sleep(2000);
+              busyStreakRef.current += 1;
+              if (busyStreakRef.current >= 2) {
+                setPhase("error");
+                setErrorMessage(mapProcessError(processRes.status, data));
+                return;
+              }
+              // ⏱️ بنحترم `retry_after` اللي السيرفر بيبعته (30–60s) عشان
+              //    من가고ش نعيد الطلب قبل ما المزوّد يforkه كمان.
+              const hint = Math.min(
+                Math.max(Number(data?.retry_after ?? 3), 2),
+                60
+              );
+              await sleep(hint * 1000);
               continue;
             }
             //429 = سقف الميزانية — كله متوقف، الطالب يستنى/يغيّر.
@@ -135,6 +173,9 @@ export function ExamRunner({
             setErrorMessage(mapProcessError(processRes.status, data));
             return;
           }
+
+          // ✅ نداء ناجح — الضغط خلص، العدّاد بيرجع لصفر.
+          busyStreakRef.current = 0;
         }
       } catch (err) {
         if (!cancelled && !stopRef.current) {
@@ -197,7 +238,9 @@ export function ExamRunner({
                 ) : (
                   <span className="w-3.5 h-3.5 border-2 border-slate-600 border-t-amber-300 rounded-full animate-spin shrink-0" aria-hidden />
                 )}
-                <span className="flex-1 text-slate-300">محاضرة {item.ordinal}</span>
+                <span className="flex-1 text-slate-300">
+                  {item.source_kind === "document" ? "مستند" : "محاضرة"} {item.ordinal}
+                </span>
                 <span className="text-[11px] text-slate-500">
                   {item.status === "ready"
                     ? "جاهزة"

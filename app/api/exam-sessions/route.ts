@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireUser, clampText } from "@/lib/api-guard";
-import { createExamSession, type ExamSessionMode } from "@/lib/ai/exam-sessions";
+import { createExamSession, selectSessionItems, type ExamSessionMode } from "@/lib/ai/exam-sessions";
 import { parseExamSpec, DEFAULT_EXAM_SPEC } from "@/lib/ai/exam-review";
 import { createServiceClient } from "@/lib/supabase/admin";
 
@@ -25,6 +25,19 @@ export const maxDuration = 300;
 
 const MODES: readonly ExamSessionMode[] = ["last_minute_review"];
 
+/** تنظيف قائمة معرّفات (نصوص) + إزالة التكرار — نفس طبقة التنظيف مرتين. */
+function normalizeIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(
+    new Set(
+      raw
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value !== "")
+    )
+  );
+}
+
 function fail(error: string, status: number, detail?: string) {
   const body = detail ? { error, detail } : { error };
   if (status >= 500) console.warn("[exam-sessions] create", error, detail ?? "");
@@ -32,37 +45,91 @@ function fail(error: string, status: number, detail?: string) {
   return NextResponse.json(body, { status });
 }
 
-export async function POST(req: Request) {
-  const { user, supabase } = await requireUser();
-  if (!user) return fail("UNAUTHORIZED", 401);
-
-  const body = (await req.json().catch(() => null)) as
+/**
+ * 🧾 لوج تشخيصي مفصّل — بتطبع السبب الحقيقي في Vercel Logs.
+ *
+ * ⚠️ **ليه**: كود 500 من غير stack = «مش عارف». هنا بنطبع: الرسالة،
+ *    الاسم، الـstack، كود القاعدة/المزوّد، والـcontext (الجلسة/البند).
+ */
+function logCrash(where: string, error: unknown, context: Record<string, unknown> = {}): void {
+  const err = error as
     | {
-        mode?: unknown;
-        lectureIds?: unknown;
-        spec?: unknown;
-        subject?: unknown;
-        title?: unknown;
-        dayId?: unknown;
+        message?: unknown;
+        name?: unknown;
+        stack?: unknown;
+        code?: unknown;
+        status?: unknown;
+        statusCode?: unknown;
+        details?: unknown;
+        hint?: unknown;
+        cause?: unknown;
       }
     | null;
-  if (!body || typeof body !== "object") return fail("VALIDATION", 400, "body required");
+  console.error(`[exam-sessions] CRASH in ${where}`, {
+    message: typeof err?.message === "string" ? err.message : String(error),
+    name: typeof err?.name === "string" ? err.name : typeof error,
+    stack: typeof err?.stack === "string" ? err.stack : undefined,
+    // 🔢 كود القاعدة (مثل 42703 = عمود ناقص) أو كود المزوّد (429/503).
+    code: err?.code,
+    status: err?.status ?? err?.statusCode,
+    details: err?.details,
+    hint: err?.hint,
+    cause: err?.cause instanceof Error ? err.cause.message : undefined,
+    context,
+  });
+}
 
-  const mode = typeof body.mode === "string" ? body.mode.trim() : "";
+/** جسم الطلب بعد التحقق (مطبَّع). */
+type ValidCreateBody = {
+  mode: ExamSessionMode;
+  lectureIds: string[];
+  documentIds: string[];
+  spec: unknown;
+  subjectId: string | null;
+  subjectName: string;
+  title: string;
+  dayId: string | null;
+};
+
+/**
+ * التحقق من شكل الـbody **قبل** أي تعامل مع القاعدة.
+ *
+ * ⚠️ **ليه**: `body.lectureIds` غير مصفوفة أو `body` مش object ⇒ كان
+ *    بيرمي TypeError ⇒ 500 غامض. دلوقتي ⇒ 400 VALIDATION برسالة واضحة.
+ *
+ * ⚠️ **`lectureIds` + `documentIds`**: المصدرين مقبولين (محاضرة أو مستند)
+ *    — والاتنين لازم يكونوا موجودين (واحد على الأقل).
+ */
+export function validateCreateBody(raw: unknown): { ok: true; body: ValidCreateBody } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, error: "body must be a JSON object" };
+  }
+  const record = raw as Record<string, unknown>;
+
+  const mode = typeof record.mode === "string" ? record.mode.trim() : "";
   if (!MODES.includes(mode as ExamSessionMode)) {
-    return fail("VALIDATION", 400, "invalid mode");
+    return { ok: false, error: "invalid mode" };
   }
 
-  // اختيار الطالب (أنواع/صعوبة/عدد) — تحليل **صارم**: غلط ⇒400 مش تخمين.
-  // من غير spec (جلسات قديمة/مختبرة) → الافتراضي كما هو.
-  const spec =
-    body.spec === undefined || body.spec === null ? { ...DEFAULT_EXAM_SPEC } : parseExamSpec(body.spec);
-  if (!spec) return fail("VALIDATION", 400, "invalid spec (types/difficulty/count)");
+  const lectureIds = normalizeIds(record.lectureIds);
+  const documentIds = normalizeIds(record.documentIds);
+  if (lectureIds.length === 0 && documentIds.length === 0) {
+    return { ok: false, error: "lectureIds or documentIds required" };
+  }
+  if (lectureIds.length + documentIds.length > 3) {
+    return { ok: false, error: "max 3 sources" };
+  }
 
-  // المادة/اليوم/العنوان — نيّة من الـURL (يُتحقق من ملكية المحاضرات في الـRPC).
+  // اختيار الطالب (أنواع/صعوبة/عدد) — تحليل **صارم** من `parseExamSpec`.
+  const spec =
+    record.spec === undefined || record.spec === null
+      ? { ...DEFAULT_EXAM_SPEC }
+      : parseExamSpec(record.spec);
+  if (!spec) return { ok: false, error: "invalid spec (types/difficulty/count)" };
+
   const rawSubject =
-    body.subject && typeof body.subject === "object" && !Array.isArray(body.subject)
-      ? (body.subject as { id?: unknown; name?: unknown })
+    record.subject && typeof record.subject === "object" && !Array.isArray(record.subject)
+      ? (record.subject as { id?: unknown; name?: unknown })
       : null;
   const subjectId =
     rawSubject && typeof rawSubject.id === "string" && rawSubject.id.trim()
@@ -72,35 +139,72 @@ export async function POST(req: Request) {
     rawSubject && typeof rawSubject.name === "string" && rawSubject.name.trim()
       ? clampText(rawSubject.name, 120).trim()
       : "";
-  const title = typeof body.title === "string" && body.title.trim()
-    ? clampText(body.title, 120).trim()
-    : "";
-  const dayId = typeof body.dayId === "string" && body.dayId.trim()
-    ? clampText(body.dayId, 64).trim()
-    : null;
+  const title =
+    typeof record.title === "string" && record.title.trim()
+      ? clampText(record.title, 120).trim()
+      : "";
+  const dayId =
+    typeof record.dayId === "string" && record.dayId.trim()
+      ? clampText(record.dayId, 64).trim()
+      : null;
 
-  if (!Array.isArray(body.lectureIds) || body.lectureIds.length === 0) {
-    return fail("VALIDATION", 400, "lectureIds required");
-  }
-  if (body.lectureIds.length > 3) {
-    return fail("VALIDATION", 400, "max 3 lectures");
-  }
+  return {
+    ok: true,
+    body: {
+      mode: mode as ExamSessionMode,
+      lectureIds,
+      documentIds,
+      spec,
+      subjectId,
+      subjectName,
+      title,
+      dayId,
+    },
+  };
+}
 
-  // تنظيف + إزالة التكرار (الـ RPC يزيله أيضًا — طبقتان)
-  const lectureIds = Array.from(
-    new Set(
-      body.lectureIds
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter((value) => value !== "")
-    )
-  );
-  if (lectureIds.length === 0) return fail("VALIDATION", 400, "lectureIds required");
+export async function POST(req: Request) {
+  const startedAt = Date.now();
+  // 🧾 سياق اللوج — بيتطبع مع أي crash عشان نعرف **مين** و**إيه** اللي فشل.
+  const logContext: Record<string, unknown> = { route: "POST /api/exam-sessions" };
 
-  const created = await createExamSession(supabase, {
-    mode: mode as ExamSessionMode,
-    lectureIds,
-  });
+  try {
+    const { user, supabase } = await requireUser();
+    if (!user) return fail("UNAUTHORIZED", 401);
+
+    // ⚠️ **قراءة الـbody**: JSON مكسور ⇒ 400 (مش 500) مع لوج.
+    let rawBody: unknown = null;
+    try {
+      rawBody = await req.json();
+    } catch (parseError) {
+      console.warn("[exam-sessions] create — invalid JSON body", {
+        message: parseError instanceof Error ? parseError.message : String(parseError),
+      });
+      return fail("VALIDATION", 400, "invalid JSON body");
+    }
+
+    // ⚠️ **التحقق قبل أي التعامل مع القاعدة** (types + المصادر + spec).
+    const validated = validateCreateBody(rawBody);
+    if (!validated.ok) {
+      console.warn("[exam-sessions] create — invalid body", {
+        reason: validated.error,
+        received: Object.keys((rawBody ?? {}) as Record<string, unknown>),
+      });
+      return fail("VALIDATION", 400, validated.error);
+    }
+    const { mode, lectureIds, documentIds, spec, subjectId, subjectName, title, dayId } =
+      validated.body;
+
+    logContext.lectureIds = lectureIds;
+    logContext.documentIds = documentIds;
+    logContext.mode = mode;
+    logContext.spec = spec;
+
+    const created = await createExamSession(supabase, {
+      mode,
+      lectureIds,
+      documentIds,
+    });
 
   if (!created.ok) {
     switch (created.code) {
@@ -109,13 +213,23 @@ export async function POST(req: Request) {
       case "UNAUTHENTICATED":
         return fail("UNAUTHORIZED", 401);
       case "NOT_OWNED":
-        // 404 لا 403 — لا نكشف وجود محاضرة ليست للمستخدم.
+        // 404 لا 403 — لا نكشف وجود مصدر ليس للمستخدم.
         return fail("NOT_FOUND", 404);
       case "BUDGET":
         return fail("BUDGET", 400, created.error);
       case "INSUFFICIENT_CREDITS":
         return fail("INSUFFICIENT_CREDITS", 402);
+      case "SOURCES_UNAVAILABLE":
+        // ⚠️ الـRPC الجديد (مستندات) لسه متطبّقش في القاعدة — رسالة صريحة
+        //    بدل 500 غامض (والمسار القديم بيشتغل).
+        console.warn("[exam-sessions] create — sources RPC unavailable", {
+          detail: created.error,
+          lectureIds: lectureIds.length,
+          documentIds: documentIds.length,
+        });
+        return fail("SOURCES_UNAVAILABLE", 503, created.error);
       default:
+        logCrash("createExamSession", created.error, { ...logContext });
         return fail("INTERNAL", 500, created.error);
     }
   }
@@ -157,24 +271,29 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (sessionError || !session) {
+    logCrash("read session after create", sessionError ?? new Error("session not readable"), {
+      ...logContext,
+      sessionId,
+    });
     return fail("INTERNAL", 500, sessionError?.message ?? "session not readable");
   }
 
-  const { data: items, error: itemsError } = await supabase
-    .from("exam_session_items")
-    .select("id, lecture_id, ordinal, status")
-    .eq("session_id", sessionId)
-    .eq("user_id", user.id)
-    .order("ordinal", { ascending: true });
+  const { rows: sessionItems, error: itemsError } = await selectSessionItems(supabase, {
+    sessionId,
+    userId: user.id,
+    columns: "id, lecture_id, ordinal, status",
+  });
 
-  if (itemsError) return fail("INTERNAL", 500, itemsError.message);
+  if (itemsError) {
+    logCrash("read session items after create", itemsError, { ...logContext, sessionId });
+    return fail("INTERNAL", 500, "could not read session items");
+  }
 
-  const lectureItems = (items ?? []) as Array<{
-    id: string;
-    lecture_id: string;
-    ordinal: number;
-    status: string;
-  }>;
+  console.info("[exam-sessions] create — done", {
+      sessionId,
+      durationMs: Date.now() - startedAt,
+      items: sessionItems.length,
+    });
 
   return NextResponse.json({
     sessionId: session.id,
@@ -185,11 +304,18 @@ export async function POST(req: Request) {
     estimated_tokens: session.estimated_tokens,
     credit_reserved_at: session.credit_reserved_at,
     metadata,
-    items: lectureItems.map((item) => ({
+    items: sessionItems.map((item) => ({
       id: item.id,
       lecture_id: item.lecture_id,
+      // ⚠️ `document_id` بييجي بس لو الـmigration 49 متطبّقة (وإلا=null).
+      document_id: item.document_id ?? null,
       ordinal: item.ordinal,
       status: item.status,
     })),
   });
+  } catch (error) {
+    // 🧾 أي exception غير متوقع ⇒ 500 **مع تفاصيل كاملة في اللوج**.
+    logCrash("POST /api/exam-sessions", error, { ...logContext, durationMs: Date.now() - startedAt });
+    return fail("INTERNAL", 500, "could not create exam session");
+  }
 }

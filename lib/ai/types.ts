@@ -145,7 +145,9 @@ export type AiFailureReasonCode =
   | "EMPTY_RESPONSE"
   | "TIMEOUT"
   | "HTTP_STATUS"
-  | "NETWORK";
+  | "NETWORK"
+  /** كوتة المزوّد (429) — حالة مؤقتة قابلة لإعادة المحاولة. */
+  | "RATE_LIMIT";
 
 export class AiProviderError extends Error {
   readonly status: number;

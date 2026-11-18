@@ -81,47 +81,292 @@ export interface UsageIncrement {
 // ────────────────────────────────────────────────────────────
 export async function createExamSession(
   supabase: SupabaseClient,
-  params: { mode: ExamSessionMode; lectureIds: string[] }
+  params: { mode: ExamSessionMode; lectureIds: string[]; documentIds?: string[] }
 ): Promise<Result<CreateSessionResult>> {
-  if (!params.lectureIds || params.lectureIds.length === 0) {
-    return { ok: false, error: 'lectureIds required', code: 'VALIDATION' };
+  const lectureIds = (params.lectureIds ?? []).filter((id) => typeof id === 'string' && id.length > 0);
+  const documentIds = (params.documentIds ?? []).filter((id) => typeof id === 'string' && id.length > 0);
+  if (lectureIds.length === 0 && documentIds.length === 0) {
+    return { ok: false, error: 'lectureIds or documentIds required', code: 'VALIDATION' };
   }
-  if (params.lectureIds.length > 3) {
-    return { ok: false, error: 'max 3 lectures per session', code: 'VALIDATION' };
+  // ⚠️ **السقف 3 مصادر** (مش 3 محاضرات) — موزوع بين المحاضرات والمستندات.
+  if (lectureIds.length + documentIds.length > 3) {
+    return { ok: false, error: 'max 3 sources per session', code: 'VALIDATION' };
   }
   if (params.mode !== 'last_minute_review') {
     return { ok: false, error: 'invalid mode', code: 'VALIDATION' };
   }
 
-  const { data, error } = await supabase.rpc('create_exam_session_with_reserve', {
+  // ⚠️ **الـRPC الجديد (محاضرات + مستندات)** بيتبني بـ`db/49-exam-documents.sql`
+  //    (تطبيق يدوي على القاعدة). لو مش موجود ⇒ الخطأ 42883 (undefined_function)
+  //    ⇒ بنرجع للـRPC القديم (محاضرات بس) عشان المسار القديم ما يكسرش.
+  const { data, error } = await supabase.rpc('create_exam_session_with_sources_reserve', {
     p_mode: params.mode,
-    p_lecture_ids: params.lectureIds,
+    p_lecture_ids: lectureIds,
+    p_document_ids: documentIds,
   });
 
-  if (error) {
-    if (error.message.includes('not authenticated')) {
-      return { ok: false, error: error.message, code: 'UNAUTHENTICATED' };
+  if (error && isMissingRpc(error)) {
+    if (documentIds.length > 0) {
+      // مستندات + الـRPC مش موجود ⇒ رسالة صريحة (مش 500 غامض).
+      return {
+        ok: false,
+        error: 'exam documents source is not available yet (migration 49 not applied)',
+        code: 'SOURCES_UNAVAILABLE',
+      };
     }
-    if (error.message.includes('not found or not owned')) {
-      return { ok: false, error: 'one or more lectures not owned', code: 'NOT_OWNED' };
-    }
-    if (
-      error.message.includes('exceeds limit') ||
-      error.message.includes('out of range')
-    ) {
-      return { ok: false, error: error.message, code: 'BUDGET' };
-    }
-    if (error.message.includes('insufficient') || error.message.includes('quota')) {
-      return { ok: false, error: error.message, code: 'INSUFFICIENT_CREDITS' };
-    }
-    return { ok: false, error: error.message, code: 'DB_ERROR' };
+    const fallback = await supabase.rpc('create_exam_session_with_reserve', {
+      p_mode: params.mode,
+      p_lecture_ids: lectureIds,
+    });
+    if (fallback.error) return mapCreateError(fallback.error);
+    return finishCreate(fallback.data);
   }
 
+  // 🛟 **شبكة أمان**: الـRPC الجديد موجود بس فيه خطأ **مستوى المخطط**
+  //    (مثل bug الـ`array_length` ⇒ 23502 not-null) ⇒ بنرجع للـRPC القديم
+  //    (محاضرات بس) عشان المسار القديم يفضل شغال فورًا.
+  //
+  // ⚠️ الـfallback **للمحاضرات بس**: المستندات محتاجة الـRPC الجديد
+  //    (المصلّح) ⇒ لو المستندات موجودة بنرجع رسالة صريحة مش 500.
+  if (error && isSchemaLevelError(error)) {
+    console.error(
+      '[exam-sessions] create_exam_session_with_sources_reserve failed at schema level —',
+      { code: error.code, message: error.message }
+    );
+    if (documentIds.length > 0) {
+      return {
+        ok: false,
+        error: 'exam documents source is not available yet (migration 49 needs re-apply)',
+        code: 'SOURCES_UNAVAILABLE',
+      };
+    }
+    const fallback = await supabase.rpc('create_exam_session_with_reserve', {
+      p_mode: params.mode,
+      p_lecture_ids: lectureIds,
+    });
+    if (!fallback.error) return finishCreate(fallback.data);
+    return mapCreateError(fallback.error);
+  }
+
+  if (error) {
+    return mapCreateError(error);
+  }
+
+  return finishCreate(data);
+}
+
+/**
+ * الـRPC مش موجود في القاعدة — يعني الـmigration (49) لسه متطبّقةش.
+ *
+ * ⚠️ **الأكواد اللي بنشوفها**:
+ *   - `42883`  = undefined_function (أораكل/Postgres).
+ *   - `PGRST202` = «Could not find the function … in the schema cache»
+ *     ← ده اللي بيرجعه **Supabase/PostgREST** فعلاً (اللي بنستخدمه).
+ *     ⚠️ لو ما اتعاملناش معاه ⇒ **كل إنشاء امتحان بيرجع 500**-production.
+ *
+ * ⚠️ **ليه fallback**: المسار القديم (محاضرات بس) لازم يشتغل زي ما كان،
+ *    حتى لو الـmigration لسه على الـstaging/production.
+ */
+function isMissingRpc(error: { code?: string; message?: string }): boolean {
+  if (error.code === '42883' || error.code === 'PGRST202') return true;
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('undefined_function') ||
+    message.includes('could not find the function') ||
+    message.includes('does not exist')
+  );
+}
+
+/**
+ * العمود مش موجود في الجدول (schema drift) — الـmigration لسه متطبّقةش.
+ *
+ * ⚠️ **الأكواد**: `42703` (undefined_column) · `PGRST204` («Could not find the
+ *    'document_id' column» من PostgREST).
+ */
+export function isMissingColumnError(error: { code?: string; message?: string }): boolean {
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('column') &&
+    (message.includes('does not exist') || message.includes('not found in schema'))
+  );
+}
+
+/**
+ * خطأ **مستوى المخطط/الدالة** — مش خطأ المستخدم ولا الميزانية.
+ *
+ * ⚠️ **ليه مهم**: الـRPC الجديد (db/49) كان فيه bug في `array_length`
+ *    (بيرجّع NULL للمصفوفة الفاضية) ⇒ `total_lectures` بتبقى NULL ⇒
+ *    انتهاك `not null` ⇒ **500 عند إنشاء أي امتحان**. ده خطأ **مخطط**،
+ *    فبنعرفه وبنتعامل معاه (fallback / رسالة واضحة) بدل 500 غامض.
+ *
+ * ⚠️ **الأكواد**: `23502` (not_null_violation) · `42883` · `42703` ·
+ *    `42P01` (undefined_table) · `PGRST202`/`PGRST204`/`PGRST205`.
+ */
+export function isSchemaLevelError(error: { code?: string; message?: string }): boolean {
+  if (
+    error.code === "23502" ||
+    error.code === "42883" ||
+    error.code === "42703" ||
+    error.code === "42P01" ||
+    error.code === "PGRST202" ||
+    error.code === "PGRST204" ||
+    error.code === "PGRST205"
+  ) {
+    return true;
+  }
+  const message = (error.message ?? "").toLowerCase();
+  return (
+    message.includes("null value in column") ||
+    message.includes("violates not-null constraint") ||
+    message.includes("could not find the function")
+  );
+}
+
+/** صف بند جلسة (الحقول الاختياريةDependent على الـmigration). */
+export type ExamSessionItemRow = {
+  id: string;
+  lecture_id: string | null;
+  document_id?: string | null;
+  ordinal: number;
+  status: ExamItemStatus;
+  attempt_count?: number;
+  transcript_chars?: number | null;
+  chunk_count?: number | null;
+  result_json?: unknown;
+  error_code?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+/**
+ * يقرأ بنود الجلسة **بشكل مستقل عن الـschema**.
+ *
+ * ⚠️ **ليه**: بعد إضافة `document_id` (db/49) لازم الاستعلام يفضل شغال
+ *    لو الـmigration لسه متطبّقةش ⇒ PostgREST بيرجّع 42703 ⇒ **500 في كل
+ *    مسار الامتحان** (إنشاء/قراءة/توليد). فبنجرب العمود الأول، ولو مش
+ *    موجود نرجع للاستعلام القديم (محاضرات بس) بدل ما نكسر المسار كله.
+ *
+ * ⚠️ `documentSupport = false` ⇒ الـقاعدة لسه قبل الـmigration ⇒ البنود
+ *    كلها محاضرات (والمستندات مش متاحة).
+ */
+export async function selectSessionItems(
+  supabase: SupabaseClient,
+  params: { sessionId: string; userId: string; columns?: string }
+): Promise<{ rows: ExamSessionItemRow[]; documentSupport: boolean; error: unknown }> {
+  const base = params.columns ?? 'id, lecture_id, ordinal, status';
+
+  const withDocument = await supabase
+    .from('exam_session_items')
+    .select(`${base}, document_id`)
+    .eq('session_id', params.sessionId)
+    .eq('user_id', params.userId)
+    .order('ordinal', { ascending: true });
+
+  if (!withDocument.error) {
+    // ⚠️ cast عبر `unknown`: الـselect مبني من متغير فـTS بيستنتج نوع
+    //    غريب (ParserError[]) — والمشروع مافيش أنواع Supabase مولّدة.
+    return {
+      rows: ((withDocument.data ?? []) as unknown) as ExamSessionItemRow[],
+      documentSupport: true,
+      error: null,
+    };
+  }
+
+  if (isMissingColumnError(withDocument.error)) {
+    // ⚠️ الـmigration (49) لسه متطبّقةش ⇒ بنرجع للاستعلام القديم.
+    console.warn(
+      '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
+      withDocument.error.message
+    );
+    const legacy = await supabase
+      .from('exam_session_items')
+      .select(base)
+      .eq('session_id', params.sessionId)
+      .eq('user_id', params.userId)
+      .order('ordinal', { ascending: true });
+    return {
+      rows: ((legacy.data ?? []) as unknown) as ExamSessionItemRow[],
+      documentSupport: false,
+      error: legacy.error ?? null,
+    };
+  }
+
+  return { rows: [], documentSupport: false, error: withDocument.error };
+}
+
+/**
+ * يقرأ بند واحد (للراوت المعالجة) — **مستقل عن الـschema** مثل الأعلى.
+ */
+export async function selectExamItem(
+  supabase: SupabaseClient,
+  params: { sessionId: string; itemId: string; userId: string }
+): Promise<{ item: ExamSessionItemRow | null; documentSupport: boolean; error: unknown }> {
+  const withDocument = await supabase
+    .from('exam_session_items')
+    .select('id, session_id, lecture_id, document_id, status')
+    .eq('id', params.itemId)
+    .eq('session_id', params.sessionId)
+    .eq('user_id', params.userId)
+    .maybeSingle();
+
+  if (!withDocument.error) {
+    return {
+      item: (withDocument.data ?? null) as ExamSessionItemRow | null,
+      documentSupport: true,
+      error: null,
+    };
+  }
+
+  if (isMissingColumnError(withDocument.error)) {
+    console.warn(
+      '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
+      withDocument.error.message
+    );
+    const legacy = await supabase
+      .from('exam_session_items')
+      .select('id, session_id, lecture_id, status')
+      .eq('id', params.itemId)
+      .eq('session_id', params.sessionId)
+      .eq('user_id', params.userId)
+      .maybeSingle();
+    return {
+      item: (legacy.data ?? null) as ExamSessionItemRow | null,
+      documentSupport: false,
+      error: legacy.error ?? null,
+    };
+  }
+
+  return { item: null, documentSupport: false, error: withDocument.error };
+}
+
+/** ترجمة خطأ الـRPC ل نتيجة typed (نفس خرائط الراوت). */
+function mapCreateError(error: { message: string }): Result<CreateSessionResult> {
+  if (error.message.includes('not authenticated')) {
+    return { ok: false, error: error.message, code: 'UNAUTHENTICATED' };
+  }
+  if (error.message.includes('not found or not owned')) {
+    return { ok: false, error: 'one or more sources not owned', code: 'NOT_OWNED' };
+  }
+  if (
+    error.message.includes('exceeds limit') ||
+    error.message.includes('out of range')
+  ) {
+    return { ok: false, error: error.message, code: 'BUDGET' };
+  }
+  if (error.message.includes('insufficient') || error.message.includes('quota')) {
+    return { ok: false, error: error.message, code: 'INSUFFICIENT_CREDITS' };
+  }
+  return { ok: false, error: error.message, code: 'DB_ERROR' };
+}
+
+/** يحوّل رد الـRPC لنتيجة (مع فحص الرد الفاضي). */
+function finishCreate(data: unknown): Result<CreateSessionResult> {
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) {
     return { ok: false, error: 'empty response from RPC', code: 'DB_ERROR' };
   }
-
   return { ok: true, data: row as CreateSessionResult };
 }
 

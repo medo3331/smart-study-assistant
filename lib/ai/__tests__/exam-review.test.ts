@@ -249,7 +249,7 @@ describe('generateExamReview — الالتزام بـspec', () => {
     expect(seen).not.toContain('questions_repair');
   });
 
-  it('puts types + difficulty + exact count in the prompt', async () => {
+  it('puts types + difficulty + group quota in the prompt', async () => {
     const { deps, runTask } = makeDeps(undefined, (aiTask, messages) => {
       if (aiTask === 'questions' || aiTask === 'questions_repair') {
         return questionsJson(promptQuota(messages), ['essay']);
@@ -261,10 +261,19 @@ describe('generateExamReview — الالتزام بـspec', () => {
       deps,
       spec: { types: ['essay'], difficulty: 'hard', count: 12 },
     });
+    // ⚠️ بعد التقسيم: 12 سؤال ⇒ 3 مجموعات (5/5/2) — مافيش نداء فوق 5.
+    const quotas = runTask.mock.calls
+      .filter((call) => {
+        const usage = (call[0] as { usage: AiUsageContext }).usage;
+        return usage.diagnostics?.ai_task === 'questions';
+      })
+      .map((call) => promptQuota((call[0] as { messages: AiChatMessage[] }).messages));
+    expect(quotas).toEqual([5, 5, 2]);
+    expect(quotas.reduce((sum, value) => sum + value, 0)).toBe(12);
+
     const system = String(
       (runTask.mock.calls[1]?.[0] as { messages: AiChatMessage[] }).messages[0].content
     );
-    expect(system).toContain('بالضبط 12 سؤالًا');
     expect(system).toContain('مقالي');
     expect(system).toContain('hard');
     expect(system).toContain('تحليل');
@@ -322,7 +331,8 @@ describe('generateExamReview — الالتزام بـspec', () => {
     expect(types.has('mcq')).toBe(true);
     expect(types.has('essay')).toBe(true);
     expect(result.review.questions).toHaveLength(6);
-    expect(result.logicalCalls).toBe(3);
+    // ⚠️ 4 نداءات منطقية: ملخص + مجموعتين أسئلة (6 ⇒ 5/1) + نداء إصلاح.
+    expect(result.logicalCalls).toBe(4);
   });
 
   it('throws SPEC_UNFULFILLED when repair still misses a requested type', async () => {

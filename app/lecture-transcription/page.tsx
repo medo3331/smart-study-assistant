@@ -9,7 +9,7 @@ import { breadcrumbLd, pageMeta } from "@/lib/seo";
 import { JsonLd } from "@/components/JsonLd";
 
 export const metadata: Metadata = pageMeta({
-  title: "حوّل محاضرتك إلى نص",
+  title: "حوّل تسجيلك الصوتي إلى نص",
   description:
     "ارفع تسجيل محاضرتك صوت أو فيديو وحوّله إلى نص عربي تقدر تراجعه وتنسخه وتحمله — من غير تكتب كلمة واحدة.",
   path: "/lecture-transcription",
@@ -33,7 +33,7 @@ export default function LectureTranscriptionPage() {
       <JsonLd
         data={breadcrumbLd([
           { name: "الرئيسية", path: "/" },
-          { name: "حوّل محاضرتك إلى نص", path: "/lecture-transcription" },
+          { name: "حوّل تسجيلك الصوتي إلى نص", path: "/lecture-transcription" },
         ])}
       />
 
@@ -42,10 +42,11 @@ export default function LectureTranscriptionPage() {
          تاني، الـ padding كان هيتضاعف والعمود هيضيق. */}
       <header className="band-top">
         <h1 className="text-2xl font-extrabold leading-snug md:text-3xl">
-          حوّل محاضرتك إلى نص 🎙️
+          حوّل تسجيلك الصوتي إلى نص 🎙️
         </h1>
         <p className="mt-3 max-w-2xl leading-relaxed text-[var(--muted)]">
-          ارفع تسجيل المحاضرة وسيتم تحويل الكلام إلى نص يمكنك مراجعته ونسخه.
+          ارفع تسجيل المحاضرة (صوت أو فيديو) وسيتم تحويل الكلام إلى نص يمكنك مراجعته ونسخه.
+          لو عندك PDF أو Word، ارفعه من <span className="font-bold">مساحة العمل ← المستندات</span>.
         </p>
 
         {/* 📚 رابط للقائمة المحفوظة.
@@ -60,7 +61,7 @@ export default function LectureTranscriptionPage() {
           className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)] underline underline-offset-4"
         >
           <BookOpen size={15} aria-hidden />
-          <span>محاضراتي المحفوظة</span>
+          <span>تسجيلاتي الصوتية المحفوظة</span>
         </Link>
       </header>
 

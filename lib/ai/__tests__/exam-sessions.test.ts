@@ -120,6 +120,75 @@ describe('createExamSession', () => {
       expect(r.data.estimated_tokens).toBe(5000);
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // 🛟 شبكة الأمان: الـRPC الجديد فيه bug مخطط (23502 not-null)
+  //    ⇒ fallback للـRPC القديم (محاضرات) بدل 500.
+  // ────────────────────────────────────────────────────────────
+  it('schema error (23502) + محاضرات ⇒ fallback للـRPC القديم', async () => {
+    supabase.rpc
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: '23502',
+          message: 'null value in column "total_lectures" violates not-null constraint',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            session_id: FAKE_SESSION,
+            status: 'created',
+            credit_reserved_at: '2026-11-04T10:00:00Z',
+            total_chars: 20000,
+            total_chunks: 2,
+            estimated_tokens: 5000,
+          },
+        ],
+        error: null,
+      });
+
+    const r = await createExamSession(supabase as never, {
+      mode: 'last_minute_review',
+      lectureIds: [FAKE_SESSION],
+    });
+
+    expect(r.ok).toBe(true);
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
+    expect(supabase.rpc.mock.calls[1][0]).toBe('create_exam_session_with_reserve');
+  });
+
+  it('schema error + مستندات ⇒ SOURCES_UNAVAILABLE (مش 500)', async () => {
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '23502', message: 'null value in column "total_lectures"' },
+    });
+
+    const r = await createExamSession(supabase as never, {
+      mode: 'last_minute_review',
+      lectureIds: [],
+      documentIds: [FAKE_ITEM],
+    });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('SOURCES_UNAVAILABLE');
+  });
+
+  it('خطأ عادي (مش مخطط) ⇒ مافيش fallback', async () => {
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'insufficient credits' },
+    });
+
+    const r = await createExamSession(supabase as never, {
+      mode: 'last_minute_review',
+      lectureIds: [FAKE_SESSION],
+    });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('INSUFFICIENT_CREDITS');
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ────────────────────────────────────────────────────────────
