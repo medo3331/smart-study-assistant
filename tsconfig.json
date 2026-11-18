@@ -14,7 +14,9 @@
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
-      { "name": "next" }
+      {
+        "name": "next"
+      }
     ],
     "paths": {
       "@/*": ["./*"]
@@ -28,12 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": [
-    "node_modules",
-    "workspace",
-    ".hermes",
-    ".next",
-    "original_page.tsx",
-    "scripts/browser/notes-storage-smoke.ts"
-  ]
+  "exclude": ["node_modules", "workspace", ".hermes", ".next", "scripts/browser"]
 }

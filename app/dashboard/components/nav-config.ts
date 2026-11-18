@@ -152,6 +152,10 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "calendar", icon: "calendar", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "missions", icon: "missions", label: "المهام اليومية", latin: "Daily Missions", href: "/missions" },
       { id: "notes", icon: "notes", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
+      // 📓 دفتر الملاحظات — صفحة كاملة (/notes)، مش قسم في الداشبورد.
+      // الاتنين مقصودين: «الملاحظات» بتوديك لكارت الملاحظات المختصر جوه
+      // الداشبورد، و«دفتر الملاحظات» بتفتح المحرر نفسه بخط اليد.
+      { id: "notebook", icon: "notes", label: "دفتر الملاحظات", latin: "Notebook", href: "/notes" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
       { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
       // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — البند ده بينزّل
