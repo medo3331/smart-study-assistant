@@ -28,7 +28,13 @@ export const EXAM_SOURCE_MAX_CHARS = 60_000;
 export const EXAM_SOURCE_CHUNK_CHARS = 6_000;
 
 /** نوع مصدر البند. */
-export type ExamSourceKind = "recording" | "document";
+export type ExamSourceKind = "recording" | "document" | "topic";
+
+/** 🌍 أقصى طول للموضوع العام (نص) — نفس سقف الـRPC (300 حرف). */
+export const EXAM_TOPIC_MAX_CHARS = 300;
+
+/** 🌍 أدنى طول للموضوع العام — أقل منه مش «موضوع». */
+export const EXAM_TOPIC_MIN_CHARS = 3;
 
 export type ExamSource = {
   kind: ExamSourceKind;
@@ -148,7 +154,54 @@ export function buildExamSource(input: {
   };
 }
 
-/** تسمية المصدر في الواجهة (الفرق بين «محاضرة» و«مستند»). */
+/** تسمية المصدر في الواجهة (الفرق بين «محاضرة» و«مستند» و«موضوع»). */
 export function examSourceLabel(kind: ExamSourceKind): string {
-  return kind === "document" ? "مستند" : "محاضرة";
+  if (kind === "document") return "مستند";
+  if (kind === "topic") return "موضوع عام";
+  return "محاضرة";
+}
+
+/**
+ * 🌍 هل عند الطالب مصادر-file قابلة للاستخدام في الامتحان؟
+ *
+ * ⚠️ **ليه**: عشان المساعد يقترح «موضوع عام» (امتحان من معلومات الـAI)
+ *    بدل ما يقول «مفيش محاضرات» — ودي استعلامات cheap بـhead (بلا صفوف).
+ *
+ * ⚠️ **محاضرة بلا تفريغ مش مصدر**: من غير تفريغ مينفعش توليد ⇒ بنحسبها
+ *    زي ما المولّد بيحسبها (بيطلب transcript_text غير فاضي).
+ */
+export async function userHasExamSources(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const { count: lectureCount } = await supabase
+    .from("lectures")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .not("transcript_text", "is", null);
+
+  if (typeof lectureCount === "number" && lectureCount > 0) return true;
+
+  const { count: documentCount } = await supabase
+    .from("documents")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  return typeof documentCount === "number" && documentCount > 0;
+}
+
+/**
+ * 🌍 ينضّف نص الموضوع العام (طبقة السيرفر — مش في المتصفح).
+ *
+ * ⚠️ **ليه**: النص جاي من المستخدم ⇒ لازم تنظيف (مسافات/تحكّم) قبل ما
+ *    يتبعت للـAI أو يتحفظ في القاعدة.
+ */
+export function normalizeTopic(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < EXAM_TOPIC_MIN_CHARS) return null;
+  return cleaned.slice(0, EXAM_TOPIC_MAX_CHARS);
 }

@@ -60,6 +60,10 @@ type ExamsInitial = {
   types: ExamQuestionType[];
   /** مستوى الصعوبة (من المساعد) — null = الافتراضي (متوسط). */
   difficulty: ExamDifficulty | null;
+  /**
+   * 🌍 موضوع عام (من المساعد) — امتحان من معلومات الـAI العامة (من غير ملفات).
+   */
+  topic: string;
 };
 
 export default async function ExamsPage({
@@ -84,6 +88,8 @@ export default async function ExamsPage({
     count: parseCount(str("count")),
     types: parseTypes(str("types")),
     difficulty: parseDifficulty(str("difficulty")),
+    // 🌍 الموضوع العام — أقصى 300 حرف (نفس سقف السيرفر).
+    topic: str("topic", 300),
   };
 
   const d = await getTaxonomyAndExams();

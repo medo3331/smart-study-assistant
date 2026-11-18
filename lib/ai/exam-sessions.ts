@@ -81,12 +81,29 @@ export interface UsageIncrement {
 // ────────────────────────────────────────────────────────────
 export async function createExamSession(
   supabase: SupabaseClient,
-  params: { mode: ExamSessionMode; lectureIds: string[]; documentIds?: string[] }
+  params: {
+    mode: ExamSessionMode;
+    lectureIds: string[];
+    documentIds?: string[];
+    /** 🌍 موضوع عام (نص) — مصدر بديل: امتحان من معلومات الـAI العامة. */
+    topic?: string;
+  }
 ): Promise<Result<CreateSessionResult>> {
   const lectureIds = (params.lectureIds ?? []).filter((id) => typeof id === 'string' && id.length > 0);
   const documentIds = (params.documentIds ?? []).filter((id) => typeof id === 'string' && id.length > 0);
-  if (lectureIds.length === 0 && documentIds.length === 0) {
-    return { ok: false, error: 'lectureIds or documentIds required', code: 'VALIDATION' };
+  // 🌍 الموضوع العام — نص مُنضَّف (اتنين لـ300 حرف).
+  const topic = typeof params.topic === 'string' ? params.topic.trim().replace(/\s+/g, ' ') : '';
+
+  if (lectureIds.length === 0 && documentIds.length === 0 && topic === '') {
+    return { ok: false, error: 'lectureIds, documentIds or topic required', code: 'VALIDATION' };
+  }
+  // ⚠️ **الموضوع لوحده**: جلسة كاملة من غير ملفات (مصدر واحد).
+  //    ماينفعش نخلطه بمصادر تانية — الـRPC بيبني جلسة واحدة بمصدر واحد.
+  if (topic !== '' && (lectureIds.length > 0 || documentIds.length > 0)) {
+    return { ok: false, error: 'topic cannot be combined with other sources', code: 'VALIDATION' };
+  }
+  if (topic !== '' && (topic.length < 3 || topic.length > 300)) {
+    return { ok: false, error: 'topic must be 3..300 chars', code: 'VALIDATION' };
   }
   // ⚠️ **السقف 3 مصادر** (مش 3 محاضرات) — موزوع بين المحاضرات والمستندات.
   if (lectureIds.length + documentIds.length > 3) {
@@ -94,6 +111,34 @@ export async function createExamSession(
   }
   if (params.mode !== 'last_minute_review') {
     return { ok: false, error: 'invalid mode', code: 'VALIDATION' };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 🌍 مصدر واحد: موضوع عام (من غير أي ملف)
+  // ────────────────────────────────────────────────────────────
+  if (topic !== '') {
+    const { data, error } = await supabase.rpc('create_exam_session_with_topic_reserve', {
+      p_mode: params.mode,
+      p_topic: topic,
+    });
+
+    if (error) {
+      if (isMissingRpc(error) || isSchemaLevelError(error)) {
+        // ⚠️ الـmigration 50 لسه متطبّقةش ⇒ رسالة صريحة (مش 500).
+        console.error(
+          '[exam-sessions] create_exam_session_with_topic_reserve unavailable —',
+          { code: error.code, message: error.message }
+        );
+        return {
+          ok: false,
+          error: 'topic exam is not available yet (migration 50 not applied)',
+          code: 'TOPIC_UNAVAILABLE',
+        };
+      }
+      return mapCreateError(error);
+    }
+
+    return finishCreate(data);
   }
 
   // ⚠️ **الـRPC الجديد (محاضرات + مستندات)** بيتبني بـ`db/49-exam-documents.sql`
@@ -228,6 +273,8 @@ export type ExamSessionItemRow = {
   id: string;
   lecture_id: string | null;
   document_id?: string | null;
+  /** 🌍 الموضوع العام (db/50) — مصدر بديل للحصة/المستند. */
+  topic?: string | null;
   ordinal: number;
   status: ExamItemStatus;
   attempt_count?: number;
@@ -240,60 +287,98 @@ export type ExamSessionItemRow = {
   completed_at?: string | null;
 };
 
+/** مستوى الدعم في القاعدة: المستندات؟ الموضوع العام؟ */
+export type ExamSchemaSupport = {
+  documentSupport: boolean;
+  topicSupport: boolean;
+};
+
 /**
  * يقرأ بنود الجلسة **بشكل مستقل عن الـschema**.
  *
- * ⚠️ **ليه**: بعد إضافة `document_id` (db/49) لازم الاستعلام يفضل شغال
- *    لو الـmigration لسه متطبّقةش ⇒ PostgREST بيرجّع 42703 ⇒ **500 في كل
- *    مسار الامتحان** (إنشاء/قراءة/توليد). فبنجرب العمود الأول، ولو مش
- *    موجود نرجع للاستعلام القديم (محاضرات بس) بدل ما نكسر المسار كله.
+ * ⚠️ **ليه**: بعد إضافة `document_id` (db/49) و`topic` (db/50) لازم
+ *    الاستعلام يفضل شغال لو الـmigration لسه متطبّقةش ⇒ PostgREST بيرجّع
+ *    42703 ⇒ **500 في كل مسار الامتحان** (إنشاء/قراءة/توليد). فبنجرب
+ *    الأعمدة بالتدريج (الأحدث فالأقدم) لحد ما نلاقي حاجة شغالة.
  *
- * ⚠️ `documentSupport = false` ⇒ الـقاعدة لسه قبل الـmigration ⇒ البنود
- *    كلها محاضرات (والمستندات مش متاحة).
+ * ⚠️ `documentSupport = false` ⇒ القاعدة لسه قبل الـmigration ⇒ البنود
+ *    كلها محاضرات. نفس المنطق لـ`topicSupport`.
  */
 export async function selectSessionItems(
   supabase: SupabaseClient,
   params: { sessionId: string; userId: string; columns?: string }
-): Promise<{ rows: ExamSessionItemRow[]; documentSupport: boolean; error: unknown }> {
+): Promise<{ rows: ExamSessionItemRow[] } & ExamSchemaSupport & { error: unknown }> {
   const base = params.columns ?? 'id, lecture_id, ordinal, status';
 
-  const withDocument = await supabase
+  // ① الأحدث: مستندات + موضوع عام (db/50).
+  const full = await supabase
     .from('exam_session_items')
-    .select(`${base}, document_id`)
+    .select(`${base}, document_id, topic`)
     .eq('session_id', params.sessionId)
     .eq('user_id', params.userId)
     .order('ordinal', { ascending: true });
 
-  if (!withDocument.error) {
+  if (!full.error) {
     // ⚠️ cast عبر `unknown`: الـselect مبني من متغير فـTS بيستنتج نوع
     //    غريب (ParserError[]) — والمشروع مافيش أنواع Supabase مولّدة.
     return {
-      rows: ((withDocument.data ?? []) as unknown) as ExamSessionItemRow[],
+      rows: ((full.data ?? []) as unknown) as ExamSessionItemRow[],
       documentSupport: true,
+      topicSupport: true,
       error: null,
     };
   }
 
-  if (isMissingColumnError(withDocument.error)) {
-    // ⚠️ الـmigration (49) لسه متطبّقةش ⇒ بنرجع للاستعلام القديم.
-    console.warn(
-      '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
-      withDocument.error.message
-    );
-    const legacy = await supabase
+  // ② وسط: مستندات بس (db/49 متطبّقة، 50 لأ).
+  if (isMissingColumnError(full.error)) {
+    const withDocument = await supabase
       .from('exam_session_items')
-      .select(base)
+      .select(`${base}, document_id`)
       .eq('session_id', params.sessionId)
       .eq('user_id', params.userId)
       .order('ordinal', { ascending: true });
+
+    if (!withDocument.error) {
+      console.warn(
+        '[exam-sessions] topic column missing (migration 50 not applied) — falling back'
+      );
+      return {
+        rows: ((withDocument.data ?? []) as unknown) as ExamSessionItemRow[],
+        documentSupport: true,
+        topicSupport: false,
+        error: null,
+      };
+    }
+
+    if (isMissingColumnError(withDocument.error)) {
+      // ③ الأقدم: محاضرات بس.
+      console.warn(
+        '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
+        withDocument.error.message
+      );
+      const legacy = await supabase
+        .from('exam_session_items')
+        .select(base)
+        .eq('session_id', params.sessionId)
+        .eq('user_id', params.userId)
+        .order('ordinal', { ascending: true });
+      return {
+        rows: ((legacy.data ?? []) as unknown) as ExamSessionItemRow[],
+        documentSupport: false,
+        topicSupport: false,
+        error: legacy.error ?? null,
+      };
+    }
+
     return {
-      rows: ((legacy.data ?? []) as unknown) as ExamSessionItemRow[],
+      rows: [],
       documentSupport: false,
-      error: legacy.error ?? null,
+      topicSupport: false,
+      error: withDocument.error,
     };
   }
 
-  return { rows: [], documentSupport: false, error: withDocument.error };
+  return { rows: [], documentSupport: false, topicSupport: false, error: full.error };
 }
 
 /**
@@ -302,43 +387,72 @@ export async function selectSessionItems(
 export async function selectExamItem(
   supabase: SupabaseClient,
   params: { sessionId: string; itemId: string; userId: string }
-): Promise<{ item: ExamSessionItemRow | null; documentSupport: boolean; error: unknown }> {
-  const withDocument = await supabase
+): Promise<{ item: ExamSessionItemRow | null } & ExamSchemaSupport & { error: unknown }> {
+  // ① الأحدث: مستندات + موضوع عام (db/50).
+  const full = await supabase
     .from('exam_session_items')
-    .select('id, session_id, lecture_id, document_id, status')
+    .select('id, session_id, lecture_id, document_id, topic, status')
     .eq('id', params.itemId)
     .eq('session_id', params.sessionId)
     .eq('user_id', params.userId)
     .maybeSingle();
 
-  if (!withDocument.error) {
+  if (!full.error) {
     return {
-      item: (withDocument.data ?? null) as ExamSessionItemRow | null,
+      item: (full.data ?? null) as ExamSessionItemRow | null,
       documentSupport: true,
+      topicSupport: true,
       error: null,
     };
   }
 
-  if (isMissingColumnError(withDocument.error)) {
-    console.warn(
-      '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
-      withDocument.error.message
-    );
-    const legacy = await supabase
+  if (isMissingColumnError(full.error)) {
+    // ② مستندات بس (db/49 متطبّقة، 50 لأ).
+    const withDocument = await supabase
       .from('exam_session_items')
-      .select('id, session_id, lecture_id, status')
+      .select('id, session_id, lecture_id, document_id, status')
       .eq('id', params.itemId)
       .eq('session_id', params.sessionId)
       .eq('user_id', params.userId)
       .maybeSingle();
-    return {
-      item: (legacy.data ?? null) as ExamSessionItemRow | null,
-      documentSupport: false,
-      error: legacy.error ?? null,
-    };
+
+    if (!withDocument.error) {
+      console.warn(
+        '[exam-sessions] topic column missing (migration 50 not applied) — falling back'
+      );
+      return {
+        item: (withDocument.data ?? null) as ExamSessionItemRow | null,
+        documentSupport: true,
+        topicSupport: false,
+        error: null,
+      };
+    }
+
+    if (isMissingColumnError(withDocument.error)) {
+      // ③ محاضرات بس.
+      console.warn(
+        '[exam-sessions] document_id column missing (migration 49 not applied) — falling back',
+        withDocument.error.message
+      );
+      const legacy = await supabase
+        .from('exam_session_items')
+        .select('id, session_id, lecture_id, status')
+        .eq('id', params.itemId)
+        .eq('session_id', params.sessionId)
+        .eq('user_id', params.userId)
+        .maybeSingle();
+      return {
+        item: (legacy.data ?? null) as ExamSessionItemRow | null,
+        documentSupport: false,
+        topicSupport: false,
+        error: legacy.error ?? null,
+      };
+    }
+
+    return { item: null, documentSupport: false, topicSupport: false, error: withDocument.error };
   }
 
-  return { item: null, documentSupport: false, error: withDocument.error };
+  return { item: null, documentSupport: false, topicSupport: false, error: full.error };
 }
 
 /** ترجمة خطأ الـRPC ل نتيجة typed (نفس خرائط الراوت). */

@@ -53,7 +53,7 @@ describe("المساعد — طلب امتحان بينفّذ فورًا (من �
   it("/api/chat: الكشف من **التاريخ** مش آخر رسالة", () => {
     const route = read("app/api/chat/route.ts");
     expect(route).toContain("detectExamRequestFromHistory(safeMessages)");
-    expect(route).toContain("buildExamHref(examRequest)");
+    expect(route).toContain("buildExamHref(examRequest");
     expect(route).toContain("EXAM_REQUEST_PROMPT_RULES");
   });
 
@@ -62,7 +62,7 @@ describe("المساعد — طلب امتحان بينفّذ فورًا (من �
     expect(route).toContain("detectExamRequestFromHistory(examTurns)");
     expect(route).toContain("loadConversationTurns");
     expect(route).toContain("saveTurn");
-    expect(route).toContain('label: "افتح مولّد الامتحان"');
+    expect(route).toContain("افتح مولّد الامتحان");
     expect(route).toContain("EXAM_REQUEST_PROMPT_RULES");
   });
 
@@ -229,7 +229,7 @@ describe("🔥 الـhotfix — 500/503 في مسار الامتحان", () => {
   it("راوت الإنشاء: تحقق من الـbody قبل أي شغل (lectureIds + documentIds)", () => {
     const route = read(CREATE_ROUTE);
     expect(route).toContain("validateCreateBody");
-    expect(route).toContain("lectureIds or documentIds required");
+    expect(route).toContain("lectureIds, documentIds or topic required");
     expect(route).toContain("max 3 sources");
     expect(route).toContain("invalid JSON body");
   });
@@ -278,5 +278,64 @@ describe("🔥 الـhotfix — 500/503 في مسار الامتحان", () => {
     expect(runner).toContain("AI_RATE_LIMITED");
     expect(runner).toContain("AI_TIMEOUT");
     expect(runner).toContain("retry_after");
+  });
+});
+
+describe("🌍 المولّد الذكي — مصدر «موضوع عام» + رفع ملف مباشر", () => {
+  it("الـmigration 50: عمود topic + قيد «مصدر واحد» + RPC جديد", () => {
+    const migration = read("db/50-exam-topic.sql");
+    expect(migration).toContain("topic text");
+    expect(migration).toContain("num_nonnulls(lecture_id, document_id, topic)");
+    expect(migration).toContain("create_exam_session_with_topic_reserve");
+  });
+
+  it("الـAPI يقبل topic (وبيمنع الخلط مع الملفات)", () => {
+    const route = read(CREATE_ROUTE);
+    expect(route).toContain("normalizeTopic");
+    expect(route).toContain("topic cannot be combined with other sources");
+    expect(route).toContain("TOPIC_UNAVAILABLE");
+    // ⚠️ الإشعار اللي بيقول للطالب إن الامتحان عام.
+    expect(route).toContain("مبني على معلومات عامة");
+  });
+
+  it("المحرك بيفرق بين وضع التفريغ ووضع المعلومات العامة", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("GROUNDING_GENERAL");
+    expect(engine).toContain("groundingFor(mode)");
+    expect(engine).toContain("mode?: ExamKnowledgeMode");
+    // ⚠️ الوضع العام بيم��نع التفاصيل النادرة (ضوابط دقة مختلفة).
+    expect(engine).toContain("ممنوع التفاصيل النادرة أو غير المؤكدة");
+  });
+
+  it("راوت المعالجة: بند الموضوع ⇒ مصدر topic + وضع عام", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain('itemRow.topic');
+    expect(route).toContain('knowledgeMode = "general"');
+    expect(route).toContain("mode: knowledgeMode");
+  });
+
+  it("الواجهة: تاب ثالث + خانة موضوع + رفع ملف", () => {
+    const ui = read("components/exams/ExamGenerator.tsx");
+    expect(ui).toContain('"topic" as const');
+    expect(ui).toContain("موضوع عام");
+    expect(ui).toContain('id="exam-topic"');
+    expect(ui).toContain('fetch("/api/documents"');
+  });
+
+  it("المساعد: مافيش ملفات ⇒ اقتراح موضوع عام (مش «مفيش محاضرات»)", () => {
+    const request = read("lib/exam-request.ts");
+    expect(request).toContain("topicMode");
+    const sources = read("lib/ai/exam-sources.ts");
+    expect(sources).toContain("userHasExamSources");
+    const chat = read("app/api/chat/route.ts");
+    expect(chat).toContain("userHasExamSources");
+    const unified = read("app/api/unified-ai/route.ts");
+    expect(unified).toContain("userHasExamSources");
+  });
+
+  it("قاعدة البيانات: استعلامات مستقلة عن الـschema (topic ناقص ⇒ fallback)", () => {
+    const sessions = read("lib/ai/exam-sessions.ts");
+    expect(sessions).toContain("topic column missing");
+    expect(sessions).toContain("topicSupport");
   });
 });

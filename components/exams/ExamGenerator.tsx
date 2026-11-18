@@ -38,6 +38,11 @@ export type ExamGeneratorInitial = {
   types?: ExamQuestionType[];
   /** مستوى الصعوبة (من المساعد) — null = الافتراضي. */
   difficulty?: ExamDifficulty | null;
+  /**
+   * 🌍 موضوع عام (من المساعد عبر الـURL) — مصدر بديل: امتحان من معلومات
+   *    الـAI العامة في الموضوع (من غير أي ملف).
+   */
+  topic?: string;
 };
 
 type LectureRow = {
@@ -60,8 +65,8 @@ type DocumentRow = {
   created_at: string;
 };
 
-/** تبويب المصدر: تسجيل صوتي (بنص تفريغ) ولا مستند (ملف). */
-type SourceTab = "recordings" | "documents";
+/** تبويب المصدر: تسجيل صوتي (بنص تفريغ) ولا مستند (ملف) ولا موضوع عام. */
+type SourceTab = "recordings" | "documents" | "topic";
 
 const FILE_TYPE_LABEL: Record<string, string> = {
   pdf: "PDF",
@@ -175,8 +180,21 @@ export function ExamGenerator({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   /** المستندات المختارة (المصادر التانية من نفس المولّد). */
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
-  /** التبويب المعروض: التسجيلات الصوتية ولا المستندات. */
-  const [sourceTab, setSourceTab] = useState<SourceTab>("recordings");
+  /** التبويب المعروض: التسجيلات الصوتية ولا المستندات ولا الموضوع العام. */
+  const [sourceTab, setSourceTab] = useState<SourceTab>(
+    initial.topic ? "topic" : "recordings"
+  );
+  /**
+   * 🌍 الموضوع العام — نص الطالب (امتحان من معلومات الـAI العامة).
+   * مالهوش علاقة بالملفات: مصدر لوحده.
+   */
+  const [topic, setTopic] = useState<string>(initial.topic ?? "");
+  /**
+   * 📄 ملف مرفوع **من صفحة الامتحانات** مباشرة (من غير مساحة العمل).
+   * بيتحفظ في مساحة العمل زي أي ملف، وبيبقى مصدر الامتحان.
+   */
+  const [uploadedDoc, setUploadedDoc] = useState<DocumentRow | null>(null);
+  const [uploading, setUploading] = useState(false);
   /** المحاضرة الجاية من الدرس (?lecture= أو محسوبة من ?dayId=). */
   const [preselectId, setPreselectId] = useState<string>(initial.lecture);
   const [notice, setNotice] = useState<string | null>(null);
@@ -334,8 +352,17 @@ export function ExamGenerator({
   const selectedDocRows = documents.filter((row) => selectedDocs.has(row.id));
   /** 📦 إجمالي المصادر المختارة (تسجيلات + مستندات) — السقف 3. */
   const selectedCount = selectedRows.length + selectedDocRows.length;
+  /** 🌍 الموضوع العام مكتوب؟ (3 أحرف على الأقل). */
+  const topicReady = topic.trim().length >= 3;
+  /**
+   * ⚠️ **مصدر واحد بس**: الموضوع العام لوحده، أو ملفات (تسجيلات/مستندات).
+   *    (الـRPC بيبني جلسة بمصدر واحد — الخلط مرفوض من السيرفر.)
+   */
   const canCreate =
-    selectedCount > 0 && selectedCount <= MAX_LECTURES && types.length > 0 && !busy;
+    types.length > 0 &&
+    !busy &&
+    !uploading &&
+    (topicReady || (selectedCount > 0 && selectedCount <= MAX_LECTURES));
   /** محاضرات إخاها فلتر المادة (في مواد تانية) — عشان نقول للطالب صراحةً. */
   const hiddenBySubject = subjectName.trim()
     ? lectures.filter((row) => !matchesSubject(row)).length
@@ -389,6 +416,54 @@ export function ExamGenerator({
     });
   }
 
+  /**
+   * 📄 رفع ملف **من صفحة الامتحانات** مباشرة.
+   *
+   * ⚠️ **ليه**: الطالب كان لازم يروح مساحة العمل الأول — دلوقتي بيرفع
+   *    من هنا والملف بيتحفظ في مساحة العمل (نفس `/api/documents`) وبيبقى
+   *    مصدر امتحان على طول.
+   */
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setError(null);
+    setErrorTransient(false);
+    setNotice(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/documents", { method: "POST", body: form });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.document?.id) {
+        const message =
+          (data?.error as { message?: string } | null)?.message ??
+          "مقدرناش نرفع الملف. جرّب تاني.";
+        setError(message);
+        setErrorTransient(response.status === 429 || response.status >= 500);
+        return;
+      }
+      const doc = data.document as { id: string; title?: string | null; file_type?: string | null; page_count?: number | null; status?: string | null };
+      const row: DocumentRow = {
+        id: doc.id,
+        title: doc.title ?? file.name,
+        file_type: doc.file_type ?? file.type,
+        page_count: doc.page_count ?? null,
+        status: doc.status ?? "ready",
+        created_at: new Date().toISOString(),
+      };
+      // ⚠️ الملف المرفوع **يحلّ محل** أي موضوع عام (مصدر واحد بس).
+      setTopic("");
+      setUploadedDoc(row);
+      setSelected(new Set());
+      setSelectedDocs(new Set([doc.id]));
+      setSourceTab("documents");
+      setNotice(`تم رفع «${row.title}» — هيتستخدم ك مصدر الامتحان.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "مقدرناش نرفع الملف. جرّب تاني.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleCreate() {
     if (!canCreate) return;
     setBusy(true);
@@ -405,9 +480,11 @@ export function ExamGenerator({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "last_minute_review",
-          lectureIds: [...selected],
-          // 📄 المستندات المختارة — مصدر تاني (RPC جديد: بند لكل مستند).
-          documentIds: [...selectedDocs],
+          // ⚠️ **مصدر واحد بس**: يا ملفات (محاضرات/مستندات) يا موضوع عام.
+          //    الموضوع بيتبعت مكان المصادر لما يكون هو المصدر.
+          lectureIds: topic.trim() ? [] : [...selected],
+          documentIds: topic.trim() ? [] : [...selectedDocs],
+          ...(topic.trim() ? { topic: topic.trim() } : {}),
           spec: { types, difficulty, count },
           subject: name ? { id: matchedId ?? undefined, name } : undefined,
           title: name ? `امتحان ${name}` : undefined,
@@ -480,12 +557,12 @@ export function ExamGenerator({
         </p>
       </section>
 
-      {/*2️⃣ المصدر — تسجيل صوتي ولا مستند */}
+      {/*2️⃣ المصدر — تسجيل صوتي ولا مستند ولا موضوع عام */}
       <section className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-5 space-y-3" aria-label="اختيار مصدر الامتحان">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-extrabold text-amber-300">2️⃣ مصدر الامتحان</h3>
           <span className="text-[11px] text-slate-400 ltr-num">
-            {selectedCount}/{MAX_LECTURES} محددة
+            {topicReady ? "موضوع عام" : `${selectedCount}/${MAX_LECTURES} محددة`}
           </span>
         </div>
 
@@ -496,6 +573,7 @@ export function ExamGenerator({
             [
               { key: "recordings" as const, label: "المحاضرات الصوتية", count: visibleLectures.length },
               { key: "documents" as const, label: "المستندات", count: documents.length },
+              { key: "topic" as const, label: "موضوع عام", count: null },
             ]
           ).map((tab) => (
             <button
@@ -511,12 +589,68 @@ export function ExamGenerator({
               }`}
             >
               {tab.label}
-              <span className="mr-1.5 text-[10px] text-slate-500 ltr-num">({tab.count})</span>
+              {tab.count !== null && (
+                <span className="mr-1.5 text-[10px] text-slate-500 ltr-num">({tab.count})</span>
+              )}
             </button>
           ))}
         </div>
 
-        {sourceTab === "recordings" ? (
+        {sourceTab === "topic" ? (
+          // 🌍 الموضوع العام (من غير ملفات) — ورفع ملف
+          //    من صفحة الامتحانات مباشرة (بيتحفظ في مساحة العمل).
+          <div className="space-y-4">
+            <div className="rounded-xl border border-[#2A3050] bg-[#0D1029] p-4 space-y-3">
+              <label htmlFor="exam-topic" className="block text-xs font-bold text-slate-300">
+                🌍 اكتب الموضوع اللي عايز تتحن عليه
+              </label>
+              <input
+                id="exam-topic"
+                type="text"
+                value={topic}
+                maxLength={300}
+                onChange={(event) => {
+                  setTopic(event.target.value);
+                  setNotice(null);
+                }}
+                placeholder="مثال: البناء الضوئي — أو: الخلقة والأنسجة"
+                className="w-full rounded-xl border border-[#2A3050] bg-[#0D1029] px-4 py-3 text-sm text-[#F0E6D2] placeholder:text-slate-500 focus:border-amber-400 focus:outline-none"
+              />
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                الامتحان هيتبني على <span className="text-amber-300">معلومات عامة</span> في الموضوع —
+                مش على ملف. لو عايز امتحان مخصص لملفك، ارفعه من تحت أو اختار من محاضراتك.
+              </p>
+            </div>
+
+            {/* 📄 رفع ملف من صفحة الامتحانات (من غير ما تروح مساحة العمل). */}
+            <div className="rounded-xl border border-dashed border-[#2A3050] p-4 space-y-3">
+              <p className="text-xs font-bold text-slate-300">📄 أو ارفع ملف هنا (PDF / PowerPoint / Word)</p>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#2A3050] hover:bg-[#3A4060] px-4 py-2 text-sm font-bold transition-colors">
+                <Upload size={14} aria-hidden />
+                {uploading ? "بيرفع…" : "اختار ملف"}
+                <input
+                  type="file"
+                  accept=".pdf,.pptx,.ppt,.docx,.doc,.txt"
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void handleUpload(file);
+                  }}
+                />
+              </label>
+              {uploadedDoc && (
+                <p className="text-[11px] text-emerald-300">
+                  تم رفع «{uploadedDoc.title}» — هيتبني عليه الامتحان.
+                </p>
+              )}
+              <p className="text-[11px] text-slate-500">
+                الملف بيتحفظ في مساحة العمل وبيبقى متاح لبقية المميزات بعد كده.
+              </p>
+            </div>
+          </div>
+        ) : sourceTab === "recordings" ? (
           visibleLectures.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#2A3050] p-6 text-center space-y-3">
               <p className="text-sm text-slate-300 leading-relaxed">

@@ -47,7 +47,7 @@ describe("validateCreateBody — جسم طلب إنشاء الامتحان", () 
   it("مفيش مصادر ⇒ 400", () => {
     const result = validateCreateBody({ mode: "last_minute_review" });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("lectureIds or documentIds required");
+    if (!result.ok) expect(result.error).toContain("lectureIds, documentIds or topic required");
   });
 
   it("أكتر من 3 مصادر ⇒ 400 (مش 500)", () => {
@@ -105,5 +105,63 @@ describe("validateCreateBody — جسم طلب إنشاء الامتحان", () 
       expect(result.body.subjectName.length).toBeLessThanOrEqual(120);
       expect(result.body.subjectId?.length).toBeLessThanOrEqual(64);
     }
+  });
+});
+
+describe("validateCreateBody — المصدر العام (موضوع)", () => {
+  it("موضوع بس ⇒ يمر", () => {
+    const result = validateCreateBody({
+      mode: "last_minute_review",
+      topic: "البناء الضوئي",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.body.topic).toBe("البناء الضوئي");
+      expect(result.body.lectureIds).toEqual([]);
+      expect(result.body.documentIds).toEqual([]);
+    }
+  });
+
+  it("موضوع + محاضرات ⇒ 400 (مصدر واحد بس)", () => {
+    const result = validateCreateBody({
+      mode: "last_minute_review",
+      lectureIds: ["a"],
+      topic: "الفيزياء",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("topic cannot be combined");
+  });
+
+  it("موضوع + مستندات ⇒ 400 (مصدر واحد بس)", () => {
+    const result = validateCreateBody({
+      mode: "last_minute_review",
+      documentIds: ["d"],
+      topic: "الفيزياء",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("topic cannot be combined");
+  });
+
+  it("موضوع قصير ⇒ 400 (مش مصدر صالح)", () => {
+    const result = validateCreateBody({ mode: "last_minute_review", topic: "ا" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("موضوع طويل ⇒ بيتقصّ لحد 300 حرف", () => {
+    const result = validateCreateBody({
+      mode: "last_minute_review",
+      topic: "ا".repeat(500),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body.topic?.length).toBe(300);
+  });
+
+  it("موضوع فيه مسافات كتير ⇒ بيتنضّف", () => {
+    const result = validateCreateBody({
+      mode: "last_minute_review",
+      topic: "  البناء    الضوئي  ",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body.topic).toBe("البناء الضوئي");
   });
 });

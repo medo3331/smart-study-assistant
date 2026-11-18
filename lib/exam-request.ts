@@ -447,13 +447,15 @@ function extractDifficulty(text: string): ExamDifficulty | null {
 /* -------------------------------------------------------------------------- */
 
 /** رابط صفحة الامتحانات مع اختيار الطالب (مادة/عدد/أنواع/صعوبة). */
-export function buildExamHref(request: ExamRequest): string {
+export function buildExamHref(request: ExamRequest, options: { topic?: boolean } = {}): string {
   const params = new URLSearchParams();
   params.set("gen", "1");
   if (request.subject) params.set("subject", request.subject);
   if (request.count) params.set("count", String(request.count));
   if (request.types.length > 0) params.set("types", request.types.join(","));
   if (request.difficulty) params.set("difficulty", request.difficulty);
+  // 🌍 **موضوع عام**: المولّد يفتح على تاب «موضوع عام» ومعبّى بالموضوع.
+  if (options.topic && request.subject) params.set("topic", request.subject);
   return `/exams?${params.toString()}`;
 }
 
@@ -465,8 +467,15 @@ export function buildExamHref(request: ExamRequest): string {
  * ⚠️ **الرابط بيتكتب نص فاضي (مش markdown)**: الـUI بتاع الداشبورد بيعرض
  *    النص خام، فلو حطينا `[نص](رابط)` هيبقى مكسوّر. الرابط المطلق بيتحول
  *    ل لينك تلقائي في الـmarkdown، والزر السريع بيعمل الباقي.
+ *
+ * ⚠️ **`topicMode`**: الطالب ماعندهوش ملفات ⇒ بنقترح «موضوع عام»
+ *    (امتحان من معلومات الـAI) بدل ما نقوله «مفيش محاضرات».
  */
-export function buildExamAnswer(request: ExamRequest, origin?: string): string {
+export function buildExamAnswer(
+  request: ExamRequest,
+  origin?: string,
+  options: { hasSources?: boolean } = {}
+): string {
   const subject = request.subject;
   const count = request.count;
   const types =
@@ -476,11 +485,23 @@ export function buildExamAnswer(request: ExamRequest, origin?: string): string {
   const difficulty = request.difficulty
     ? ` بمستوى ${DIFFICULTY_LABELS_AR[request.difficulty]}`
     : "";
-  const href = buildExamHref(request);
+  /**
+   * 🌍 **موضوع عام؟** = الطالب طلب امتحان في مادة، وعنده **ملفات**؟ لو
+   *    لأ ⇒ بنفتح المولّد على تاب «موضوع عام» (امتحان من معارف الـAI).
+   */
+  const topicMode = subject ? options.hasSources === false : false;
+  const href = buildExamHref(request, { topic: topicMode });
   const link = origin ? `${origin.replace(/\/$/, "")}${href}` : href;
 
   // الطلب مكتمل ⇒ نحكيله اختياره بالظبط (ومفيش أي سؤال توضيحي).
   if (subject && count) {
+    if (topicMode) {
+      return [
+        `تمام — جهّزت لك امتحان ${subject} من ${count} سؤال${types}${difficulty}.`,
+        "ما وصلناش ملفات في الموضوع ده، فالامتحان هيتبني على معلومات عامة فيه. لو عايزه مخصص لمحاضرتك، ارفع الملف في نفس الشاشة:",
+        link,
+      ].join("\n\n");
+    }
     return [
       `تمام — جهّزت لك امتحان ${subject} من ${count} سؤال${types}${difficulty}.`,
       "افتح مولّد الامتحان وابدأ التوليد (محاضراتك محفوظة جاهزة):",
@@ -531,4 +552,5 @@ export const EXAM_REQUEST_PROMPT_RULES = [
   "- اعرض زر «افتح مولّد الامتحان» فورًا مع رابط /exams?gen=1 — ولو تعرف المادة أو العدد ضيفهم (?subject=…&count=…).",
   "- قوله يكمل باقي الإعدادات (المادة/الأنواع/الصعوبة) في شاشة المولّد، لأن الشاشة أسهل وأسرع من الشات.",
   "- متولّدش الأسئلة بنفسك في الشات — المولّد بياخدها من تفريغ محاضراته.",
+  "- 🌍 لو مفيش ملفات (محاضرات/مستندات) للمادة دي: متقولش «مفيش محاضرات» — قول إنه ينفع يعمل «موضوع عام» (امتحان من معلومات عامة في المادة) وافتح المولّد على ?topic=… .",
 ].join("\n");

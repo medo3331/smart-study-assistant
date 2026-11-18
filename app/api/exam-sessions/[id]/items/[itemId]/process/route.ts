@@ -213,14 +213,23 @@ export async function POST(
     id: string;
     lecture_id: string | null;
     document_id?: string | null;
+    topic?: string | null;
     status: string;
   };
 
   let transcript = "";
   let sourceTitle = "";
   let sourceKind: ExamSourceKind = "recording";
+  // 🌍 وضع المعرفة: تفريغ (محاضرة/مستند) ولا معلومات عامة (موضوع).
+  let knowledgeMode: "source" | "general" = "source";
 
-  if (itemRow.document_id) {
+  if (itemRow.topic) {
+    // 🌍 موضوع عام — المصدر هو نص الموضوع (الـAI يكمّل بمعرفته العامة).
+    sourceKind = "topic";
+    knowledgeMode = "general";
+    transcript = itemRow.topic;
+    sourceTitle = `موضوع: ${itemRow.topic}`;
+  } else if (itemRow.document_id) {
     // 📄 مستند — النص المستخرج وقت الرفع (صفحات knowledge_base).
     sourceKind = "document";
     let document: Awaited<ReturnType<typeof readDocumentText>> = null;
@@ -353,6 +362,8 @@ export async function POST(
   // ── ٨) التوليد
   const operationId = crypto.randomUUID();
   let sequence = 0;
+  /** مفتاح المصدر (للـidempotency + ربط سجلات الاستخدام). */
+  const sourceKey = item.lecture_id ?? itemRow.topic ?? itemRow.document_id ?? "topic";
 
   const deps: ExamReviewDeps = {
     runTask: async ({ messages, usage, temperature, maxTokens, timeoutMs }) => {
@@ -378,7 +389,9 @@ export async function POST(
       operationId,
       // ⚠️ مفتاح فريد لكل نداء منطقي: قيد (user_id, idempotency_key, attempt_no)
       // يُسقط أي سطر ثانٍ بنفس المفتاح صامتًا.
-      idempotencyKey: `exam:${sessionId}:${item.lecture_id}:${aiTask}:${sequence++}`,
+      // ⚠️ **مفتاح المصدر**: بند الموضوع مالهوش lecture_id ⇒ بنستخدم نص
+      //    الموضوع في المفتاح (عشان مافيش تصادم بين بندين).
+      idempotencyKey: `exam:${sessionId}:${sourceKey}:${aiTask}:${sequence++}`,
       source: "server",
       userId: user.id,
       feature: "exam_review",
@@ -399,7 +412,7 @@ export async function POST(
 
   let generated;
   try {
-    generated = await generateExamReview({ transcript, deps, spec });
+    generated = await generateExamReview({ transcript, deps, spec, mode: knowledgeMode });
   } catch (error) {
     if (error instanceof ExamLeaseLostError) {
       // عامل قديم: لا نُفشل البند — قد يستعيده عامل آخر بعد انتهاء الـ lease.
@@ -478,9 +491,9 @@ export async function POST(
     const rows = (usageRows ?? []) as Array<{ metadata: Record<string, unknown> | null }>;
     const matched = rows.filter((row) => {
       const meta = row.metadata ?? {};
-      return (
-        meta.exam_session_id === sessionId && meta.lecture_id === item.lecture_id
-      );
+      // ⚠️ بند الموضوع: `lecture_id` = null في السطر والتطابق ⇒ بيطابق
+      //    (جلسة الموضوع عندها بند واحد بس ⇒ مافيش خلط).
+      return meta.exam_session_id === sessionId && meta.lecture_id === item.lecture_id;
     });
     if (matched.length > 0) attempts = matched.length;
   } catch (error) {

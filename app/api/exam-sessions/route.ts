@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireUser, clampText } from "@/lib/api-guard";
 import { createExamSession, selectSessionItems, type ExamSessionMode } from "@/lib/ai/exam-sessions";
 import { parseExamSpec, DEFAULT_EXAM_SPEC } from "@/lib/ai/exam-review";
+import { normalizeTopic } from "@/lib/ai/exam-sources";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 /**
@@ -84,6 +85,8 @@ type ValidCreateBody = {
   mode: ExamSessionMode;
   lectureIds: string[];
   documentIds: string[];
+  /** 🌍 موضوع عام — مصدر بديل (مفيش ملفات). */
+  topic: string | null;
   spec: unknown;
   subjectId: string | null;
   subjectName: string;
@@ -113,8 +116,16 @@ export function validateCreateBody(raw: unknown): { ok: true; body: ValidCreateB
 
   const lectureIds = normalizeIds(record.lectureIds);
   const documentIds = normalizeIds(record.documentIds);
-  if (lectureIds.length === 0 && documentIds.length === 0) {
-    return { ok: false, error: "lectureIds or documentIds required" };
+  // 🌍 الموضوع العام — نص (3..300 حرف) أو null.
+  const topic = normalizeTopic(record.topic);
+
+  // ⚠️ **مصدر واحد بس**: يا ملفات (محاضرات/مستندات) يا موضوع عام.
+  //    الخلط بينهم مرفوض (الـRPC بيبني جلسة بمصدر واحد).
+  if (topic && (lectureIds.length > 0 || documentIds.length > 0)) {
+    return { ok: false, error: "topic cannot be combined with other sources" };
+  }
+  if (!topic && lectureIds.length === 0 && documentIds.length === 0) {
+    return { ok: false, error: "lectureIds, documentIds or topic required" };
   }
   if (lectureIds.length + documentIds.length > 3) {
     return { ok: false, error: "max 3 sources" };
@@ -154,6 +165,7 @@ export function validateCreateBody(raw: unknown): { ok: true; body: ValidCreateB
       mode: mode as ExamSessionMode,
       lectureIds,
       documentIds,
+      topic,
       spec,
       subjectId,
       subjectName,
@@ -192,11 +204,12 @@ export async function POST(req: Request) {
       });
       return fail("VALIDATION", 400, validated.error);
     }
-    const { mode, lectureIds, documentIds, spec, subjectId, subjectName, title, dayId } =
+    const { mode, lectureIds, documentIds, topic, spec, subjectId, subjectName, title, dayId } =
       validated.body;
 
     logContext.lectureIds = lectureIds;
     logContext.documentIds = documentIds;
+    logContext.topic = topic;
     logContext.mode = mode;
     logContext.spec = spec;
 
@@ -204,6 +217,7 @@ export async function POST(req: Request) {
       mode,
       lectureIds,
       documentIds,
+      topic: topic ?? undefined,
     });
 
   if (!created.ok) {
@@ -228,6 +242,12 @@ export async function POST(req: Request) {
           documentIds: documentIds.length,
         });
         return fail("SOURCES_UNAVAILABLE", 503, created.error);
+      case "TOPIC_UNAVAILABLE":
+        // ⚠️ الـmigration 50 (موضوع عام) لسه متطبّقةش ⇒ رسالة صريحة.
+        console.warn("[exam-sessions] create — topic RPC unavailable", {
+          detail: created.error,
+        });
+        return fail("TOPIC_UNAVAILABLE", 503, created.error);
       default:
         logCrash("createExamSession", created.error, { ...logContext });
         return fail("INTERNAL", 500, created.error);
@@ -304,11 +324,17 @@ export async function POST(req: Request) {
     estimated_tokens: session.estimated_tokens,
     credit_reserved_at: session.credit_reserved_at,
     metadata,
+    // 🌍 إشعار «موضوع عام» — الطالب لازم يعرف مصدر أسئلته.
+    notice: topic
+      ? "الامتحان ده مبني على معلومات عامة في الموضوع. لو عايز امتحان مخصص لمحاضرتك، ارفع الملف أو اختار من محاضراتك."
+      : null,
     items: sessionItems.map((item) => ({
       id: item.id,
       lecture_id: item.lecture_id,
       // ⚠️ `document_id` بييجي بس لو الـmigration 49 متطبّقة (وإلا=null).
       document_id: item.document_id ?? null,
+      topic: item.topic ?? null,
+      source_kind: item.topic ? "topic" : item.document_id ? "document" : "recording",
       ordinal: item.ordinal,
       status: item.status,
     })),

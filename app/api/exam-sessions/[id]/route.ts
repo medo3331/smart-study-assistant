@@ -36,6 +36,8 @@ type ItemRow = {
   lecture_id: string | null;
   // ⚠️ اختياري: بييجي بس لو الـmigration 49 متطبّقة في القاعدة.
   document_id?: string | null;
+  // 🌍 اختياري: بييجي بس لو الـmigration 50 متطبّقة في القاعدة.
+  topic?: string | null;
   ordinal: number;
   status: string;
   attempt_count: number;
@@ -86,7 +88,7 @@ export async function GET(
     sessionId: id,
     userId: user.id,
     columns:
-      "id, lecture_id, ordinal, status, attempt_count, transcript_chars, chunk_count, result_json, error_code, error_message, started_at, completed_at",
+      "id, lecture_id, topic, ordinal, status, attempt_count, transcript_chars, chunk_count, result_json, error_code, error_message, started_at, completed_at",
   });
 
   if (itemsError) {
@@ -113,6 +115,10 @@ export async function GET(
     mode: session.mode,
     status: session.status,
     metadata: session.metadata ?? null,
+    // 🌍 إشعار «موضوع عام» — الطالب لازم يعرف مصدر أسئلته.
+    notice: rows.some((item) => item.topic)
+      ? "الامتحان ده مبني على معلومات عامة في الموضوع. لو عايز امتحان مخصص لمحاضرتك، ارفع الملف أو اختار من محاضراتك."
+      : null,
     total_lectures: session.total_lectures,
     completed_lectures: completedLectures,
     last_completed_at: lastCompletedAt,
@@ -131,8 +137,10 @@ export async function GET(
       id: item.id,
       lecture_id: item.lecture_id,
       document_id: item.document_id ?? null,
-      // 📄/🎙️ نوع المصدر — عشان الواجهة تقول «مستند ١» مش «محاضرة ١».
-      source_kind: item.document_id ? "document" : "recording",
+      // 🌍 الموضوع العام (لو الـmigration 50 متطبّقة).
+      topic: item.topic ?? null,
+      // 📄/🎙️/🌍 نوع المصدر — عشان الواجهة تقول «مستند ١» مش «محاضرة ١».
+      source_kind: item.topic ? "topic" : item.document_id ? "document" : "recording",
       ordinal: item.ordinal,
       status: item.status,
       attempt_count: item.attempt_count,
