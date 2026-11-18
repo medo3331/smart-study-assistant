@@ -194,3 +194,40 @@ describe("templates", () => {
     expect(result.valid).toBe(false);
   });
 });
+
+describe("shape strokes", () => {
+  it("hit-tests a rectangle by its outline, not its diagonal", () => {
+    const rect: Stroke = {
+      ...makeStroke([[10, 10], [110, 60]]),
+      shape: "rect",
+    };
+    // On the top edge, but far from the diagonal between the two handles.
+    expect(hitTestStroke(rect, 60, 10)).toBe(true);
+    expect(hitTestStroke(rect, 60, 35)).toBe(false);
+  });
+
+  it("hit-tests an ellipse by its outline", () => {
+    const ellipse: Stroke = {
+      ...makeStroke([[0, 0], [100, 100]]),
+      shape: "ellipse",
+    };
+    expect(hitTestStroke(ellipse, 0, 50)).toBe(true);
+    expect(hitTestStroke(ellipse, 50, 50)).toBe(false);
+  });
+
+  it("hit-tests arrows along the shaft", () => {
+    const arrow: Stroke = {
+      ...makeStroke([[0, 0], [100, 0]]),
+      shape: "arrow",
+    };
+    expect(hitTestStroke(arrow, 50, 0)).toBe(true);
+    expect(hitTestStroke(arrow, 50, 40)).toBe(false);
+  });
+
+  it("counts shapes inside strokeAt ordering", () => {
+    const bottom: Stroke = { ...makeStroke([[0, 0], [100, 0]]), shape: "line" };
+    const top = makeStroke([[50, 30], [51, 30]]);
+    expect(strokeAt([bottom, top], 50, 0)).toBe(0);
+    expect(strokeAt([bottom, top], 50, 30)).toBe(1);
+  });
+});

@@ -7,16 +7,18 @@ import {
 import { InMemoryNoteStorage, createInMemoryStore } from "../storage";
 import type { InMemoryStore } from "../storage";
 import type { NoteRepository } from "../repository";
-import type { StorageNotebook, StoragePage } from "../types";
+import type { StorageNotebook, StoragePage, Stroke } from "../types";
 import {
   buildEmptyPage,
   buildNotebookSave,
   buildPageSave,
+  contentFromSnapshot,
   ensureNotebook,
   sortNotebooksByRecency,
   sortPagesByCreation,
   strokesFromSnapshot,
 } from "../notebook";
+import { pageContentStrokes } from "../content";
 
 const OWNER = createTestOwner("anon", "n1");
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -323,5 +325,59 @@ describe("buildEmptyPage", () => {
     expect(record.ownerId).toBe(OWNER.id);
     expect(record.quarantined).toBe(false);
     expect(record.localJournal).toEqual([]);
+  });
+});
+
+describe("contentFromSnapshot", () => {
+  it("round-trips strokes, texts and images", () => {
+    const strokes: Stroke[] = [
+      { id: "s1", tool: "pen" as const, color: "#111", thickness: 2, opacity: 1, points: [[1, 2]] },
+      {
+        id: "s2",
+        tool: "pen" as const,
+        color: "#111",
+        thickness: 2,
+        opacity: 1,
+        points: [[0, 0], [10, 10]],
+        shape: "arrow" as const,
+      },
+    ];
+    const texts = [
+      { id: "t1", kind: "text" as const, text: "مرحبا", x: 10, y: 20, size: 28, color: "#111" },
+    ];
+    const images = [
+      { id: "i1", kind: "image" as const, src: "data:image/png;base64,x", x: 5, y: 5, width: 100, height: 80 },
+    ];
+    const snapshot = pageContentStrokes("lined", strokes, texts, images);
+    const content = contentFromSnapshot(snapshot);
+    expect(content.strokes).toEqual(strokes);
+    expect(content.texts).toEqual(texts);
+    expect(content.images).toEqual(images);
+  });
+
+  it("drops malformed texts and images but keeps valid strokes", () => {
+    const content = contentFromSnapshot({
+      strokes: [{ id: "s1", tool: "pen", color: "#111", thickness: 2, opacity: 1, points: [[0, 0]] }],
+      texts: [null, "nope", { id: "x" }, { id: "t1", kind: "text", text: "ok", x: 1, y: 2, size: 20 }],
+      images: [{ id: "i1", kind: "image", src: "data:x", x: 1, y: 2, width: 10, height: 10 }, "junk"],
+    });
+    expect(content.strokes).toHaveLength(1);
+    expect(content.texts).toHaveLength(1);
+    expect(content.images).toHaveLength(1);
+  });
+
+  it("tolerates legacy snapshots without texts or images", () => {
+    const content = contentFromSnapshot({
+      template: "lined",
+      strokes: [{ id: "s1", tool: "pen", color: "#111", thickness: 2, opacity: 1, points: [[0, 0]] }],
+    });
+    expect(content.strokes).toHaveLength(1);
+    expect(content.texts).toEqual([]);
+    expect(content.images).toEqual([]);
+  });
+
+  it("tolerates junk snapshots", () => {
+    expect(contentFromSnapshot(null)).toEqual({ strokes: [], texts: [], images: [] });
+    expect(contentFromSnapshot(42)).toEqual({ strokes: [], texts: [], images: [] });
   });
 });

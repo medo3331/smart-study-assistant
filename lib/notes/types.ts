@@ -34,6 +34,14 @@ export type NotesOwner = {
  */
 export type NoteRepositoryStatus = "ready" | "read-only" | "disposed";
 
+/**
+ * Geometric shapes drawn with a two-point gesture (start → end).
+ *
+ * A shape is stored as a Stroke whose `points` is exactly [start, end], so
+ * undo/redo, the eraser and the revision guard keep working unchanged.
+ */
+export type StrokeShape = "line" | "arrow" | "rect" | "ellipse";
+
 /** A single drawing stroke, stable across reloads. */
 export type Stroke = {
   id: string;
@@ -43,6 +51,42 @@ export type Stroke = {
   opacity: number;
   points: [number, number][];
   pressure?: number; // per-point when supported, else 0.5 fallback
+  /** Present only for shape strokes — freehand strokes omit it. */
+  shape?: StrokeShape;
+};
+
+/** A typed text block placed on the page (Arabic/RTL aware). */
+export type NoteText = {
+  id: string;
+  kind: "text";
+  text: string;
+  /** Top-left corner of the text box, in page coordinates. */
+  x: number;
+  y: number;
+  /** Font size in page pixels. */
+  size: number;
+  color: string;
+  /** CSS font family; falls back to the site body font. */
+  font?: string;
+};
+
+/** A raster image embedded in the page (stored as a data URL). */
+export type NoteImage = {
+  id: string;
+  kind: "image";
+  src: string;
+  /** Placement and size, in page coordinates. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** Everything a page can contain, in one immutable snapshot. */
+export type PageContent = {
+  strokes: Stroke[];
+  texts: NoteText[];
+  images: NoteImage[];
 };
 
 /** Storage record for a notebook. */

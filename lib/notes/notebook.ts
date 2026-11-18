@@ -13,7 +13,15 @@
 
 import { pageContentStrokes } from "./content";
 import type { NoteRepository } from "./repository";
-import type { NotesTemplate, StorageNotebook, StoragePage, Stroke } from "./types";
+import type {
+  NoteImage,
+  NoteText,
+  NotesTemplate,
+  PageContent,
+  StorageNotebook,
+  StoragePage,
+  Stroke,
+} from "./types";
 
 /** What the editor should render after bootstrapping. */
 export type NotebookBoot =
@@ -71,6 +79,58 @@ export function strokesFromSnapshot(snapshot: unknown): Stroke[] {
       Array.isArray((stroke as Stroke).points) &&
       (stroke as Stroke).points.length > 0,
   );
+}
+
+/**
+ * Rehydrate the full page content (strokes + texts + images) from a persisted
+ * snapshot.
+ *
+ * The snapshot is opaque to the storage layer, so a record written by an older
+ * build — or by a future one — must never crash the editor. Anything that does
+ * not look like the expected shape is dropped. Texts and images are optional:
+ * records written before they existed rehydrate as empty arrays.
+ */
+export function contentFromSnapshot(snapshot: unknown): PageContent {
+  if (snapshot == null || typeof snapshot !== "object") {
+    return { strokes: [], texts: [], images: [] };
+  }
+  const candidate = snapshot as {
+    strokes?: unknown;
+    texts?: unknown;
+    images?: unknown;
+  };
+
+  const strokes = strokesFromSnapshot(snapshot);
+
+  const texts: NoteText[] = Array.isArray(candidate.texts)
+    ? candidate.texts.filter(
+        (text): text is NoteText =>
+          text != null &&
+          typeof text === "object" &&
+          typeof (text as NoteText).id === "string" &&
+          typeof (text as NoteText).text === "string" &&
+          typeof (text as NoteText).x === "number" &&
+          typeof (text as NoteText).y === "number" &&
+          typeof (text as NoteText).size === "number" &&
+          (text as NoteText).size > 0,
+      )
+    : [];
+
+  const images: NoteImage[] = Array.isArray(candidate.images)
+    ? candidate.images.filter(
+        (image): image is NoteImage =>
+          image != null &&
+          typeof image === "object" &&
+          typeof (image as NoteImage).id === "string" &&
+          typeof (image as NoteImage).src === "string" &&
+          typeof (image as NoteImage).x === "number" &&
+          typeof (image as NoteImage).y === "number" &&
+          typeof (image as NoteImage).width === "number" &&
+          typeof (image as NoteImage).height === "number",
+      )
+    : [];
+
+  return { strokes, texts, images };
 }
 
 /** A brand-new empty page record, revision 1. */

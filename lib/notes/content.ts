@@ -13,7 +13,15 @@
 // This module is shared by the IndexedDB storage and the in-memory double so
 // both make exactly the same decision for the same inputs.
 
-import type { NotesTemplate, StorageNotebook, StoragePage, Stroke } from "./types";
+import type {
+  NoteImage,
+  NoteText,
+  NotesTemplate,
+  PageContent,
+  StorageNotebook,
+  StoragePage,
+  Stroke,
+} from "./types";
 
 /** Normalise a revision: legacy records without one are revision 0. */
 export function normalizeRevision(value: unknown): number {
@@ -61,17 +69,32 @@ export function pageContent(page: StoragePage): unknown {
   };
 }
 
-/** Serialize a page's template and strokes into a persistedSnapshot-
- * compatible value. This is the canonical source of truth for a page's
- * drawing content; CAS comparisons in `idbPutRecordIfNewer` use
- * `canonicalJson(pageContent(record))`, so the returned shape must be
- * serializable via `canonicalJson` and stable across sessions.
+/**
+ * Serialize a page's full content into a persistedSnapshot-compatible value.
+ *
+ * This is the canonical source of truth for a page's drawing content; CAS
+ * comparisons in `idbPutRecordIfNewer` use `canonicalJson(pageContent(record))`,
+ * so the returned shape must be serializable via `canonicalJson` and stable
+ * across sessions. Texts and images are optional — older callers that only
+ * pass strokes keep producing the exact same bytes as before.
  */
-export function pageContentStrokes(template: NotesTemplate, strokes: Stroke[]): unknown {
+export function pageContentStrokes(
+  template: NotesTemplate,
+  strokes: Stroke[],
+  texts: NoteText[] = [],
+  images: NoteImage[] = [],
+): unknown {
   return {
     template,
     strokes,
+    texts,
+    images,
   };
+}
+
+/** The empty content of a brand-new page. */
+export function emptyPageContent(): PageContent {
+  return { strokes: [], texts: [], images: [] };
 }
 
 /**
