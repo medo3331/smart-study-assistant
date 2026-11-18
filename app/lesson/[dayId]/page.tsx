@@ -27,6 +27,7 @@ import { SpecializationTools } from "@/components/lesson/SpecializationTools";
 import { LectureLinkModal, type LinkLectureOption, type LinkSuggestion } from "@/components/lesson/LectureLinkModal";
 import { LessonCitedExplanationView } from "@/components/lesson/LessonCitations";
 import type { LessonCitedExplanation } from "@/lib/lesson/citations";
+import OpenNotesBeside from "@/components/notes/OpenNotesBeside";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -343,6 +344,12 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
 
   return (
     <div dir="rtl">
+      <div className="flex justify-end mb-1">
+        <OpenNotesBeside
+          className="btn btn-quiet text-xs px-2.5 py-1.5"
+          label="📝 نوت جانبية"
+        />
+      </div>
       {link ? (
         /* 🔗 الدرس مربوط بمحاضرة — بديل التابات: مصدر واحد + إجراءاته */
         <div className="flex flex-wrap items-center gap-2 bg-paper border border-rule p-2 rounded-[var(--r-sm)]">

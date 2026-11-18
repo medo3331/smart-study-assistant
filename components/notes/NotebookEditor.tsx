@@ -29,6 +29,11 @@ import {
   ensureNotebook,
 } from "@/lib/notes/notebook";
 import type { NoteRepository } from "@/lib/notes/repository";
+import {
+  MAX_PDF_PAGES_PER_IMPORT,
+  loadPdfDocument,
+  renderPdfPageToImage,
+} from "@/lib/notes/pdf";
 import type {
   NoteImage,
   NoteText,
@@ -42,6 +47,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
 import PageThumbs from "@/components/notes/PageThumbs";
+import NotesAssistant from "@/components/notes/NotesAssistant";
 
 /**
  * The notebook editor.
@@ -197,6 +203,18 @@ export default function NotebookEditor({
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
+  // ---- PDF import state ----
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfImportOpen, setPdfImportOpen] = useState(false);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [pdfFrom, setPdfFrom] = useState(1);
+  const [pdfTo, setPdfTo] = useState(1);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<string | null>(null);
+
+  // ---- Split-screen mode (opened beside a lesson) ----
+  const [besideMode, setBesideMode] = useState(false);
+
   // ---- Refs: the drawing hot path must not depend on render closures ----
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -248,6 +266,15 @@ export default function NotebookEditor({
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+
+  // The editor may live in a side window launched from a lesson page.
+  // window.name is read after hydration to avoid an SSR mismatch.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setBesideMode(window.name === "smart-notes-beside");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   // ---- Painting ----
 
@@ -1727,6 +1754,119 @@ export default function NotebookEditor({
     }
   }, [ensureImagesLoaded, notebookTitle, pages, pdfSelected, renderPageToCanvas]);
 
+  // ---- PDF import ----
+
+  const handlePdfFile = useCallback(async (file: File) => {
+    if (!canWrite) return;
+    try {
+      setSaveStatus("idle");
+      setPdfProgress("بنقرا الملف…");
+      setPdfImportOpen(true);
+      const doc = await loadPdfDocument(file);
+      const count = doc.numPages;
+      doc.destroy();
+      if (count < 1) {
+        setPdfImportOpen(false);
+        setMessage("الملف ده مفيهوش صفحات مقروءة.");
+        return;
+      }
+      setPdfPageCount(count);
+      setPdfFrom(1);
+      setPdfTo(Math.min(count, Math.min(10, MAX_PDF_PAGES_PER_IMPORT)));
+      setPdfProgress(null);
+    } catch (error) {
+      console.error("[notes] pdf open failed", error);
+      setPdfImportOpen(false);
+      setPdfProgress(null);
+      setMessage("مقدرناش نقرا ملف الـ PDF — لو ملف مفقولح، جرّب ملف تاني.");
+    }
+  }, [canWrite, setSaveStatus]);
+
+  const confirmPdfImport = useCallback(async () => {
+    const nbId = notebookIdRef.current;
+    if (!nbId || !repo.canWrite) return;
+    const from = Math.max(1, Math.min(pdfFrom, pdfPageCount));
+    const to = Math.max(from, Math.min(pdfTo, pdfPageCount, from + MAX_PDF_PAGES_PER_IMPORT - 1));
+    const count = to - from + 1;
+
+    setPdfBusy(true);
+    try {
+      const file = pdfInputRef.current?.files?.[0];
+      if (!file) {
+        setMessage("اختار ملف الـ PDF الأول.");
+        return;
+      }
+      const doc = await loadPdfDocument(file);
+
+      const imported: UiPage[] = [];
+      for (let number = from; number <= to; number += 1) {
+        setPdfProgress(`بنستورد صفحة ${number - from + 1} من ${count}…`);
+        const { image } = await renderPdfPageToImage(doc, number);
+        const pageId = newId();
+        const noteImage: NoteImage = { id: newId(), kind: "image", ...image };
+        const record = buildEmptyPage({
+          ownerId: repo.ownerId,
+          notebookId: nbId,
+          pageId,
+          template: "blank",
+          now: nowIso(),
+          persistedSnapshot: pageContentStrokes("blank", [], [], [noteImage]),
+        });
+        await repo.savePage(record);
+        imported.push({
+          id: pageId,
+          template: "blank",
+          content: { strokes: [], texts: [], images: [noteImage] },
+          revision: record.revision,
+        });
+      }
+      doc.destroy();
+
+      const nextPages = [...pages, ...imported];
+      const lastImported = imported[imported.length - 1];
+      await saveNotebookRecord(
+        nbId,
+        nextPages.map((page) => page.id),
+        lastImported?.id ?? currentPageIdRef.current,
+        notebookTitle,
+      );
+
+      setPages(nextPages);
+      if (lastImported) {
+        setCurrentPageId(lastImported.id);
+        currentPageIdRef.current = lastImported.id;
+        templateRef.current = "blank";
+        setTemplateState("blank");
+        contentRef.current = emptyPageContent();
+        historyRef.current.reset(contentRef.current);
+        setSelection(null);
+        selectionRef.current = null;
+        syncHistory();
+        paint();
+      }
+      setPdfImportOpen(false);
+      setSaveStatus("saved");
+      setMessage(null);
+    } catch (error) {
+      console.error("[notes] pdf import failed", error);
+      setMessage("فشل استيراد الـ PDF — جرّب تاني.");
+    } finally {
+      setPdfBusy(false);
+      setPdfProgress(null);
+    }
+  }, [
+    notebookTitle,
+    pages,
+    paint,
+    pdfFrom,
+    pdfPageCount,
+    pdfTo,
+    repo,
+    saveNotebookRecord,
+    setSaveStatus,
+    syncHistory,
+  ]);
+
   // ---- Derived UI ----
 
   const currentIndex = currentPageId
@@ -1735,6 +1875,17 @@ export default function NotebookEditor({
   const { canUndo, canRedo } = historyState;
   const eraserActive = tool === "eraser";
   const showTextControls = tool === "text" || selection?.kind === "text";
+
+  /** What the assistant sees: notebook title + the page's typed texts. */
+  const getEditorContext = useCallback(() => {
+    const content = contentRef.current;
+    const typed = content.texts
+      .map((text) => text.text)
+      .filter((line) => line.trim() !== "")
+      .join("\n")
+      .slice(0, 1800);
+    return `دفتر: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
+  }, [currentPageId, notebookTitle, pages]);
 
   /** Text blocks across the whole notebook matching the search query. */
   const searchResults = useMemo(() => {
@@ -1782,6 +1933,11 @@ export default function NotebookEditor({
         >
           {saveStatus === "idle" ? "جاهز" : saveStatus === "saving" ? "بيحفظ…" : saveStatus === "saved" ? "محفوظ" : "فشل الحفظ"}
         </NotesChip>
+        {besideMode ? (
+          <NotesChip tone="ok" title="وضع التقسيم">
+            📌 وضع التقسيم
+          </NotesChip>
+        ) : null}
         <NotesThemeToggle />
       </header>
 
@@ -1865,6 +2021,30 @@ export default function NotebookEditor({
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void insertImageFile(file);
+              event.target.value = "";
+            }}
+          />
+        </div>
+
+        <div className="notes-group">
+          <button
+            type="button"
+            onClick={() => pdfInputRef.current?.click()}
+            disabled={!canWrite}
+            title="استورد PDF واكتب عليه"
+            className="notes-btn"
+          >
+            <span aria-hidden="true">📄</span>
+            <span>PDF</span>
+          </button>
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handlePdfFile(file);
               event.target.value = "";
             }}
           />
@@ -2309,6 +2489,83 @@ export default function NotebookEditor({
         <kbd>V</kbd> · التعديلات بتتحفظ تلقائياً.
       </p>
 
+      {/* PDF import dialog */}
+      {pdfImportOpen ? (
+        <div
+          className="notes-modal-backdrop"
+          onClick={() => {
+            if (!pdfBusy) setPdfImportOpen(false);
+          }}
+          role="presentation"
+        >
+          <div
+            className="notes-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="استيراد PDF"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="notes-modal-title">استيراد PDF</h2>
+            <p className="notes-modal-sub">
+              كل صفحة PDF بتبقى خلفية لصفحة نوته — تكتب وترسم وتظلل عليها بكل
+              الأدوات، وبتفضل محفوظة على جهازك.
+            </p>
+            {pdfProgress ? (
+              <p className="notes-hint" aria-live="polite">{pdfProgress}</p>
+            ) : pdfPageCount > 0 ? (
+              <>
+                <p className="notes-modal-sub">
+                  الملف فيه {pdfPageCount} صفحة. اختار النطاق (حد أقصى {MAX_PDF_PAGES_PER_IMPORT} صفحة في المرة):
+                </p>
+                <div className="notes-modal-actions">
+                  <label className="notes-label">
+                    من
+                    <input
+                      type="number"
+                      min={1}
+                      max={pdfPageCount}
+                      value={pdfFrom}
+                      onChange={(event) => setPdfFrom(Number(event.target.value))}
+                      className="notes-input notes-btn-sm"
+                    />
+                  </label>
+                  <label className="notes-label">
+                    إلى
+                    <input
+                      type="number"
+                      min={1}
+                      max={pdfPageCount}
+                      value={pdfTo}
+                      onChange={(event) => setPdfTo(Number(event.target.value))}
+                      className="notes-input notes-btn-sm"
+                    />
+                  </label>
+                </div>
+                <div className="notes-modal-actions">
+                  <div className="notes-spacer" />
+                  <button
+                    type="button"
+                    onClick={() => setPdfImportOpen(false)}
+                    className="notes-btn notes-btn-sm"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmPdfImport()}
+                    disabled={pdfBusy}
+                    data-tone="primary"
+                    className="notes-btn"
+                  >
+                    {pdfBusy ? "بنستورد…" : "استيراد"}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {/* PDF export dialog */}
       {pdfOpen ? (
         <div
@@ -2384,6 +2641,8 @@ export default function NotebookEditor({
           </div>
         </div>
       ) : null}
+
+      <NotesAssistant getEditorContext={getEditorContext} />
     </div>
   );
 }
