@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { emptyPageContent, pageContentStrokes } from "@/lib/notes/content";
 import { classifyNotesError } from "@/lib/notes/errors";
@@ -41,6 +41,7 @@ import type { SaveStatus } from "@/hooks/useNoteRepository";
 import { useTheme } from "@/theme/ThemeProvider";
 import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
+import PageThumbs from "@/components/notes/PageThumbs";
 
 /**
  * The notebook editor.
@@ -191,6 +192,10 @@ export default function NotebookEditor({
   const [pdfOpen, setPdfOpen] = useState(false);
   const [pdfSelected, setPdfSelected] = useState<Set<string>>(new Set());
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // ---- In-notebook text search state ----
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
   // ---- Refs: the drawing hot path must not depend on render closures ----
   const containerRef = useRef<HTMLDivElement>(null);
@@ -816,6 +821,110 @@ export default function NotebookEditor({
       setSaveStatus("error");
     }
   }, [notebookTitle, paint, pages, repo, saveNotebookRecord, setSaveStatus, syncHistory]);
+
+  /** Copy the current page's content into a fresh page right after it. */
+  const duplicatePage = useCallback(async () => {
+    const nbId = notebookIdRef.current;
+    const sourceId = currentPageIdRef.current;
+    if (!nbId || !sourceId || !repo.canWrite) return;
+    const index = pages.findIndex((page) => page.id === sourceId);
+    if (index < 0) return;
+
+    try {
+      setSaveStatus("saving");
+      await saveCurrentPage();
+
+      const timestamp = nowIso();
+      const pageId = newId();
+      const source = pages[index];
+      const record = buildEmptyPage({
+        ownerId: repo.ownerId,
+        notebookId: nbId,
+        pageId,
+        template: source.template,
+        now: timestamp,
+        persistedSnapshot: pageContentStrokes(
+          source.template,
+          source.content.strokes,
+          source.content.texts,
+          source.content.images,
+        ),
+      });
+      await repo.savePage(record);
+
+      const nextPages = [
+        ...pages.slice(0, index + 1),
+        { id: pageId, template: source.template, content: source.content, revision: record.revision },
+        ...pages.slice(index + 1),
+      ];
+      await saveNotebookRecord(
+        nbId,
+        nextPages.map((page) => page.id),
+        pageId,
+        notebookTitle,
+      );
+
+      setPages(nextPages);
+      setCurrentPageId(pageId);
+      currentPageIdRef.current = pageId;
+      templateRef.current = source.template;
+      setTemplateState(source.template);
+      contentRef.current = {
+        strokes: [...source.content.strokes],
+        texts: [...source.content.texts],
+        images: [...source.content.images],
+      };
+      historyRef.current.reset(contentRef.current);
+      setSelection(null);
+      selectionRef.current = null;
+      syncHistory();
+      paint();
+      setSaveStatus("saved");
+    } catch (error) {
+      console.error("[notes] duplicate page failed", classifyNotesError(error), error);
+      setSaveStatus("error");
+    }
+  }, [
+    notebookTitle,
+    paint,
+    pages,
+    repo,
+    saveCurrentPage,
+    saveNotebookRecord,
+    setSaveStatus,
+    syncHistory,
+  ]);
+
+  /** Swap a page with its neighbour, persisting the new order. */
+  const movePage = useCallback(
+    async (pageId: string, delta: -1 | 1) => {
+      const nbId = notebookIdRef.current;
+      if (!nbId || !repo.canWrite) return;
+      const index = pages.findIndex((page) => page.id === pageId);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= pages.length) return;
+
+      const nextPages = [...pages];
+      const [moved] = nextPages.splice(index, 1);
+      nextPages.splice(target, 0, moved);
+      setPages(nextPages);
+
+      try {
+        await saveNotebookRecord(
+          nbId,
+          nextPages.map((page) => page.id),
+          currentPageIdRef.current,
+          notebookTitle,
+        );
+        setSaveStatus("saved");
+      } catch (error) {
+        console.error("[notes] reorder failed", classifyNotesError(error), error);
+        setSaveStatus("error");
+        // The next notebook write will reconcile the stored order.
+      }
+    },
+    [notebookTitle, pages, repo, saveNotebookRecord, setSaveStatus],
+  );
 
   const changeTemplate = useCallback(
     (template: NotesTemplate) => {
@@ -1627,6 +1736,22 @@ export default function NotebookEditor({
   const eraserActive = tool === "eraser";
   const showTextControls = tool === "text" || selection?.kind === "text";
 
+  /** Text blocks across the whole notebook matching the search query. */
+  const searchResults = useMemo(() => {
+    const needle = query.trim();
+    if (needle === "") return [];
+    return pages.flatMap((page, pageIndex) =>
+      page.content.texts
+        .filter((text) => text.text.includes(needle))
+        .map((text) => ({
+          pageId: page.id,
+          pageIndex,
+          textId: text.id,
+          snippet: text.text.replace(/\s+/g, " ").slice(0, 80),
+        })),
+    );
+  }, [pages, query]);
+
   const textEditorStyle = textDraft
     ? {
         left: textDraft.x * view.zoom + view.panX,
@@ -2061,6 +2186,44 @@ export default function NotebookEditor({
             </option>
           ))}
         </select>
+
+        <span className="notes-sep" aria-hidden="true" />
+
+        <button
+          type="button"
+          onClick={() => {
+            const current = currentPageId;
+            if (current) void movePage(current, -1);
+          }}
+          disabled={!canWrite || currentIndex <= 0}
+          title="حرك الصفحة لقدام"
+          aria-label="حرك الصفحة لقدام"
+          className="notes-btn notes-btn-sm"
+        >
+          ⟲ ترتيب
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const current = currentPageId;
+            if (current) void movePage(current, 1);
+          }}
+          disabled={!canWrite || currentIndex < 0 || currentIndex >= pages.length - 1}
+          title="حرك الصفحة لورا"
+          aria-label="حرك الصفحة لورا"
+          className="notes-btn notes-btn-sm"
+        >
+          ⟳ ترتيب
+        </button>
+        <button
+          type="button"
+          onClick={() => void duplicatePage()}
+          disabled={!canWrite || currentIndex < 0}
+          title="انسخ الصفحة الحالية بكل محتواها"
+          className="notes-btn notes-btn-sm"
+        >
+          ⧉ تكرار
+        </button>
         <button
           type="button"
           onClick={() => void addPage()}
@@ -2079,7 +2242,65 @@ export default function NotebookEditor({
         >
           حذف الصفحة
         </button>
+
+        <span className="notes-sep" aria-hidden="true" />
+
+        <button
+          type="button"
+          onClick={() => setSearchOpen((open) => !open)}
+          data-active={searchOpen}
+          aria-expanded={searchOpen}
+          className="notes-btn notes-btn-sm"
+        >
+          🔍 بحث
+        </button>
       </div>
+
+      {/* Visual page navigator */}
+      <PageThumbs
+        pages={pages.map((page) => ({
+          id: page.id,
+          template: page.template,
+          content: page.content,
+        }))}
+        activePageId={currentPageId}
+        lookup={lookupImage}
+        onSelect={(pageId) => void selectPage(pageId)}
+      />
+
+      {/* Search inside the notebook's typed texts */}
+      {searchOpen ? (
+        <div className="notes-search">
+          <input
+            autoFocus
+            type="search"
+            value={query}
+            placeholder="ابحث في نصوص الدفتر…"
+            aria-label="ابحث في نصوص الدفتر"
+            className="notes-input"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <div className="notes-search-results">
+            {query.trim() === "" ? (
+              <p className="notes-search-empty">اكتب كلمة للبحث في كل النصوص المكتوبة.</p>
+            ) : searchResults.length === 0 ? (
+              <p className="notes-search-empty">مفيش نتائج للبحث ده.</p>
+            ) : (
+              searchResults.map((result) => (
+                <button
+                  key={`${result.pageId}-${result.textId}`}
+                  type="button"
+                  className="notes-search-hit"
+                  onClick={() => void selectPage(result.pageId)}
+                >
+                  <span className="notes-search-page">صفحة {result.pageIndex + 1}</span>
+                  <span className="notes-search-snippet">{result.snippet}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <p className="notes-hint">
         <kbd>مسافة</kbd> + سحب للتحريك · <kbd>Ctrl</kbd> + عجلة للتكبير ·{" "}

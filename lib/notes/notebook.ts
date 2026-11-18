@@ -62,6 +62,26 @@ export function sortPagesByCreation(pages: readonly StoragePage[]): StoragePage[
 }
 
 /**
+ * Order pages the way the notebook record says (its pageIds list), falling
+ * back to creation order for any page the list does not mention yet.
+ *
+ * Reordering writes the new order into `StorageNotebook.pageIds`; honoring it
+ * here is what makes a manual reordering survive a reload.
+ */
+export function orderPagesForNotebook(
+  pages: readonly StoragePage[],
+  pageIds: readonly string[],
+): StoragePage[] {
+  const byId = new Map(pages.map((page) => [page.id, page] as const));
+  const listed = pageIds
+    .map((id) => byId.get(id))
+    .filter((page): page is StoragePage => page != null);
+  const mentioned = new Set(pageIds);
+  const rest = sortPagesByCreation(pages.filter((page) => !mentioned.has(page.id)));
+  return [...listed, ...rest];
+}
+
+/**
  * Rehydrate strokes from a persisted snapshot.
  *
  * The snapshot is opaque to the storage layer, so a record written by an older
@@ -241,7 +261,10 @@ export async function ensureNotebook(
   if (requestedNotebookId && !target) return { status: "missing" };
 
   if (target) {
-    const pages = sortPagesByCreation(await repo.listPages(target.id));
+    const pages = orderPagesForNotebook(
+      await repo.listPages(target.id),
+      target.pageIds,
+    );
 
     if (pages.length === 0) {
       if (!repo.canWrite) return { status: "read-only-empty", reason: "no-pages" };

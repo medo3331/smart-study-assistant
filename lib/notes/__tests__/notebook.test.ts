@@ -14,6 +14,7 @@ import {
   buildPageSave,
   contentFromSnapshot,
   ensureNotebook,
+  orderPagesForNotebook,
   sortNotebooksByRecency,
   sortPagesByCreation,
   strokesFromSnapshot,
@@ -306,6 +307,24 @@ describe("ordering helpers", () => {
       page("p1", "nb", NOW),
     ]);
     expect(sorted.map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("orders pages by the notebook's pageIds list", () => {
+    const pages = [page("p1", "nb", NOW), page("p2", "nb", LATER), page("p3", "nb", LATER)];
+    const ordered = orderPagesForNotebook(pages, ["p3", "p1", "p2"]);
+    expect(ordered.map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
+  });
+
+  it("falls back to creation order for pages missing from the list", () => {
+    const pages = [page("p1", "nb", NOW), page("p2", "nb", LATER), page("p3", "nb", LATER)];
+    const ordered = orderPagesForNotebook(pages, ["p3"]);
+    expect(ordered.map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
+  });
+
+  it("ignores pageIds that point at nothing", () => {
+    const pages = [page("p1", "nb", NOW), page("p2", "nb", LATER)];
+    const ordered = orderPagesForNotebook(pages, ["p1", "ghost", "p2"]);
+    expect(ordered.map((p) => p.id)).toEqual(["p1", "p2"]);
   });
 });
 
