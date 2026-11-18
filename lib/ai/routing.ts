@@ -324,6 +324,49 @@ function shouldTryNextCandidate(error: { status: number; message?: string }): bo
  *
  * البوابة الموحّدة في كل الحالات: enabled + freeEndpoint + تهيئة المزوّد + صحته.
  */
+/**
+ * 🔀 **تجاوز بيئي لاختيار موديلات التوليد** — `EXAM_GENERATION_MODELS`.
+ *
+ * ⚠️ **ليه**: في الإنتاج كل نداءات لـGroq بس وتوقّفت. تشغيل
+ *    موديل تاني (مثل `llama-3.3-70b-versatile`) لازم يكون **قرار
+ *    تشغيلي** مش تعديل كود ⇒ متغير بيئة في Vercel = تبديل فوري ✓
+ *    من غير إعادة نشر.
+ *
+ * ⚠️ **الموديل لازم يكون مسجّل في `MODEL_REGISTRY`** (و `enabled`) وإلا
+ *    الراوتر يتجاهله (بالتصميم) ✓.
+ */
+export function primaryProviderForTask(
+  task: AiTaskType,
+  hasImage: boolean
+): AiProviderName {
+  if (hasImage) return "openrouter";
+  /**
+   * 🔀 **تجاوز بيئي لمزوّد التوليد** — `EXAM_GENERATION_PROVIDER`.
+   *
+   * ⚠️ **ليه**: لو Groq بقى مشغول/محدود في الإنتاج، التحول لـ
+   *    `openrouter` (موديلات سريعة زي `openai/gpt-4o-mini`) قرار تشغيلي
+   *    بمتغير بيئة، من غير كود وإعادة نشر ✓.
+   */
+  if (task === "exam_generation") {
+    const override = (process.env.EXAM_GENERATION_PROVIDER ?? "").trim();
+    if (override === "openrouter" || override === "groq" || override === "nvidia") {
+      return override;
+    }
+  }
+  return AI_PROVIDER_BY_TASK[task];
+}
+
+export function preferenceForTask(task: AiTaskType): readonly string[] {
+  if (task === "exam_generation") {
+    const override = (process.env.EXAM_GENERATION_MODELS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (override.length > 0) return override;
+  }
+  return TASK_MODEL_PREFERENCE[task] ?? [];
+}
+
 export function routeCandidates(
   task: AiTaskType,
   now: Date = new Date(),
@@ -334,7 +377,7 @@ export function routeCandidates(
   const required = hasImage
     ? [...TASK_CAPABILITIES[task], "vision" as AiCapability]
     : TASK_CAPABILITIES[task];
-  const primaryProvider = hasImage ? "openrouter" : AI_PROVIDER_BY_TASK[task];
+  const primaryProvider = primaryProviderForTask(task, hasImage);
   const allowPaid = paidModelsAllowed();
   const candidates: RouteCandidate[] = [];
 
@@ -364,7 +407,7 @@ export function routeCandidates(
   };
 
   // ١) مصفوفة تفضيل المهمة — بالترتيب المعلن، والموقوف/غير الصحي بيتخطى ديناميكيًا.
-  for (const modelId of TASK_MODEL_PREFERENCE[task] ?? []) {
+  for (const modelId of preferenceForTask(task)) {
     const preferred = MODEL_REGISTRY.find((model) => model.id === modelId);
     if (!preferred || !isUsable(preferred.provider)) continue;
     if (hasImage && preferred.provider === "gemini") continue;

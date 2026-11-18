@@ -24,8 +24,18 @@ import { chunkTranscript } from "./lecture-prompts";
 /** أقصى عدد حروف لكل مصدر (متوافق مع سقف الجلسة في القاعدة: 60 ألف). */
 export const EXAM_SOURCE_MAX_CHARS = 60_000;
 
-/** طول القطعة الواحدة (نفس `DEFAULT_CHUNK_CHARS` بتاع المحاضرات). */
-export const EXAM_SOURCE_CHUNK_CHARS = 6_000;
+/**
+ * طول القطعة الواحدة (حرف) — 3000.
+ *
+ * ⚠️ **ليه 3000**: كل نداءة بتروح لنص أطول = وقت + توكنز أكتر. النداء
+ *    الواحد بقى أسرع ملحوظ (1.3s بدل 12s على gpt-oss-20b) وبقلّة حجم
+ *    كل نداء احتمال الفشل (JSON مبتور/مهلات) بتقلّ.
+ *
+ * ⚠️ **الside effect**: قطع أكتر = نداءات أكتر ⇒ **ميزانية_SESSION لازم
+ *    تتحسب من عدد القطع** (مش رقم ثابت) — وإلا امتحان طويل هيقع في
+ *    BUDGET (429) وميتولّدش.
+ */
+export const EXAM_SOURCE_CHUNK_CHARS = 3_000;
 
 /** نوع مصدر البند. */
 export type ExamSourceKind = "recording" | "document" | "topic";

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { requireUser, clampText } from "@/lib/api-guard";
 import { createExamSession, selectSessionItems, type ExamSessionMode } from "@/lib/ai/exam-sessions";
 import { parseExamSpec, DEFAULT_EXAM_SPEC } from "@/lib/ai/exam-review";
-import { normalizeTopic } from "@/lib/ai/exam-sources";
+import { normalizeTopic, readDocumentText } from "@/lib/ai/exam-sources";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 /**
@@ -212,6 +212,49 @@ export async function POST(req: Request) {
     logContext.topic = topic;
     logContext.mode = mode;
     logContext.spec = spec;
+
+    /**
+     * ⚠️ **فحص مسبق للمصادر**: مصدر **بلا نص** (PDF صور/مشفّر، أو محاضرة
+     *    من غير تفريغ) = جلسة ميتة (404/422 بعدين) + **كريدت محجوز** ✗.
+     *    ⇒ بنرفض قبل الإنشاء برسالة واضحة (422) ✓.
+     */
+    const emptySources: string[] = [];
+    if (lectureIds.length > 0) {
+      const { data: lectureRows } = await supabase
+        .from("lectures")
+        .select("id, title, transcript_text")
+        .in("id", lectureIds)
+        .eq("user_id", user.id);
+      for (const row of (lectureRows ?? []) as Array<{
+        id: string;
+        title?: string | null;
+        transcript_text?: string | null;
+      }>) {
+        if (typeof row.transcript_text !== "string" || !row.transcript_text.trim()) {
+          emptySources.push(row.title?.trim() || "محاضرة بدون تفريغ");
+        }
+      }
+      // ⚠️ معرّف مش موجود أصلاً (مش ملك المستخدم) — الـRPC هيرفضه.
+      const found = new Set(((lectureRows ?? []) as Array<{ id: string }>).map((r) => r.id));
+      for (const id of lectureIds) {
+        if (!found.has(id)) emptySources.push("محاضرة مش موجودة");
+      }
+    }
+    if (documentIds.length > 0) {
+      const admin = createServiceClient();
+      for (const documentId of documentIds) {
+        const document = await readDocumentText(admin, { documentId, userId: user.id });
+        if (!document) emptySources.push("مستند مفيهوش نص قابل للقراءة");
+      }
+    }
+    if (emptySources.length > 0) {
+      console.warn("[exam-sessions] create — sources without text", {
+        emptySources,
+        lectureIds: lectureIds.length,
+        documentIds: documentIds.length,
+      });
+      return fail("SOURCE_WITHOUT_TEXT", 422, emptySources.join(" · "));
+    }
 
     const created = await createExamSession(supabase, {
       mode,

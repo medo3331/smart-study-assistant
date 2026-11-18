@@ -49,16 +49,26 @@ function mapProcessError(
         return "الطلب اتأخر وقت التوليد — جرّب تاني بعد شوية.";
       case "AI_EMPTY_RESPONSE":
         return "الموديل رجّع رد فاضي — جرّب تاني.";
+      case "AI_PROVIDER_UNAVAILABLE":
+        return "مزوّد الذكاء الاصطناعي مش متاح دلوقتي — جرب تاني بعد دقيقة.";
       case "SOURCE_TABLE_MISSING":
       case "SOURCE_UNAVAILABLE":
         return "المستندات لسه مفعّلةش على السيرفر — جرّب المحاضرات الصوتية.";
       default:
-        return "السيرفر مشغول جداً حالياً — جرب تاني بعد شوية.";
+        return "السيرفر مشغول جداً — جرب تاني بعد دقيقة.";
     }
   }
   if (status === 502) return "الخدمة رجعت خطأ أثناء التوليد — جرّب تاني.";
   if (status === 402) return "رصيدك مش كافٍ.";
-  if (status === 404) return "الجلسة مش موجودة.";
+  // ⚠️ 422 = المصدر بلا نص (مستند صور/مشفّر، أو محاضرة من غير تفريغ).
+  if (status === 422) {
+    return data?.error === "NO_TEXT"
+      ? "المستند ده مفيهوش نص قابل للقراءة — ارفع ملف تاني."
+      : data?.detail || "المصدر مفيهوش نص — جرّب مصدر تاني.";
+  }
+  if (status === 404) {
+    return "مقدرناش نلاقي جلسة الامتحان — جرّب تاني بعد ثانية أو ابدأ امتحانًا جديدًا.";
+  }
   return data?.error || "حصل خطأ أثناء التجهيز — جرّب تاني.";
 }
 
@@ -81,6 +91,8 @@ export function ExamRunner({
   // ⚠️ عدّاد ضغط الخدمة: كل 503 متتالي = محاولة تانية مجاندة، بعدين بنوقف
   //    ونعرض رسالة واضحة + زرار إعادة (مش حلقة لا نهائية).
   const busyStreakRef = useRef(0);
+  /** 🔁 عدّاد محاولات البحث عن الجلسة بعد 404 (تأخّر الـreplica). */
+  let missingSessionTries = 0;
 
   useEffect(() => {
     stopRef.current = false;
@@ -96,8 +108,25 @@ export function ExamRunner({
             | (SessionState & { error?: string })
             | null;
           if (cancelled || stopRef.current) return;
+          /**
+           * ⚠️ **404 = تأخّر الـreplica غالباً**: الجلسة اتعملت قبل لحظات
+           *   والقراءة وقعت على replica لسه ماCatchت الكتابة ⇒ 404 مؤقت.
+           *   ⇒ بنستنى ونجرب تاني (3 مرات) بدل ما نعرض «الجلسة مش موجودة»
+           *   ونخسر الطالب امتحانه ✗.
+           */
+          if (stateRes.status === 404 && !state?.error) {
+            missingSessionTries += 1;
+            if (missingSessionTries <= 3) {
+              await sleep(1500);
+              continue;
+            }
+          }
           if (!stateRes.ok || !state) {
-            throw new Error(state?.error || "مقدرناش نقرأ حالة الامتحان.");
+            throw new Error(
+              state?.error === "NOT_FOUND"
+                ? "مقدرناش نلاقي جلسة الامتحان — جرّب تاني أو ابدأ امتحانًا جديدًا."
+                : state?.error || "مقدرناش نقرأ حالة الامتحان."
+            );
           }
 
           setItems(state.items ?? []);

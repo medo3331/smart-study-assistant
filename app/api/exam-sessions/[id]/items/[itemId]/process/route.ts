@@ -24,6 +24,7 @@ import {
 import {
   buildExamSource,
   readDocumentText,
+  EXAM_SOURCE_CHUNK_CHARS,
   type ExamSourceKind,
 } from "@/lib/ai/exam-sources";
 
@@ -56,6 +57,21 @@ const MAX_ITEM_ATTEMPTS = 2;
  *    موجود من قبل التقسيم). دلوقتي السقف = 15 × عدد المحاضرات.
  */
 const MAX_LOGICAL_CALLS_PER_ITEM = MAX_LOGICAL_CALLS;
+
+/** 🔁 مهلة الانتظار بين محاولتي قراءة الجلسة (تأخّر الـreplica). */
+const REPLICA_RETRY_DELAY_MS = 700;
+
+/** صف الجلسة (الأعمدة اللي بنقراها في مسار المعالجة). */
+type SessionRow = {
+  id: string;
+  status: string;
+  started_at: string | null;
+  total_lectures: number | null;
+  total_chars?: number | null;
+  logical_calls_used: number | null;
+  provider_attempts_used: number | null;
+  metadata: unknown;
+};
 const MAX_PROVIDER_ATTEMPTS_PER_ITEM = MAX_PROVIDER_ATTEMPTS;
 
 /**
@@ -161,14 +177,26 @@ export async function POST(
   logContext.itemId = itemId;
 
   // ── ١) الجلسة (ملكية صريحة)
-  const { data: session, error: sessionError } = await supabase
-    .from("exam_sessions")
-    .select(
-      "id, status, started_at, total_lectures, logical_calls_used, provider_attempts_used, metadata"
-    )
-    .eq("id", sessionId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  //
+  // ⚠️ **قراءة واحدة + إعادة محاولة واحدة**: الجلسة اتعملت قبل لحظات
+  //   (بعد الإنشاء) والقراءة ممكن تقع على **replica لسه ماCatchت الكتابة**
+  //   ⇒ 404 مؤقت. فبنستنى نص ثانية ونجرب تاني قبل ما تقول «مش موجودة» ✓.
+  let session: SessionRow | null = null;
+  let sessionError: { message?: string } | null = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const read = await supabase
+      .from("exam_sessions")
+      .select(
+        "id, status, started_at, total_lectures, total_chars, logical_calls_used, provider_attempts_used, metadata"
+      )
+      .eq("id", sessionId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    session = read.data as SessionRow | null;
+    sessionError = read.error;
+    if (read.data || read.error) break;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, REPLICA_RETRY_DELAY_MS));
+  }
 
   if (sessionError) {
     logCrash("read session", sessionError, { ...logContext });
@@ -195,7 +223,13 @@ export async function POST(
         : "could not read item";
     return fail("INTERNAL", 500, { detail });
   }
-  if (!item) return fail("NOT_FOUND", 404);
+  if (!item) {
+    // ⚠️ نفس فكرة الجلسة: البند اتعمل مع الجلسة ⇒ ممكن يكون تأخّر replica.
+    logCrash("item not found (maybe replica lag)", new Error("item not found"), {
+      ...logContext,
+    });
+    return fail("NOT_FOUND", 404, { detail: "item not found" });
+  }
 
   // ── ٣) الجلسة مغلقة؟
   if (["completed", "failed", "abandoned"].includes(session.status)) {
@@ -250,7 +284,18 @@ export async function POST(
       }
       return fail("SOURCE_UNAVAILABLE", 503, { detail: "could not read document" });
     }
-    if (!document) return fail("NOT_FOUND", 404);
+    if (!document) {
+      // ⚠️ **مستند موجود بس مفيهوش نص مستخرج** (PDF صور/مشفّر/فارغ):
+      //    ده كان بيرجّع **404** ⇒ والواجبة كانت بتقول «الجلسة مش موجودة»
+      //    والطالب مش فاهم حاجة. الصواب: **422** برسالة واضحة ✓.
+      logCrash("document without extractable text", new Error("no text"), {
+        ...logContext,
+        document_id: itemRow.document_id,
+      });
+      return fail("NO_TEXT", 422, {
+        detail: "المستند مفيهوش نص قابل للقراءة — ارفع ملف تاني",
+      });
+    }
     transcript = document.text;
     sourceTitle = document.title;
   } else {
@@ -329,10 +374,25 @@ export async function POST(
   const estimate = estimateItemBudget(chunks.length, spec.count);
 
   const totalLectures = Math.max(1, Number(session.total_lectures) || 1);
-  const sessionLogicalCap = MAX_LOGICAL_CALLS_PER_ITEM * totalLectures;
-  const sessionAttemptsCap = MAX_PROVIDER_ATTEMPTS_PER_ITEM * totalLectures;
+  /**
+   * ⚠️ **السقف بيتحسب من حجم الجلسة الحقيقي** (مش رقم ثابت):
+   *    لقط المصدر بقى 3000 حرف (بدل 6000) ⇒ القطع بضعف ⇒ نداءات
+   *    أكتر ⇒ سقف ثابت 15 كان هيقع في **BUDGET (429)** على
+   *    الجلسات الطويلة.
+   *
+   *    ⇒ السقف = (نداءات الجلسة المتوقعة) + هامش للإصلاح.
+   *    عدد قطع الجلسة ≈ ceil(total_chars / حجم_القطعة).
+   */
+  const sessionChunks = Math.max(
+    1,
+    Math.ceil(Math.max(0, Number(session.total_chars) || 0) / EXAM_SOURCE_CHUNK_CHARS)
+  );
+  const sessionLogicalCap =
+    estimateItemBudget(sessionChunks, spec.count).logical + MAX_LOGICAL_CALLS_PER_ITEM;
+  const sessionAttemptsCap =
+    estimateItemBudget(sessionChunks, spec.count).attempts + MAX_PROVIDER_ATTEMPTS_PER_ITEM;
 
-  if (session.logical_calls_used + estimate.logical > sessionLogicalCap) {
+  if ((session.logical_calls_used ?? 0) + estimate.logical > sessionLogicalCap) {
     await failItem(supabase, {
       itemId,
       claimToken,
@@ -341,7 +401,7 @@ export async function POST(
     });
     return fail("BUDGET", 429, { detail: "logical" });
   }
-  if (session.provider_attempts_used + estimate.attempts > sessionAttemptsCap) {
+  if ((session.provider_attempts_used ?? 0) + estimate.attempts > sessionAttemptsCap) {
     await failItem(supabase, {
       itemId,
       claimToken,
@@ -557,7 +617,7 @@ export async function POST(
     .eq("status", "ready");
 
   const allReady =
-    typeof readyCount === "number" && readyCount >= session.total_lectures;
+    typeof readyCount === "number" && readyCount >= (session.total_lectures ?? 1);
   await setSessionStatus({
     sessionId,
     userId: user.id,

@@ -169,18 +169,23 @@ export class ExamLeaseLostError extends Error {
  *    `content` **فاضي** ⇒ المزوّد بيرمي ⇒ الراوتر بيحاول مزوّد تاني ⇒
  *    وآخر حاجة 503 «كل المزوّدات فشلوا». ده كان سبب الـ 503 في التوليد.
  *
- * الأرقام: 600 توكن/سؤال تقديري (السؤال + الاختيارات + التفسير) مع
- * حد أدنى 4000 (يسع تفكير الموديل + المخرج) وسقف 16000.
+ * الأرقام: 800 توكن/سؤال تقديري (السؤال + الاختيارات + التفسير) مع
+ * حد أدنى 2000 وسقف 4096.
+ *
+ * ⚠️ **ليه 4096 مش 16000**: النداء الطويل بيخلّي الموديل يطلّع **محتوى
+ *    مبتور** (content ناقص ⇒ JSON مش صالح ⇒ 502).
+ * ⚠️ **اتأكد حيّ**: 5 أسئلة على `gpt-oss-20b` = **1270 توكن** (فيهم
+ *    توكنز التفكير) ⇒ 2048 **بمبتور** ⇒ 4096 هو الحد الآمن ✓.
  */
 export function examMaxTokens(aiTask: ExamAiTask, quota = 1): number {
   switch (aiTask) {
     case "summary":
-      return 4_000;
+      return 3_000;
     case "summary_merge":
-      return 6_000;
+      return 2_500;
     case "questions":
     case "questions_repair":
-      return Math.min(16_000, Math.max(4_000, Math.trunc(quota) * 600));
+      return Math.min(4_096, Math.max(2_000, Math.trunc(quota) * 800));
   }
 }
 
@@ -401,6 +406,10 @@ function specRules(spec: ExamSpec, mode: ExamKnowledgeMode = "source"): string[]
   const general = mode === "general";
   const rules = [
     `اكتب بالضبط ${spec.count} سؤالًا بصيغة JSON فقط بالشكل:`,
+    // ⚠️ **توضيح الظرف**: الموديلات السريعة (gpt-oss-20b) بترجع Array
+    //    مباشر بدل الـobject ⇒ الـparse بيرمي ⇒ 502/503. فالمثال بقى
+    //    كامل (بطاقة questions) والـparser بيقبل الشكلين مع بعض ✓.
+    `  {"questions":[ … ${spec.count} عنصر … ]}`,
     ...typeShapes(spec.types).map((shape) => `  ${shape}`),
     "",
     `الأنواع المطلوبة بالظبط: ${labels}. أي سؤال بغير هذا النوع مرفوض.`,
@@ -574,6 +583,19 @@ function parseQuestionsEnvelope(raw: string): unknown[] {
     throw new ExamReviewError("INVALID_QUESTIONS_OUTPUT", "رد غير صالح من الموديل (مش JSON).");
   }
   try {
+    // ⚠️ **شكلين مقبولين**:
+    //   ① `{"questions":[ … ]}` (المطلوب في البرومبت).
+    //   ② `[ … ]` (Array مباشر) — وده اللي **الموديلات السريعة بترجعه**
+    //      فعليًا (اتأكدنا منه بنداء حي: gpt-oss-20b رجّع Array مباشر ⇒
+    //      الـparse كان بيرمي ⇒ كل الامتحانات فشلت بـ502/503).
+    //   ⇒ نقبل الاتنين بدل ما نخسر الامتحان كله على تفصيلة شكل.
+    if (Array.isArray(parsed)) {
+      const list = expectArray(parsed);
+      if (list.length === 0) {
+        throw new Error("Expected a non-empty array of questions");
+      }
+      return list;
+    }
     const root = expectObject(parsed);
     rejectUnknownKeys(root, ["questions"], "questions root");
     const list = expectArray(root.questions);

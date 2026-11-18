@@ -106,8 +106,10 @@ describe("المرونة — تقسيم النداءات وإعادة المحا
     expect(engine).toContain("estimateQuestionCalls(chunks, count)");
     const route = read(PROCESS_ROUTE);
     expect(route).toContain("estimateItemBudget(chunks.length, spec.count)");
-    // ⚠️ السقف لازم يتضاعف × عدد محاضرات الجلسة (كان ثابت 15 ⇒ BUDGET واطي).
-    expect(route).toContain("MAX_LOGICAL_CALLS_PER_ITEM * totalLectures");
+    // ⚠️ السقف لازم يتحسب من **عدد قطع الجلسة** (كان ثابت 15 ⇒ BUDGET واطي
+    //    لما القطع بقت أصغر = نداءات أكتر).
+    expect(route).toContain("estimateItemBudget(sessionChunks, spec.count).logical");
+    expect(route).toContain("EXAM_SOURCE_CHUNK_CHARS");
   });
 
   it("Groq: withRetry + retry-after + تدوير المفاتيح", () => {
@@ -386,5 +388,31 @@ describe("🔥 تخصيص الموديل لكل ميزة (Task-Specific Models)"
     // ⚠️ قائمة تفضيلات التوليد ما فيهاش الموديل المحجوب.
     const block = routing.slice(routing.indexOf("exam_generation: ["), routing.indexOf("]", routing.indexOf("exam_generation: [")));
     expect(block).not.toContain("llama-3.3-70b-versatile");
+  });
+
+  it("الـ404 المؤقت (تأخّر الـreplica) بيتعالج، مش خطأ نهائي", () => {
+    const route = read(PROCESS_ROUTE);
+    // ⚠️ قراءة واحدة + إعادة محاولة واحدة قبل «مش موجودة».
+    expect(route).toContain("REPLICA_RETRY_DELAY_MS");
+    const runner = read("components/exams/ExamRunner.tsx");
+    expect(runner).toContain("missingSessionTries");
+    expect(runner).toContain("stateRes.status === 404");
+  });
+
+  it("مصدر بلا نص ⇒ 422 (مش 404 و.message واضحة)", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain('fail("NO_TEXT", 422');
+    const createRoute = read("app/api/exam-sessions/route.ts");
+    expect(createRoute).toContain('fail("SOURCE_WITHOUT_TEXT", 422');
+    // ⚠️ الفحص المسبق لازم يكون **قبل** إنشاء الجلسة (مش بعده) عشان
+    //    الكريدت ما يتحجزش ل.session ميتة.
+    expect(createRoute.indexOf("SOURCE_WITHOUT_TEXT")).toBeLessThan(
+      createRoute.indexOf("createExamSession(supabase")
+    );
+  });
+
+  it("المحرك بيقبل Array مباشر كـJSON للأسئلة", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("Array.isArray(parsed)");
   });
 });

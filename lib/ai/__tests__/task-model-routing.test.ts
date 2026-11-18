@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import {
   AI_PROVIDER_BY_TASK,
   TASK_MODEL_PREFERENCE,
+  preferenceForTask,
+  primaryProviderForTask,
 } from "../routing";
 import { MODEL_REGISTRY, getModel } from "../models";
 
@@ -69,6 +71,48 @@ describe("خريطة توجيه الموديلات حسب المهمة", () => {
     for (const [task, list] of Object.entries(TASK_MODEL_PREFERENCE)) {
       const primary = getModel(list![0]);
       expect(primary.enabled, `${task} → ${primary.id} must be enabled`).toBe(true);
+    }
+  });
+});
+
+describe("التجاوز البيئي لموديلات/مزوّد التوليد", () => {
+  it("من غير متغير ⇒ التفضيل الافتراضي", () => {
+    delete process.env.EXAM_GENERATION_MODELS;
+    expect(preferenceForTask("exam_generation")).toEqual(
+      TASK_MODEL_PREFERENCE.exam_generation
+    );
+    expect(primaryProviderForTask("exam_generation", false)).toBe("groq");
+  });
+
+  it("`EXAM_GENERATION_MODELS` بيسبق الافتراضي (قرار تشغيلي)", () => {
+    process.env.EXAM_GENERATION_MODELS = "openai/gpt-oss-120b,nvidia/nemotron-3-super-120b-a12b";
+    try {
+      expect(preferenceForTask("exam_generation")).toEqual([
+        "openai/gpt-oss-120b",
+        "nvidia/nemotron-3-super-120b-a12b",
+      ]);
+    } finally {
+      delete process.env.EXAM_GENERATION_MODELS;
+    }
+  });
+
+  it("`EXAM_GENERATION_PROVIDER` بيغيّر المزوّد الأساسي", () => {
+    process.env.EXAM_GENERATION_PROVIDER = "openrouter";
+    try {
+      expect(primaryProviderForTask("exam_generation", false)).toBe("openrouter");
+      // ⚠️ ت等其他 المهام غير متأثرة.
+      expect(primaryProviderForTask("chat", false)).toBe("groq");
+    } finally {
+      delete process.env.EXAM_GENERATION_PROVIDER;
+    }
+  });
+
+  it("قيمة غلط ما بتغيّرش حاجة", () => {
+    process.env.EXAM_GENERATION_PROVIDER = "not-a-provider";
+    try {
+      expect(primaryProviderForTask("exam_generation", false)).toBe("groq");
+    } finally {
+      delete process.env.EXAM_GENERATION_PROVIDER;
     }
   });
 });

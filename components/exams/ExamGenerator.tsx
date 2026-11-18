@@ -142,6 +142,13 @@ function mapCreateError(
       };
     case "VALIDATION_SPEC":
       return { message: "اختيار شكل الامتحان (أنواع/صعوبة/عدد) غير صالح.", transient: false };
+    case "SOURCE_WITHOUT_TEXT":
+      // ⚠️ مصدر بلا نص (PDF صور/مشفّر، أو محاضرة من غير تفريغ) — بنقول
+      //    للطالب بالظبط إيه الغلط (مش «حصل خطأ» غامض).
+      return {
+        message: `في مصدر مفيهوش نص قابل للقراءة${data?.detail ? ` (${data.detail})` : ""} — جرّب مصدر تاني.`,
+        transient: false,
+      };
     case "SOURCES_UNAVAILABLE":
       // ⚠️ الـmigration 49 لسه متطبّقةش على القاعدة ⇒ المستندات مش متاحة.
       return {
