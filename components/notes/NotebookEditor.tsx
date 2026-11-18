@@ -14,8 +14,15 @@ import {
   strokeAt,
 } from "@/lib/notes/canvas";
 import { UndoStack } from "@/lib/notes/history";
+import {
+  buildEmptyPage,
+  buildNotebookSave,
+  buildPageSave,
+  ensureNotebook,
+  strokesFromSnapshot,
+} from "@/lib/notes/notebook";
 import type { NoteRepository } from "@/lib/notes/repository";
-import type { NotesTemplate, StorageNotebook, StoragePage, Stroke } from "@/lib/notes/types";
+import type { NotesTemplate, Stroke } from "@/lib/notes/types";
 import type { SaveStatus } from "@/hooks/useNoteRepository";
 import { useTheme } from "@/theme/ThemeProvider";
 import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
@@ -72,40 +79,6 @@ function newId(): string {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function strokesFromSnapshot(snapshot: unknown): Stroke[] {
-  if (snapshot == null || typeof snapshot !== "object") return [];
-  const candidate = (snapshot as { strokes?: unknown }).strokes;
-  if (!Array.isArray(candidate)) return [];
-  return candidate.filter(
-    (stroke): stroke is Stroke =>
-      stroke != null &&
-      typeof stroke === "object" &&
-      Array.isArray((stroke as Stroke).points) &&
-      (stroke as Stroke).points.length > 0,
-  );
-}
-
-function emptyPageRecord(
-  ownerId: string,
-  notebookId: string,
-  pageId: string,
-  template: NotesTemplate,
-  timestamp: string,
-): StoragePage {
-  return {
-    id: pageId,
-    ownerId,
-    notebookId,
-    template,
-    persistedSnapshot: pageContentStrokes(template, []),
-    localJournal: [],
-    quarantined: false,
-    revision: 1,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
 }
 
 export default function NotebookEditor({
@@ -284,20 +257,17 @@ export default function NotebookEditor({
     try {
       setSaveStatus("saving");
       const existing = await repo.getPage(pageId);
-      const timestamp = nowIso();
       const template = templateRef.current;
-      const record: StoragePage = {
-        id: pageId,
+      const record = buildPageSave({
         ownerId: repo.ownerId,
         notebookId: nbId,
+        pageId,
         template,
+        strokes: strokesRef.current,
         persistedSnapshot: pageContentStrokes(template, strokesRef.current),
-        localJournal: existing?.localJournal ?? [],
-        quarantined: false,
-        revision: (existing?.revision ?? 0) + 1,
-        createdAt: existing?.createdAt ?? timestamp,
-        updatedAt: timestamp,
-      };
+        existing,
+        now: nowIso(),
+      });
       await repo.savePage(record);
 
       const savedStrokes = strokesRef.current;
@@ -349,17 +319,15 @@ export default function NotebookEditor({
   const saveNotebookRecord = useCallback(
     async (nbId: string, pageIds: string[], activeId: string | null, title: string) => {
       const existing = await repo.getNotebook(nbId);
-      const timestamp = nowIso();
-      const record: StorageNotebook = {
-        id: nbId,
+      const record = buildNotebookSave({
         ownerId: repo.ownerId,
+        notebookId: nbId,
         title,
         pageIds,
-        currentPageId: activeId,
-        revision: (existing?.revision ?? 0) + 1,
-        createdAt: existing?.createdAt ?? timestamp,
-        updatedAt: timestamp,
-      };
+        activePageId: activeId,
+        existing,
+        now: nowIso(),
+      });
       await repo.saveNotebook(record);
       return record;
     },
@@ -416,74 +384,40 @@ export default function NotebookEditor({
 
     (async () => {
       try {
-        const notebooks = await repo.listNotebooks();
-        const sorted = [...notebooks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        const timestamp = nowIso();
+        const boot = await ensureNotebook(repo, {
+          requestedNotebookId,
+          newId,
+          now: nowIso,
+        });
 
-        const toUi = (records: StoragePage[]): UiPage[] =>
-          records
-            .slice()
-            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-            .map((record) => ({
-              id: record.id,
-              template: record.template,
-              strokes: strokesFromSnapshot(record.persistedSnapshot),
-              revision: record.revision,
-            }));
-
-        const target = requestedNotebookId
-          ? sorted.find((candidate) => candidate.id === requestedNotebookId) ?? null
-          : sorted[0];
-
-        if (requestedNotebookId && !target) {
-          if (!cancelled) {
-            setLoaded(true);
-            setMessage("الدفتر المطلوب مش موجود — يمكن اتحذف. ارجع لدفاتري.");
-          }
-          return;
-        }
-
-        if (target) {
-          let records = await repo.listPages(target.id);
-          if (records.length === 0) {
-            if (!repo.canWrite) {
-              if (!cancelled) {
-                setLoaded(true);
-                setMessage("مفيش صفحات محفوظة، والتبويب ده للقراءة فقط.");
-              }
-              return;
-            }
-            const pageId = newId();
-            const record = emptyPageRecord(repo.ownerId, target.id, pageId, "lined", timestamp);
-            await repo.savePage(record);
-            await saveNotebookRecord(target.id, [pageId], pageId, target.title);
-            records = [record];
-          }
-          if (cancelled) return;
-          const uiPages = toUi(records);
-          const active =
-            uiPages.find((page) => page.id === target.currentPageId) ?? uiPages[0] ?? null;
-          activatePage(active, uiPages, target.id, target.title);
-          setLoaded(true);
-          return;
-        }
-
-        if (!repo.canWrite) {
-          if (!cancelled) {
-            setLoaded(true);
-            setMessage("مفيش دفاتر محفوظة، والتبويب ده للقراءة فقط.");
-          }
-          return;
-        }
-
-        const nbId = newId();
-        const pageId = newId();
-        const record = emptyPageRecord(repo.ownerId, nbId, pageId, "lined", timestamp);
-        await repo.savePage(record);
-        await saveNotebookRecord(nbId, [pageId], pageId, "دفتر");
         if (cancelled) return;
-        const uiPages = toUi([record]);
-        activatePage(uiPages[0] ?? null, uiPages, nbId, "دفتر");
+
+        if (boot.status === "missing") {
+          setLoaded(true);
+          setMessage("الدفتر المطلوب مش موجود — يمكن اتحذف. ارجع لدفاتري.");
+          return;
+        }
+
+        if (boot.status === "read-only-empty") {
+          setLoaded(true);
+          setMessage(
+            boot.reason === "no-pages"
+              ? "مفيش صفحات محفوظة، والتبويب ده للقراءة فقط."
+              : "مفيش دفاتر محفوظة، والتبويب ده للقراءة فقط.",
+          );
+          return;
+        }
+
+        const uiPages: UiPage[] = boot.pages.map((record) => ({
+          id: record.id,
+          template: record.template,
+          strokes: strokesFromSnapshot(record.persistedSnapshot),
+          revision: record.revision,
+        }));
+
+        const active =
+          uiPages.find((page) => page.id === boot.activePageId) ?? uiPages[0] ?? null;
+        activatePage(active, uiPages, boot.notebook.id, boot.notebook.title);
         setLoaded(true);
       } catch (error) {
         if (cancelled) return;
@@ -496,7 +430,7 @@ export default function NotebookEditor({
     return () => {
       cancelled = true;
     };
-  }, [repo, requestedNotebookId, activatePage, saveNotebookRecord]);
+  }, [repo, requestedNotebookId, activatePage]);
 
   // ---- Page navigation ----
 
@@ -543,7 +477,14 @@ export default function NotebookEditor({
 
       const timestamp = nowIso();
       const pageId = newId();
-      const record = emptyPageRecord(repo.ownerId, nbId, pageId, templateRef.current, timestamp);
+      const record = buildEmptyPage({
+        ownerId: repo.ownerId,
+        notebookId: nbId,
+        pageId,
+        template: templateRef.current,
+        now: timestamp,
+        persistedSnapshot: pageContentStrokes(templateRef.current, []),
+      });
       await repo.savePage(record);
 
       const nextPages = [
