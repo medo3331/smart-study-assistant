@@ -8,9 +8,9 @@ import HowItWorksVideo from '@/components/landing/HowItWorksVideo';
 import ExamShowcase from '@/components/landing/ExamShowcase';
 import FeatureGrid from '@/components/landing/FeatureGrid';
 import ClosingCTA from '@/components/landing/ClosingCTA';
+import Testimonials from '@/components/landing/Testimonials';
 
 import { SiteFooter } from '@/components/SiteFooter';
-import { FeedbackWidget } from '@/components/FeedbackWidget';
 import { JsonLd } from '@/components/JsonLd';
 import { softwareApplicationLd, howItWorksVideoLd } from '@/lib/seo';
 
@@ -55,8 +55,8 @@ export default function LandingPage() {
           {/* Closing CTA section */}
           <ClosingCTA />
 
-          {/* Feedback widget */}
-          <FeedbackWidget page="landing" featureLabel="الصفحة الرئيسية" />
+          {/* آراء المستخدمين في نهاية محتوى اللاندينج، قبل الفوتر. */}
+          <Testimonials />
         </main>
       </div>
 
