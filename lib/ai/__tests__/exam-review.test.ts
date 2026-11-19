@@ -8,6 +8,8 @@ import {
   normalizeExamSpec,
   validateExamMcqs,
   validateExamQuestion,
+  extractSectionTitles,
+  snapTopic,
   dedupeQuestions,
   extractKeyPoints,
   ExamReviewError,
@@ -575,6 +577,58 @@ describe('validateExamQuestion — الأنواع الجديدة', () => {
     );
     expect(q.type).toBe('mcq');
   });
+
+  // 🏷️ اساس تقييم نقاط الضعف: الجزء اللي السؤال بيقيسه
+  it('accepts and normalizes the topic label', () => {
+    const q = validateExamQuestion(
+      {
+        type: 'mcq',
+        topic: '  القلب   والأوعية  ',
+        question: 'س؟',
+        options: ['أ', 'ب', 'ج', 'د'],
+        correctAnswer: 0,
+        explanation: 'لأن',
+      },
+      ['mcq']
+    );
+    expect(q.topic).toBe('القلب والأوعية');
+  });
+
+  it('topic is optional — a question without it is still valid', () => {
+    const q = validateExamQuestion(
+      { type: 'true_false', question: 'س؟', correct: false, explanation: 'لأن' },
+      ['true_false']
+    );
+    expect(q.topic).toBeUndefined();
+  });
+
+  it('ignores a non-string topic instead of dropping the question', () => {
+    const q = validateExamQuestion(
+      {
+        type: 'true_false',
+        topic: 42,
+        question: 'س؟',
+        correct: true,
+        explanation: 'لأن',
+      },
+      ['true_false']
+    );
+    expect(q.topic).toBeUndefined();
+  });
+
+  it('caps a runaway topic label at 80 chars', () => {
+    const q = validateExamQuestion(
+      {
+        type: 'true_false',
+        topic: 'ط'.repeat(200),
+        question: 'س؟',
+        correct: true,
+        explanation: 'لأن',
+      },
+      ['true_false']
+    );
+    expect(q.topic).toHaveLength(80);
+  });
 });
 
 describe('helpers', () => {
@@ -593,5 +647,55 @@ describe('helpers', () => {
     const points = extractKeyPoints(SUMMARY_MD);
     expect(points).toContain('الفصل الأول');
     expect(points.some((p) => p.includes('تعريف مهم'))).toBe(true);
+  });
+});
+
+/**
+ * 🏷️ تقييم الأجزاء: العناوين لازم تتجمّع على أقسام المحاضرة الحقيقية.
+ * الحالة اللي كشفت المشكلة: ٢٠ سؤال ⇒ ١٧ «جزء» كل واحد سؤال.
+ */
+describe('extractSectionTitles + snapTopic', () => {
+  const summary = [
+    '## Initial Access',
+    '### Password Attacks',
+    '- نقطة',
+    '## Phishing',
+    '## Phishing',
+    '## Security Controls',
+  ].join('\n');
+
+  it('بيستخرج عناوين الأقسام بلا تكرار وبالترتيب', () => {
+    expect(extractSectionTitles(summary)).toEqual([
+      'Initial Access',
+      'Password Attacks',
+      'Phishing',
+      'Security Controls',
+    ]);
+  });
+
+  it('بيحدد العدد الأقصى', () => {
+    expect(extractSectionTitles(summary, 2)).toHaveLength(2);
+  });
+
+  it('ملخّص من غير عناوين ⇒ مصفوفة فاضية', () => {
+    expect(extractSectionTitles('- نقطة\n- نقطة تانية')).toEqual([]);
+  });
+
+  it('snapTopic: مطابقة تامة (بغض النظر عن الحالة والتشكيل)', () => {
+    expect(snapTopic('phishing', ['Initial Access', 'Phishing'])).toBe('Phishing');
+  });
+
+  it('snapTopic: احتواء — اسم قصير جوه اسم طويل', () => {
+    expect(snapTopic('Phishing Email Indicators', ['Phishing'])).toBe('Phishing');
+    expect(snapTopic('Access', ['Initial Access'])).toBe('Initial Access');
+  });
+
+  it('snapTopic: مفيش تطابق ⇒ بيسيب عنوان الموديل', () => {
+    expect(snapTopic('Malware Types', ['Phishing'])).toBe('Malware Types');
+  });
+
+  it('snapTopic: label فاضي ⇒ undefined', () => {
+    expect(snapTopic(undefined, ['Phishing'])).toBeUndefined();
+    expect(snapTopic('   ', ['Phishing'])).toBeUndefined();
   });
 });

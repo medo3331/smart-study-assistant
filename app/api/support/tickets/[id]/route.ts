@@ -14,7 +14,7 @@ export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}){
   const {data:ticket}=await service.from("support_tickets").select("*").eq("id",id).maybeSingle();
   if(!ticket||ticket.user_id!==user.id)return NextResponse.json({success:false,error:"Not found."},{status:404});
   const {data:messages}=await service.from("support_messages").select("*").eq("ticket_id",id).order("created_at",{ascending:true});
-  return NextResponse.json({success:true,ticket,messages:messages??[]});
+  return NextResponse.json({success:true,ticket:{...ticket,subject:ticket.subject||ticket.title||"طلب دعم"},messages:messages??[]});
  }catch(e){console.error("[support ticket] GET",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
 }
 export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){

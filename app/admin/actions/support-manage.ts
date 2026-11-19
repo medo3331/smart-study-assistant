@@ -28,6 +28,9 @@ export async function replyToTicket(formData: FormData): Promise<void> {
   if (!ticket) {
     redirect("/admin/support?error=" + encodeURIComponent("التذكرة غير موجودة"));
   }
+  if (["closed", "resolved"].includes(ticket.status)) {
+    redirect("/admin/support?error=" + encodeURIComponent("أعد فتح التذكرة قبل إرسال الرد"));
+  }
 
   const { error: msgErr } = await db.from("support_messages").insert({
     ticket_id: ticketId,
@@ -41,19 +44,20 @@ export async function replyToTicket(formData: FormData): Promise<void> {
 
   await db
     .from("support_tickets")
-    .update({ status: "pending", updated_at: new Date().toISOString() })
+    .update({ status: "open", updated_at: new Date().toISOString() })
     .eq("id", ticketId);
 
-  // notify the user
   try {
     await db.from("notifications").insert({
-      recipient_id: (ticket as any).user_id,
+      recipient_id: ticket.user_id,
       type: "support_reply",
       title: "رد من فريق الدعم",
       body: body.slice(0, 200),
-      link_url: "/support",
+      link_url: `/dashboard/support?ticket=${ticketId}`,
     });
-  } catch {}
+  } catch (notificationError) {
+    console.error("[support notification]", notificationError instanceof Error ? notificationError.message : notificationError);
+  }
 
   await recordAuditLog({
     actor: adminId,
@@ -73,16 +77,23 @@ export async function updateTicketStatus(formData: FormData): Promise<void> {
   const { id: adminId, email: adminEmail } = await actor();
   const ticketId = String(formData.get("ticket_id") || "").trim();
   const status = String(formData.get("status") || "").trim();
-  if (!ticketId || !["open", "pending", "resolved", "closed"].includes(status)) {
+  if (!ticketId || !["open", "resolved", "closed"].includes(status)) {
     redirect("/admin/support?error=" + encodeURIComponent("حالة غير صالحة"));
   }
   const db = createServiceClient();
+  const { data: ticket } = await db.from("support_tickets").select("id, user_id").eq("id", ticketId).maybeSingle();
+  if (!ticket) redirect("/admin/support?error=" + encodeURIComponent("التذكرة غير موجودة"));
   const { error } = await db
     .from("support_tickets")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", ticketId);
   if (error) {
     redirect("/admin/support?error=" + encodeURIComponent(error.message));
+  }
+  try {
+    await db.from("notifications").insert({ recipient_id: ticket.user_id, type: "support_status", title: "تحديث حالة التذكرة", body: `تم تحديث الحالة إلى ${status}.`, link_url: `/dashboard/support?ticket=${ticketId}` });
+  } catch (notificationError) {
+    console.error("[support status notification]", notificationError instanceof Error ? notificationError.message : notificationError);
   }
   await recordAuditLog({
     actor: adminId,

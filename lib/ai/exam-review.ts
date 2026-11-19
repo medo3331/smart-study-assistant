@@ -71,12 +71,14 @@ export type ExamMcq = {
 };
 
 /** ما يُخزَّن في `result_json.questions` — discriminated union. */
-export type ExamMcqQuestion = ExamMcq & { type: "mcq" };
+export type ExamMcqQuestion = ExamMcq & { type: "mcq"; topic?: string };
 export type ExamTrueFalseQuestion = {
   type: "true_false";
   question: string;
   correct: boolean;
   explanation: string;
+  /** 🏷️ الجزء اللي السؤال بيقيسه من المحاضرة — أساس تقييم نقاط الضعف. */
+  topic?: string;
 };
 export type ExamEssayQuestion = {
   type: "essay";
@@ -84,6 +86,7 @@ export type ExamEssayQuestion = {
   modelAnswer: string;
   rubric: string[];
   maxScore: 5;
+  topic?: string;
 };
 
 export type ExamQuestion = ExamMcqQuestion | ExamTrueFalseQuestion | ExamEssayQuestion;
@@ -390,13 +393,13 @@ function buildMergeMessages(notes: string[]): AiChatMessage[] {
 function typeShapes(types: ExamQuestionType[]): string[] {
   const shapes: string[] = [];
   if (types.includes("mcq")) {
-    shapes.push('{"type":"mcq","question":"…","options":["…","…","…","…"],"correctAnswer":0,"explanation":"…"}');
+    shapes.push('{"type":"mcq","topic":"…","question":"…","options":["…","…","…","…"],"correctAnswer":0,"explanation":"…"}');
   }
   if (types.includes("true_false")) {
-    shapes.push('{"type":"true_false","question":"…","correct":true,"explanation":"…"}');
+    shapes.push('{"type":"true_false","topic":"…","question":"…","correct":true,"explanation":"…"}');
   }
   if (types.includes("essay")) {
-    shapes.push('{"type":"essay","question":"…","modelAnswer":"…","rubric":["…","…","…"],"maxScore":5}');
+    shapes.push('{"type":"essay","topic":"…","question":"…","modelAnswer":"…","rubric":["…","…","…"],"maxScore":5}');
   }
   return shapes;
 }
@@ -413,6 +416,8 @@ function specRules(spec: ExamSpec, mode: ExamKnowledgeMode = "source"): string[]
     ...typeShapes(spec.types).map((shape) => `  ${shape}`),
     "",
     `الأنواع المطلوبة بالظبط: ${labels}. أي سؤال بغير هذا النوع مرفوض.`,
+    // 🏷️ أساس تقييم نقاط الضعف: كل سؤال مربوط بالجزء اللي بيقيسه.
+    'الحقل "topic" إجباري عقب كل سؤال: عنوان قصير (2–5 كلمات) للجزء اللي السؤال بيقيسه مأخوذ من النص — مثال: "القلب والأوعية"، "المعادلات التفاضلية". ممنوع "عام" أو "المحاضرة" أو تكرار نص السؤال.',
     spec.types.length > 1 ? "يجب أن يظهر كل نوع من الأنواع المختارة مرة واحدة على الأقل." : "",
     `مستوى الصعوبة: ${spec.difficulty} — ${difficultyGuidanceFor(mode, spec.difficulty)}`,
     "",
@@ -443,8 +448,10 @@ function buildQuestionsMessages(input: {
   index: number;
   total: number;
   mode?: ExamKnowledgeMode;
+  /** 🏷️ أجزاء المحاضرة المسموح بيها في `topic` (من الملخّص). */
+  sections?: readonly string[];
 }): AiChatMessage[] {
-  const { quota, spec, chunk, index, total } = input;
+  const { quota, spec, chunk, index, total, sections } = input;
   const mode = input.mode ?? "source";
   const general = mode === "general";
   const chunkSpec: ExamSpec = { ...spec, count: quota };
@@ -457,6 +464,9 @@ function buildQuestionsMessages(input: {
           : "أنت «ماجيكلي»، مساعد مذاكرة. ولّد أسئلة اختبار من تفريغ محاضرة جامعية.",
         "",
         ...specRules(chunkSpec, mode),
+        sections && sections.length > 0
+          ? `اختر "topic" حرفياً واحد من دول: ${sections.join(" · ")}. ممنوع اختراع اسم جديد.`
+          : "",
         partLabel(index, total),
       ]
         .filter(Boolean)
@@ -473,8 +483,9 @@ function buildRepairMessages(input: {
   types: ExamQuestionType[];
   spec: ExamSpec;
   mode?: ExamKnowledgeMode;
+  sections?: readonly string[];
 }): AiChatMessage[] {
-  const { summary, need, types, spec } = input;
+  const { summary, need, types, spec, sections } = input;
   const mode = input.mode ?? "source";
   const repairSpec: ExamSpec = { ...spec, types, count: need };
   return [
@@ -486,6 +497,9 @@ function buildRepairMessages(input: {
           : "أنت «ماجيكلي». هذه ملاحظات امتحان جاهز من محاضرة — ناقصها أسئلة أكملها بنفس المستوى.",
         "",
         ...specRules(repairSpec, mode),
+        sections && sections.length > 0
+          ? `اختر "topic" حرفياً واحد من دول: ${sections.join(" · ")}. ممنوع اختراع اسم جديد.`
+          : "",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -510,6 +524,19 @@ function normalizeOption(value: string): string {
  * `allowedTypes` = ما اختاره الطالب؛ النوع الغائب عن الاختيار يُرفض.
  * غياب `type` يُسامح فقط لو نوع واحد بس مختار (الموديل ينساه أحيانًا).
  */
+/**
+ * 🏷️ عنوان الجزء اللي السؤال بيقيسه.
+ *
+ * **اختياري بالتصميم**: الموديل ممكن ينساه، والمولّد بيحطّ بديل حتمي
+ * (`الجزء N`) وقت التجميع. وأي قيمة غير نصية بتتجاهَل بدل ما ترمي
+ * السؤال كله — سؤال من غير عنوان أفضل من امتحان ناقص.
+ */
+function readTopic(obj: Record<string, unknown>): string | undefined {
+  if (typeof obj.topic !== "string") return undefined;
+  const clean = obj.topic.replace(/\s+/g, " ").trim().slice(0, 80);
+  return clean.length > 0 ? clean : undefined;
+}
+
 export function validateExamQuestion(raw: unknown, allowedTypes: ExamQuestionType[]): ExamQuestion {
   const obj = expectObject(raw);
 
@@ -527,10 +554,11 @@ export function validateExamQuestion(raw: unknown, allowedTypes: ExamQuestionTyp
   }
 
   const question = expectString(obj.question, "question");
+  const topic = readTopic(obj);
 
   switch (type) {
     case "mcq": {
-      rejectUnknownKeys(obj, ["type", "question", "options", "correctAnswer", "explanation"], "mcq");
+      rejectUnknownKeys(obj, ["type", "topic", "question", "options", "correctAnswer", "explanation"], "mcq");
       const options = expectArray(obj.options).map((option, i) => expectString(option, `options[${i}]`));
       if (options.length !== EXAM_MCQ_OPTIONS) {
         throw new Error(`Expected exactly ${EXAM_MCQ_OPTIONS} options, got ${options.length}`);
@@ -544,18 +572,18 @@ export function validateExamQuestion(raw: unknown, allowedTypes: ExamQuestionTyp
         throw new Error("Expected correctAnswer to be an integer in 0..3");
       }
       const explanation = expectString(obj.explanation, "explanation");
-      return { type, question, options, correctAnswer, explanation };
+      return { type, question, options, correctAnswer, explanation, ...(topic ? { topic } : {}) };
     }
     case "true_false": {
-      rejectUnknownKeys(obj, ["type", "question", "correct", "explanation"], "true_false");
+      rejectUnknownKeys(obj, ["type", "topic", "question", "correct", "explanation"], "true_false");
       if (typeof obj.correct !== "boolean") {
         throw new Error('Expected "correct" to be a boolean');
       }
       const explanation = expectString(obj.explanation, "explanation");
-      return { type, question, correct: obj.correct, explanation };
+      return { type, question, correct: obj.correct, explanation, ...(topic ? { topic } : {}) };
     }
     case "essay": {
-      rejectUnknownKeys(obj, ["type", "question", "modelAnswer", "rubric", "maxScore"], "essay");
+      rejectUnknownKeys(obj, ["type", "topic", "question", "modelAnswer", "rubric", "maxScore"], "essay");
       const modelAnswer = expectString(obj.modelAnswer, "modelAnswer");
       if (modelAnswer.trim().length < 20) {
         throw new Error("Expected modelAnswer to be at least20 characters");
@@ -567,7 +595,7 @@ export function validateExamQuestion(raw: unknown, allowedTypes: ExamQuestionTyp
       if (obj.maxScore !== 5) {
         throw new Error('Expected maxScore to be5');
       }
-      return { type, question, modelAnswer, rubric, maxScore: 5 };
+      return { type, question, modelAnswer, rubric, maxScore: 5, ...(topic ? { topic } : {}) };
     }
   }
   throw new Error("unreachable question type");
@@ -652,6 +680,66 @@ function stripCodeFence(text: string): string {
   const trimmed = text.trim();
   const fenced = /^```[a-zA-Z]*\n([\s\S]*?)\n?```$/.exec(trimmed);
   return (fenced ? fenced[1] : trimmed).trim();
+}
+
+/** مفتاح مقارنة: توحيد التشكيل والمسافات وعلامات الترقيم. */
+function normalizeTopicKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[\u0640\u064B-\u0652]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * 🏷️ عناوين الأجزاء من ملخّص المراجعة (`## heading`).
+ *
+ * ⚠️ **ليه**: من غير قائمة محددة، الموديل بيبتكر عنوان لكل سؤال
+ *    («Phishing Attack» / «Phishing Definition» / «Phishing Email
+ *    Indicators») ⇒ ١٧ «جزء» لـ٢٠ سؤال، والتقييم بيبقى بلا معنى.
+ *    بالقائمة دي بتتحول لأقسام حقيقية من المحاضرة.
+ */
+export function extractSectionTitles(summary: string, max = 8): string[] {
+  const titles: string[] = [];
+  const seen = new Set<string>();
+  for (const line of summary.split(/\r?\n/)) {
+    const match = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!match) continue;
+    const title = match[1].replace(/[*_`]/g, "").trim().slice(0, 80);
+    if (!title) continue;
+    const key = normalizeTopicKey(title);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    titles.push(title);
+    if (titles.length >= max) break;
+  }
+  return titles;
+}
+
+/**
+ * 🎯 تحويل عنوان السؤال لعنوان قسم من الملخّص.
+ *
+ * مطابقة تامة ← ثم احتواء (اسم قصير جوه اسم طويل أو العكس) ← وإلا
+ * نسيب عنوان الموديل زي ما هو (أفضل من دفنه في «عام»).
+ */
+export function snapTopic(
+  label: string | undefined,
+  sections: readonly string[]
+): string | undefined {
+  if (!label) return undefined;
+  const key = normalizeTopicKey(label);
+  if (!key) return undefined;
+
+  for (const section of sections) {
+    if (normalizeTopicKey(section) === key) return section;
+  }
+  for (const section of sections) {
+    const sectionKey = normalizeTopicKey(section);
+    if (!sectionKey) continue;
+    if (sectionKey.includes(key) || key.includes(sectionKey)) return section;
+  }
+  return label;
 }
 
 /** نقاط مفتاحية مشتقّة محليًا من الملخص — بلا أي نداء AI إضافي. */
@@ -849,6 +937,10 @@ export async function generateExamReview(input: {
     throw new ExamReviewError("EMPTY_OUTPUT", "الخدمة رجعت ملخصًا فاضي.");
   }
 
+  // 🏷️ أجزاء المحاضرة من الملخّص — بتستخدم كقائمة مسموح بيها للـ`topic`
+  //    عشان التقييم يتجمع على أقسام حقيقية مش عنوان لكل سؤال.
+  const sections = extractSectionTitles(summary);
+
   // ٣) الأسئلة — نداء لكل **مجموعة** (حتى 5 أسئلة) من حصّة كل قطعة،
   //    بأنواع الطالب وصعوبته.
   //
@@ -875,7 +967,7 @@ export async function generateExamReview(input: {
         try {
           raw = await callTask(
             "questions",
-            buildQuestionsMessages({ quota: part, spec, chunk, index, total: chunks.length, mode }),
+            buildQuestionsMessages({ quota: part, spec, chunk, index, total: chunks.length, mode, sections }),
             0.4,
             part
           );
@@ -892,7 +984,13 @@ export async function generateExamReview(input: {
         }
       }
       if (raw === null) continue;
-      collected.push(...validateItemsLenient(parseQuestionsEnvelope(raw), spec.types));
+      const batch = validateItemsLenient(parseQuestionsEnvelope(raw), spec.types);
+      // 🏷️ كل سؤال لازم يكون له جزء: لو الموديل نساه، بديل حتمي من رقم
+      //    القطعة — عشان تقييم نقاط الضعف يفضل شغّال مهما كان المزوّد.
+      for (const question of batch) {
+        const topic = snapTopic(question.topic, sections) ?? `الجزء ${index + 1}`;
+        collected.push({ ...question, topic });
+      }
     }
   }
 
@@ -910,13 +1008,19 @@ export async function generateExamReview(input: {
       try {
         const raw = await callTask(
           "questions_repair",
-          buildRepairMessages({ summary, need: part, types: repairTypes, spec, mode }),
+          buildRepairMessages({ summary, need: part, types: repairTypes, spec, mode, sections }),
           0.4,
           part
         );
+        const repaired = validateItemsLenient(parseQuestionsEnvelope(raw), repairTypes);
+        // 🏷️ الإصلاح بيتم من الملخّص مش من قطعة محددة ⇒ عنوان محايد
+        //    بدل ما نسيب الجزء فاضي (بيظهر في تقييم الضعف تحت "عام").
         final = dedupeQuestions([
           ...final,
-          ...validateItemsLenient(parseQuestionsEnvelope(raw), repairTypes),
+          ...repaired.map((question) => ({
+            ...question,
+            topic: snapTopic(question.topic, sections) ?? "مراجعة عامة",
+          })),
         ]);
       } catch (error) {
         // فشل الإصلاح (رد فاسد) لا يوقف التوليد — الفحص تحت هو الحاكم.

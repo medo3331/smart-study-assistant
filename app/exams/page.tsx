@@ -64,6 +64,10 @@ type ExamsInitial = {
    * 🌍 موضوع عام (من المساعد) — امتحان من معلومات الـAI العامة (من غير ملفات).
    */
   topic: string;
+  /**
+   * 📄 معرّف مستند جاهز (من رفع في الشات) — بيتحدّد كمصدر مباشرة.
+   */
+  document: string;
 };
 
 export default async function ExamsPage({
@@ -90,6 +94,8 @@ export default async function ExamsPage({
     difficulty: parseDifficulty(str("difficulty")),
     // 🌍 الموضوع العام — أقصى 300 حرف (نفس سقف السيرفر).
     topic: str("topic", 300),
+    // 📄 مستند مرفوع من الشات — بيتحدّد كمصدر في المولّد.
+    document: str("document", 64),
   };
 
   const d = await getTaxonomyAndExams();

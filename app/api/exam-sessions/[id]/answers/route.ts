@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-guard";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { ExamQuestion, ExamQuestionType } from "@/lib/ai/exam-review";
+import { summarizeByTopic, FALLBACK_TOPIC } from "@/lib/ai/exam-topics";
 
 /* ==========================================================================
    POST /api/exam-sessions/[id]/answers — حفظ إجابات الطالب + التسليم
@@ -271,10 +272,30 @@ export async function POST(
   const totalMax = autoTotal + essayMax;
   const percent = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
 
+  /**
+   * 🏷️ **تقييم الأجزاء**: نجمع الصحة على عنوان الجزء اللي كل سؤال
+   *    بيقيسه ⇒ الطالب يشوف «ضعيف في …» بدل درجة واحدة مبهمة.
+   *
+   *    المصدر هو `inventory` (الأسئلة المحفوظة على السيرفر) مش إجابة
+   *    العميل — زي باقي التصحيح.
+   */
+  const weaknesses = summarizeByTopic(
+    [...inventory.entries()].map(([key, entry]) => {
+      const row = savedByKey.get(key);
+      return {
+        topic: (entry.question as { topic?: string | null }).topic ?? null,
+        type: entry.question.type,
+        correct: row?.is_correct ?? null,
+        selfScore: row?.self_score ?? null,
+      };
+    }),
+  );
+
   const result = {
     auto: { correct: autoCorrect, total: autoTotal },
     essay: { score: essayScore, max: essayMax },
     total: { score: totalScore, max: totalMax, percent },
+    weaknesses,
   };
 
   const metadata =
@@ -288,6 +309,80 @@ export async function POST(
     .eq("id", sessionId)
     .eq("user_id", user.id);
   if (completeError) return fail("INTERNAL", 500, completeError.message);
+
+  /**
+   * 📈 **تراكم نقاط الضعف**: الكتابة في `user_weaknesses` بتخلّي المساعد
+   *    يعرف «إنت ضعيف في…» من امتحانات سابقة — `lib/education/context.ts`
+   *    بيقرا الجدول ده أصلاً (أعلى ٣ أخطاء وأقل إتقان).
+   *
+   * ⚠️ **مفيش unique constraint** على (user_id, topic_name) ⇒ مفيش upsert:
+   *    بنقرا ثم نحدّث/ندرج. التزامن هنا ضعيف (جلسة واحدة للطالب)، وأسوأ
+   *    حالة صف مكرر — مش تلفيق بيانات.
+   * ⚠️ **best-effort**: فشل الكتابة مايوقّعش التسليم (النتيجة اتحفظت خلاص).
+   */
+  try {
+    const rawSubjectId = (metadata as { subject_id?: unknown }).subject_id;
+    const subjectId =
+      typeof rawSubjectId === "string" && /^[0-9a-f-]{36}$/i.test(rawSubjectId)
+        ? rawSubjectId
+        : null;
+
+    const nowIso = new Date().toISOString();
+    for (const topic of weaknesses) {
+      // «عام» مش جزء حقيقي ⇒ مالوش معنى كضعف يتعلم منه المساعد.
+      if (topic.topic === FALLBACK_TOPIC || topic.topic === "مراجعة عامة") continue;
+
+      const wrong = Math.max(0, Math.round(topic.max - topic.score));
+      const mastery = Math.min(1, Math.max(0, topic.percent / 100));
+
+      const { data: existing } = await admin
+        .from("user_weaknesses")
+        .select("id, error_count")
+        .eq("user_id", user.id)
+        .eq("topic_name", topic.topic)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        const { error: updateWeaknessError } = await admin
+          .from("user_weaknesses")
+          .update({
+            error_count: Number((existing as { error_count?: number }).error_count ?? 0) + wrong,
+            mastery_level: mastery,
+            updated_at: nowIso,
+          })
+          .eq("id", (existing as { id: string }).id);
+        if (updateWeaknessError) {
+          console.warn("[exam-sessions] weakness update skipped", {
+            topic: topic.topic,
+            detail: updateWeaknessError.message,
+          });
+        }
+        continue;
+      }
+
+      // جزء اتجاوب كله صح ومفيش صف سابق ⇒ مفيش ضعف يتسجل.
+      if (wrong === 0) continue;
+
+      const { error: insertWeaknessError } = await admin.from("user_weaknesses").insert({
+        user_id: user.id,
+        subject_id: subjectId,
+        topic_name: topic.topic,
+        error_count: wrong,
+        mastery_level: mastery,
+      });
+      if (insertWeaknessError) {
+        console.warn("[exam-sessions] weakness insert skipped", {
+          topic: topic.topic,
+          detail: insertWeaknessError.message,
+        });
+      }
+    }
+  } catch (error) {
+    console.warn("[exam-sessions] weaknesses not recorded", {
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   return NextResponse.json({ ok: true, final: true, result });
 }

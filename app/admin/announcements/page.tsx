@@ -3,7 +3,7 @@ import { AdminPageHeader, AdminCard, AdminNotice } from "@/components/admin/ui";
 import { sendBroadcast, listAllNotifications, deleteNotification } from "@/app/admin/actions/notifications-manage";
 
 export default async function AdminAnnouncementsPage() {
-  const { user } = await requireAdminPermission("plans.manage");
+  const { user } = await requireAdminPermission("announcements.manage");
   const { data } = await listAllNotifications();
 
   async function action(formData: FormData) {
@@ -18,7 +18,7 @@ export default async function AdminAnnouncementsPage() {
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader title="الإعلانات والإشعارات" subtitle="إرسال إشعارات عامة أو موجهة" badge="plans.manage" permissionKey="plans.manage" />
+      <AdminPageHeader title="الإعلانات والإشعارات" subtitle="إرسال إشعارات عامة أو موجهة" badge="announcements.manage" permissionKey="announcements.manage" />
       <AdminCard title="إرسال إشعار جديد" tone="default">
         <form action={action} className="space-y-3">
           <input name="title" placeholder="العنوان" required className="w-full rounded bg-slate-800 p-2 text-sm" />

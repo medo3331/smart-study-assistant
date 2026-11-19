@@ -93,7 +93,7 @@ export function isOwnerEmail(email: string | null | undefined): boolean {
   return allowed.includes(normalized);
 }
 
-export type AdminRole = "owner" | "admin" | null;
+export type AdminRole = "owner" | "admin" | "support" | null;
 
 /**
  * دالة فحص مستوى صلاحية الأدمن (Owner vs Admin)
@@ -114,11 +114,24 @@ export async function getAdminRole(
   }
 
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("site_admins")
-      .select("role")
+      .select("role, permissions")
       .eq("user_id", userId)
       .maybeSingle();
+
+    if (!error && data?.role === "admin" && Array.isArray(data.permissions) && data.permissions.includes("support")) {
+      return "support";
+    }
+
+    if (error) {
+      const legacy = await supabase
+        .from("site_admins")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+      return (legacy.data?.role as AdminRole) || null;
+    }
 
     return (data?.role as AdminRole) || null;
   } catch {
@@ -195,25 +208,25 @@ export async function getAdminPermissions(
       .eq("user_id", userId)
       .maybeSingle();
 
-    // إذا الـ permissions column موجود (بعد تنفيذ SQL)
-    const permsArray: string[] = data?.permissions || [];
+    // إذا كانت الصلاحيات محددة صراحةً، لا نوسّعها عند وجود قيم غير معروفة.
+    const permsArray: string[] = Array.isArray(data?.permissions) ? data.permissions : [];
     if (permsArray.length > 0) {
-      return permsArray.filter((p): p is AdminPermissionKey =>
+      const explicitPermissions = permsArray.filter((p): p is AdminPermissionKey =>
         ADMIN_PERMISSION_KEYS.includes(p as AdminPermissionKey)
       );
+      if (explicitPermissions.length > 0) return explicitPermissions;
+      if (!(role === "support" && permsArray.includes("support"))) return [];
     }
 
-    // إذا الـ column غير موجود بعد → افتراضي حسب الدور
-    // Admin: كل شيء ما عدا models.manage و admins.manage و plans.manage و trial.manage (Owner-only)
-    // Support: users.read + files.moderate + audit.read + subscriptions.manage (لا trial.manage ولا plans.manage)
-    if (data?.role === "admin") {
-      return ADMIN_PERMISSION_KEYS.filter(
-        (k) => k !== "models.manage" && k !== "admins.manage" && k !== "plans.manage" && k !== "trial.manage" && k !== "credits.manage"
+    // إذا كان عمود permissions غير موجود/فارغ → اشتق الافتراضي من خريطة الأدوار نفسها.
+    if (role === "admin") {
+      return ADMIN_PERMISSION_KEYS.filter((key) =>
+        ADMIN_PERMISSION_MAP[key].allowed_roles.includes("admin")
       );
     }
-    // Support (يمثل بـ admin + permissions خاص) — افتراضي محدود بدون plans.manage أو trial.manage
+    // Support: صلاحيات قراءة محدودة وإدارة صندوق الدعم فقط.
     return [
-      "users.read", "files.moderate", "audit.read", "subscriptions.manage"
+      "users.read", "files.moderate", "audit.read", "support.manage"
     ];
   } catch {
     return [];
@@ -233,7 +246,7 @@ export async function hasPermission(
   const perms = await getAdminPermissions(supabase, userId, role);
   const record = ADMIN_PERMISSION_MAP[permissionKey];
   // إذا الـ permission مسموح للدور حسب الخريطة
-  if (record && record.allowed_roles.includes(role as "owner" | "admin")) {
+  if (record && record.allowed_roles.includes(role)) {
     // إذا الـ permissions array موجود، نتحقق من وجود المفتاح فيه أيضًا
     if (perms.length > 0) return perms.includes(permissionKey);
     // إذا لم يتم تنفيذ SQL بعد → نعتمد على الخريطة الافتراضية

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/api-guard";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { AiProviderError } from "@/lib/ai/types";
 import { summarizeProviderFailure } from "@/lib/ai/errors";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -10,6 +11,7 @@ import {
   claimItem,
   failItem,
   incrementUsage,
+  isSessionExhausted,
   renewLease,
   saveResult,
   selectExamItem,
@@ -84,6 +86,90 @@ const MAX_PROVIDER_ATTEMPTS_PER_ITEM = MAX_PROVIDER_ATTEMPTS;
  */
 function serviceClient() {
   return createServiceClient();
+}
+
+/**
+ * 🛟 **استرجاع الكريدت لما الجلسة تفشل بالكامل**.
+ *
+ * الكريدت بيتحجز مرة واحدة عند إنشاء الجلسة بـref = `exam_session:<id>`.
+ * لو كل بند استنفد محاولاته وفشل ⇒ الطالب دفع كريدت على امتحان مش موجود،
+ * فبنرجّعه ونعلّم الجلسة `failed` مع إشعار واضح للطالب.
+ *
+ * ⚠️ **idempotent**: `refund_ai_credit` بيرفض الاسترجاع المكرر بنفس
+ *    الـref، والـupdate بيكتب نفس القيم ⇒ آمن من أي مسار فشل ومتزامن.
+ * ⚠️ **مش بتلمس جلسة مكتملة**: الشرط نفسه (`كل البنود فاشلة`) مش بيتحقق
+ *    في جلسة اتسلّمت (بنودها `ready`).
+ */
+async function refundIfSessionDead(params: {
+  supabase: SupabaseClient;
+  sessionId: string;
+  userId: string;
+}): Promise<void> {
+  const { supabase, sessionId, userId } = params;
+  try {
+    const { data: items, error } = await supabase
+      .from("exam_session_items")
+      .select("status, attempt_count")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId);
+    if (error || !items) return;
+    if (!isSessionExhausted(items, MAX_ITEM_ATTEMPTS)) return;
+
+    const admin = serviceClient();
+    const { data: session } = await admin
+      .from("exam_sessions")
+      .select("id, status, metadata, credit_refunded_at")
+      .eq("id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!session || session.status === "completed" || session.credit_refunded_at) return;
+
+    const { error: refundError } = await admin.rpc("refund_ai_credit", {
+      p_user_id: userId,
+      p_ref_id: `exam_session:${sessionId}`,
+    });
+    if (refundError) {
+      console.warn("[exam-sessions] refund failed", {
+        sessionId,
+        detail: refundError.message,
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const metadata =
+      session.metadata && typeof session.metadata === "object" && !Array.isArray(session.metadata)
+        ? { ...(session.metadata as Record<string, unknown>) }
+        : {};
+    metadata.notice =
+      "التوليد فشل في كل البنود عند مزوّد الذكاء الاصطناعي — رجّعنا الكريدت لحسابك. جرّب مصدر تاني أو حاول تاني بعد شوية.";
+
+    const { error: updateError } = await admin
+      .from("exam_sessions")
+      .update({
+        status: "failed",
+        credit_refunded_at: now,
+        metadata,
+        updated_at: now,
+      })
+      .eq("id", sessionId)
+      .eq("user_id", userId);
+    if (updateError) {
+      console.warn("[exam-sessions] mark-failed skipped", {
+        sessionId,
+        detail: updateError.message,
+      });
+      return;
+    }
+
+    console.info("[exam-sessions] session dead — credit refunded", { sessionId });
+  } catch (error) {
+    // الاسترجاع best-effort: فشله مايقلبش رد الـAPI (البند اتسجل فاشل خلاص).
+    console.warn("[exam-sessions] refund check failed", {
+      sessionId,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function fail(error: string, status: number, extra?: Record<string, unknown>) {
@@ -403,6 +489,8 @@ export async function POST(
       errorCode: "BUDGET_LOGICAL",
       errorMessage: "session logical budget",
     });
+    // 🛟 لو ده آخر بند فاشل ⇒ الجلسة ميتة ⇒ رجّع الكريدت.
+    await refundIfSessionDead({ supabase, sessionId, userId: user.id });
     return fail("BUDGET", 429, { detail: "logical" });
   }
   if ((session.provider_attempts_used ?? 0) + estimate.attempts > sessionAttemptsCap) {
@@ -412,6 +500,7 @@ export async function POST(
       errorCode: "BUDGET_ATTEMPTS",
       errorMessage: "session attempts budget",
     });
+    await refundIfSessionDead({ supabase, sessionId, userId: user.id });
     return fail("BUDGET", 429, { detail: "attempts" });
   }
 
@@ -505,6 +594,8 @@ export async function POST(
       errorCode: "PROVIDER_ERROR",
       errorMessage: "ai_provider_exhausted",
     });
+    // 🛟 فشل المزوّد في البند الأخير ⇒ رجّع الكريدت (idempotent).
+    await refundIfSessionDead({ supabase, sessionId, userId: user.id });
 
     // 🧾 اللوج الكامل: الـstatus والرسالة من خطأ الـAI SDK (مش مجرد نص).
     //

@@ -14,9 +14,21 @@ export async function POST(req: Request) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const actor = await resolveActor(supabase, user?.id || null, user?.email ?? null);
+  if (!user || user.is_anonymous) {
+    return NextResponse.json({ error: "غير مصرح: لازم تسجيل دخول" }, { status: 401 });
+  }
+  const actor = await resolveActor(supabase, user.id, user.email ?? null);
 
   if (!actorHasPermission(actor, "credits.manage")) {
+    await recordAuditLog({
+      actor: user.id,
+      actor_email: user.email ?? null,
+      action: "credits.manage",
+      resource_type: "ai_credits",
+      resource_id: null,
+      details: { reason: "authorization_denied", actor_role: actor.role },
+      result: "BLOCKED",
+    });
     return NextResponse.json({ error: "غير مصرح — للمالك فقط (credits.manage)" }, { status: 403 });
   }
 
@@ -48,9 +60,9 @@ export async function POST(req: Request) {
 
     // EPIC-2: Audit log for credit grants (sensitive operation)
     await recordAuditLog({
-      actor: user?.id ?? null,
-      actor_email: user?.email ?? null,
-      action: "subscriptions.manage",
+      actor: user.id,
+      actor_email: user.email ?? null,
+      action: "credits.manage",
       resource_type: "ai_credits",
       resource_id: targetUserId,
       details: {
@@ -67,9 +79,9 @@ export async function POST(req: Request) {
 
     // EPIC-2: Audit log for failed credit grants
     await recordAuditLog({
-      actor: user?.id ?? null,
-      actor_email: user?.email ?? null,
-      action: "subscriptions.manage",
+      actor: user.id,
+      actor_email: user.email ?? null,
+      action: "credits.manage",
       resource_type: "ai_credits",
       resource_id: targetUserId,
       details: {

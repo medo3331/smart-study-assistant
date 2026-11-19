@@ -1,5 +1,4 @@
 ﻿import Link from "next/link";
-import { redirect } from "next/navigation";
 import { UserSearch, Users } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { hasPermission } from "@/lib/auth-roles";
@@ -33,14 +32,12 @@ export default async function AdminUsersPage({
   }>;
 }) {
   const sp = await searchParams;
-  const { user, supabase, isOwner } = await requireAdminPermission("users.read");
-  if (!isOwner) {
-    redirect("/dashboard?admin=owner-only");
-  }
+  const { user, supabase } = await requireAdminPermission("users.read");
 
-  const [canBan, canUnban] = await Promise.all([
+  const [canBan, canUnban, canGrantCredits] = await Promise.all([
     hasPermission(supabase, user.id, user.email ?? null, "users.ban"),
     hasPermission(supabase, user.id, user.email ?? null, "users.unban"),
+    hasPermission(supabase, user.id, user.email ?? null, "credits.manage"),
   ]);
 
   const plan = sp.plan ?? "all";
@@ -242,7 +239,7 @@ export default async function AdminUsersPage({
         <UserAiLookup />
       </AdminCard>
 
-      <AdminCard title="شحن AI Credits يدويًا" description="إضافة رصيد لأي مستخدم عبر /api/admin/add-credits (سيرفر-سايد، Admin فقط، مسجّل في ai_credit_ledger بسبب reason=admin_grant)." tone="emerald">
+      {canGrantCredits ? <AdminCard title="شحن AI Credits يدويًا" description="إضافة رصيد لأي مستخدم عبر /api/admin/add-credits (صلاحية credits.manage، مسجّل في ai_credit_ledger بسبب reason=admin_grant)." tone="emerald">
         <form action="/api/admin/add-credits" method="POST" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <input
             type="text"
@@ -263,15 +260,14 @@ export default async function AdminUsersPage({
             إرسال الرصيد
           </button>
         </form>
-           <li className="flex items-center gap-2">
-             <Users size={14} className="text-amber-400" />
-             <Link className="underline hover:text-amber-300" href="/admin/users/analytics">تحليلات المستخدمين (استخدام AI + الاشتراك)</Link>
-           </li>
+      </AdminCard> : null}
 
-      </AdminCard>
-
-      <AdminCard title="الأقسام المرتبطة" tone="default">
+      <AdminCard title="روابط وتحليلات المستخدمين" tone="default">
         <ul className="text-xs text-slate-300 space-y-2">
+          <li className="flex items-center gap-2">
+            <Users size={14} className="text-amber-400" />
+            <Link className="underline hover:text-amber-300" href="/admin/users/analytics">تحليلات المستخدمين (استخدام AI + الاشتراك)</Link>
+          </li>
           <li className="flex items-center gap-2">
             <Users size={14} className="text-amber-400" />
             <Link className="underline hover:text-amber-300" href="/admin/subscriptions">تفعيل اشتراك لمستخدم عبر User Code</Link>
