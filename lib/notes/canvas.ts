@@ -21,6 +21,7 @@ export const TEMPLATE_OPTIONS: readonly { id: NotesTemplate; label: string }[] =
   { id: "lined", label: "مسطّر" },
   { id: "grid", label: "مربعات" },
   { id: "dotted", label: "نقط" },
+  { id: "cornell", label: "كورنل" },
   { id: "blank", label: "فاضي" },
 ];
 
@@ -330,6 +331,48 @@ export function paintPageBackground(
           ctx.fill();
         }
       }
+    }
+
+    // 📝 Cornell Notes — RTL: الكلمات المفتاحية يمين، الملاحظات شمال، الملخص تحت.
+    if (template === "cornell") {
+      const cueWidth = Math.round(width * 0.26);
+      const summaryHeight = Math.round(height * 0.22);
+      const dividerX = width - cueWidth + 0.5;
+      const summaryTop = height - summaryHeight + 0.5;
+
+      // مسطّر خفيف جوه منطقة الملاحظات (شمال عمود الكلمات).
+      ctx.strokeStyle = "#e5e7eb";
+      const gap = 32;
+      for (let y = gap; y < summaryTop - gap / 2; y += gap) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(dividerX, y + 0.5);
+        ctx.stroke();
+      }
+
+      // الفواصل الرئيسية أغمق شوية عشان تبان.
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(dividerX, 0);
+      ctx.lineTo(dividerX, height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, summaryTop);
+      ctx.lineTo(width, summaryTop);
+      ctx.stroke();
+
+      // لافتات الأقسام — إرشاد لطيف مكتوب داخل الخلفية.
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "13px system-ui, 'Segoe UI', Tahoma, sans-serif";
+      ctx.textBaseline = "top";
+      if ("direction" in ctx) {
+        (ctx as CanvasRenderingContext2D & { direction: CanvasDirection }).direction = "rtl";
+      }
+      ctx.textAlign = "center";
+      ctx.fillText("الكلمات والأسئلة", width - cueWidth / 2, 10);
+      ctx.fillText("الملاحظات", (width - cueWidth) / 2, 10);
+      ctx.fillText("الملخص", width / 2, summaryTop + 8);
     }
   }
 

@@ -154,10 +154,10 @@ describe("segmentWidth", () => {
 });
 
 describe("templates", () => {
-  it("offers four distinct page rules", () => {
+  it("offers five distinct page rules", () => {
     const ids = TEMPLATE_OPTIONS.map((option) => option.id);
-    expect(ids).toEqual(["lined", "grid", "dotted", "blank"]);
-    expect(new Set(ids).size).toBe(4);
+    expect(ids).toEqual(["lined", "grid", "dotted", "cornell", "blank"]);
+    expect(new Set(ids).size).toBe(5);
   });
 
   it("accepts every offered template in the storage contract", () => {

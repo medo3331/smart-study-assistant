@@ -126,7 +126,7 @@ export type StorageNotebook = {
  * Stored verbatim, so adding a variant is a backwards-compatible change:
  * records written with an older variant keep validating.
  */
-export type NotesTemplate = "lined" | "grid" | "dotted" | "blank";
+export type NotesTemplate = "lined" | "grid" | "dotted" | "blank" | "cornell";
 
 /** Storage record for a page. */
 export type StoragePage = {

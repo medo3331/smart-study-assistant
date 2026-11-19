@@ -1428,6 +1428,70 @@ export default function NotebookEditor({
     paint();
   }, [paint]);
 
+  /** ▦ إدراج جدول — خطوط مستقيمة (strokes) تكوّن الشبكة، فتفضل قابلة
+   *  للتحريك والمسح والتحديد زي أي عنصر تاني على الصفحة. */
+  const insertTable = useCallback(() => {
+    if (!canWrite) return;
+    const spec = window.prompt("عدد الصفوف × الأعمدة (مثال: 4x3):", "4x3");
+    if (!spec) return;
+    const match = /^(\d{1,2})\s*[x×✕*]\s*(\d{1,2})$/.exec(spec.trim());
+    if (!match) {
+      setMessage("اكتب الأبعاد بالشكل ده: 4x3 (صفوف × أعمدة).");
+      return;
+    }
+    const rows = Math.max(1, Math.min(20, Number(match[1])));
+    const cols = Math.max(1, Math.min(12, Number(match[2])));
+
+    const canvas = canvasRef.current;
+    const viewWidth = canvas ? canvas.width / dprRef.current : PAGE_WIDTH;
+    const viewHeight = canvas ? canvas.height / dprRef.current : PAGE_HEIGHT;
+    const pan = panRef.current;
+    const zoomLevel = zoomRef.current;
+    // مركز الشاشة الحالي في إحداثيات الصفحة.
+    const centerX = (viewWidth / 2 - pan.x) / zoomLevel;
+    const centerY = (viewHeight / 2 - pan.y) / zoomLevel;
+
+    const width = Math.min(cols * 110, PAGE_WIDTH - 96);
+    const height = Math.min(rows * 56, PAGE_HEIGHT - 96);
+    const left = Math.max(48, Math.min(centerX - width / 2, PAGE_WIDTH - width - 48));
+    const top = Math.max(48, Math.min(centerY - height / 2, PAGE_HEIGHT - height - 48));
+
+    const line = (points: Array<[number, number]>): Stroke => ({
+      id: newId(),
+      tool: "pen",
+      shape: "line",
+      color: color,
+      thickness: 2,
+      opacity: 1,
+      points,
+    });
+
+    const strokes: Stroke[] = [];
+    for (let r = 0; r <= rows; r++) {
+      const y = top + (height * r) / rows;
+      strokes.push(line([[left, y], [left + width, y]]));
+    }
+    for (let c = 0; c <= cols; c++) {
+      const x = left + (width * c) / cols;
+      strokes.push(line([[x, top], [x, top + height]]));
+    }
+
+    const content = contentRef.current;
+    setContent({
+      strokes: [...content.strokes, ...strokes],
+      texts: content.texts,
+      images: content.images,
+    });
+    // الجديد بيتحدد كله — تحركه/تمسحه/تكبّره ككتلة واحدة.
+    multiSelRef.current = new Set(strokes.map((stroke) => stroke.id));
+    setMultiCount(strokes.length);
+    selectionRef.current = null;
+    setSelection(null);
+    paint();
+    commitHistory();
+    scheduleSave();
+  }, [canWrite, color, commitHistory, paint, scheduleSave, setContent]);
+
   // ---- Copy / paste (بين الصفحات) ----
 
   /** ⧉ نسخ: المحدد الحالي (فردي أو مجموعة) إلى الحافظة الداخلية.
@@ -3096,6 +3160,15 @@ export default function NotebookEditor({
               {option.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={insertTable}
+            disabled={!canWrite}
+            title="إدراج جدول — اكتب عدد الصفوف والأعمدة مثل 4x3"
+            className="notes-btn notes-btn-sm"
+          >
+            ▦ جدول
+          </button>
         </div>
 
         <span className="notes-sep" aria-hidden="true" />

@@ -18,6 +18,7 @@ export const VALID_TEMPLATES: readonly NotesTemplate[] = [
   "grid",
   "dotted",
   "blank",
+  "cornell",
 ];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
