@@ -36,6 +36,7 @@ import {
   renderPdfPageToImage,
 } from "@/lib/notes/pdf";
 import { SaveCoordinator } from "@/lib/notes/editor-save";
+import { pageQuotaBlockedMessage, requestPageCredits } from "@/lib/notes/page-quota";
 import type {
   NoteImage,
   NoteText,
@@ -859,6 +860,15 @@ export default function NotebookEditor({
 
     try {
       setSaveStatus("saving");
+      // 📄 كوتة الصفحات اليومية (free = 10/يوم) — طلب رصيد قبل الإنشاء.
+      // الأوفلاين = fail-open (شوف lib/notes/page-quota.ts).
+      const quota = await requestPageCredits(1);
+      if (!quota.allowed) {
+        setSaveStatus("idle");
+        setMessage(pageQuotaBlockedMessage(quota));
+        return;
+      }
+
       await saveCurrentPage();
 
       const timestamp = nowIso();
@@ -966,6 +976,14 @@ export default function NotebookEditor({
 
     try {
       setSaveStatus("saving");
+      // 📄 كوتة الصفحات — التكرار بيستنفد رصيد صفحة جديدة كمان.
+      const dupQuota = await requestPageCredits(1);
+      if (!dupQuota.allowed) {
+        setSaveStatus("idle");
+        setMessage(pageQuotaBlockedMessage(dupQuota));
+        return;
+      }
+
       await saveCurrentPage();
 
       const timestamp = nowIso();
@@ -2002,6 +2020,13 @@ export default function NotebookEditor({
 
     setPdfBusy(true);
     try {
+      // 📄 كوتة الصفحات: الاستيراد بيستهلك N صفحة من حد اليوم دفعة واحدة.
+      const pageQuota = await requestPageCredits(count);
+      if (!pageQuota.allowed) {
+        setMessage(pageQuotaBlockedMessage(pageQuota));
+        return;
+      }
+
       // 📁 مصدر الاستيراد: ملف «ملفاتي» لو متختار، وإلا الملف المحلي.
       let file: File | undefined;
       if (pdfLibraryFile?.url) {

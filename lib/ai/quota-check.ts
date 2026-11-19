@@ -16,7 +16,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 
-export type QuotaKind = "message" | "upload";
+export type QuotaKind = "message" | "upload" | "page";
 
 export interface QuotaCheckResult {
   allowed: boolean;
@@ -153,7 +153,9 @@ export async function checkSubscriptionQuota(
         resetAt,
         reasonAr: kind === "message"
           ? `وصلت لحد رسايل باقتك (${limit} رسالة/يوم). الكوتا بتتجدد كل 24 ساعة، أو رقّي باقتك لحد أعلى.`
-          : `وصلت لحد الرفع اليومي لباقتك (${limit} ملفات).`,
+          : kind === "page"
+            ? `وصلت لحد صفحات اليوم (${limit} صفحة). الكوتا بتتجدد كل 24 ساعة، أو رقّي باقتك لحد أعلى.`
+            : `وصلت لحد الرفع اليومي لباقتك (${limit} ملفات).`,
       };
     }
 
