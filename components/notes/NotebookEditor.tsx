@@ -2781,6 +2781,75 @@ export default function NotebookEditor({
     return canvas.toDataURL("image/jpeg", 0.85);
   }, [renderPageToCanvas]);
 
+  /** 🔎 POC قراءة خط اليد: صورة الصفحة → vision → نص قابل للتعديل.
+   *  تجريبي — الدقة بتعتمد على وضوح الخط، والأصل مش بيتمس. */
+  const [handwritingBusy, setHandwritingBusy] = useState(false);
+  const convertHandwriting = useCallback(async () => {
+    if (!canWrite || handwritingBusy) return;
+    const snapshot = getCanvasSnapshot();
+    if (!snapshot?.startsWith("data:image/")) {
+      setMessage("مقدرناش ناخد لقطة الصفحة — جرّب تاني.");
+      return;
+    }
+    setHandwritingBusy(true);
+    setSaveStatus("idle");
+    try {
+      const blob = await (await fetch(snapshot)).blob();
+      const form = new FormData();
+      form.append("file", blob, "page.jpg");
+      form.append(
+        "question",
+        "دي صورة صفحة من دفتر طالب. اقرا خط اليد واكتب بالحرف كل اللي مكتوب فيه، سطر بسطر بنفس الترتيب، من غير أي تعليق أو ترقيم. رجّع النص فقط.",
+      );
+      const res = await fetch("/api/ai/image-analysis", { method: "POST", body: form });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error?.message ?? "فشل تحليل الصورة.");
+      }
+      const raw: string = typeof data?.result === "string" ? data.result : "";
+      const text = raw.trim();
+      if (!text) {
+        setMessage("المساعد مش شايف نص مقروء في الصفحة.");
+        return;
+      }
+      // كل سطر بيبقى بلوك نص مستقل قابل للتعديل — من ناحية اليمين (RTL).
+      const lines = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 60);
+      const startX = PAGE_WIDTH - 64;
+      const startY = 72;
+      const lineHeight = 34;
+      const content = contentRef.current;
+      const newBlocks: NoteText[] = lines.map((line, index) => ({
+        id: newId(),
+        kind: "text",
+        text: line,
+        x: Math.max(24, startX - line.length * 9),
+        y: startY + index * lineHeight,
+        size: 20,
+        color: "#2563eb",
+      }));
+      setContent({
+        strokes: content.strokes,
+        texts: [...content.texts, ...newBlocks],
+        images: content.images,
+      });
+      multiSelRef.current = new Set(newBlocks.map((block) => block.id));
+      setMultiCount(newBlocks.length);
+      selectionRef.current = null;
+      setSelection(null);
+      paint();
+      commitHistory();
+      scheduleSave();
+      setMessage(
+        `اتقرا ${lines.length} سطر — النص الأزرق ده تجربة، عدّله براحتك. الأصل (خطك) محفوظ زي ما هو.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "فشل قراءة الخط. حاول تاني.");
+    } finally {
+      setHandwritingBusy(false);
+    }
+  }, [canWrite, commitHistory, getCanvasSnapshot, handwritingBusy, paint, scheduleSave, setContent]);
+
+
   /** Text blocks across the whole notebook matching the search query. */
   const searchResults = useMemo(() => {
     const needle = query.trim();
@@ -3154,6 +3223,15 @@ export default function NotebookEditor({
             className="notes-btn"
           >
             🎴 مذاكرة
+          </button>
+          <button
+            type="button"
+            onClick={() => void convertHandwriting()}
+            disabled={!canWrite || handwritingBusy}
+            title="تجريبي: يقرا خط اليد ويحوله لنص قابل للتعديل — الأصل مش بيتمس"
+            className="notes-btn"
+          >
+            {handwritingBusy ? "🔎 بيقرا الخط…" : "🔎 قراءة الخط"}
           </button>
         </div>
 
