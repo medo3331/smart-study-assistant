@@ -84,8 +84,8 @@ export function smoothPoints(
 ): [number, number][] {
   if (points.length < 3) return [...points];
 
-  const alpha = 0.25 + 0.45 * clamp01(strength);
-  const iterations = 1 + Math.round(2 * clamp01(strength));
+  const alpha = 0.3 + 0.5 * clamp01(strength);
+  const iterations = 2 + Math.round(5 * clamp01(strength));
 
   let current: [number, number][] = [...points];
   for (let pass = 0; pass < iterations; pass += 1) {
@@ -102,6 +102,143 @@ export function smoothPoints(
     current = next;
   }
   return current;
+}
+
+/**
+ * Corner-aware smoothing — the beautify pass proper.
+ *
+ * Wobble is high-frequency: small, rapid direction changes. Letter corners
+ * are LOW-frequency structure: one sharp turn. So we detect the sharp turns
+ * first and PIN them, then run the Laplacian hard on everything between.
+ * The result relaxes the tremor while the letter's skeleton — its corners —
+ * stays exactly where the student put it. That is what keeps the output
+ * reading as handwriting instead of a printed font.
+ */
+export function smoothPreservingCorners(
+  points: readonly [number, number][],
+  strength: number,
+  cornerAngleDeg = 35,
+): [number, number][] {
+  return smoothCornersCore(points, strength, cornerAngleDeg).points;
+}
+
+/** Internal core: smoothed points PLUS the pinned corner coordinates, so the
+ *  caller can re-plant them after any later resampling. */
+function smoothCornersCore(
+  points: readonly [number, number][],
+  strength: number,
+  cornerAngleDeg: number,
+): { points: [number, number][]; corners: [number, number][] } {
+  if (points.length < 3) return { points: [...points], corners: [] };
+
+  // Corner detection with a WINDOWED direction comparison (~10px arms):
+  // pen wobble averages out across the window, so only real corners light up.
+  const step = points.length > 1 ? Math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1]) : 4;
+  const window = Math.max(2, Math.round(10 / Math.max(1, step)));
+  const protect = markCorners(points, cornerAngleDeg, window);
+  // Pin the neighbours too, so a pinned point doesn't drift alone.
+  for (let i = 1; i < protect.length - 1; i += 1) {
+    if (protect[i]) {
+      protect[i - 1] = true;
+      protect[i + 1] = true;
+    }
+  }
+
+  const corners: [number, number][] = [];
+  for (let i = 1; i < protect.length - 1; i += 1) {
+    // The center of each pinned run is the actual corner.
+    if (protect[i] && !protect[i - 1]) {
+      let end = i;
+      while (end + 1 < protect.length && protect[end + 1]) end += 1;
+      const mid = i + Math.floor((end - i) / 2);
+      corners.push(points[mid]);
+    }
+  }
+
+  const alpha = 0.3 + 0.5 * clamp01(strength);
+  const iterations = 2 + Math.round(6 * clamp01(strength));
+
+  let current: [number, number][] = [...points];
+  for (let pass = 0; pass < iterations; pass += 1) {
+    const next: [number, number][] = current.map((point, index) => {
+      if (index === 0 || index === current.length - 1) return point;
+      if (protect[index]) return point;
+      const [px, py] = point;
+      const [ax, ay] = current[index - 1];
+      const [bx, by] = current[index + 1];
+      return [
+        px + alpha * ((ax + bx) / 2 - px),
+        py + alpha * ((ay + by) / 2 - py),
+      ];
+    });
+    current = next;
+  }
+  return { points: current, corners };
+}
+
+/**
+ * Make sure every pinned corner survives a later resampling: the nearest
+ * point of `evened` snaps to the corner's exact coordinates (or the corner
+ * is inserted when the nearest point drifted too far).
+ */
+function replantCorners(
+  evened: [number, number][],
+  corners: readonly [number, number][],
+  step: number,
+): [number, number][] {
+  if (corners.length === 0) return evened;
+  const output = [...evened];
+  for (const [cx, cy] of corners) {
+    let nearest = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < output.length; i += 1) {
+      const dist = Math.hypot(output[i][0] - cx, output[i][1] - cy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = i;
+      }
+    }
+    if (nearestDist > step * 0.45) {
+      output.splice(nearest, 0, [cx, cy]);
+    } else {
+      output[nearest] = [cx, cy];
+    }
+  }
+  return output;
+}
+
+/**
+ * Indices of points where the path turns sharply (letter corners).
+ *
+ * Directions are compared over a WINDOW of points, not immediate neighbours:
+ * pen wobble averages out across a ~10px window, so only real corners —
+ * whose direction change survives the window — are protected.
+ */
+export function markCorners(
+  points: readonly [number, number][],
+  cornerAngleDeg = 35,
+  window = 1,
+): boolean[] {
+  const protect = new Array<boolean>(points.length).fill(false);
+  if (points.length < 2 * window + 1) return protect;
+  const threshold = (cornerAngleDeg * Math.PI) / 180;
+
+  for (let i = window; i < points.length - window; i += 1) {
+    const [ax, ay] = points[i - window];
+    const [bx, by] = points[i];
+    const [cx, cy] = points[i + window];
+    const inX = bx - ax;
+    const inY = by - ay;
+    const outX = cx - bx;
+    const outY = cy - by;
+    const inLen = Math.hypot(inX, inY);
+    const outLen = Math.hypot(outX, outY);
+    if (inLen === 0 || outLen === 0) continue;
+    const cos = (inX * outX + inY * outY) / (inLen * outLen);
+    const turn = Math.acos(clampNumber(cos, -1, 1));
+    if (turn >= threshold) protect[i] = true;
+  }
+  return protect;
 }
 
 /**
@@ -177,13 +314,51 @@ export function beautifyStroke(
 ): Stroke {
   if (stroke.shape || stroke.points.length < 3) return stroke;
 
-  // Resample step scales with stroke width so wide marker strokes keep mass.
-  const step = Math.max(2.5, 6 - stroke.thickness * 0.15);
-  const resampled = resampleByDistance(stroke.points, step);
-  const smoothed = smoothPoints(resampled, options.strength);
-  const straightened = straightenIfElongated(smoothed);
+  // Resample step scales with the stroke's own size: small letters keep
+  // detail, long lines get evenly spaced points.
+  const box = strokeBox(stroke.points);
+  const size = Math.max(box.width, box.height);
+  const step = clampNumber(Math.max(2, size / 55), 2, 6);
 
-  return { ...stroke, points: straightened };
+  const resampled = resampleByDistance(stroke.points, step);
+  const core = smoothCornersCore(resampled, options.strength, 35);
+  // Smoothing shortens and re-bunches the path — even it out again so the
+  // rendered width stays constant along the stroke, then re-plant the
+  // pinned corners that the resampling would otherwise blunt.
+  const evened = replantCorners(
+    resampleByDistance(core.points, step),
+    core.corners,
+    step,
+  );
+  const straightened = straightenIfElongated(evened);
+
+  return {
+    ...stroke,
+    points: straightened,
+    // Even, gently tapered width — reads as a confident pen stroke.
+    polished: true,
+  };
+}
+
+function strokeBox(points: readonly [number, number][]): {
+  width: number;
+  height: number;
+} {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of points) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { width: maxX - minX, height: maxY - minY };
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 /**

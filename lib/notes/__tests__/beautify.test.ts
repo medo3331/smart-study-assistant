@@ -209,3 +209,61 @@ describe("beautifyStrokes", () => {
     expect(result).toHaveLength(2);
   });
 });
+
+describe("corner-aware smoothing (beautify v2)", () => {
+  /** An L: horizontal leg, sharp 90° corner, vertical leg — with wobble. */
+  function lShapedWobble(): [number, number][] {
+    const points: [number, number][] = [];
+    for (let i = 0; i <= 30; i += 1) {
+      points.push([i * 8, 100 + Math.sin(i * 2.3) * 6]);
+    }
+    for (let i = 1; i <= 20; i += 1) {
+      points.push([240 + Math.cos(i * 2.1) * 5, 100 + i * 8]);
+    }
+    return points;
+  }
+
+  it("keeps the sharp corner while smoothing the wobble", () => {
+    const original = lShapedWobble();
+    const beautified = beautifyStroke(strokeFrom(original), {
+      strength: 0.8,
+      straightenRows: false,
+    });
+
+    // Find the point nearest the true corner (240, 100) and measure its turn.
+    const nearest = beautified.points.reduce((best, point) =>
+      Math.hypot(point[0] - 240, point[1] - 100) <
+      Math.hypot(best[0] - 240, best[1] - 100)
+        ? point
+        : best,
+    );
+    const index = beautified.points.indexOf(nearest);
+    const [ax, ay] = beautified.points[index - 1];
+    const [bx, by] = beautified.points[index];
+    const [cx, cy] = beautified.points[index + 1];
+    const inX = bx - ax;
+    const inY = by - ay;
+    const outX = cx - bx;
+    const outY = cy - by;
+    const cos = (inX * outX + inY * outY) /
+      (Math.hypot(inX, inY) * Math.hypot(outX, outY));
+    const turnDeg = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+    expect(turnDeg).toBeGreaterThan(55);
+
+    // The wobble on the legs is still relaxed.
+    const spread = (stroke: Stroke) => {
+      const leg = stroke.points.slice(0, 25).map(([, y]) => y);
+      return Math.max(...leg) - Math.min(...leg);
+    };
+    expect(spread(beautified)).toBeLessThan(spread(strokeFrom(original)));
+  });
+
+  it("marks beautified strokes as polished", () => {
+    const beautified = beautifyStroke(strokeFrom(shakyLine()), {
+      strength: 0.6,
+      straightenRows: false,
+    });
+    expect(beautified.polished).toBe(true);
+    expect(beautifyStroke(strokeFrom([[0, 0], [1, 1]])).polished).toBeUndefined();
+  });
+});

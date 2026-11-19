@@ -114,6 +114,18 @@ export function segmentWidth(stroke: Stroke, index: number): number {
   const points = stroke.points;
   if (index < 1 || index >= points.length) return base;
 
+  if (stroke.polished) {
+    // Even width with a soft pen-lift taper at both ends — the signature of
+    // a confident, beautified stroke.
+    const t = index / (points.length - 1);
+    const edge = Math.min(t, 1 - t);
+    const taper = edge < 0.12 ? 0.7 + 0.3 * (edge / 0.12) : 1;
+    if (typeof stroke.pressure === "number" && stroke.pressure > 0) {
+      return base * (0.85 + 0.3 * clamp01(stroke.pressure)) * taper;
+    }
+    return base * taper;
+  }
+
   if (typeof stroke.pressure === "number" && stroke.pressure > 0) {
     return base * (0.65 + 0.7 * clamp01(stroke.pressure));
   }

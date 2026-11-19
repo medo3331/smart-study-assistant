@@ -53,6 +53,11 @@ export type Stroke = {
   pressure?: number; // per-point when supported, else 0.5 fallback
   /** Present only for shape strokes — freehand strokes omit it. */
   shape?: StrokeShape;
+  /**
+   * True for beautified strokes: rendered with an even width and a gentle
+   * pen-lift taper at both ends instead of the raw speed/pressure taper.
+   */
+  polished?: boolean;
 };
 
 /** A typed text block placed on the page (Arabic/RTL aware). */
