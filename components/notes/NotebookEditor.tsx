@@ -2184,6 +2184,32 @@ export default function NotebookEditor({
     return `دفتر: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
   }, [currentPageId, notebookTitle, pages]);
 
+  /** ✂️ نص العنصر المحدد حالياً — بستخدمه في زر «اشرح المحدد». */
+  const getSelectedText = useCallback(() => {
+    const sel = selectionRef.current;
+    if (!sel || sel.kind !== "text") return null;
+    const text = contentRef.current.texts.find(
+      (entry) => entry.id === sel.id,
+    );
+    return text?.text?.trim() ? text.text : null;
+  }, []);
+
+  /** 📸 لقطة نظيفة للصفحة الحالية (برسمها برة الشاشة من غير ما ناخد سكرين شوت من الواجهة). */
+  const getCanvasSnapshot = useCallback(() => {
+    const canvas = renderPageToCanvas(
+      {
+        id: currentPageIdRef.current ?? "",
+        template: templateRef.current,
+        content: contentRef.current,
+        revision: 0,
+      },
+      1.5,
+    );
+    if (!canvas) return null;
+    // JPEG أصغر بكتير من PNG — كفاية للـ vision وتحت حد 5 ميجا بسهولة.
+    return canvas.toDataURL("image/jpeg", 0.85);
+  }, [renderPageToCanvas]);
+
   /** Text blocks across the whole notebook matching the search query. */
   const searchResults = useMemo(() => {
     const needle = query.trim();
@@ -3133,7 +3159,11 @@ export default function NotebookEditor({
         </div>
       ) : null}
 
-      <NotesAssistant getEditorContext={getEditorContext} />
+      <NotesAssistant
+        getEditorContext={getEditorContext}
+        getSelectedText={getSelectedText}
+        getCanvasSnapshot={getCanvasSnapshot}
+      />
     </div>
   );
 }

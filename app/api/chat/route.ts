@@ -295,6 +295,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ...data,
+      // 🛡️ الرد النصي المختصر — بعض العملاء كانوا بيقرأوه من هنا
+      //   والباقي من choices[0].message.content (الـ payload الخام).
+      //   الراية دي بتضمن إن مافيش عميل يرجّع رد فاضي.
+      answer: completion.content,
       conversationId: savedConversationId || undefined,
       suggestedAgent: suggestAgentFromText(safeMessages.at(-1)?.content ?? "") ?? undefined,
     });

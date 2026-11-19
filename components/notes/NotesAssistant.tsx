@@ -22,9 +22,15 @@ const QUICK_ACTIONS: { label: string; prompt: string }[] = [
 
 export default function NotesAssistant({
   getEditorContext,
+  getSelectedText,
+  getCanvasSnapshot,
 }: {
   /** Current page context (title + typed texts). Called when sending. */
   getEditorContext: () => string;
+  /** نص العنصر المحدد على الصفحة (لو حصل تحديد لنص) — للتشغيل على نص معين. */
+  getSelectedText?: () => string | null;
+  /** لقطة الصفحة الحالية كـ dataURL — يبعتها للذكاء الاصطناعي كصورة. */
+  getCanvasSnapshot?: () => string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -32,12 +38,31 @@ export default function NotesAssistant({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoContext, setAutoContext] = useState(true);
+  // ✂️ النص المحدد حالياً — بيتحدّث بيروديا عشان زر «اشرح المحدد» يبان مفعل.
+  const [selectedText, setSelectedText] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, busy]);
+
+  // بنتتبع التحديد من المحرر كل نصانية — بدل ما نعمل callback معقد
+  // من جوه الـ editor، كفاية إن الزر يتحدّث لما تفتح اللوحة أو ترجع لها.
+  useEffect(() => {
+    if (!open) return;
+    const poll = () => {
+      const text = getSelectedText?.() ?? null;
+      setSelectedText((previous) =>
+        text === previous ? previous : text,
+      );
+    };
+    poll();
+    const timer = setInterval(poll, 600);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [open, getSelectedText]);
 
   const send = useCallback(
     async (rawText: string) => {
@@ -74,8 +99,16 @@ export default function NotesAssistant({
             data?.error?.message ?? "فشل الاتصال بالمساعد. حاول تاني.",
           );
         }
-        const answer = typeof data?.answer === "string" && data.answer.trim()
-          ? data.answer
+        // ⚠️ /api/chat بيرجّع الـ payload الخام للمزوّد (choices) — وفيه
+        //   كمان `answer` الجديد. بقرا الاتنين الاحتياطيين عشان أي شكل
+        //   مالوش يرجّعنا رد فاضي.
+        const raw =
+          data?.answer ??
+          data?.choices?.[0]?.message?.content ??
+          data?.content ??
+          null;
+        const answer = typeof raw === "string" && raw.trim()
+          ? raw
           : "المساعد رجع رد فاضي — حاول تاني.";
         setMessages((previous) => [...previous, { role: "assistant", content: answer }]);
       } catch (caught) {
@@ -86,6 +119,81 @@ export default function NotesAssistant({
     },
     [autoContext, busy, getEditorContext, messages],
   );
+
+  /** ✂️ اشرح النص المحدد — بيبعت للـ AI مع طلب شرح مفصّل. */
+  const explainSelection = useCallback(() => {
+    const text = (getSelectedText?.() ?? selectedText ?? "").trim();
+    if (!text) {
+      setError("حدد نص على الصفحة الأول (اضغط عليه من أداة التحديد). ثم جرّب تاني.");
+      return;
+    }
+    setError(null);
+    if (text.length > 4000) {
+      void send(`اشرح النص ده بالتفصيل وبأسلوب سهل:
+
+${text.slice(0, 4000)}`);
+    } else {
+      void send(`اشرح النص ده بالتفصيل وبأسلوب سهل:
+
+${text}`);
+    }
+  }, [getSelectedText, selectedText, send]);
+
+  /** 📸 صورة الصفحة — بيبعتها للـ AI كصورة عبر /api/ai/image-analysis. */
+  const analyzeSnapshot = useCallback(async () => {
+    if (busy) return;
+    if (!getCanvasSnapshot) {
+      setError("مفيش دعم لقطة الصفحة هنا.");
+      return;
+    }
+    const dataUrl = getCanvasSnapshot();
+    if (!dataUrl?.startsWith("data:image/")) {
+      setError("مقدرناش نصور الصفحة دلوقتي — جرّب تاني.");
+      return;
+    }
+    const question = input.trim();
+    setMessages((previous) => [
+      ...previous,
+      {
+        role: "user" as const,
+        content: question
+          ? `📸 صوّرت لك الصفحة — ${question}`
+          : "📸 صوّرت لك الصفحة — اشرح اللي فيها",
+      },
+    ]);
+    setInput("");
+    setBusy(true);
+    setError(null);
+    try {
+      // dataURL → blob عشان نبعته FormData زي أي صورة.
+      const blob = await (await fetch(dataUrl)).blob();
+      const form = new FormData();
+      form.append("file", blob, "page.png");
+      form.append(
+        "question",
+        question ||
+          "دي صفحة من دفتر طالب بذاكر. اشرح اللي مكتوب فيها بالتفصيل بالعربي، ولو فيها أخطاء صححها.",
+      );
+      const res = await fetch("/api/ai/image-analysis", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          data?.error?.message ?? "فشل تحليل الصورة. حاول تاني.",
+        );
+      }
+      const answer = typeof data?.result === "string" && data.result.trim()
+        ? data.result
+        : "المساعد رجع رد فاضي — حاول تاني.";
+      setMessages((previous) => [...previous, { role: "assistant", content: answer }]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "حصل خطأ غير متوقع.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, getCanvasSnapshot, input]);
 
   return (
     <>
@@ -141,6 +249,27 @@ export default function NotesAssistant({
           </div>
 
           <div className="notes-assistant-chips">
+            <button
+              type="button"
+              className="notes-btn notes-btn-sm"
+              disabled={busy}
+              data-tone={selectedText ? "primary" : undefined}
+              onClick={explainSelection}
+              title={selectedText ? "اشرح النص المحدد" : "حدد نص على الصفحة الأول"}
+            >
+              ✂️ اشرح المحدد
+            </button>
+            {getCanvasSnapshot ? (
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                disabled={busy}
+                onClick={() => void analyzeSnapshot()}
+                title="صوّر الصفحة وابعتها للذكاء الاصطناعي"
+              >
+                📸 صورة الصفحة
+              </button>
+            ) : null}
             {QUICK_ACTIONS.map((action) => (
               <button
                 key={action.label}
@@ -173,7 +302,7 @@ export default function NotesAssistant({
               type="text"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="اسأل المساعد…"
+              placeholder={selectedText ? "محدد عندك نص — اسأل عنه أو دوس «اشرح المحدد»…" : "اسأل المساعد…"}
               aria-label="اكتب رسالتك للمساعد"
               disabled={busy}
               className="notes-input"
