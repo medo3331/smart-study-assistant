@@ -35,6 +35,7 @@ export type NavIconName =
   | "lessons"
   | "workspace"
   | "lectures"
+  | "files"
   | "exams"
   | "slides"
   | "aiMentor"
@@ -126,6 +127,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
       //    «المحاضرات» كانت بتستخدم لكل حاجة (صوتيات وملفات) وبتخلّي
       //    الطالب ميتلخبط: فين أرفع الصوت وفين أرفع الـPDF؟
       { id: "lectures", icon: "lectures", label: "التسجيلات الصوتية", latin: "Audio Lectures", href: "/lectures" },
+      // 📁 ملفات الطالب — رفع مباشر للتخزين + عارض داخل الصفحة.
+      { id: "files", icon: "files", label: "ملفاتي", latin: "My Files", href: "/files" },
       { id: "exams", icon: "exams", label: "بنك الامتحانات", latin: "Past Exams", href: "/exams" },
       { id: "slides", icon: "slides", label: "العروض", latin: "Slides", href: "/dashboard/slides" },
     ],

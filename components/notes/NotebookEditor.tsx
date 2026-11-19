@@ -214,6 +214,16 @@ export default function NotebookEditor({
   const [pdfTo, setPdfTo] = useState(1);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string | null>(null);
+  // 📁 مصدر الاستيراد: ملف محلي (pdfInputRef) أو من «ملفاتي» (Storage).
+  const [pdfLibraryFile, setPdfLibraryFile] = useState<{
+    fileId: string;
+    fileName: string;
+    url: string;
+  } | null>(null);
+  const [pdfLibraryList, setPdfLibraryList] = useState<Array<{
+    id: string;
+    file_name: string;
+  }> | null>(null);
 
   // ---- Split-screen mode (opened beside a lesson) ----
   const [besideMode, setBesideMode] = useState(false);
@@ -1854,31 +1864,134 @@ export default function NotebookEditor({
 
   // ---- PDF import ----
 
-  const handlePdfFile = useCallback(async (file: File) => {
-    if (!canWrite) return;
-    try {
-      setSaveStatus("idle");
-      setPdfProgress("بنقرا الملف…");
-      setPdfImportOpen(true);
-      const doc = await loadPdfDocument(file);
-      const count = doc.numPages;
-      doc.destroy();
-      if (count < 1) {
+  /** يفتح ملف PDF (محلي أو من «ملفاتي») ويعرض اختيار النطاق. */
+  const openPdfImport = useCallback(
+    async (getDoc: () => Promise<File>, libraryFile: {
+      fileId: string;
+      fileName: string;
+      url: string;
+    } | null) => {
+      if (!canWrite) return;
+      try {
+        setSaveStatus("idle");
+        setPdfProgress("بنقرا الملف…");
+        setPdfImportOpen(true);
+        const file = await getDoc();
+        const doc = await loadPdfDocument(file);
+        const count = doc.numPages;
+        doc.destroy();
+        if (count < 1) {
+          setPdfImportOpen(false);
+          setMessage("الملف ده مفيهوش صفحات مقروءة.");
+          return;
+        }
+        setPdfLibraryFile(libraryFile);
+        setPdfPageCount(count);
+        setPdfFrom(1);
+        setPdfTo(Math.min(count, Math.min(10, MAX_PDF_PAGES_PER_IMPORT)));
+        setPdfProgress(null);
+      } catch (error) {
+        console.error("[notes] pdf open failed", error);
         setPdfImportOpen(false);
-        setMessage("الملف ده مفيهوش صفحات مقروءة.");
+        setPdfProgress(null);
+        setMessage("مقدرناش نقرا ملف الـ PDF — لو ملف مفقولح، جرّب ملف تاني.");
+      }
+    },
+    [canWrite, setSaveStatus],
+  );
+
+  const handlePdfFile = useCallback(
+    (file: File) => openPdfImport(() => Promise.resolve(file), null),
+    [openPdfImport],
+  );
+
+  /** استيراد PDF من مكتبة «ملفاتي» — بيجيب رابط موقّع من السيرفر. */
+  const handlePdfFromLibrary = useCallback(
+    async (fileId: string, fileName: string) => {
+      setPdfProgress("بيجهّز الملف من مكتبتك…");
+      try {
+        const res = await fetch("/api/files", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fileId }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          setPdfProgress(null);
+          setMessage(data?.error?.message || "مقدرناش نجيب الملف من مكتبتك.");
+          return;
+        }
+        const url = data.url as string;
+        await openPdfImport(async () => {
+          const blob = await (await fetch(url)).blob();
+          return new File([blob], fileName, { type: "application/pdf" });
+        }, { fileId, fileName, url });
+      } catch (error) {
+        console.error("[notes] pdf from library failed", error);
+        setPdfProgress(null);
+        setMessage("مقدرناش نجيب الملف من مكتبتك.");
+      }
+    },
+    [openPdfImport],
+  );
+
+  /** استيراد عبر رابط موقّع مباشر — بيستخدمه ?importFile= من صفحة «ملفاتي». */
+  const importFromLibraryParam = useCallback(
+    async (fileId: string) => {
+      // بيجيب الاسم من قايمة المكتبة عشان يبقى اسم معقول للملف.
+      const res = await fetch("/api/files");
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (!data?.ok) return;
+      const match = (data.files as Array<{ id: string; file_name: string; file_type: string }>).find(
+        (entry) => entry.id === fileId && entry.file_type === "pdf",
+      );
+      if (!match) {
+        setMessage("الملف ده مش PDF — الاستيراد للنوته للـ PDF بس.");
         return;
       }
-      setPdfPageCount(count);
-      setPdfFrom(1);
-      setPdfTo(Math.min(count, Math.min(10, MAX_PDF_PAGES_PER_IMPORT)));
-      setPdfProgress(null);
-    } catch (error) {
-      console.error("[notes] pdf open failed", error);
-      setPdfImportOpen(false);
-      setPdfProgress(null);
-      setMessage("مقدرناش نقرا ملف الـ PDF — لو ملف مفقولح، جرّب ملف تاني.");
+      await handlePdfFromLibrary(fileId, match.file_name);
+    },
+    [handlePdfFromLibrary],
+  );
+
+  // ?importFile=<id> — زر «للنوته» في «ملفاتي» بيفتح الاستيراد فوراً.
+  const handledImportParamRef = useRef(false);
+  useEffect(() => {
+    if (handledImportParamRef.current) return;
+    if (typeof window === "undefined") return;
+    const fileId = new URLSearchParams(window.location.search).get("importFile");
+    if (!fileId) return;
+    handledImportParamRef.current = true;
+    // نظّف الرابط عشان الريفريش ما يفتحش الاستيراد تاني، وبنأجّل الاستيراد
+    // ما بعد الـ effect عشان متعملش setState متزامن (قاعدة react-hooks).
+    window.history.replaceState(null, "", window.location.pathname);
+    const timer = setTimeout(() => {
+      void importFromLibraryParam(fileId);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [importFromLibraryParam]);
+
+  // قايمة مكتبة «ملفاتي» — بتتجاب أول ما نحتاجها في منتقي الاستيراد.
+  const loadPdfLibrary = useCallback(async () => {
+    try {
+      const res = await fetch("/api/files");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setPdfLibraryList([]);
+        return;
+      }
+      setPdfLibraryList(
+        (data.files as Array<{ id: string; file_name: string; file_type: string }>).filter(
+          (entry) => entry.file_type === "pdf",
+        ),
+      );
+    } catch {
+      setPdfLibraryList([]);
     }
-  }, [canWrite, setSaveStatus]);
+  }, []);
 
   const confirmPdfImport = useCallback(async () => {
     const nbId = notebookIdRef.current;
@@ -1889,7 +2002,14 @@ export default function NotebookEditor({
 
     setPdfBusy(true);
     try {
-      const file = pdfInputRef.current?.files?.[0];
+      // 📁 مصدر الاستيراد: ملف «ملفاتي» لو متختار، وإلا الملف المحلي.
+      let file: File | undefined;
+      if (pdfLibraryFile?.url) {
+        const blob = await (await fetch(pdfLibraryFile.url)).blob();
+        file = new File([blob], pdfLibraryFile.fileName, { type: "application/pdf" });
+      } else {
+        file = pdfInputRef.current?.files?.[0];
+      }
       if (!file) {
         setMessage("اختار ملف الـ PDF الأول.");
         return;
@@ -1957,6 +2077,7 @@ export default function NotebookEditor({
     pages,
     paint,
     pdfFrom,
+    pdfLibraryFile,
     pdfPageCount,
     pdfTo,
     repo,
@@ -2794,7 +2915,61 @@ export default function NotebookEditor({
                   </button>
                 </div>
               </>
-            ) : null}
+            ) : (
+              // 📁 منتقي المصدر: ملف محلي أو PDF من مكتبة «ملفاتي».
+              <>
+                <div className="notes-modal-actions">
+                  <div className="notes-spacer" />
+                  <button
+                    type="button"
+                    onClick={() => pdfInputRef.current?.click()}
+                    className="notes-btn"
+                    data-tone="primary"
+                  >
+                    اختار ملف من جهازك
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPdfImportOpen(false)}
+                    className="notes-btn notes-btn-sm"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+                <p className="notes-modal-sub">أو استورد من مكتبة «ملفاتي»:</p>
+                {pdfLibraryList === null ? (
+                  <p className="notes-hint">
+                    <button
+                      type="button"
+                      onClick={() => void loadPdfLibrary()}
+                      className="notes-btn notes-btn-sm"
+                    >
+                      اعرض ملفاتي
+                    </button>
+                  </p>
+                ) : pdfLibraryList.length === 0 ? (
+                  <p className="notes-hint">
+                    مفيش PDF في مكتبتك —{" "}
+                    <a href="/files" className="notes-link">ارفع من صفحة «ملفاتي»</a>.
+                  </p>
+                ) : (
+                  <ul className="notes-import-library">
+                    {pdfLibraryList.map((entry) => (
+                      <li key={entry.id}>
+                        <button
+                          type="button"
+                          onClick={() => void handlePdfFromLibrary(entry.id, entry.file_name)}
+                          className="notes-btn notes-btn-sm"
+                          title={entry.file_name}
+                        >
+                          📕 {entry.file_name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
           </div>
         </div>
       ) : null}
