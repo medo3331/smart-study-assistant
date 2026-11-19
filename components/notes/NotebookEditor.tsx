@@ -2784,6 +2784,9 @@ export default function NotebookEditor({
   /** 🔎 POC قراءة خط اليد: صورة الصفحة → vision → نص قابل للتعديل.
    *  تجريبي — الدقة بتعتمد على وضوح الخط، والأصل مش بيتمس. */
   const [handwritingBusy, setHandwritingBusy] = useState(false);
+  // 📝 معاينة النص المقروء قبل الإدراج — الطالب يصحح أي غلط في القراءة.
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
+  const [handwritingDraft, setHandwritingDraft] = useState("");
   const convertHandwriting = useCallback(async () => {
     if (!canWrite || handwritingBusy) return;
     const snapshot = getCanvasSnapshot();
@@ -2812,21 +2815,51 @@ export default function NotebookEditor({
         setMessage("المساعد مش شايف نص مقروء في الصفحة.");
         return;
       }
-      // كل سطر بيبقى بلوك نص مستقل قابل للتعديل — من ناحية اليمين (RTL).
-      const lines = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 60);
-      const startX = PAGE_WIDTH - 64;
-      const startY = 72;
-      const lineHeight = 34;
+      // 📝 معاينة قبل الإدراج — الطالب يصحح أي غلط في القراءة الأول.
+      setHandwritingDraft(text);
+      setHandwritingOpen(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "فشل قراءة الخط. حاول تاني.");
+    } finally {
+      setHandwritingBusy(false);
+    }
+  }, [canWrite, getCanvasSnapshot, handwritingBusy]);
+
+  /** إدراج النص المقروء على الصفحة — الأصل (خط الطالب) مش بيتمس أبداً. */
+  const insertHandwritingText = useCallback(
+    (mode: "lines" | "block") => {
+      if (!canWrite) return;
+      const text = handwritingDraft.trim();
+      if (!text) return;
       const content = contentRef.current;
-      const newBlocks: NoteText[] = lines.map((line, index) => ({
-        id: newId(),
-        kind: "text",
-        text: line,
-        x: Math.max(24, startX - line.length * 9),
-        y: startY + index * lineHeight,
-        size: 20,
-        color: "#2563eb",
-      }));
+      let newBlocks: NoteText[] = [];
+      if (mode === "block") {
+        // بلوك واحد متعدد الأسطر — يتحرك ويعدل كقطعة واحدة.
+        newBlocks = [{
+          id: newId(),
+          kind: "text",
+          text,
+          x: PAGE_WIDTH - 64,
+          y: 72,
+          size: 18,
+          color: "#2563eb",
+        }];
+      } else {
+        // سطر بسطر — كل سطر بلوك مستقل من ناحية اليمين (RTL).
+        const lines = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 60);
+        const startX = PAGE_WIDTH - 64;
+        const startY = 72;
+        const lineHeight = 34;
+        newBlocks = lines.map((line, index) => ({
+          id: newId(),
+          kind: "text",
+          text: line,
+          x: Math.max(24, startX - line.length * 9),
+          y: startY + index * lineHeight,
+          size: 20,
+          color: "#2563eb",
+        }));
+      }
       setContent({
         strokes: content.strokes,
         texts: [...content.texts, ...newBlocks],
@@ -2839,15 +2872,16 @@ export default function NotebookEditor({
       paint();
       commitHistory();
       scheduleSave();
+      setHandwritingOpen(false);
+      setHandwritingDraft("");
       setMessage(
-        `اتقرا ${lines.length} سطر — النص الأزرق ده تجربة، عدّله براحتك. الأصل (خطك) محفوظ زي ما هو.`,
+        mode === "block"
+          ? "النص اتدرج كبلوك واحد أزرق — عدّله وحركه براحتك، وخطك الأصلي محفوظ."
+          : `اتدرج ${newBlocks.length} سطر كبلوكات أزرق — عدّل أي واحد، وخطك الأصلي محفوظ.`,
       );
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "فشل قراءة الخط. حاول تاني.");
-    } finally {
-      setHandwritingBusy(false);
-    }
-  }, [canWrite, commitHistory, getCanvasSnapshot, handwritingBusy, paint, scheduleSave, setContent]);
+    },
+    [canWrite, commitHistory, handwritingDraft, paint, scheduleSave, setContent],
+  );
 
 
   /** Text blocks across the whole notebook matching the search query. */
@@ -3870,6 +3904,56 @@ export default function NotebookEditor({
         getSelectedText={getSelectedText}
         getCanvasSnapshot={getCanvasSnapshot}
       />
+
+      {/* 📝 معاينة قراءة خط اليد — تصحيح قبل الإدراج */}
+      {handwritingOpen ? (
+        <div className="notes-modal-backdrop" role="presentation">
+          <div className="notes-modal" role="dialog" aria-modal="true" aria-label="قراءة خط اليد">
+            <h2 className="notes-modal-title">📝 النص المقروء من خطك</h2>
+            <p className="notes-modal-sub">
+              ده اللي المساعد قراه من خطك — صحّح أي غلط قبل الإدراج. النص
+              هيندرج أزرق فوق الصفحة، وخطك الأصلي مش هيتلمس.
+            </p>
+            <textarea
+              className="notes-input notes-handwriting-draft"
+              dir="rtl"
+              rows={10}
+              value={handwritingDraft}
+              onChange={(event) => setHandwritingDraft(event.target.value)}
+              aria-label="النص المقروء"
+            />
+            <div className="notes-modal-actions">
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                onClick={() => {
+                  setHandwritingOpen(false);
+                  setHandwritingDraft("");
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                onClick={() => insertHandwritingText("lines")}
+                title="كل سطر بيبقى بلوك نص مستقل"
+              >
+                سطر بسطر
+              </button>
+              <button
+                type="button"
+                className="notes-btn"
+                data-tone="primary"
+                onClick={() => insertHandwritingText("block")}
+                title="النص كله كبلوك واحد يتحرك كقطعة واحدة"
+              >
+                إدراج كبلوك واحد
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* 🎴 مذاكرة من النوته — فلَش كاردز + اختيار من متعدد */}
       <StudyCards

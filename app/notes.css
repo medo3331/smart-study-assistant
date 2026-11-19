@@ -789,6 +789,16 @@
   margin: 6px auto 0;
 }
 
+/* 📝 مساحة تحرير النص المقروء من خط اليد */
+.notes-handwriting-draft {
+  width: 100%;
+  min-height: 220px;
+  font-size: 14px;
+  line-height: 2;
+  resize: vertical;
+  text-align: right;
+}
+
 /* 📊 شريط استهلاك صفحات اليوم — جنب زر «＋ صفحة» */
 .notes-quota-chip {
   display: inline-flex;
