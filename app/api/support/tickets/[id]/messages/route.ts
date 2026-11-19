@@ -16,7 +16,6 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   const service=createServiceClient();
   const {data:ticket}=await service.from("support_tickets").select("*").eq("id",id).maybeSingle();
   if(!ticket||ticket.user_id!==user.id)return NextResponse.json({success:false,error:"Not found."},{status:404});
-  if(ticket.status==="closed")return NextResponse.json({success:false,error:"Ticket is closed."},{status:400});
   const {data:msg,error}=await service.from("support_messages").insert({ticket_id:id,author_id:user.id,author_role:"user",body:text}).select("*").single();
   if(error||!msg){console.error("[support reply]",error?.message);return NextResponse.json({success:false,error:"Failed to reply."},{status:500});}
   await service.from("support_tickets").update({status:"open",updated_at:new Date().toISOString()}).eq("id",id);

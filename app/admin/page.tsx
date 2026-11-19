@@ -42,7 +42,7 @@ export default async function AdminHomePage({
     <div className="space-y-6 sm:space-y-8">
       <AdminPageHeader
         title="مركز الإدارة الشامل"
-        subtitle={`المتحكم الحالي: ${isOwner ? "المالك الرئيسي (Owner)" : role === "admin" ? "أدمن (Admin)" : role}`}
+        subtitle={`المتحكم الحالي: ${isOwner ? "المالك الرئيسي (Owner)" : role === "admin" ? "أدمن (Admin)" : role === "support" ? "الدعم (Support)" : role}`}
         badge="لوحة الأدمن"
         permissionKey={ADMIN_HOME_PERMISSION}
       />

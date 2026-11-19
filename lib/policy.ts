@@ -100,6 +100,7 @@ export const OWNER_ONLY_PERMISSIONS: AdminPermissionKey[] = [
   "models.manage",
   "rewards.manage",
   "admins.manage",
+  "credits.manage",
 ];
 
 /** فحص ما إذا كان الفاعل يملك صلاحية معينة (المالك يتخطى تلقائياً) */

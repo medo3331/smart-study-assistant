@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   nextUpgrade,
@@ -236,6 +237,17 @@ export default function ProfilePage() {
           </div>
         </div>
       </section>
+
+      <Link
+        href="/dashboard/support"
+        className="group flex items-center justify-between gap-4 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-5 transition hover:border-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--color-surface-2)] text-[var(--color-primary)]"><MessageCircle className="h-5 w-5" aria-hidden="true" /></span>
+          <span><span className="block font-semibold">مركز دعم MAG</span><span className="mt-1 block text-xs text-[var(--color-text-muted)]">تابع طلباتك وردود فريق الدعم أو ابدأ محادثة جديدة.</span></span>
+        </span>
+        <span className="shrink-0 text-sm font-bold text-[var(--color-primary)]">فتح الدعم ←</span>
+      </Link>
 
       <section className="rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-5 md:p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">

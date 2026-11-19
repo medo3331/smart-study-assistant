@@ -114,7 +114,6 @@ export async function resetSubscriptionQuota(
   userIdOrCode: string
 ): Promise<any> {
   const lookup = (userIdOrCode || "").trim();
-  const db = createServiceClient();
 
   let actor: ActorContext;
   try {
@@ -127,6 +126,7 @@ export async function resetSubscriptionQuota(
   const adminUserId = actor.userId!;
   const adminEmail = actor.userEmail;
   const auditBase = { actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage" as const, resource_type: "subscription_quota", resource_id: lookup || null };
+  const db = createServiceClient();
   try {
     if (!lookup) return { ok: false, message: "معرّف المستخدم مطلوب" };
     let userId = lookup;

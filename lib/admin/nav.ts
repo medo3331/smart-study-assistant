@@ -165,6 +165,34 @@ export const ADMIN_NAV: AdminNavItem[] = [
     permission: "admins.manage",
     icon: "Settings",
   },
+  {
+    href: "/admin/analytics",
+    label: "تحليلات المنصة",
+    description: "مؤشرات الاشتراكات والاستخدام ونشاط المستخدمين",
+    permission: "users.read",
+    icon: "ScrollText",
+  },
+  {
+    href: "/admin/alerts",
+    label: "التنبيهات",
+    description: "مراقبة أعطال مزوّدي الذكاء الاصطناعي",
+    permission: "users.read",
+    icon: "ScrollText",
+  },
+  {
+    href: "/admin/ai-telemetry",
+    label: "مراقبة AI التقنية",
+    description: "تفصيل المحاولات حسب المزوّد والنموذج والحالة",
+    permission: "users.read",
+    icon: "Cpu",
+  },
+  {
+    href: "/admin/messaging",
+    label: "الرسائل والإعلانات",
+    description: "إرسال إعلانات أو رسائل للمستخدمين",
+    permission: "announcements.manage",
+    icon: "Megaphone",
+  },
 ];
 
 /** المسار الرئيسي — متاح لأي أدمن (قراءة فقط) */

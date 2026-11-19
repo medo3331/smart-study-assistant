@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 // الرقم الافتراضي هو نفس واتساب التواصل الموجود في lib/site-links.ts.
 // تقدر تغيّره في Vercel بمتغير NEXT_PUBLIC_SUPPORT_WHATSAPP كرابط wa.me كامل.
@@ -65,6 +66,7 @@ export function SupportWidget() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
   // أي مكان في التطبيق يقدر يفتح النافذة (ويفتحها بتفاصيل معبّأة)
   useEffect(() => {
@@ -101,27 +103,30 @@ export function SupportWidget() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setError("لازم تسجّل دخولك الأول عشان التذكرة توصلك بحسابك — أو كلّمنا على واتساب.");
+        setError("لازم تسجّل دخولك الأول عشان تتابع رد الدعم في حسابك — أو كلّمنا على واتساب.");
         return;
       }
 
-      const typeLabel =
-        ISSUE_TYPES.find((t) => t.value === category)?.label ?? "مشكلة أخرى";
-      const { error: insertError } = await supabase.from("support_tickets").insert({
-        user_id: user.id,
-        category,
-        title: typeLabel,
-        description: `الصفحة: ${pathname}\n\n${text}`,
+      const typeLabel = ISSUE_TYPES.find((t) => t.value === category)?.label ?? "مشكلة أخرى";
+      const response = await fetch("/api/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: typeLabel,
+          category,
+          message: `الصفحة: ${pathname}\n\n${text}`,
+        }),
       });
-
-      if (insertError) {
-        console.error("support ticket insert failed:", insertError.message);
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        console.error("support ticket create failed:", result?.error ?? response.status);
         setError("مقدرناش نحفظ التذكرة دلوقتي — جرّب تاني أو كلّمنا على واتساب.");
         return;
       }
 
       setSent(true);
       setDetails("");
+      router.refresh();
     } catch (err) {
       console.error("support ticket error:", err);
       setError("حصل خطأ غير متوقع — جرّب تاني.");
