@@ -767,6 +767,25 @@
   text-decoration: underline;
 }
 
+/* 📊 شريط استهلاك صفحات اليوم — جنب زر «＋ صفحة» */
+.notes-quota-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+.notes-quota-chip[data-full="true"] {
+  color: #d93025;
+  background: rgba(217, 48, 37, 0.12);
+  font-weight: 600;
+}
+
 .notes-hint kbd {
   font-family: var(--font-mono);
   font-size: 11px;

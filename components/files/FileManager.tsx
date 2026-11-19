@@ -30,6 +30,12 @@ interface UploadTicket {
   token: string;
 }
 
+interface UploadQuota {
+  used: number;
+  limit: number;
+  resetAt: string | null;
+}
+
 const CATEGORY_ICONS: Record<string, string> = {
   pdf: "📕",
   word: "📄",
@@ -70,13 +76,20 @@ export function FileManager() {
   const [uploadName, setUploadName] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<StudentFile | null>(null);
+  // 📊 رصيد الرفع اليومي — من GET /api/files (limit -1 = مشترَك/بلا حد).
+  const [quota, setQuota] = useState<UploadQuota | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/files");
     if (res.ok) {
       const data = await res.json().catch(() => null);
-      if (data?.ok) setFiles(data.files as StudentFile[]);
+      if (data?.ok) {
+        setFiles(data.files as StudentFile[]);
+        if (data.quota && typeof data.quota.limit === "number" && data.quota.limit >= 0) {
+          setQuota(data.quota as UploadQuota);
+        }
+      }
     }
     setLoading(false);
   }, []);
@@ -241,6 +254,22 @@ export function FileManager() {
       </div>
 
       {notice && <p className="fm-notice">{notice}</p>}
+
+      {quota ? (
+        <div className="fm-quota" title="رصيد الرفع اليومي — بيتجدد كل 24 ساعة">
+          <div className="fm-quota-bar" aria-hidden="true">
+            <span
+              style={{ width: `${Math.min(100, Math.round((quota.used / quota.limit) * 100))}%` }}
+              data-full={quota.used >= quota.limit ? "true" : undefined}
+            />
+          </div>
+          <span className="fm-quota-text" data-full={quota.used >= quota.limit ? "true" : undefined}>
+            {quota.used >= quota.limit
+              ? `خلصت رصيد النهارده (${quota.limit}/${quota.limit}) — بيتجدد كل 24 ساعة`
+              : `باقي لك ${quota.limit - quota.used} ملفات النهارده (${quota.used}/${quota.limit})`}
+          </span>
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="fm-loading">بيجيب ملفاتك…</p>

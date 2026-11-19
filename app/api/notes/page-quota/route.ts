@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { checkRateLimit } from "@/lib/api-guard";
 import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { readQuotaSnapshot } from "@/lib/ai/quota-snapshot";
 import { resolveActor } from "@/lib/policy";
 
 /* ==========================================================================
@@ -20,6 +21,23 @@ import { resolveActor } from "@/lib/policy";
      → 200 { allowed, used, limit, resetAt, reasonAr? }
        limit = -1 يعني بلا حد (مشتركون/مالك)
    ========================================================================== */
+
+/* GET — قراءة الرصيد **بدون استهلاك** — لشريط الاستهلاك في المحرر. */
+export async function GET() {
+  try {
+    const { user, response: authError } = await requireUserSafe();
+    if (authError) return authError;
+
+    const snapshot = await readQuotaSnapshot(user.id, "page");
+    return NextResponse.json({ ok: true, ...snapshot });
+  } catch (error) {
+    console.error("notes/page-quota GET:", error);
+    return NextResponse.json(
+      { error: { code: "UNKNOWN", message: "حصل خطأ غير متوقع. حاول تاني." } },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

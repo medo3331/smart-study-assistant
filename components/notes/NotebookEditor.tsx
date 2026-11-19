@@ -36,7 +36,7 @@ import {
   renderPdfPageToImage,
 } from "@/lib/notes/pdf";
 import { SaveCoordinator } from "@/lib/notes/editor-save";
-import { pageQuotaBlockedMessage, requestPageCredits } from "@/lib/notes/page-quota";
+import { pageQuotaBlockedMessage, requestPageCredits, type PageQuotaResult } from "@/lib/notes/page-quota";
 import type {
   NoteImage,
   NoteText,
@@ -228,6 +228,35 @@ export default function NotebookEditor({
 
   // ---- Split-screen mode (opened beside a lesson) ----
   const [besideMode, setBesideMode] = useState(false);
+
+  // 📊 كوتة الصفحات اليومية (free = 10/يوم) — لشريط الاستهلاك. null = مشترَك/بلا حد/لسه ماتجابتش.
+  const [pageQuota, setPageQuota] = useState<{ used: number; limit: number } | null>(null);
+
+  // 📊 تحديث شريط الكوتة من رد طلب الرصيد.
+  const trackPageQuota = useCallback((result: PageQuotaResult) => {
+    if (!result.failOpen && result.limit >= 0) {
+      setPageQuota({ used: result.used, limit: result.limit });
+    }
+  }, []);
+
+  // 📊 الرصيد المبدأي — GET مش بيستهلك حاجة.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/notes/page-quota");
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && data?.ok && typeof data.limit === "number" && data.limit >= 0) {
+          setPageQuota({ used: data.used ?? 0, limit: data.limit });
+        }
+      } catch {
+        // أوفلاين — الشريط بيفضل مخفي.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ---- Handwriting beautify (Natural mode) ----
   const [beautifyOpen, setBeautifyOpen] = useState(false);
@@ -868,6 +897,7 @@ export default function NotebookEditor({
         setMessage(pageQuotaBlockedMessage(quota));
         return;
       }
+      trackPageQuota(quota);
 
       await saveCurrentPage();
 
@@ -922,6 +952,7 @@ export default function NotebookEditor({
     saveNotebookRecord,
     setSaveStatus,
     syncHistory,
+    trackPageQuota,
   ]);
 
   const deletePage = useCallback(async () => {
@@ -983,6 +1014,7 @@ export default function NotebookEditor({
         setMessage(pageQuotaBlockedMessage(dupQuota));
         return;
       }
+      trackPageQuota(dupQuota);
 
       await saveCurrentPage();
 
@@ -1045,6 +1077,7 @@ export default function NotebookEditor({
     saveNotebookRecord,
     setSaveStatus,
     syncHistory,
+    trackPageQuota,
   ]);
 
   /** Swap a page with its neighbour, persisting the new order. */
@@ -2026,6 +2059,7 @@ export default function NotebookEditor({
         setMessage(pageQuotaBlockedMessage(pageQuota));
         return;
       }
+      trackPageQuota(pageQuota);
 
       // 📁 مصدر الاستيراد: ملف «ملفاتي» لو متختار، وإلا الملف المحلي.
       let file: File | undefined;
@@ -2109,6 +2143,7 @@ export default function NotebookEditor({
     saveNotebookRecord,
     setSaveStatus,
     syncHistory,
+    trackPageQuota,
   ]);
 
   // ---- Handwriting beautify ----
@@ -2818,6 +2853,15 @@ export default function NotebookEditor({
         >
           ＋ صفحة
         </button>
+        {pageQuota ? (
+          <span
+            className="notes-quota-chip"
+            data-full={pageQuota.used >= pageQuota.limit ? "true" : undefined}
+            title="صفحات النهارده المتاحة — بتتجدد كل 24 ساعة"
+          >
+            📄 {pageQuota.used}/{pageQuota.limit}
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={() => void deletePage()}

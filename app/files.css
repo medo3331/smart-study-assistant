@@ -86,6 +86,46 @@
   font-size: 0.9rem;
 }
 
+/* 📊 شريط استهلاك رصيد الرفع اليومي */
+.fm-quota {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.fm-quota-bar {
+  flex: 1;
+  max-width: 320px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(139, 148, 158, 0.25);
+  overflow: hidden;
+}
+
+.fm-quota-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--fm-accent);
+  transition: width 0.3s ease;
+}
+
+.fm-quota-bar span[data-full="true"] {
+  background: #f85149;
+}
+
+.fm-quota-text {
+  font-size: 0.85rem;
+  color: var(--fm-muted);
+  white-space: nowrap;
+}
+
+.fm-quota-text[data-full="true"] {
+  color: #f85149;
+  font-weight: 600;
+}
+
 .fm-loading,
 .fm-empty {
   color: var(--fm-muted);

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { readFileUrl } from "@/lib/files/storage";
+import { readQuotaSnapshot } from "@/lib/ai/quota-snapshot";
 
 /* ==========================================================================
    📁 /api/files — مكتبة ملفات الطالب
@@ -40,7 +41,13 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ ok: true, files: data ?? [] });
+    const snapshot = await readQuotaSnapshot(user.id, "upload");
+    return NextResponse.json({
+      ok: true,
+      files: data ?? [],
+      // 📊 رصيد الرفع اليومي — لشريط الاستهلاك في «ملفاتي».
+      quota: { used: snapshot.used, limit: snapshot.limit, resetAt: snapshot.resetAt },
+    });
   } catch (error) {
     console.error("files/list:", error);
     return NextResponse.json(
