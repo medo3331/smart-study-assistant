@@ -52,6 +52,7 @@ import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
 import PageThumbs from "@/components/notes/PageThumbs";
 import NotesAssistant from "@/components/notes/NotesAssistant";
+import StudyCards from "@/components/notes/StudyCards";
 
 /**
  * The notebook editor.
@@ -321,6 +322,8 @@ export default function NotebookEditor({
 
   // ---- Handwriting beautify (Natural mode) ----
   const [beautifyOpen, setBeautifyOpen] = useState(false);
+  // 🎴 مذاكرة من النوته — فلَش كاردز + اختيار من متعدد.
+  const [studyOpen, setStudyOpen] = useState(false);
   const [beautifyStrength, setBeautifyStrength] = useState(0.6);
   const [beautifyRows, setBeautifyRows] = useState(true);
 
@@ -2713,6 +2716,25 @@ export default function NotebookEditor({
   const showTextControls = tool === "text" || selection?.kind === "text";
 
   /** What the assistant sees: notebook title + the page's typed texts. */
+  /** 🎴 نصوص المذاكرة: نصوص الصفحة الحالية — لو قليلة، بيجمع من الدفتر كله. */
+  const getStudyTexts = useCallback(() => {
+    const pageTexts = contentRef.current.texts
+      .map((text) => text.text)
+      .filter((line) => line.trim() !== "")
+      .join("\n");
+    if (pageTexts.trim().length >= 80) return pageTexts.slice(0, 6000);
+    return pages
+      .map((page) =>
+        page.content.texts
+          .map((text) => text.text)
+          .filter((line) => line.trim() !== "")
+          .join("\n"),
+      )
+      .filter((text) => text.trim() !== "")
+      .join("\n\n")
+      .slice(0, 6000);
+  }, [pages]);
+
   const getEditorContext = useCallback(() => {
     const content = contentRef.current;
     const typed = content.texts
@@ -2722,6 +2744,16 @@ export default function NotebookEditor({
       .slice(0, 1800);
     return `دفتر: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
   }, [currentPageId, notebookTitle, pages]);
+
+  /** 🎴 تحميل/حفظ ديك المذاكرة في meta store للدفتر. */
+  const loadStudyDeck = useCallback(
+    (key: string) => repo.getMeta(key) as Promise<never>,
+    [repo],
+  );
+  const saveStudyDeck = useCallback(
+    (key: string, deckValue: unknown) => repo.putMeta(key, deckValue),
+    [repo],
+  );
 
   /** ✂️ نص العنصر المحدد حالياً — بستخدمه في زر «اشرح المحدد». */
   const getSelectedText = useCallback(() => {
@@ -3114,6 +3146,14 @@ export default function NotebookEditor({
             className="notes-btn"
           >
             ✍️ تحسين الخط
+          </button>
+          <button
+            type="button"
+            onClick={() => setStudyOpen(true)}
+            title="فلَش كاردز وأسئلة اختياري من محتوى النوته"
+            className="notes-btn"
+          >
+            🎴 مذاكرة
           </button>
         </div>
 
@@ -3751,6 +3791,16 @@ export default function NotebookEditor({
         getEditorContext={getEditorContext}
         getSelectedText={getSelectedText}
         getCanvasSnapshot={getCanvasSnapshot}
+      />
+
+      {/* 🎴 مذاكرة من النوته — فلَش كاردز + اختيار من متعدد */}
+      <StudyCards
+        open={studyOpen}
+        onClose={() => setStudyOpen(false)}
+        getPageTexts={getStudyTexts}
+        storageKey={`notes:cards:${notebookId ?? ""}`}
+        getSavedDeck={loadStudyDeck}
+        saveDeck={saveStudyDeck}
       />
     </div>
   );
