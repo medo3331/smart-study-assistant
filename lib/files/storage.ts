@@ -96,17 +96,29 @@ function storageFrom() {
 
 let bucketReady: Promise<void> | null = null;
 
-/** يتأكد إن الباكيت موجود — أول استدعاء بيعمله لو ناقص، وبعدين يكاش. */
+/** يتأكد إن الباكيت موجود — أول استدعاء بيعمله لو ناقص، وبعدين يكاش.
+ *
+ *  ⚠️ بعض مشاريع Supabase عليها حد global للحجم أقل من اللي بنطلب،
+ *  فالإنشاء بحد 1GB ممكن يفشل برسالة غريبة ("exceeded the maximum allowed
+ *  size") — بنكرر من غير حد، والـ global limit بيفرض نفسه وقت الرفع. */
 export async function ensureFileBucket(): Promise<void> {
   bucketReady ??= (async () => {
     try {
-      const { error } = await storage().createBucket(FILE_BUCKET, {
+      const withLimit = await storage().createBucket(FILE_BUCKET, {
         public: false,
         fileSizeLimit: 1024 * 1024 * 1024,
       });
-      // "Already exists" مش خطأ حقيقي.
-      if (error && !/exists/i.test(error.message)) {
-        console.error(`files: فشل إنشاء الباكيت — ${error.message}`);
+      const fail1 = withLimit.error && !/exists/i.test(withLimit.error.message);
+      if (fail1) {
+        console.error(
+          `files: إنشاء الباكيت بحد 1GB فشل — ${withLimit.error?.message} — بنكرر من غير حد`,
+        );
+        const withoutLimit = await storage().createBucket(FILE_BUCKET, {
+          public: false,
+        });
+        if (withoutLimit.error && !/exists/i.test(withoutLimit.error.message)) {
+          console.error(`files: فشل إنشاء الباكيت — ${withoutLimit.error.message}`);
+        }
       }
     } catch (error) {
       console.error("files: فحص الباكيت فشل", error);
