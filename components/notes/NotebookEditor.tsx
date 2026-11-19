@@ -73,6 +73,7 @@ type Tool =
   | Stroke["tool"]
   | "eraser"
   | "select"
+  | "lasso"
   | "text"
   | StrokeShape;
 
@@ -109,6 +110,7 @@ const MAX_IMAGE_DIMENSION = 1400;
 
 const TOOL_OPTIONS: { id: Tool; label: string; icon: string; key: string }[] = [
   { id: "select", label: "تحديد", icon: "⬚", key: "v" },
+  { id: "lasso", label: "حبل تحديد (تحديد متعدد)", icon: "⌇", key: "l" },
   { id: "pen", label: "قلم", icon: "🖊️", key: "1" },
   { id: "ink", label: "حبر", icon: "🖋️", key: "2" },
   { id: "pencil", label: "رصاص", icon: "✏️", key: "3" },
@@ -158,6 +160,65 @@ function strokeBounds(stroke: Stroke): { x: number; y: number; width: number; he
 
 const isShapeTool = (candidate: Tool): candidate is StrokeShape =>
   candidate === "line" || candidate === "arrow" || candidate === "rect" || candidate === "ellipse";
+
+// ---- Lasso (حبل تحديد) — هندسة بسيطة على مستوى الموديول ----
+
+/** نقطة داخل مضلع (ray casting) — للحبل المرسوم حر. */
+function pointInPolygon(
+  point: [number, number],
+  polygon: ReadonlyArray<[number, number]>,
+): boolean {
+  const [px, py] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersects =
+      yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+/** تقاطع تقريبي مضلع × مستطيل: ركن من المستطيل جوه المضلع، أو نقطة من
+ *  المضلع جوه المستطيل، أو تقاطع أضلاع المضلع مع أضلاع المستطيل. */
+function polygonTouchesRect(
+  polygon: ReadonlyArray<[number, number]>,
+  rect: { x: number; y: number; width: number; height: number },
+): boolean {
+  if (polygon.length < 2) return false;
+  const corners: Array<[number, number]> = [
+    [rect.x, rect.y],
+    [rect.x + rect.width, rect.y],
+    [rect.x + rect.width, rect.y + rect.height],
+    [rect.x, rect.y + rect.height],
+  ];
+  if (corners.some((corner) => pointInPolygon(corner, polygon))) return true;
+  if (polygon.some((point) => pointInRect(point[0], point[1], rect, 0))) return true;
+  // تقاطع أضلاع (segment intersect) — بيقصي الحالات اللي الحبل يلف حوالين الشكل.
+  const rectEdges: Array<[[number, number], [number, number]]> = [
+    [[rect.x, rect.y], [rect.x + rect.width, rect.y]],
+    [[rect.x + rect.width, rect.y], [rect.x + rect.width, rect.y + rect.height]],
+    [[rect.x + rect.width, rect.y + rect.height], [rect.x, rect.y + rect.height]],
+    [[rect.x, rect.y + rect.height], [rect.x, rect.y]],
+  ];
+  const segmentsIntersect = (
+    a1: [number, number], a2: [number, number],
+    b1: [number, number], b2: [number, number],
+  ): boolean => {
+    const d = (cf: [number, number], s1: [number, number], s2: [number, number]) =>
+      (s2[0] - s1[0]) * (cf[1] - s1[1]) - (s2[1] - s1[1]) * (cf[0] - s1[0]);
+    const d1 = d(b1, a1, a2), d2 = d(b2, a1, a2);
+    const d3 = d(a1, b1, b2), d4 = d(a2, b1, b2);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  };
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    if (rectEdges.some(([r1, r2]) => segmentsIntersect(a, b, r1, r2))) return true;
+  }
+  return false;
+}
 
 export default function NotebookEditor({
   repo,
@@ -294,6 +355,21 @@ export default function NotebookEditor({
   } | null>(null);
   /** Active image resize from the bottom-right handle. */
   const resizeRef = useRef<{ id: string; original: NoteImage } | null>(null);
+  // ---- Lasso multi-select + clipboard ----
+  /** العناصر المحددة بالحبل (ids فريدة عبر الأنواع كلها). */
+  const multiSelRef = useRef<Set<string>>(new Set());
+  /** مسار الحبل الحالي أثناء السحب (page coords). */
+  const lassoPathRef = useRef<Array<[number, number]> | null>(null);
+  /** سحب مجموعة محددة: نقطة البداية + نسخ أصلية لكل عنصر محدد. */
+  const multiDragRef = useRef<{
+    start: [number, number];
+    originals: Map<string, Stroke | NoteText | NoteImage>;
+  } | null>(null);
+  /** الحافظة الداخلية — عناصر منسوخة (page coords) للصق في أي صفحة. */
+  const clipboardRef = useRef<PageContent | null>(null);
+  /** عدد العناصر المحددة — للواجهة (أزرار نسخ/لصق/حذف). */
+  const [multiCount, setMultiCount] = useState(0);
+  const [clipboardLoaded, setClipboardLoaded] = useState(false);
   /** Decoded image cache: data URL → ready-to-draw element. */
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
 
@@ -343,9 +419,46 @@ export default function NotebookEditor({
     width: number;
     height: number;
   } | null => {
+    const content = contentRef.current;
+
+    // 🪢 تحديد متعدد: صندوق موحّد حوالين كل العناصر المحددة.
+    if (multiSelRef.current.size > 0) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let found = false;
+      for (const stroke of content.strokes) {
+        if (!multiSelRef.current.has(stroke.id)) continue;
+        const bounds = strokeBounds(stroke);
+        minX = Math.min(minX, bounds.x); minY = Math.min(minY, bounds.y);
+        maxX = Math.max(maxX, bounds.x + bounds.width); maxY = Math.max(maxY, bounds.y + bounds.height);
+        found = true;
+      }
+      for (const image of content.images) {
+        if (!multiSelRef.current.has(image.id)) continue;
+        minX = Math.min(minX, image.x); minY = Math.min(minY, image.y);
+        maxX = Math.max(maxX, image.x + image.width); maxY = Math.max(maxY, image.y + image.height);
+        found = true;
+      }
+      for (const text of content.texts) {
+        if (!multiSelRef.current.has(text.id)) continue;
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        const bounds = ctx ? textBounds(ctx, text) : {
+          x: text.x,
+          y: text.y,
+          width: text.size * Math.max(...text.text.split("\n").map((line) => line.length), 1) * 0.55,
+          height: text.size * 1.5 * text.text.split("\n").length,
+        };
+        minX = Math.min(minX, bounds.x); minY = Math.min(minY, bounds.y);
+        maxX = Math.max(maxX, bounds.x + bounds.width); maxY = Math.max(maxY, bounds.y + bounds.height);
+        found = true;
+      }
+      return found
+        ? { x: minX - 4, y: minY - 4, width: maxX - minX + 8, height: maxY - minY + 8 }
+        : null;
+    }
+
     const current = selectionRef.current;
     if (!current) return null;
-    const content = contentRef.current;
     if (current.kind === "image") {
       return content.images.find((image) => image.id === current.id) ?? null;
     }
@@ -431,6 +544,22 @@ export default function NotebookEditor({
     // Live shape preview while dragging.
     const preview = currentStrokeRef.current;
     if (preview && preview.shape) paintShapeStroke(ctx, preview);
+
+    // 🪢 مسار الحبل أثناء السحب — خط متقطع حول العناصر المطلوب تحديدها.
+    const lassoPath = lassoPathRef.current;
+    if (lassoPath && lassoPath.length > 1) {
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(lassoPath[0][0], lassoPath[0][1]);
+      for (let i = 1; i < lassoPath.length; i++) {
+        ctx.lineTo(lassoPath[i][0], lassoPath[i][1]);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
 
     const rect = selectionRect();
     if (rect && !textDraftRef.current) paintSelectionOutline(ctx, rect);
@@ -722,6 +851,8 @@ export default function NotebookEditor({
       contentRef.current = next;
       setSelection(null);
       selectionRef.current = null;
+      multiSelRef.current.clear();
+      setMultiCount(0);
       paint();
       syncHistory();
       scheduleSave();
@@ -759,6 +890,8 @@ export default function NotebookEditor({
       historyRef.current.reset(contentRef.current);
       setSelection(null);
       selectionRef.current = null;
+      multiSelRef.current.clear();
+      setMultiCount(0);
       syncHistory();
       // Decode any embedded images before the first paint of the page.
       void ensureImagesLoaded(contentRef.current.images.map((image) => image.src)).then(() => {
@@ -854,6 +987,8 @@ export default function NotebookEditor({
       historyRef.current.reset(contentRef.current);
       setSelection(null);
       selectionRef.current = null;
+      multiSelRef.current.clear();
+      setMultiCount(0);
       syncHistory();
       void ensureImagesLoaded(page.content.images.map((image) => image.src)).then(() => paint());
       paint();
@@ -936,6 +1071,8 @@ export default function NotebookEditor({
       historyRef.current.reset(contentRef.current);
       setSelection(null);
       selectionRef.current = null;
+      multiSelRef.current.clear();
+      setMultiCount(0);
       syncHistory();
       paint();
       setSaveStatus("saved");
@@ -988,6 +1125,8 @@ export default function NotebookEditor({
       historyRef.current.reset(contentRef.current);
       setSelection(null);
       selectionRef.current = null;
+      multiSelRef.current.clear();
+      setMultiCount(0);
       syncHistory();
       paint();
       setSaveStatus("saved");
@@ -1061,6 +1200,8 @@ export default function NotebookEditor({
       historyRef.current.reset(contentRef.current);
       setSelection(null);
       selectionRef.current = null;
+      multiSelRef.current.clear();
+      setMultiCount(0);
       syncHistory();
       paint();
       setSaveStatus("saved");
@@ -1137,13 +1278,30 @@ export default function NotebookEditor({
     setContent({ strokes: [], texts: [], images: [] });
     setSelection(null);
     selectionRef.current = null;
+    multiSelRef.current.clear();
+    setMultiCount(0);
     commitHistory();
   }, [canWrite, commitHistory, setContent]);
 
   const deleteSelection = useCallback(() => {
+    const content = contentRef.current;
+    // 🪢 حذف المجموعة المحددة بالحبل أولاً.
+    if (multiSelRef.current.size > 0) {
+      const ids = multiSelRef.current;
+      setContent({
+        strokes: content.strokes.filter((stroke) => !ids.has(stroke.id)),
+        texts: content.texts.filter((text) => !ids.has(text.id)),
+        images: content.images.filter((image) => !ids.has(image.id)),
+      });
+      ids.clear();
+      setMultiCount(0);
+      selectionRef.current = null;
+      setSelection(null);
+      commitHistory();
+      return;
+    }
     const current = selectionRef.current;
     if (!current || !canWrite) return;
-    const content = contentRef.current;
     if (current.kind === "stroke") {
       setContent({
         ...content,
@@ -1162,6 +1320,8 @@ export default function NotebookEditor({
     }
     setSelection(null);
     selectionRef.current = null;
+    multiSelRef.current.clear();
+    setMultiCount(0);
     commitHistory();
   }, [canWrite, commitHistory, setContent]);
 
@@ -1173,6 +1333,126 @@ export default function NotebookEditor({
     },
     [paint],
   );
+
+  // ---- Lasso multi-select + clipboard helpers ----
+
+  /** نسخ أصلية لكل العناصر المحددة — أساس سحب المجموعة والنسخ. */
+  const collectMultiOriginals = useCallback(
+    (content: PageContent): Map<string, Stroke | NoteText | NoteImage> => {
+      const originals = new Map<string, Stroke | NoteText | NoteImage>();
+      for (const stroke of content.strokes) {
+        if (!multiSelRef.current.has(stroke.id)) continue;
+        originals.set(stroke.id, { ...stroke, points: stroke.points.map((point) => [...point] as [number, number]) });
+      }
+      for (const text of content.texts) {
+        if (!multiSelRef.current.has(text.id)) continue;
+        originals.set(text.id, { ...text });
+      }
+      for (const image of content.images) {
+        if (!multiSelRef.current.has(image.id)) continue;
+        originals.set(image.id, { ...image });
+      }
+      return originals;
+    },
+    [],
+  );
+
+  /** إنهاء الحبل: بنحدد كل العناصر اللي المسار لمسها. */
+  const finishLasso = useCallback(() => {
+    const path = lassoPathRef.current;
+    lassoPathRef.current = null;
+    if (!path || path.length < 3) {
+      multiSelRef.current.clear();
+      setMultiCount(0);
+      selectionRef.current = null;
+      setSelection(null);
+      paint();
+      return;
+    }
+    const content = contentRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d") ?? null;
+    const ids = new Set<string>();
+    for (const stroke of content.strokes) {
+      if (stroke.points.some((point) => pointInPolygon(point, path))) ids.add(stroke.id);
+    }
+    for (const image of content.images) {
+      if (polygonTouchesRect(path, image)) ids.add(image.id);
+    }
+    for (const text of content.texts) {
+      const bounds = ctx ? textBounds(ctx, text) : {
+        x: text.x,
+        y: text.y,
+        width: text.size * Math.max(...text.text.split("\n").map((line) => line.length), 1) * 0.55,
+        height: text.size * 1.5 * text.text.split("\n").length,
+      };
+      if (polygonTouchesRect(path, bounds)) ids.add(text.id);
+    }
+    multiSelRef.current = ids;
+    setMultiCount(ids.size);
+    selectionRef.current = null;
+    setSelection(null);
+    paint();
+  }, [paint]);
+
+  // ---- Copy / paste (بين الصفحات) ----
+
+  /** ⧉ نسخ: المحدد الحالي (فردي أو مجموعة) إلى الحافظة الداخلية.
+   *  الإحداثيات تبقى page coords — واللصق بيضيف إزاحة بسيطة. */
+  const copySelection = useCallback(() => {
+    const content = contentRef.current;
+    const ids = new Set(multiSelRef.current);
+    const current = selectionRef.current;
+    if (current) ids.add(current.id);
+    if (ids.size === 0) return;
+    const copied: PageContent = {
+      strokes: content.strokes
+        .filter((stroke) => ids.has(stroke.id))
+        .map((stroke) => ({ ...stroke, points: stroke.points.map((point) => [...point] as [number, number]) })),
+      texts: content.texts
+        .filter((text) => ids.has(text.id))
+        .map((text) => ({ ...text })),
+      images: content.images
+        .filter((image) => ids.has(image.id))
+        .map((image) => ({ ...image })),
+    };
+    if (copied.strokes.length + copied.texts.length + copied.images.length === 0) return;
+    clipboardRef.current = copied;
+    setClipboardLoaded(true);
+  }, []);
+
+  /** 📋 لصق: عناصر الحافظة في الصفحة الحالية — بمعرفات جديدة وإزاحة.
+   *  ده اللي بيتيح النسخ بين الصفحات: انسخ من صفحة، اتنقل، الصق. */
+  const pasteClipboard = useCallback(() => {
+    if (!canWrite) return;
+    const clipboard = clipboardRef.current;
+    if (!clipboard) return;
+    const OFFSET = 24;
+    const content = contentRef.current;
+    const strokes = clipboard.strokes.map((stroke) => ({
+      ...stroke,
+      id: newId(),
+      points: stroke.points.map((point) => [point[0] + OFFSET, point[1] + OFFSET] as [number, number]),
+    }));
+    const texts = clipboard.texts.map((text) => ({ ...text, id: newId(), x: text.x + OFFSET, y: text.y + OFFSET }));
+    const images = clipboard.images.map((image) => ({ ...image, id: newId(), x: image.x + OFFSET, y: image.y + OFFSET }));
+    // لو العناصر منصفحة تانية، اتأكد إن الصور متحملة قبل الرسم.
+    const missing = images.map((image) => image.src);
+    void ensureImagesLoaded(missing).then(() => paint());
+    setContent({
+      strokes: [...content.strokes, ...strokes],
+      texts: [...content.texts, ...texts],
+      images: [...content.images, ...images],
+    });
+    // المجموعة الجديدة بقت هي المحددة — تقدر تحركها فوراً.
+    multiSelRef.current = new Set([...strokes.map((s) => s.id), ...texts.map((t) => t.id), ...images.map((i) => i.id)]);
+    setMultiCount(multiSelRef.current.size);
+    selectionRef.current = null;
+    setSelection(null);
+    paint();
+    commitHistory();
+    scheduleSave();
+  }, [canWrite, commitHistory, ensureImagesLoaded, paint, scheduleSave, setContent]);
 
   // ---- Images ----
 
@@ -1360,7 +1640,28 @@ export default function NotebookEditor({
       const [x, y] = toPagePoint(event.clientX, event.clientY);
       const content = contentRef.current;
 
-      if (tool === "select") {
+      if (tool === "select" || tool === "lasso") {
+        // 🪢 تحديد متعدد موجود + الضغط جوه الصندوق الموحّد = سحب المجموعة كلها.
+        const multiRect = multiSelRef.current.size > 0 ? selectionRect() : null;
+        if (multiRect && pointInRect(x, y, multiRect, 8)) {
+          multiDragRef.current = {
+            start: [x, y],
+            originals: collectMultiOriginals(content),
+          };
+          return;
+        }
+
+        // 🪢 الحبل: من غير ما نلمس أي عنصر — بنبدأ مسار التحديد.
+        if (tool === "lasso") {
+          multiSelRef.current.clear();
+          setMultiCount(0);
+          selectionRef.current = null;
+          setSelection(null);
+          lassoPathRef.current = [[x, y]];
+          paint();
+          return;
+        }
+
         // Image resize handle first (bottom-right of the selected image).
         const current = selectionRef.current;
         if (current?.kind === "image") {
@@ -1376,11 +1677,20 @@ export default function NotebookEditor({
           }
         }
 
+        // ضغطة على عنصر بره مجموعة التحديد = تحديد فردي جديد (بمسح المجموعة).
+        const startSingleDrag = (kind: "image" | "text" | "stroke", id: string, original: Stroke | NoteText | NoteImage) => {
+          if (multiSelRef.current.size > 0) {
+            multiSelRef.current.clear();
+            setMultiCount(0);
+          }
+          selectElement({ kind, id } as Selection);
+          dragRef.current = { kind, id, start: [x, y], original };
+        };
+
         const imageIndex = imageAt(content.images, x, y, 4);
         if (imageIndex >= 0) {
           const image = content.images[imageIndex];
-          selectElement({ kind: "image", id: image.id });
-          dragRef.current = { kind: "image", id: image.id, start: [x, y], original: { ...image } };
+          startSingleDrag("image", image.id, { ...image });
           return;
         }
 
@@ -1389,8 +1699,7 @@ export default function NotebookEditor({
           const textIndex = textAt(content.texts, x, y, ctx, 6);
           if (textIndex >= 0) {
             const text = content.texts[textIndex];
-            selectElement({ kind: "text", id: text.id });
-            dragRef.current = { kind: "text", id: text.id, start: [x, y], original: { ...text } };
+            startSingleDrag("text", text.id, { ...text });
             return;
           }
         }
@@ -1398,11 +1707,14 @@ export default function NotebookEditor({
         const strokeIndex = strokeAt(content.strokes, x, y, ERASER_TOLERANCE);
         if (strokeIndex >= 0) {
           const stroke = content.strokes[strokeIndex];
-          selectElement({ kind: "stroke", id: stroke.id });
-          dragRef.current = { kind: "stroke", id: stroke.id, start: [x, y], original: { ...stroke } };
+          startSingleDrag("stroke", stroke.id, { ...stroke, points: stroke.points.map((point) => [...point] as [number, number]) });
           return;
         }
 
+        if (multiSelRef.current.size > 0) {
+          multiSelRef.current.clear();
+          setMultiCount(0);
+        }
         selectElement(null);
         return;
       }
@@ -1462,12 +1774,14 @@ export default function NotebookEditor({
     },
     [
       canWrite,
+      collectMultiOriginals,
       color,
       openTextEditor,
       opacity,
       paint,
       selectElement,
       setContent,
+      selectionRect,
       thickness,
       toPagePoint,
       tool,
@@ -1542,6 +1856,46 @@ export default function NotebookEditor({
             ),
           };
         }
+        paint();
+        return;
+      }
+
+      // 🪢 سحب المجموعة المحددة بالحبل — كل العناصر المحددة تتحرك مع بعض.
+      const multiDrag = multiDragRef.current;
+      if (multiDrag) {
+        const [x, y] = toPagePoint(event.clientX, event.clientY);
+        const dx = x - multiDrag.start[0];
+        const dy = y - multiDrag.start[1];
+        if (dx !== 0 || dy !== 0) movedRef.current = true;
+        const content = contentRef.current;
+        contentRef.current = {
+          strokes: content.strokes.map((stroke) => {
+            const original = multiDrag.originals.get(stroke.id);
+            if (!original || !("points" in original)) return stroke;
+            return {
+              ...stroke,
+              points: (original as Stroke).points.map((point) => [point[0] + dx, point[1] + dy]),
+            };
+          }),
+          texts: content.texts.map((text) => {
+            const original = multiDrag.originals.get(text.id);
+            if (!original || !("text" in original)) return text;
+            return { ...text, x: (original as NoteText).x + dx, y: (original as NoteText).y + dy };
+          }),
+          images: content.images.map((image) => {
+            const original = multiDrag.originals.get(image.id);
+            if (!original || !("src" in original)) return image;
+            return { ...image, x: (original as NoteImage).x + dx, y: (original as NoteImage).y + dy };
+          }),
+        };
+        paint();
+        return;
+      }
+
+      // 🪢 الحبل — بنمد المسار مع كل حركة.
+      if (lassoPathRef.current) {
+        const [x, y] = toPagePoint(event.clientX, event.clientY);
+        lassoPathRef.current.push([x, y]);
         paint();
         return;
       }
@@ -1624,6 +1978,22 @@ export default function NotebookEditor({
       return;
     }
 
+    if (multiDragRef.current) {
+      multiDragRef.current = null;
+      if (movedRef.current) {
+        movedRef.current = false;
+        commitHistory();
+        scheduleSave();
+      }
+      return;
+    }
+
+    // 🪢 إنهاء الحبل — بنحدد العناصر اللي المسار لمسها.
+    if (lassoPathRef.current) {
+      finishLasso();
+      return;
+    }
+
     if (dragRef.current) {
       dragRef.current = null;
       if (movedRef.current) {
@@ -1665,7 +2035,7 @@ export default function NotebookEditor({
     paint();
     commitHistory();
     scheduleSave();
-  }, [commitHistory, paint, scheduleSave, selectElement]);
+  }, [commitHistory, finishLasso, paint, scheduleSave, selectElement]);
 
   // Double-click with the select tool re-opens the text editor.
   const handleDoubleClick = useCallback(
@@ -1785,6 +2155,16 @@ export default function NotebookEditor({
         else undo();
         return;
       }
+      if (mod && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        pasteClipboard();
+        return;
+      }
       if (mod && event.key.toLowerCase() === "y") {
         event.preventDefault();
         redo();
@@ -1823,7 +2203,7 @@ export default function NotebookEditor({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [cancelTextDraft, deleteSelection, redo, saveCurrentPage, selectElement, undo, zoomAt]);
+  }, [cancelTextDraft, copySelection, deleteSelection, pasteClipboard, redo, saveCurrentPage, selectElement, undo, zoomAt]);
 
   // ---- Export ----
 
@@ -2118,6 +2498,8 @@ export default function NotebookEditor({
         historyRef.current.reset(contentRef.current);
         setSelection(null);
         selectionRef.current = null;
+        multiSelRef.current.clear();
+        setMultiCount(0);
         syncHistory();
         paint();
       }
@@ -2843,6 +3225,24 @@ export default function NotebookEditor({
           className="notes-btn notes-btn-sm"
         >
           ⧉ تكرار
+        </button>
+        <button
+          type="button"
+          onClick={copySelection}
+          disabled={multiCount === 0 && !selection}
+          title="انسخ المحدد (Ctrl+C) — تقدر تنقّل لصفحة تانية وتلصق"
+          className="notes-btn notes-btn-sm"
+        >
+          نسخ
+        </button>
+        <button
+          type="button"
+          onClick={pasteClipboard}
+          disabled={!canWrite || !clipboardLoaded}
+          title="لصق في الصفحة الحالية (Ctrl+V)"
+          className="notes-btn notes-btn-sm"
+        >
+          لصق
         </button>
         <button
           type="button"
