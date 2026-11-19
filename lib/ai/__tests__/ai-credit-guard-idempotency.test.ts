@@ -48,10 +48,22 @@ type SbState = {
 
 function makeSupabase(): {
   rpc: (name: string, args: Record<string, unknown>) => Promise<unknown>;
-  from: () => unknown;
+  from: (table: string) => unknown;
   __state: SbState;
 } {
   const state: SbState = { error: null, called: 0, refs: [] };
+  // بوابة الاشتراك (Phase I) بتعمل استعلامين محتملين — بنرصها
+  // بالسلاسل زي ما الـ client الحقيقي بيشتغل.
+  const chainable = (resolve: () => { data: unknown; error: unknown }) => {
+    const builder: Record<string, unknown> = {};
+    const chain = () => builder;
+    builder.select = chain;
+    builder.eq = chain;
+    builder.order = chain;
+    builder.limit = chain;
+    builder.maybeSingle = async () => resolve();
+    return builder;
+  };
   return {
     rpc: async (name: string, args: Record<string, unknown>) => {
       state.called += 1;
@@ -60,7 +72,12 @@ function makeSupabase(): {
       void name;
       return { error: null, data: [] };
     },
-    from: () => ({}),
+    from: (table: string) =>
+      table === "entitlements"
+        ? chainable(() => ({ data: { value: "ultra" }, error: null }))
+        : table === "site_admins"
+          ? chainable(() => ({ data: { role: "owner" }, error: null }))
+          : chainable(() => ({ data: null, error: null })),
     __state: state,
   };
 }

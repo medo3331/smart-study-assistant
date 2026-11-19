@@ -51,3 +51,12 @@
   `messages_per_day/uploads_per_day` + ناقصه unique index على
   `subscription_quotas.user_id`) ⇒ كل AI ورفع بيرجع «نظام الكوتة
   غير متاح». التصليح في `db/41-fix-consume-subscription-quota.sql`.
+
+## ✅ الحالة: منفّذ (2025-11)
+
+- البوابة اتنفذت في `guardAiAccessAndReserve` (نقطة الدخول الواحدة لكل
+  طرق الـ AI — 21+ راوت). Pro/Ultra/مالك الموقع بس؛ الباقي 403
+  `AI_SUBSCRIBERS_ONLY` مع رسالة عربية ورابط `/pricing`.
+- من غير أي استهلاك كريدت أو عدّادات — الرفض قبل الحجز.
+- مفتاح طوارئ: `AI_SUBSCRIBERS_ONLY=false` في البيئة بيعطل البوابة.
+- فشل قراءة الخطة = رفض 503 مؤقت (fail-closed اقتصادي مع تسجيل).

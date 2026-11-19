@@ -39,6 +39,98 @@ function serverRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Phase I — الذكاء الاصطناعي للمشتركين المدفوعين فقط (قرار صاحب المنصة)
+// ════════════════════════════════════════════════════════════════════
+// Pro / Ultra فقط (+ المالك). أي حاجة تانية — free/premium/بدون خطة —
+// بتترفض 403 من غير ما تستهلك كريدت ولا عدّادات.
+// مفتاح تشغيل/إطفاء للطوارئ: AI_SUBSCRIBERS_ONLY=false بيقفل البوابة
+// (يُستخدم وقت الإطلاق أو التشخيص من غير كود جديد).
+
+const AI_PAID_PLANS = new Set(["pro", "ultra"]);
+
+function aiSubscriptionGateEnabled(): boolean {
+  return process.env.AI_SUBSCRIBERS_ONLY !== "false";
+}
+
+async function readUserPlan(supabase: SupabaseClient, userId: string): Promise<{ plan: string; failed: boolean }> {
+  try {
+    const { data } = await supabase
+      .from("entitlements")
+      .select("value")
+      .eq("user_id", userId)
+      .eq("kind", "plan")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const value = (data as { value?: unknown } | null)?.value;
+    return { plan: typeof value === "string" && value.trim() ? value.trim() : "free", failed: false };
+  } catch (error) {
+    console.error(JSON.stringify({ event: "ai_plan_read_failed", severity: "high", user_id: userId, error: error instanceof Error ? error.message : String(error) }));
+    return { plan: "free", failed: true };
+  }
+}
+
+/** المالك (site_admins role='owner') بيتجاوز بوابة الاشتراك. */
+async function isPlatformOwner(supabase: SupabaseClient, userId: string): Promise<boolean | null> {
+  try {
+    const { data } = await supabase
+      .from("site_admins")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return (data as { role?: unknown } | null)?.role === "owner";
+  } catch (error) {
+    console.error(JSON.stringify({ event: "ai_owner_check_failed", severity: "high", user_id: userId, error: error instanceof Error ? error.message : String(error) }));
+    return null;
+  }
+}
+
+/** 403 لغير المشتركين — قبل أي كريدت أو عدّاد. */
+function subscriptionRejected(): GuardResult {
+  return {
+    ok: false,
+    response: new Response(
+      JSON.stringify({
+        ok: false,
+        error: "الذكاء الاصطناعي متاح لمشتركي Magicly Pro و Ultra فقط. رقّي باقتك من صفحة الخطط.",
+        code: "AI_SUBSCRIPTION_REQUIRED",
+        upgrade: "/pricing",
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    ),
+  };
+}
+
+async function checkAiSubscriptionGate(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<GuardResult | null> {
+  const { plan, failed } = await readUserPlan(supabase, userId);
+  if (failed) {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({ ok: false, error: "تعذر التحقق من الاشتراك. حاول بعد قليل.", code: "AI_SUBSCRIPTION_CHECK_FAILED" }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      ),
+    };
+  }
+  if (AI_PAID_PLANS.has(plan)) return null;
+  const owner = await isPlatformOwner(supabase, userId);
+  if (owner === true) return null;
+  if (owner === null) {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({ ok: false, error: "تعذر التحقق من الاشتراك. حاول بعد قليل.", code: "AI_SUBSCRIPTION_CHECK_FAILED" }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      ),
+    };
+  }
+  return subscriptionRejected();
+}
+
 /**
  * Guard: entitlement (403 before reserve) + all rate limits (429 before reserve) + reserve 1 credit (402 if insufficient)
  */
@@ -74,6 +166,12 @@ export async function guardAiAccessAndReserve(
   const policy = getModelAccessPolicy(modelId);
   const isAnonymous = Boolean(opts?.isAnonymous);
   const cost = Math.max(1, Math.floor(Number(opts?.cost ?? 1)));
+
+  // ---- Phase I: بوابة الاشتراك (قبل أي حد أو حجز) — 403 بدون أي استهلاك ----
+  if (userId && aiSubscriptionGateEnabled()) {
+    const gate = await checkAiSubscriptionGate(supabase, userId);
+    if (gate) return gate;
+  }
 
   // ---- Phase C: Guest Rate Limit (Anonymous 5/24h) ----
   if (isAnonymous && userId) {
