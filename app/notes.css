@@ -767,6 +767,28 @@
   text-decoration: underline;
 }
 
+/* 🏷️ أسماء الصفحات في الـ thumbnails */
+.notes-thumb-num {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.notes-thumb-name {
+  font-style: normal;
+  font-size: 10px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+.notes-thumb-rename {
+  margin: 6px auto 0;
+}
+
 /* 📊 شريط استهلاك صفحات اليوم — جنب زر «＋ صفحة» */
 .notes-quota-chip {
   display: inline-flex;

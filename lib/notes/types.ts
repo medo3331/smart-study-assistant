@@ -105,6 +105,8 @@ export type StorageNotebook = {
   ownerId: string;
   title: string;
   pageIds: string[];
+  /** أسماء الصفحات الاختيارية (pageId → اسم) — غايبة في الدفاتر القديمة. */
+  pageNames?: Record<string, string>;
   currentPageId: string | null;
   /**
    * Monotonic revision of this record.

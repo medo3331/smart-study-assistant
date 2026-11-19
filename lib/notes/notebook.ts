@@ -224,13 +224,20 @@ export function buildNotebookSave(params: {
   activePageId: string | null;
   existing: StorageNotebook | null;
   now: string;
+  pageNames?: Record<string, string> | null;
 }): StorageNotebook {
   const { existing } = params;
+  // الأسماء الفاضية مش بتتخزن — والدفاتر القديمة من غير أسماء زي ما هي.
+  const pageNames =
+    params.pageNames && Object.keys(params.pageNames).length > 0
+      ? params.pageNames
+      : undefined;
   return {
     id: params.notebookId,
     ownerId: params.ownerId,
     title: params.title,
     pageIds: params.pageIds,
+    ...(pageNames ? { pageNames } : {}),
     currentPageId: params.activePageId,
     revision: (existing?.revision ?? 0) + 1,
     createdAt: existing?.createdAt ?? params.now,

@@ -820,6 +820,10 @@ export default function NotebookEditor({
     };
   }, [getSaveCoordinator]);
 
+  // 🏷️ أسماء الصفحات (اختيارية) — بتتخزن في الدفتر وتظهر في الـ thumbnails.
+  const [pageNames, setPageNames] = useState<Record<string, string>>({});
+  const pageNamesRef = useRef<Record<string, string>>({});
+
   const saveNotebookRecord = useCallback(
     async (nbId: string, pageIds: string[], activeId: string | null, title: string) => {
       const existing = await repo.getNotebook(nbId);
@@ -831,11 +835,36 @@ export default function NotebookEditor({
         activePageId: activeId,
         existing,
         now: nowIso(),
+        pageNames: pageNamesRef.current,
       });
       await repo.saveNotebook(record);
       return record;
     },
     [repo],
+  );
+
+  /** 🏷️ إعادة تسمية الصفحة — الاسم يظهر في الـ thumbnails والبحث. */
+  const renamePage = useCallback(
+    async (pageId: string) => {
+      const nbId = notebookIdRef.current;
+      if (!nbId || !repo.canWrite) return;
+      const current = pageNamesRef.current[pageId] ?? "";
+      const next = window.prompt("اسم الصفحة (اتركه فاضي لمسحه):", current);
+      if (next === null) return; // إلغاء
+      const trimmed = next.trim().slice(0, 80);
+      const names = { ...pageNamesRef.current };
+      if (trimmed) names[pageId] = trimmed;
+      else delete names[pageId];
+      pageNamesRef.current = names;
+      setPageNames(names);
+      await saveNotebookRecord(
+        nbId,
+        pages.map((page) => page.id),
+        currentPageIdRef.current,
+        notebookTitle,
+      );
+    },
+    [notebookTitle, pages, repo, saveNotebookRecord],
   );
 
   // ---- History ----
@@ -949,6 +978,10 @@ export default function NotebookEditor({
 
         const active =
           uiPages.find((page) => page.id === boot.activePageId) ?? uiPages[0] ?? null;
+        // 🏷️ أسماء الصفحات المحفوظة في الدفتر.
+        const names = boot.notebook.pageNames ?? {};
+        pageNamesRef.current = names;
+        setPageNames(names);
         activatePage(active, uiPages, boot.notebook.id, boot.notebook.title);
         setLoaded(true);
       } catch (error) {
@@ -2656,17 +2689,28 @@ export default function NotebookEditor({
   const searchResults = useMemo(() => {
     const needle = query.trim();
     if (needle === "") return [];
-    return pages.flatMap((page, pageIndex) =>
-      page.content.texts
+    return pages.flatMap((page, pageIndex) => {
+      const results = page.content.texts
         .filter((text) => text.text.includes(needle))
         .map((text) => ({
           pageId: page.id,
           pageIndex,
           textId: text.id,
           snippet: text.text.replace(/\s+/g, " ").slice(0, 80),
-        })),
-    );
-  }, [pages, query]);
+        }));
+      // 🏷️ اسم الصفحة بيدخل في البحث كمان — بدون نص مكتوب على الصفحة.
+      const name = pageNames[page.id];
+      if (name && name.includes(needle) && !results.some((result) => result.pageId === page.id && result.textId === "__name__")) {
+        results.push({
+          pageId: page.id,
+          pageIndex,
+          textId: "__name__",
+          snippet: name,
+        });
+      }
+      return results;
+    });
+  }, [pageNames, pages, query]);
 
   const textEditorStyle = textDraft
     ? {
@@ -3295,6 +3339,8 @@ export default function NotebookEditor({
         activePageId={currentPageId}
         lookup={lookupImage}
         onSelect={(pageId) => void selectPage(pageId)}
+        pageNames={pageNames}
+        onRename={(pageId) => void renamePage(pageId)}
       />
 
       {/* Search inside the notebook's typed texts */}

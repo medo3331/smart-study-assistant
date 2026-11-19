@@ -60,11 +60,17 @@ export default function PageThumbs({
   activePageId,
   lookup,
   onSelect,
+  pageNames = {},
+  onRename,
 }: {
   pages: ThumbPage[];
   activePageId: string | null;
   lookup: (src: string) => CanvasImageSource | null;
   onSelect: (pageId: string) => void;
+  /** 🏷️ أسماء الصفحات (pageId → اسم). */
+  pageNames?: Record<string, string>;
+  /** فتح إعادة التسمية لصفحة. */
+  onRename?: (pageId: string) => void;
 }) {
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
@@ -83,15 +89,29 @@ export default function PageThumbs({
           type="button"
           role="tab"
           aria-selected={page.id === activePageId}
-          aria-label={`صفحة ${index + 1}`}
+          aria-label={pageNames[page.id] ? `صفحة ${index + 1} — ${pageNames[page.id]}` : `صفحة ${index + 1}`}
           className="notes-thumb"
           data-active={page.id === activePageId}
           onClick={() => onSelect(page.id)}
         >
           <PageThumb page={page} lookup={lookup} />
-          <span className="notes-thumb-num">{index + 1}</span>
+          <span className="notes-thumb-num">
+            {index + 1}
+            {pageNames[page.id] ? <em className="notes-thumb-name">{pageNames[page.id]}</em> : null}
+          </span>
         </button>
       ))}
+      {onRename ? (
+        <button
+          type="button"
+          className="notes-btn notes-btn-sm notes-thumb-rename"
+          onClick={() => activePageId && onRename(activePageId)}
+          disabled={!activePageId}
+          title="غيّر اسم الصفحة الحالية"
+        >
+          🏷️ تسمية
+        </button>
+      ) : null}
     </div>
   );
 }

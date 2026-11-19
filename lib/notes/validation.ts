@@ -48,6 +48,15 @@ export function validateNotebook(record: unknown): ValidationResult {
   else if (!r.pageIds.every((id: unknown) => typeof id === "string")) {
     errors.push("pageIds must contain only strings");
   }
+  // pageNames اختياري (دفاتر قديمة مالوش) — لو موجود لازم خريطة نصوص.
+  if (r.pageNames !== undefined && !isPlainObject(r.pageNames)) {
+    errors.push("pageNames must be a plain object when present");
+  } else if (isPlainObject(r.pageNames)) {
+    const names = r.pageNames as Record<string, unknown>;
+    if (!Object.values(names).every((value) => typeof value === "string")) {
+      errors.push("pageNames values must be strings");
+    }
+  }
   if (!isValidDate(r.createdAt)) errors.push("createdAt must be a valid ISO date");
   if (!isValidDate(r.updatedAt)) errors.push("updatedAt must be a valid ISO date");
 
