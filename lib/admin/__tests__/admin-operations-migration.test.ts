@@ -1,0 +1,38 @@
+import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+
+const root = path.join(process.cwd(), "db");
+const activationSql = fs.readFileSync(path.join(root, "54-admin-operations.sql"), "utf8");
+const campaignSql = fs.readFileSync(path.join(root, "phase1e-announcement-email-campaigns.sql"), "utf8");
+
+describe("admin operations migrations (static safety checks)", () => {
+  it("keeps activation migration manual and allows UUID-only accounts", () => {
+    expect(activationSql.toLowerCase()).toContain("manual migration");
+    expect(activationSql).toContain("ALTER COLUMN user_code DROP NOT NULL");
+    expect(activationSql).toContain("p_user_id uuid");
+    expect(activationSql).toContain("p_user_code IS NOT NULL");
+    expect(activationSql).toContain("GRANT EXECUTE ON FUNCTION public.admin_activate_subscription");
+    expect(activationSql).toContain("FROM PUBLIC, anon, authenticated");
+  });
+
+  it("creates activation, entitlement, quota and welcome notification in one RPC", () => {
+    const rpc = activationSql.slice(activationSql.indexOf("CREATE OR REPLACE FUNCTION public.admin_activate_subscription"));
+    expect(rpc).toContain("INSERT INTO public.subscription_activations");
+    expect(rpc).toContain("INSERT INTO public.entitlements");
+    expect(rpc).toContain("INSERT INTO public.subscription_quotas");
+    expect(rpc).toContain("INSERT INTO public.notifications");
+    expect(rpc).toContain("ON CONFLICT (subscription_activation_id) DO NOTHING");
+    expect(rpc).not.toContain("INSERT INTO public.ai_credit_ledger");
+  });
+
+  it("recreates the notification type constraint idempotently", () => {
+    expect(activationSql).toContain("DROP CONSTRAINT IF EXISTS notifications_type_check");
+    expect(activationSql).toContain("ADD CONSTRAINT notifications_type_check");
+  });
+
+  it("matches campaign sender override used by the send API", () => {
+    expect(campaignSql).toContain("sender_override text");
+    expect(campaignSql).toContain("add column if not exists sender_override text");
+  });
+});
