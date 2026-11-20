@@ -18,6 +18,8 @@ import {
 } from "@/hooks/useNoteRepository";
 import { NotesChip, NotesHeader } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
+import { reportClientEngagementEvent } from "@/lib/engagement/client-events";
+import { ENGAGEMENT_EVENT_TYPES } from "@/lib/engagement/event-contract";
 
 /**
  * Notebook library — the `/notes` landing screen.
@@ -204,6 +206,13 @@ export default function NotesLibrary() {
       });
 
       setNewTitle("");
+      // P1-B2.2 — إنشاء نوتة وتفظيها فعل حقيقي (مش مجرد فتح) ⇒ تجربة
+      //   حقيقية للميزة. التصنيف client_reported في الـregistry.
+      void reportClientEngagementEvent(
+        ENGAGEMENT_EVENT_TYPES.NOTES_SAVED,
+        notebookId,
+        { page_count: 1 },
+      );
       router.push(`/notes/${notebookId}`);
     } catch (e) {
       console.error("[notes] create notebook failed", e);

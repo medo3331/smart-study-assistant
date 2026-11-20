@@ -92,7 +92,14 @@ REVOKE ALL ON TABLE public.engagement_events FROM authenticated;
 REVOKE TRUNCATE ON TABLE public.engagement_events FROM anon;
 REVOKE TRUNCATE ON TABLE public.engagement_events FROM authenticated;
 
--- Append-only: reject updates and deletes
+-- Append-only: reject updates and deletes.
+--
+-- ⚠️ **استثناء واحد مقصود**: الـDELETE اللي جاي من FK cascade (حذف المستخدم
+--    من auth.users) مسموح — وإلا حذف الحساب نفسه كان هيقف بسببEvents
+--    (و ده يكسر حق المستخدم في حذف بياناته + الـFK ON DELETE CASCADE).
+--    التمييز بينه وبين الحذف المباشر يتم بـpg_trigger_depth():
+--      1 = حذف مباشر (مرفوض).
+--      2 = حذف جاي من cascade (مسموح).
 CREATE OR REPLACE FUNCTION public._engagement_events_no_mutate()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -100,6 +107,11 @@ SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
 BEGIN
+  IF TG_OP = 'DELETE' AND pg_trigger_depth() > 1 THEN
+    -- cascade من FK (حذف المستخدم) — متاح.
+    RETURN OLD;
+  END IF;
+
   RAISE EXCEPTION 'engagement_events is append-only (% not allowed)', TG_OP;
 END;
 $$;

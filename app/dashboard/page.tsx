@@ -57,6 +57,7 @@ import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
+import SmartNotesDiscoveryCard from "@/components/engagement/SmartNotesDiscoveryCard";
 import { TodayMissionsCard } from "./components/TodayMissionsCard";
 import { MotivationNudge } from "@/components/MotivationNudge";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
@@ -1719,6 +1720,9 @@ export default function DashboardPage() {
 
           {/* Phase 0.2 — Smart Contextual Notification (in-app only; zero DB; no push/cron) */}
           <ContextualNotification />
+
+          {/* P1-B2.2 — Smart Notes Feature Discovery (تعريف سياقي، مش إجباري) */}
+          <SmartNotesDiscoveryCard />
 
           {/* Phase 0.4 — Light Social Comparison (reuses weekly_quiz_leaderboard; no new DB) */}
           <LightSocialComparison />

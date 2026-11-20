@@ -229,13 +229,19 @@ VALUES
      ARRAY['surface', 'campaign'],
      2048, 40,
      'ظهور رسالة تعريف بميزة للمستخدم (تُصدر من السيرفر بعد عرض فعلي).',
-     false),
+     true),
 
   ('feature_tried', 'client_notes', 'client_reported',
      ARRAY['feature'],
      2048, 60,
      'المستخدم جرّب الميزة فعليًا (إثبات ضعيف حاليًا).',
-     false)
+     true),
+
+  ('feature_adopted', 'engagement_discovery', 'server',
+     ARRAY['feature', 'active_days', 'adoption_min_days'],
+     2048, 40,
+     'تبنّي الميزة: استخدام على أيام كايرو مختلفة (بيشتقه السيرفر من الأحداث).',
+     true)
 ON CONFLICT (event_type) DO UPDATE SET
   source_table = EXCLUDED.source_table,
   trust_level = EXCLUDED.trust_level,

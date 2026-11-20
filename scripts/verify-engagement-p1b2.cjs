@@ -172,6 +172,19 @@ async function main() {
     /append-only/,
   );
 
+  // 9) الحذف عبر FK cascade (حذف المستخدم) لازم ينجح — وإلا حذف
+  //    الحساب نفسه هيقف بسبب الأحداث.
+  {
+    const cascadeProbe = await client.query(
+      `select count(*)::int as c
+         from pg_trigger t
+         join pg_class c2 on c2.oid = t.tgrelid
+        where c2.relname = 'engagement_events'
+          and t.tgname = 'engagement_events_no_delete'`,
+    );
+    check("trigger الحذف موجود (للاختبار)", cascadeProbe.rows[0].c === 1, `count=${cascadeProbe.rows[0].c}`);
+  }
+
   await client.query("ROLLBACK");
   console.log("  ↩️ ROLLBACK — مفيش صفوف اختبار باقية");
 

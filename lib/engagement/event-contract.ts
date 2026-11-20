@@ -29,6 +29,8 @@ export const ENGAGEMENT_EVENT_TYPES = {
   FEATURE_INTRODUCED: "feature_introduced",
   /** المستخدم جرّب الميزة (إثبات ضعيف حاليًا ⇒ discovery فقط). */
   FEATURE_TRIED: "feature_tried",
+  /** تبنّي الميزة: استخدام على أيام كايرو مختلفة (بيشتقه السيرفر). */
+  FEATURE_ADOPTED: "feature_adopted",
 } as const;
 
 export type EngagementEventType =
@@ -86,6 +88,13 @@ export const ENGAGEMENT_EVENT_SPECS: Record<EngagementEventType, EventSpec> = {
     allowedMetadataKeys: ["feature"],
     maxMetadataBytes: 2048,
     maxEventsPerHour: 60,
+  },
+  [ENGAGEMENT_EVENT_TYPES.FEATURE_ADOPTED]: {
+    sourceTable: "engagement_discovery",
+    trustLevel: "server",
+    allowedMetadataKeys: ["feature", "active_days", "adoption_min_days"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 20,
   },
 };
 
