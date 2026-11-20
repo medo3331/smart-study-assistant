@@ -3,6 +3,7 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/lib/admin/audit-log-record";
 import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
+import { revalidatePath } from "next/cache";
 
 export interface BanResult {
   ok: boolean;
@@ -85,6 +86,7 @@ export async function banUser(
       details: { user_id: userId, user_code: userCode, reason: reason, status: "banned" },
       result: "PASS",
     });
+    revalidatePath("/admin/subscriptions");
     return { ok: true, message: "تم حظر المستخدم بنجاح (Audit: PASS)", auditId: auditRes.id || null };
   } catch (e: any) {
     return { ok: false, message: "فشل في الحظر: " + (e?.message || String(e)), error: String(e), auditId: null };
@@ -143,6 +145,7 @@ export async function unbanUser(
       details: { user_id: userId, user_code: userCode, status: "unbanned" },
       result: "PASS",
     });
+    revalidatePath("/admin/subscriptions");
     return { ok: true, message: "تم فك حظر المستخدم (Audit: PASS)", auditId: auditRes.id || null };
   } catch (e: any) {
     return { ok: false, message: "فشل في فك الحظر: " + (e?.message || String(e)), error: String(e), auditId: null };
