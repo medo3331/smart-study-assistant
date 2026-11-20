@@ -110,6 +110,65 @@ export default function NotesLibrary() {
     });
   }, [repo, load]);
 
+  // 📥 ?importFile=<id> — زر «للنوته» في «ملفاتي»: بيفتح آخر دفتر
+  // (أو بيعمل واحد) مع تمرير البارميتر للمحرر، لأن معالجة الاستيراد
+  // عايشة جوة محرر الدفتر مش في المكتبة.
+  const handledImportRedirectRef = React.useRef(false);
+  useEffect(() => {
+    if (handledImportRedirectRef.current) return;
+    if (!repo || boot.phase !== "ready") return;
+    if (typeof window === "undefined") return;
+    const fileId = new URLSearchParams(window.location.search).get("importFile");
+    if (!fileId) return;
+    handledImportRedirectRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const all = await repo.listNotebooks();
+        const sorted = [...all].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        if (cancelled) return;
+        const target = sorted[0];
+        if (target) {
+          router.replace(`/notes/${target.id}?importFile=${encodeURIComponent(fileId)}`);
+        } else {
+          // مفيش دفاتر — بيعمل دفتر جديد فوراً مع الاستيراد.
+          const now = new Date().toISOString();
+          const notebookId = newNotesId();
+          const pageId = newNotesId();
+          await repo.savePage({
+            id: pageId,
+            ownerId: repo.ownerId,
+            notebookId,
+            template: "lined",
+            persistedSnapshot: pageContentStrokes("lined", []),
+            localJournal: [],
+            quarantined: false,
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+          await repo.saveNotebook({
+            id: notebookId,
+            ownerId: repo.ownerId,
+            title: "دفتر جديد",
+            pageIds: [pageId],
+            currentPageId: pageId,
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+          if (cancelled) return;
+          router.replace(`/notes/${notebookId}?importFile=${encodeURIComponent(fileId)}`);
+        }
+      } catch (e) {
+        console.error("[notes] import redirect failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [repo, boot.phase, router]);
+
   const createNotebook = async () => {
     if (!repo || !canWrite || creating) return;
     const title = newTitle.trim() || "دفتر جديد";

@@ -36,6 +36,7 @@ import {
 } from "@/lib/notes/pdf";
 import PdfExportDialog from "@/components/notes/PdfExportDialog";
 import PdfImportDialog, { type PdfLibraryEntry } from "@/components/notes/PdfImportDialog";
+import { dataUrlToBlob } from "@/lib/notes/blob";
 import { SaveCoordinator } from "@/lib/notes/editor-save";
 import { pageQuotaBlockedMessage, refundPageCredit, requestPageCredits, type PageQuotaResult } from "@/lib/notes/page-quota";
 import {
@@ -2426,24 +2427,187 @@ export default function NotebookEditor({
     [openPdfImport],
   );
 
-  /** استيراد عبر رابط موقّع مباشر — بيستخدمه ?importFile= من صفحة «ملفاتي». */
+  /** 📥 استيراد أي ملف من «ملفاتي» كصفحة جديدة في الدفتر الحالي:
+   *  PDF → منتقي النطاق الموجود، صورة → خلفية صفحة، docx/نص → نص مطبوع. */
+  const importLibraryEntry = useCallback(
+    async (entry: { id: string; file_name: string; file_type: string }) => {
+      if (!canWrite) return;
+      const nbId = notebookIdRef.current;
+      if (!nbId || !repo.canWrite) return;
+
+      // 📄 PDF يمشي في المسار القديم (منتقي النطاق).
+      if (entry.file_type === "pdf") {
+        await handlePdfFromLibrary(entry.id, entry.file_name);
+        return;
+      }
+      const isImage = entry.file_type === "image" || entry.file_type.startsWith("image/");
+      const isText = entry.file_type === "text" || entry.file_type === "docx" || entry.file_type === "word";
+      if (!isImage && !isText) {
+        setMessage("الاستيراد للنوته بيدعم PDF وصورة وWord وملفات نصية — الملف ده نوعه مش مدعوم.");
+        return;
+      }
+
+      setMessage("بيجهّز الملف من مكتبتك…");
+      try {
+        // 🔗 رابط قراءة موقّع من السيرفر.
+        const res = await fetch("/api/files", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fileId: entry.id }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          setMessage(data?.error?.message || "مقدرناش نجيب الملف من مكتبتك.");
+          return;
+        }
+        const blob = await (await fetch(data.url as string)).blob();
+
+        // 📄 كوتة الصفحات: استيراد الملف بيستهلك صفحة واحدة.
+        const pageQuota = await requestPageCredits(1);
+        if (!pageQuota.allowed) {
+          setMessage(pageQuotaBlockedMessage(pageQuota));
+          return;
+        }
+        trackPageQuota(pageQuota);
+
+        let snapshot: unknown;
+        if (isImage) {
+          // 🖼️ صورة → خلفية الصفحة (fit A4 + تصغير للحد الأقصى).
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          const element = new Image();
+          element.src = dataUrl;
+          await new Promise<void>((resolve, reject) => {
+            element.onload = () => resolve();
+            element.onerror = () => reject(new Error("image load failed"));
+          });
+          const largest = Math.max(element.naturalWidth, element.naturalHeight);
+          const scale = largest > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / largest : 1;
+          const fit = Math.min(PAGE_WIDTH / element.naturalWidth, PAGE_HEIGHT / element.naturalHeight);
+          let src = dataUrl;
+          if (scale < 1) {
+            const offscreen = document.createElement("canvas");
+            offscreen.width = Math.round(element.naturalWidth * scale);
+            offscreen.height = Math.round(element.naturalHeight * scale);
+            const ctx = offscreen.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(element, 0, 0, offscreen.width, offscreen.height);
+              src = offscreen.toDataURL("image/jpeg", 0.85);
+            }
+          }
+          const noteImage: NoteImage = {
+            id: newId(),
+            kind: "image",
+            src,
+            x: 0,
+            y: 0,
+            width: Math.round(element.naturalWidth * fit),
+            height: Math.round(element.naturalHeight * fit),
+          };
+          snapshot = pageContentStrokes("blank", [], [], [noteImage]);
+        } else {
+          // 📝 docx/نص → استخراج النص وإدراجه كبلوكات مطبوعة.
+          let text = "";
+          if (entry.file_type === "docx" || entry.file_type === "word") {
+            const mammoth = await import("mammoth/mammoth.browser");
+            const result = await mammoth.extractRawText({ arrayBuffer: await blob.arrayBuffer() });
+            text = result.value;
+          } else {
+            text = await blob.text();
+          }
+          const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 60);
+          if (lines.length === 0) {
+            setMessage("الملف ده مفيهوش نص مقروء.");
+            return;
+          }
+          const texts: NoteText[] = lines.map((line, index) => ({
+            id: newId(),
+            kind: "text",
+            text: line,
+            x: 40,
+            y: 72 + index * 34,
+            size: 20,
+            color: "#111827",
+          }));
+          snapshot = pageContentStrokes("blank", [], texts, []);
+        }
+
+        // 📄 إنشاء الصفحة الجديدة وفتحها.
+        const pageId = newId();
+        const record = buildEmptyPage({
+          ownerId: repo.ownerId,
+          notebookId: nbId,
+          pageId,
+          template: "blank",
+          now: nowIso(),
+          persistedSnapshot: snapshot,
+        });
+        await repo.savePage(record);
+        const imported: UiPage = {
+          id: pageId,
+          template: "blank",
+          content: {
+            strokes: [],
+            texts: (snapshot as { texts?: NoteText[] }).texts ?? [],
+            images: (snapshot as { images?: NoteImage[] }).images ?? [],
+          },
+          revision: record.revision,
+        };
+        const nextPages = [...pages, imported];
+        await saveNotebookRecord(
+          nbId,
+          nextPages.map((page) => page.id),
+          pageId,
+          notebookTitle,
+        );
+        setPages(nextPages);
+        setCurrentPageId(pageId);
+        currentPageIdRef.current = pageId;
+        templateRef.current = "blank";
+        setTemplateState("blank");
+        contentRef.current = emptyPageContent();
+        historyRef.current.reset(contentRef.current);
+        setSelection(null);
+        selectionRef.current = null;
+        multiSelRef.current.clear();
+        setMultiCount(0);
+        syncHistory();
+        paint();
+        setSaveStatus("saved");
+        setMessage(null);
+      } catch (error) {
+        console.error("[notes] library import failed", error);
+        setMessage("فشل استيراد الملف — جرّب تاني.");
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canWrite, notebookTitle, pages, paint, repo, saveNotebookRecord, setSaveStatus, syncHistory, trackPageQuota],
+  );
+
+  /** استيراد عبر رابط موقّع مباشر — بيستخدمه ?importFile= من صفحة «ملفاتي».
+   *  بيقبل PDF وصورة وdocx/نص — مش PDF بس. */
   const importFromLibraryParam = useCallback(
     async (fileId: string) => {
-      // بيجيب الاسم من قايمة المكتبة عشان يبقى اسم معقول للملف.
+      // بيجيب اسم الملف ونوعه من قايمة المكتبة.
       const res = await fetch("/api/files");
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
       if (!data?.ok) return;
       const match = (data.files as Array<{ id: string; file_name: string; file_type: string }>).find(
-        (entry) => entry.id === fileId && entry.file_type === "pdf",
+        (entry) => entry.id === fileId,
       );
       if (!match) {
-        setMessage("الملف ده مش PDF — الاستيراد للنوته للـ PDF بس.");
+        setMessage("الملف ده مش موجود في مكتبتك.");
         return;
       }
-      await handlePdfFromLibrary(fileId, match.file_name);
+      await importLibraryEntry(match);
     },
-    [handlePdfFromLibrary],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [importLibraryEntry],
   );
 
   // ?importFile=<id> — زر «للنوته» في «ملفاتي» بيفتح الاستيراد فوراً.
@@ -2757,7 +2921,12 @@ export default function NotebookEditor({
     setHandwritingBusy(true);
     setSaveStatus("idle");
     try {
-      const blob = await (await fetch(snapshot)).blob();
+      // ⚠️ ممنوع fetch(dataUrl) — Firefox بيرمي «Failed to fetch» عليه.
+      const blob = dataUrlToBlob(snapshot);
+      if (!blob) {
+        setMessage("مقدرناش نجهز لقطة الصفحة — جرّب تاني.");
+        return;
+      }
       const form = new FormData();
       form.append("file", blob, "page.jpg");
       form.append(

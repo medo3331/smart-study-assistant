@@ -297,7 +297,8 @@ export function FileManager() {
                 <button type="button" onClick={() => setPreview(file)}>
                   فتح
                 </button>
-                {file.file_type === "pdf" && (
+                {(file.file_type === "pdf" || file.file_type === "image" ||
+                  file.file_type === "word" || file.file_type === "text") && (
                   <Link href={`/notes?importFile=${encodeURIComponent(file.id)}`} className="fm-card-notes">
                     للنوته
                   </Link>

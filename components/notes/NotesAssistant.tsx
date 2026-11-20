@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { dataUrlToBlob } from "@/lib/notes/blob";
 
 /**
  * The notebook's AI assistant — a floating side panel over the editor.
@@ -165,8 +166,12 @@ ${text}`);
     setBusy(true);
     setError(null);
     try {
-      // dataURL → blob عشان نبعته FormData زي أي صورة.
-      const blob = await (await fetch(dataUrl)).blob();
+      // dataURL → blob بدون fetch (Firefox مش بيدعم fetch على data:).
+      const blob = dataUrlToBlob(dataUrl);
+      if (!blob) {
+        setError("مقدرناش نصور الصفحة دلوقتي — جرّب تاني.");
+        return;
+      }
       const form = new FormData();
       form.append("file", blob, "page.png");
       form.append(
