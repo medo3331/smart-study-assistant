@@ -8,6 +8,8 @@ import {
   type NoteRepository,
   type NoteRepositoryStatus,
 } from "@/lib/notes";
+import { reportClientEngagementEvent } from "@/lib/engagement/client-events";
+import { ENGAGEMENT_EVENT_TYPES } from "@/lib/engagement/event-contract";
 
 /**
  * Shared bootstrap for every notes screen.
@@ -56,6 +58,7 @@ export function useNoteRepository(): {
           await repo.dispose().catch(() => undefined);
           return;
         }
+        instrumentNoteSaves(repo);
         setLease(repo.status);
         setBoot({ phase: "ready", repo });
 
@@ -93,6 +96,35 @@ export function newNotesId(): string {
     return crypto.randomUUID();
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * 📊 قياس usage لـSmart Notes (P1-B2) — حفظ نوتة حقيقي.
+ *
+ * ⚠️ التصنيف: `client_reported` ⇒ **مش إثبات مكافأة**، بس بيغذّي
+ *    Feature Discovery (هل الطالب جرّب الميزة؟) وقياس الاستخدام.
+ *
+ * ⚠️ ليش الـdebounce مهم: الحفظ بيعمل autosave كل شوية ⇒ من غير throttle
+ *    هنملي البوابة بأحداث مكررة (وهي rate-limited أصلًا).
+ *
+ * ⚠️ كل حاجة best-effort: فشل الإرسال مابيرميش الحفظ ولا بيأثر على UX.
+ */
+function instrumentNoteSaves(repo: NoteRepository): void {
+  const original = repo.savePage.bind(repo);
+  let lastSentAt = 0;
+  const THROTTLE_MS = 30_000;
+
+  repo.savePage = async (page: Parameters<NoteRepository["savePage"]>[0]) => {
+    await original(page);
+    const now = Date.now();
+    if (now - lastSentAt < THROTTLE_MS) return;
+    lastSentAt = now;
+    void reportClientEngagementEvent(
+      ENGAGEMENT_EVENT_TYPES.NOTES_SAVED,
+      page.notebookId,
+      { page_count: 1 },
+    );
+  };
 }
 
 /** Relative age, because a raw ISO string tells a student nothing. */

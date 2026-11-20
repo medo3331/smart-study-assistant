@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/api-guard";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { ENGAGEMENT_EVENT_TYPES, recordEngagementEvent } from "@/lib/engagement/events";
 import type { ExamQuestion, ExamQuestionType } from "@/lib/ai/exam-review";
 import { summarizeByTopic, FALLBACK_TOPIC } from "@/lib/ai/exam-topics";
 
@@ -309,6 +310,29 @@ export async function POST(
     .eq("id", sessionId)
     .eq("user_id", user.id);
   if (completeError) return fail("INTERNAL", 500, completeError.message);
+
+  /**
+   * 📊 **حدث Engine واحد (P1-B2)** — امتحان اتسلّم وتصحيحه اتعمل على السيرفر.
+   *
+   * مصدر الإثبات: نفس الكود اللي فوق (الـinventory على السيرفر)، فالمصدر
+   * server_verified ⇒ صالح كإثبات مهمة في P1-C (بعد مراجعة الاقتصاد).
+   *
+   * ⚠️ **best-effort**: فشل تسجيل الحدث مايوقّعش التسليم ولا يمسّ
+   *    نتيجة الامتحان. ومفيش Coins/XP هنا — المسار ده إثبات فقط.
+   */
+  void recordEngagementEvent({
+    type: ENGAGEMENT_EVENT_TYPES.EXAM_COMPLETED,
+    sourceId: sessionId,
+    userId: user.id,
+    metadata: {
+      percent,
+      auto_correct: autoCorrect,
+      auto_total: autoTotal,
+      has_essay: essayCount > 0,
+    },
+  }).catch((error: unknown) => {
+    console.error("[exam-sessions] engagement event:", error);
+  });
 
   /**
    * 📈 **تراكم نقاط الضعف**: الكتابة في `user_weaknesses` بتخلّي المساعد
