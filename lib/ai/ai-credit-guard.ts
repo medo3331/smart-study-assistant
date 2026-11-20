@@ -42,12 +42,13 @@ function serverRequestId(): string {
 // ════════════════════════════════════════════════════════════════════
 // Phase I — الذكاء الاصطناعي للمشتركين المدفوعين فقط (قرار صاحب المنصة)
 // ════════════════════════════════════════════════════════════════════
-// Pro / Ultra فقط (+ المالك). أي حاجة تانية — free/premium/بدون خطة —
-// بتترفض 403 من غير ما تستهلك كريدت ولا عدّادات.
+// أي خطة مدفوعة بتعدي (pro/ultra/premium/أي خطة جديدة) + المالك.
+// الـfree وبدون خطة بس اللي بيترفضوا 403 من غير ما يستهلكوا كريدت
+// ولا عدّادات. (bug مُصلح: premium كانت تتحجوب بالغلط كأنها free.)
 // مفتاح تشغيل/إطفاء للطوارئ: AI_SUBSCRIBERS_ONLY=false بيقفل البوابة
 // (يُستخدم وقت الإطلاق أو التشخيص من غير كود جديد).
 
-const AI_PAID_PLANS = new Set(["pro", "ultra"]);
+const AI_FREE_PLANS = new Set(["", "free", "none", "trial_expired"]);
 
 function aiSubscriptionGateEnabled(): boolean {
   return process.env.AI_SUBSCRIBERS_ONLY !== "false";
@@ -64,7 +65,7 @@ async function readUserPlan(supabase: SupabaseClient, userId: string): Promise<{
       .limit(1)
       .maybeSingle();
     const value = (data as { value?: unknown } | null)?.value;
-    return { plan: typeof value === "string" && value.trim() ? value.trim() : "free", failed: false };
+    return { plan: typeof value === "string" && value.trim() ? value.trim().toLowerCase() : "free", failed: false };
   } catch (error) {
     console.error(JSON.stringify({ event: "ai_plan_read_failed", severity: "high", user_id: userId, error: error instanceof Error ? error.message : String(error) }));
     return { plan: "free", failed: true };
@@ -93,7 +94,7 @@ function subscriptionRejected(): GuardResult {
     response: new Response(
       JSON.stringify({
         ok: false,
-        error: "الذكاء الاصطناعي متاح لمشتركي Magicly Pro و Ultra فقط. رقّي باقتك من صفحة الخطط.",
+        error: "الذكاء الاصطناعي متاح لمشتركي Magicly المدفوعين فقط. رقّي باقتك من صفحة الخطط.",
         code: "AI_SUBSCRIPTION_REQUIRED",
         upgrade: "/pricing",
       }),
@@ -116,7 +117,10 @@ async function checkAiSubscriptionGate(
       ),
     };
   }
-  if (AI_PAID_PLANS.has(plan)) return null;
+  // 💡 أي خطة غير مجانية بتعدّي — pro/ultra/premium/أي خطة مدفوعة جديدة.
+  // كان فيه bug: خطة premium (مشتركين حقيقيين دافعين) كانت متحجوبة
+  // لأن الفحص كان بيقبل pro/ultra بس.
+  if (!AI_FREE_PLANS.has(plan)) return null;
   const owner = await isPlatformOwner(supabase, userId);
   if (owner === true) return null;
   if (owner === null) {
