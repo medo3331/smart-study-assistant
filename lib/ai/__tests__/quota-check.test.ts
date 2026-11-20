@@ -16,6 +16,11 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 vi.mock("@/lib/supabase/admin");
+// 🎁 الفترة التجريبية مقفولة افتراضياً في الاختبارات — إلا في اختبارها المخصصة.
+vi.mock("@/lib/ai/trial", () => ({
+  isAiOpenTrialActive: vi.fn(() => false),
+  aiOpenTrialEnd: vi.fn(() => "2026-12-21T00:00:00+02:00"),
+}));
 
 /** Fake in-memory Supabase client للـ RPC. */
 class FakeRpcClient {
@@ -179,5 +184,27 @@ describe("checkSubscriptionQuota (quota-check.ts)", () => {
     const key = rpcClient.rpcCalls[0].params.p_idempotency_key as string;
     expect(key).toMatch(/^quota:user-123:message:/);
     expect(key.split(":").length).toBe(4);
+  });
+});
+
+describe("الفترة التجريبية المفتوحة (trial)", () => {
+  it("كل أنواع الكوتة مفتوحة بلا استدعاء RPC أثناء التجربة", async () => {
+    const { isAiOpenTrialActive } = await import("@/lib/ai/trial");
+    const mocked = vi.mocked(isAiOpenTrialActive);
+    mocked.mockReturnValue(true);
+    try {
+      const rpcClient = new FakeRpcClient();
+      (createServiceClient as ReturnType<typeof vi.fn>).mockReturnValue(rpcClient);
+      for (const kind of ["message", "upload", "page"] as const) {
+        const result = await checkSubscriptionQuota("user-123", kind);
+        expect(result.allowed).toBe(true);
+        expect(result.limit).toBe(-1);
+        expect(result.planKey).toBe("trial");
+      }
+      // مفيش أي استهلاك فعلًا.
+      expect(rpcClient.rpcCalls).toHaveLength(0);
+    } finally {
+      mocked.mockReturnValue(false);
+    }
   });
 });
