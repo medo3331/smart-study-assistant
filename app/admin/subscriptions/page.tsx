@@ -3,6 +3,8 @@ import { CalendarClock, Search } from "lucide-react";
 import { hasPermission } from "@/lib/auth-roles";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { getSubscriptionStatus, extendSubscription, revokeSubscription, resetSubscriptionQuota } from "@/app/admin/actions/subscription-manage";
+import { searchUsers } from "@/app/admin/actions/users-search";
+import SubscriptionCenter from "@/components/admin/SubscriptionCenter";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard } from "@/components/admin/ui";
 
 /**
@@ -23,9 +25,8 @@ function expiryInfo(iso: string | null, fallback: string): { label: string; cls:
 /**
  * 💳 تفعيل الاشتراكات — اتنقلت من الصفحة الموحّدة (المرحلة 1).
  *
- * RBAC: الصفحة محتاجة subscriptions.manage (owner/admin). التفعيل نفسه بيمر
- * على subscriptionActivationFormAction → activateSubscription اللي بتتحقق
- * من الدور تاني (Owner) وتسجّل audit_log (PASS/FAIL/BLOCKED).
+ * RBAC: الصفحة والإجراءات الحساسة تمر عبر subscriptions.manage على الخادم،
+ * وتسجّل audit_log (PASS/FAIL/BLOCKED).
  *
  * عرض الحالة التفصيلي بيستخدم getSubscriptionStatus الموجودة أصلًا
  * (subscription-manage.ts) — مكانتش مستعملة في أي واجهة قبل كده.
@@ -38,8 +39,13 @@ export default async function AdminSubscriptionsPage({
   const sp = await searchParams;
   const { user, isOwner, supabase } = await requireAdminPermission("subscriptions.manage");
 
-  const canActivate = isOwner;
-  const canResetQuota = await hasPermission(supabase, user.id, user.email ?? null, "subscriptions.manage");
+  const [canGrantCredits, canGrantReward, canResetQuota, initialUsers] = await Promise.all([
+    hasPermission(supabase, user.id, user.email ?? null, "credits.manage"),
+    hasPermission(supabase, user.id, user.email ?? null, "rewards.manage"),
+    hasPermission(supabase, user.id, user.email ?? null, "subscriptions.manage"),
+    searchUsers("", "all", "all", "all"),
+  ]);
+  const canActivate = canResetQuota;
   const lookupRaw = (sp.sub_lookup ?? "").trim();
   const status = lookupRaw ? await getSubscriptionStatus(lookupRaw) : null;
   const lookupFailed = Boolean(lookupRaw) && !status;
@@ -60,6 +66,13 @@ export default async function AdminSubscriptionsPage({
           يمكنك الاطلاع وإعادة تعيين الحصص بصلاحية <code>subscriptions.manage</code>، أما تفعيل/تمديد/إلغاء الاشتراك فمحجوز للمالك فقط.
         </AdminNotice>
       ) : null}
+
+      <SubscriptionCenter
+        initialUsers={initialUsers}
+        canActivate={canActivate}
+        canGrantCredits={canGrantCredits}
+        canGrantReward={canGrantReward}
+      />
 
       <AdminCard
         title="بحث عن اشتراك مستخدم"

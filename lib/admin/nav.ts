@@ -34,8 +34,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
   },
   {
     href: "/admin/subscriptions",
-    label: "تفعيل الاشتراكات",
-    description: "تفعيل يدوي عبر User Code + حالة الاشتراك الحالية",
+    label: "المستخدمون والاشتراكات",
+    description: "بحث الطلاب، الملفات، الاشتراكات، والكريدت والهدايا الجماعية",
     permission: "subscriptions.manage",
     icon: "CreditCard",
   },

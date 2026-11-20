@@ -1,6 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
+import { isUuid } from "@/lib/credits/grants";
 import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 
 export interface UserSearchResult {
@@ -54,11 +55,20 @@ export async function searchUsers(
       .from("profiles")
       .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at");
 
-    if (q) {
-      const like = `%${q}%`;
+    let codeMatchUserId: string | null = null;
+    if (isUuid(q)) {
+      baseQuery = baseQuery.eq("id", q);
+    } else if (q) {
+      const like = `%${q.replace(/[%,()]/g, " ")}%`;
       baseQuery = baseQuery.or(
         `display_name.ilike.${like},email.ilike.${like},public_user_code.ilike.${like}`
       );
+      if (/^[a-z0-9-]{4,32}$/i.test(q)) {
+        try {
+          const { data: codeMatch } = await privileged.from("user_codes").select("user_id").eq("code", q.toUpperCase()).eq("is_active", true).maybeSingle();
+          codeMatchUserId = codeMatch?.user_id ?? null;
+        } catch { /* codes schema is optional */ }
+      }
     }
 
     if (statusFilter === "banned") baseQuery = baseQuery.eq("is_banned", true);
@@ -77,6 +87,11 @@ export async function searchUsers(
     baseQuery = baseQuery.order("created_at", { ascending: false, nullsFirst: false });
 
     const { data, error } = await baseQuery.limit(50);
+    let searchRows = data ?? [];
+    if (!error && codeMatchUserId && !searchRows.some((row: any) => row.id === codeMatchUserId)) {
+      const { data: codeProfile } = await privileged.from("profiles").select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at").eq("id", codeMatchUserId).maybeSingle();
+      if (codeProfile) searchRows = [codeProfile, ...searchRows].slice(0, 50);
+    }
     // Enrich emails from auth.users (profiles.email is often NULL)
     let emailMap: Record<string, string> = {};
     try {
@@ -87,7 +102,7 @@ export async function searchUsers(
     } catch {}
 
     // Fetch related codes/entitlements separately (no FK dependency on PostgREST joins)
-    const profileIds = (data ?? []).map((r: any) => r.id).filter(Boolean);
+    const profileIds = searchRows.map((r: any) => r.id).filter(Boolean);
     const codesByUser: Record<string, string | null> = {};
     const entitlementsByUser: Record<string, any[]> = {};
     if (profileIds.length) {
@@ -114,7 +129,7 @@ export async function searchUsers(
     }
 
     // Attach nested-like fields for mapRows compatibility
-    const enrichedData = (data ?? []).map((r: any) => ({
+    const enrichedData = searchRows.map((r: any) => ({
       ...r,
       user_codes: codesByUser[r.id] ? [{ code: codesByUser[r.id], is_active: true }] : [],
       entitlements: entitlementsByUser[r.id] ?? [],
