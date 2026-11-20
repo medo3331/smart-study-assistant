@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { checkRateLimit } from "@/lib/api-guard";
-import { checkSubscriptionQuota } from "@/lib/ai/quota-check";
+import { checkSubscriptionQuota, refundSubscriptionQuota } from "@/lib/ai/quota-check";
 import { readQuotaSnapshot } from "@/lib/ai/quota-snapshot";
 import { resolveActor } from "@/lib/policy";
 
@@ -39,6 +39,41 @@ export async function GET() {
   }
 }
 
+/** DELETE — استرداد رصيد صفحة (refund) بمفتاح العنفة الأصلي. */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { user, response: authError } = await requireUserSafe();
+    if (authError) return authError;
+
+    const body = (await request.json().catch(() => null)) as { key?: unknown } | null;
+    const key = typeof body?.key === "string" ? body.key.slice(0, 200) : "";
+    if (!key) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "مفيش مفتاح استرداد." } },
+        { status: 400 },
+      );
+    }
+
+    // 🔑 بيرفض المفاتيح اللي مش بتاعة المستخدم ده — الأمان بالربط.
+    if (!key.startsWith(`quota:${user.id}:page:`)) {
+      return NextResponse.json(
+        { error: { code: "FORBIDDEN", message: "المفتاح مش بتاعك." } },
+        { status: 403 },
+      );
+    }
+
+    await refundSubscriptionQuota(user.id, "page", key);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("notes/page-quota DELETE:", error);
+    return NextResponse.json(
+      { error: { code: "UNKNOWN", message: "حصل خطأ غير متوقع. حاول تاني." } },
+      { status: 500 },
+    );
+  }
+}
+
+/** POST JSON { count?: number }  (افتراضي 1، أقصى 50 لاستيراد PDF) */
 export async function POST(request: NextRequest) {
   try {
     const { user, supabase, response: authError } = await requireUserSafe();
@@ -62,6 +97,8 @@ export async function POST(request: NextRequest) {
       resetAt: quota.resetAt,
       reasonAr: quota.reasonAr,
       count,
+      // 🔑 مفتاح العنفة — عشان الحذف يقدر يعمل refund بنفس المفتاح.
+      idempotencyKey: quota.idempotencyKey,
     });
   } catch (error) {
     console.error("notes/page-quota:", error);

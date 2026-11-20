@@ -35,7 +35,7 @@ import {
   renderPdfPageToImage,
 } from "@/lib/notes/pdf";
 import { SaveCoordinator } from "@/lib/notes/editor-save";
-import { pageQuotaBlockedMessage, requestPageCredits, type PageQuotaResult } from "@/lib/notes/page-quota";
+import { pageQuotaBlockedMessage, refundPageCredit, requestPageCredits, type PageQuotaResult } from "@/lib/notes/page-quota";
 import {
   AUTOSAVE_DELAY_MS,
   ERASER_TOLERANCE,
@@ -191,9 +191,15 @@ export default function NotebookEditor({
   const [pageQuota, setPageQuota] = useState<{ used: number; limit: number } | null>(null);
 
   // 📊 تحديث شريط الكوتة من رد طلب الرصيد.
+  /** 🔑 مفاتيح استهلاك صفحات الجلسة — للتردد عند حذف الصفحة. */
+  const pageCreditKeysRef = useRef<string[]>([]);
   const trackPageQuota = useCallback((result: PageQuotaResult) => {
     if (!result.failOpen && result.limit >= 0) {
       setPageQuota({ used: result.used, limit: result.limit });
+      if (result.idempotencyKey) {
+        pageCreditKeysRef.current.push(result.idempotencyKey);
+        if (pageCreditKeysRef.current.length > 50) pageCreditKeysRef.current.shift();
+      }
     }
   }, []);
 
@@ -1062,6 +1068,24 @@ export default function NotebookEditor({
       syncHistory();
       paint();
       setSaveStatus("saved");
+      // ↩ الصفحة المحذوفة بترجّع رصيدها اليومي (لو اتستهلك في الجلسة دي).
+      const creditKey = pageCreditKeysRef.current.pop();
+      if (creditKey) {
+        void refundPageCredit(creditKey).then(() => {
+          // حدّث الشريط من الـ snapshot بعد الـ refund.
+          void (async () => {
+            try {
+              const res = await fetch("/api/notes/page-quota");
+              const data = await res.json().catch(() => null);
+              if (res.ok && data?.ok && typeof data.limit === "number" && data.limit >= 0) {
+                setPageQuota({ used: data.used ?? 0, limit: data.limit });
+              }
+            } catch {
+              /* الشريط يفضل بالقديم */
+            }
+          })();
+        });
+      }
     } catch (error) {
       console.error("[notes] delete page failed", classifyNotesError(error), error);
       setSaveStatus("error");
