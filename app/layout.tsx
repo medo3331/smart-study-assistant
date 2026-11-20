@@ -30,6 +30,7 @@ import {
   webSiteLd,
 } from '@/lib/seo';
 import './globals.css';
+import './notes.css';
 
 /* العناوين: خط عربي هندسي، متغيّر الأوزان */
 const display = Alexandria({
