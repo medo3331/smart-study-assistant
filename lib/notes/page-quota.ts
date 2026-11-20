@@ -22,8 +22,20 @@ export interface PageQuotaResult {
   idempotencyKey?: string;
 }
 
-/** يطلب رصيد `count` صفحة قبل إنشائها. fail-open على أي خطأ شبكة. */
+/** يطلب رصيد `count` صفحة قبل إنشائها.
+ *
+ *  📄 قرار صاحب المشروع (db/45): الصفحات **بلا حد** لكل الخطط — الدالة
+ *  بترجع نجاح فوري من غير أي نداء شبكة، عشان إنشاء الصفحة ما يعتمد
+ *  نهائيًا على حالة السيرفر أو الـ RPC. الـ endpoint لسه موجود
+ *  (fail-open على السيرفر) لو رجّعنا الحدود يوماً ما.
+ */
 export async function requestPageCredits(count = 1): Promise<PageQuotaResult> {
+  void count;
+  return { allowed: true, limit: -1, used: 0, failOpen: false };
+}
+
+/* — النسخة القديمة (بيت نتاع الشبكة) — محفوظة للمرجع:
+export async function requestPageCreditsViaServer(count = 1): Promise<PageQuotaResult> {
   try {
     const res = await fetch("/api/notes/page-quota", {
       method: "POST",
@@ -48,6 +60,7 @@ export async function requestPageCredits(count = 1): Promise<PageQuotaResult> {
     return { allowed: true, limit: -1, used: 0, failOpen: true };
   }
 }
+*/
 
 /** رسالة الرفض الجاهزة للعرض — تحفّز الترقية. */
 export function pageQuotaBlockedMessage(result: PageQuotaResult): string {
@@ -58,16 +71,8 @@ export function pageQuotaBlockedMessage(result: PageQuotaResult): string {
   return "مقدرنش أعمل صفحات جديدة دلوقتي — حاول تاني.";
 }
 
-/** ↩ استرداد رصيد صفحة اتحذفت — بالـ key اللي اتسجل عند الاستهلاك. */
+/** ↩ استرداد رصيد صفحة اتحذفت — بالـ key اللي اتسجل عند الاستهلاك.
+ *  📄 بلا حد الآن — عملياً no-op (لا توجد استهلاك يرجع). */
 export async function refundPageCredit(key: string): Promise<void> {
-  if (!key) return;
-  try {
-    await fetch("/api/notes/page-quota", {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key }),
-    });
-  } catch {
-    // فشل الـ refund مش حرج — الرصيد هيتجدد بنفس اليوم على أي حال.
-  }
+  void key; // بلا حد — مفيش استهلاك نرجعه.
 }
