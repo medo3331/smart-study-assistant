@@ -2609,7 +2609,6 @@ export default function NotebookEditor({
       }
       await importLibraryEntry(match);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [importLibraryEntry],
   );
 

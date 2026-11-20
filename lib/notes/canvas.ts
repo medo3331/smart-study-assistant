@@ -22,6 +22,9 @@ export const TEMPLATE_OPTIONS: readonly { id: NotesTemplate; label: string }[] =
   { id: "grid", label: "مربعات" },
   { id: "dotted", label: "نقط" },
   { id: "cornell", label: "كورنل" },
+  { id: "arabic", label: "خط عربي" },
+  { id: "columns", label: "عمودين" },
+  { id: "planner", label: "مخطط يومي" },
   { id: "blank", label: "فاضي" },
 ];
 
@@ -38,7 +41,20 @@ export const TOOL_STYLE: Record<Stroke["tool"], ToolStyle> = {
   ink: { widthScale: 1.25, alpha: 1, composite: "source-over" },
   pencil: { widthScale: 0.6, alpha: 0.55, composite: "source-over" },
   highlighter: { widthScale: 3.4, alpha: 0.28, composite: "multiply" },
+  // 🖌️ فرشاة — سميكة وبتنحّف مع السرعة (إحساس فرشاة حقيقية).
+  brush: { widthScale: 2.2, alpha: 0.92, composite: "source-over" },
+  // 🖍️ شمعي — حواف خشنة وملمس حبيبي (٣ طبقات متزحة).
+  crayon: { widthScale: 1.6, alpha: 0.62, composite: "source-over" },
+  // ✨ نيون — توهج حوالين خط رفيع حاد.
+  neon: { widthScale: 1.1, alpha: 1, composite: "source-over" },
 };
+
+/** ضوضاء حتمية (deterministic) من فهرس القطعة — للملمس الخشن.
+ *  بدل Math.random اللي يكسر إعادة الرسم بنفس الشكل. */
+function jitterAt(index: number, seed: number): number {
+  const value = Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453;
+  return value - Math.floor(value); // [0, 1)
+}
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -84,6 +100,51 @@ export function shapeOutlinePoints(stroke: Stroke): [number, number][] {
         [x0, y0],
         [x1, y1],
       ];
+    case "triangle": {
+      const left = Math.min(x0, x1);
+      const right = Math.max(x0, x1);
+      const top = Math.min(y0, y1);
+      const bottom = Math.max(y0, y1);
+      return [
+        [(left + right) / 2, top],
+        [right, bottom],
+        [left, bottom],
+        [(left + right) / 2, top],
+      ];
+    }
+    case "diamond": {
+      const left = Math.min(x0, x1);
+      const right = Math.max(x0, x1);
+      const top = Math.min(y0, y1);
+      const bottom = Math.max(y0, y1);
+      const cx = (left + right) / 2;
+      const cy = (top + bottom) / 2;
+      return [
+        [cx, top],
+        [right, cy],
+        [cx, bottom],
+        [left, cy],
+        [cx, top],
+      ];
+    }
+    case "star": {
+      const left = Math.min(x0, x1);
+      const right = Math.max(x0, x1);
+      const top = Math.min(y0, y1);
+      const bottom = Math.max(y0, y1);
+      const cx = (left + right) / 2;
+      const cy = (top + bottom) / 2;
+      const rx = (right - left) / 2;
+      const ry = (bottom - top) / 2;
+      const outline: [number, number][] = [];
+      // نجمة خماسية: 10 رؤوس بالتناوب (خارجي/داخلي) — من فوق لتحت.
+      for (let i = 0; i <= 10; i += 1) {
+        const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        const radius = i % 2 === 0 ? 1 : 0.42;
+        outline.push([cx + rx * radius * Math.cos(angle), cy + ry * radius * Math.sin(angle)]);
+      }
+      return outline;
+    }
     case "ellipse": {
       const cx = (x0 + x1) / 2;
       const cy = (y0 + y1) / 2;
@@ -134,6 +195,10 @@ export function segmentWidth(stroke: Stroke, index: number): number {
   const [x0, y0] = points[index - 1];
   const [x1, y1] = points[index];
   const speed = Math.hypot(x1 - x0, y1 - y0);
+  if (stroke.tool === "brush") {
+    // الفرشاة أصرم في التنحيف — الحركة السريعة بترقّ الخط جدًا.
+    return base * Math.max(0.3, 1.1 - speed / 26);
+  }
   return base * Math.max(0.55, 1.05 - speed / 40);
 }
 
@@ -333,6 +398,107 @@ export function paintPageBackground(
       }
     }
 
+    // 🌱 خط عربي — سطور كثيرة بخط إرشادي رمادي فاتح وخط أحمر هادي،
+    // مع خط علوٍ عريض للصف الأول (الأنسب لكتابة الرقعة والنسخ).
+    if (template === "arabic") {
+      const gap = 24;
+      for (let y = gap; y < height; y += gap) {
+        ctx.strokeStyle = "#fca5a5";
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(width, y + 0.5);
+        ctx.stroke();
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.moveTo(0, y - gap * 0.45);
+        ctx.lineTo(width, y - gap * 0.45);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    // 🗂️ عمودين — RTL: اليمين للشرح والشمال للتمارين/الملاحظات.
+    if (template === "columns") {
+      const midX = Math.round(width / 2);
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(midX + 0.5, 0);
+      ctx.lineTo(midX + 0.5, height);
+      ctx.stroke();
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 1;
+      const gap = 32;
+      for (let y = gap; y < height; y += gap) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(midX, y + 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(midX, y + 0.5);
+        ctx.lineTo(width, y + 0.5);
+        ctx.stroke();
+      }
+      // لافتات الأعمدة.
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "13px system-ui, 'Segoe UI', Tahoma, sans-serif";
+      ctx.textBaseline = "top";
+      if ("direction" in ctx) {
+        (ctx as CanvasRenderingContext2D & { direction: CanvasDirection }).direction = "rtl";
+      }
+      ctx.textAlign = "center";
+      ctx.fillText("الشرح", (midX + width) / 2, 10);
+      ctx.fillText("التمارين", midX / 2, 10);
+    }
+
+    // 📅 مخطط يومي — رأس بالتاريخ، قايمة مهام، وأولوية/ملاحظات أسفل.
+    if (template === "planner") {
+      const headerHeight = 72;
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(16.5, 16.5, width - 33, headerHeight);
+      ctx.beginPath();
+      ctx.moveTo(16.5, headerHeight + 16.5);
+      ctx.lineTo(width - 16.5, headerHeight + 16.5);
+      ctx.stroke();
+
+      // قايمة المهام — 10 خانات بخانة ✅ صغيرة.
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "13px system-ui, 'Segoe UI', Tahoma, sans-serif";
+      if ("direction" in ctx) {
+        (ctx as CanvasRenderingContext2D & { direction: CanvasDirection }).direction = "rtl";
+      }
+      ctx.textAlign = "right";
+      ctx.fillText("المهام", width - 24, headerHeight + 30);
+
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 1;
+      const taskCount = 10;
+      const taskGap = Math.min(64, Math.floor((height - headerHeight - 140) / taskCount));
+      for (let i = 0; i < taskCount; i += 1) {
+        const y = headerHeight + 64 + i * taskGap;
+        // خانة الصح.
+        ctx.strokeRect(width - 44.5, y - 8.5, 18, 18);
+        // سطر المهمة.
+        ctx.beginPath();
+        ctx.moveTo(24, y + 0.5);
+        ctx.lineTo(width - 56, y + 0.5);
+        ctx.stroke();
+      }
+
+      // شريط الملاحظات أسفل.
+      const noteTop = height - 96;
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(16.5, noteTop);
+      ctx.lineTo(width - 16.5, noteTop);
+      ctx.stroke();
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText("ملاحظات اليوم", width - 24, noteTop + 10);
+    }
+
     // 📝 Cornell Notes — RTL: الكلمات المفتاحية يمين، الملاحظات شمال، الملخص تحت.
     if (template === "cornell") {
       const cueWidth = Math.round(width * 0.26);
@@ -418,6 +584,38 @@ export function paintStroke(ctx: CanvasRenderingContext2D, stroke: Stroke): void
       i === points.length - 1 ? current : midpoint(points[i - 1], points[i]);
 
     ctx.lineWidth = segmentWidth(stroke, i);
+
+    // 🖍️ شمعي — ٣ طبقات متزحة بحبيبات حتمية: ملمس شمع حقيقي.
+    if (stroke.tool === "crayon") {
+      const width = ctx.lineWidth;
+      for (let layer = 0; layer < 3; layer += 1) {
+        const seed = layer * 1.7;
+        const along = jitterAt(i, seed) * width - width / 2; // عرضي
+        const across = jitterAt(i + 97, seed) * 2 - 1; // طولي طفيف
+        ctx.save();
+        ctx.globalAlpha *= 0.4;
+        ctx.lineWidth = width * (0.55 + jitterAt(i + 31, seed) * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(start[0] + across, start[1] + along);
+        ctx.quadraticCurveTo(previous[0] + across, previous[1] + along, end[0] + across, end[1] + along);
+        ctx.stroke();
+        ctx.restore();
+      }
+      continue;
+    }
+
+    // ✨ نيون — هالة عريضة شفافة تحت الخط الحاد.
+    if (stroke.tool === "neon") {
+      ctx.save();
+      ctx.globalAlpha *= 0.22;
+      ctx.lineWidth = ctx.lineWidth * 2.6;
+      ctx.beginPath();
+      ctx.moveTo(start[0], start[1]);
+      ctx.quadraticCurveTo(previous[0], previous[1], end[0], end[1]);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.beginPath();
     ctx.moveTo(start[0], start[1]);
     ctx.quadraticCurveTo(previous[0], previous[1], end[0], end[1]);
@@ -452,6 +650,20 @@ export function paintShapeStroke(
 
   if (stroke.shape === "rect") {
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.restore();
+    return;
+  }
+
+  // المضلعات (مثلث/معين/نجمة) بتترسم من مخططها الجاهز — نفس الهندسة
+  // اللي بيتأصل عليها اختبار اللمس، فالرسم والتحديد متطابقين.
+  if (stroke.shape === "triangle" || stroke.shape === "diamond" || stroke.shape === "star") {
+    const outline = shapeOutlinePoints(stroke);
+    ctx.beginPath();
+    outline.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
     ctx.restore();
     return;
   }

@@ -19,6 +19,9 @@ export const VALID_TEMPLATES: readonly NotesTemplate[] = [
   "dotted",
   "blank",
   "cornell",
+  "arabic",
+  "columns",
+  "planner",
 ];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

@@ -40,12 +40,12 @@ export type NoteRepositoryStatus = "ready" | "read-only" | "disposed";
  * A shape is stored as a Stroke whose `points` is exactly [start, end], so
  * undo/redo, the eraser and the revision guard keep working unchanged.
  */
-export type StrokeShape = "line" | "arrow" | "rect" | "ellipse";
+export type StrokeShape = "line" | "arrow" | "rect" | "ellipse" | "triangle" | "diamond" | "star";
 
 /** A single drawing stroke, stable across reloads. */
 export type Stroke = {
   id: string;
-  tool: "pen" | "ink" | "pencil" | "highlighter";
+  tool: "pen" | "ink" | "pencil" | "highlighter" | "brush" | "crayon" | "neon";
   color: string;
   thickness: number;
   opacity: number;
@@ -126,7 +126,7 @@ export type StorageNotebook = {
  * Stored verbatim, so adding a variant is a backwards-compatible change:
  * records written with an older variant keep validating.
  */
-export type NotesTemplate = "lined" | "grid" | "dotted" | "blank" | "cornell";
+export type NotesTemplate = "lined" | "grid" | "dotted" | "blank" | "cornell" | "arabic" | "columns" | "planner";
 
 /** Storage record for a page. */
 export type StoragePage = {

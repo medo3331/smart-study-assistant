@@ -44,7 +44,27 @@ export type UiPage = {
 
 // ---- الثوابت ----
 
-export const PALETTE = ["#111827", "#dc2626", "#2563eb", "#059669", "#d97706", "#7c3aed"];
+export const PALETTE = [
+  // أساسيات
+  "#111827", // أسود حبر
+  "#4b5563", // رمادي
+  "#ffffff", // أبيض (مفيد على صور/خلفيات)
+  "#dc2626", // أحمر
+  "#ea580c", // برتقالي
+  "#d97706", // كهرماني
+  "#059669", // أخضر
+  "#0d9488", // تركواز
+  "#0891b2", // سماوي غامق
+  "#2563eb", // أزرق
+  "#4f46e5", // بنفسجي مزرق
+  "#7c3aed", // بنفسجي
+  "#c026d3", // فوشيا
+  "#db2777", // وردي
+  "#a16207", // برونزي
+];
+
+/** ألوان التظليل المقترحة — عائلة فاتحة شفافة جاهزة. */
+export const HIGHLIGHT_PALETTE = ["#fde047", "#86efac", "#7dd3fc", "#fda4af", "#d8b4fe"];
 export const AUTOSAVE_DELAY_MS = 600;
 export const MIN_ZOOM = 0.35;
 export const MAX_ZOOM = 4;
@@ -58,6 +78,9 @@ export const TOOL_OPTIONS: { id: Tool; label: string; icon: string; key: string 
   { id: "pen", label: "قلم", icon: "🖊️", key: "1" },
   { id: "ink", label: "حبر", icon: "🖋️", key: "2" },
   { id: "pencil", label: "رصاص", icon: "✏️", key: "3" },
+  { id: "brush", label: "فرشاة", icon: "🖌️", key: "6" },
+  { id: "crayon", label: "شمعي", icon: "🟫", key: "7" },
+  { id: "neon", label: "نيون", icon: "✨", key: "8" },
   { id: "highlighter", label: "تظليل", icon: "🖍️", key: "4" },
   { id: "eraser", label: "ممحاة", icon: "🧽", key: "5" },
 ];
@@ -67,6 +90,9 @@ export const SHAPE_OPTIONS: { id: StrokeShape; label: string; icon: string }[] =
   { id: "arrow", label: "سهم", icon: "↗" },
   { id: "rect", label: "مستطيل", icon: "▭" },
   { id: "ellipse", label: "دايرة", icon: "◯" },
+  { id: "triangle", label: "مثلث", icon: "△" },
+  { id: "diamond", label: "معين", icon: "◇" },
+  { id: "star", label: "نجمة", icon: "☆" },
 ];
 
 export const FONT_OPTIONS: { id: string; label: string }[] = [

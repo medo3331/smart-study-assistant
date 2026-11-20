@@ -3,10 +3,12 @@ import {
   distanceToSegment,
   hitTestStroke,
   segmentWidth,
+  shapeOutlinePoints,
   strokeAt,
   strokeBaseWidth,
   strokeMaxWidth,
   TEMPLATE_OPTIONS,
+  TOOL_STYLE,
 } from "../canvas";
 import { validatePage } from "../validation";
 import type { Stroke } from "../types";
@@ -153,11 +155,67 @@ describe("segmentWidth", () => {
   });
 });
 
+describe("new tools (brush/crayon/neon)", () => {
+  it("كل أداة معرفة في TOOL_STYLE بقاعدة رسم", () => {
+    for (const tool of ["pen", "ink", "pencil", "highlighter", "brush", "crayon", "neon"] as const) {
+      expect(TOOL_STYLE[tool]).toBeDefined();
+      expect(TOOL_STYLE[tool].widthScale).toBeGreaterThan(0);
+    }
+  });
+
+  it("الفرشاة بتنحف مع السرعة أكتر من القلم العادي (نسبة من سماكتها)", () => {
+    const base = { id: "b", color: "#000", thickness: 4, opacity: 1, points: [[0, 0], [30, 0]] as [number, number][] };
+    const brushTaper = segmentWidth({ ...base, tool: "brush" } as Stroke, 1) / strokeBaseWidth({ ...base, tool: "brush" } as Stroke);
+    const penTaper = segmentWidth({ ...base, tool: "pen" } as Stroke, 1) / strokeBaseWidth({ ...base, tool: "pen" } as Stroke);
+    expect(brushTaper).toBeLessThan(penTaper);
+  });
+
+  it("الفرشاة السميكة أعرض من القلم بنفس السماكة", () => {
+    const base = { id: "b", color: "#000", thickness: 4, opacity: 1, points: [[0, 0], [1, 0]] as [number, number][] };
+    expect(strokeBaseWidth({ ...base, tool: "brush" } as Stroke)).toBeGreaterThan(
+      strokeBaseWidth({ ...base, tool: "pen" } as Stroke),
+    );
+  });
+});
+
+describe("new shapes (triangle/diamond/star)", () => {
+  const from: [number, number] = [0, 0];
+  const to: [number, number] = [100, 60];
+
+  it("المثلث بيرجّع 4 نقاط (مغلق)", () => {
+    const outline = shapeOutlinePoints(makeStroke([from, to], { shape: "triangle" }));
+    expect(outline).toHaveLength(4);
+    expect(outline[0]).toEqual(outline[3]);
+  });
+
+  it("المعين بيرجّع 5 نقاط (مغلق) ومركزه وسط المستطيل", () => {
+    const outline = shapeOutlinePoints(makeStroke([from, to], { shape: "diamond" }));
+    expect(outline).toHaveLength(5);
+    const cx = outline.reduce((sum, [x]) => sum + x, 0) / outline.length;
+    expect(cx).toBeCloseTo(50);
+  });
+
+  it("النجمة 11 نقطة وتعمل هيت-تست في الجسم", () => {
+    const stroke = makeStroke([from, to], { shape: "star" });
+    const outline = shapeOutlinePoints(stroke);
+    expect(outline).toHaveLength(11);
+    expect(hitTestStroke(stroke, 55, 45, strokeMaxWidth(stroke))).toBeTruthy();
+  });
+
+  it("الرأس المشكوك لبره النجمة مش بيتحدد (-1 = مفيش إصابة)", () => {
+    const stroke = makeStroke([from, to], { shape: "star" });
+    expect(strokeAt([stroke], 200, 200, strokeMaxWidth(stroke))).toBe(-1);
+  });
+});
+
 describe("templates", () => {
-  it("offers five distinct page rules", () => {
+  it("offers eight distinct page rules", () => {
     const ids = TEMPLATE_OPTIONS.map((option) => option.id);
-    expect(ids).toEqual(["lined", "grid", "dotted", "cornell", "blank"]);
-    expect(new Set(ids).size).toBe(5);
+    expect(ids).toEqual([
+      "lined", "grid", "dotted", "cornell",
+      "arabic", "columns", "planner", "blank",
+    ]);
+    expect(new Set(ids).size).toBe(8);
   });
 
   it("accepts every offered template in the storage contract", () => {
