@@ -979,3 +979,66 @@
   background: var(--paper-3);
   color: var(--ink);
 }
+
+/* ---- 📖 العارض المشترك للقراءة فقط ---- */
+.shared-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px 12px 40px;
+}
+.shared-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.shared-title {
+  font-size: 20px;
+  margin: 0 0 2px;
+}
+.shared-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shared-counter {
+  font-variant-numeric: tabular-nums;
+  color: var(--notes-muted, #777);
+  font-size: 13px;
+}
+.shared-canvas-wrap {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  background: #fff;
+}
+.shared-canvas {
+  max-width: 100%;
+  height: auto;
+}
+.shared-thumbs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.shared-thumb {
+  min-width: 34px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--notes-border, #ddd);
+  background: var(--notes-surface, #fff);
+  color: inherit;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.shared-thumb[data-active="true"] {
+  border-color: #6d5cff;
+  color: #6d5cff;
+  font-weight: 700;
+}

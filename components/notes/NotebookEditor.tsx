@@ -163,6 +163,12 @@ export default function NotebookEditor({
   const [pdfSelected, setPdfSelected] = useState<Set<string>>(new Set());
   const [exportingPdf, setExportingPdf] = useState(false);
 
+  // ---- Share (read-only link) state ----
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+
   // ---- In-notebook text search state ----
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -2317,6 +2323,38 @@ export default function NotebookEditor({
 
   // ---- PDF import ----
 
+  /** 📤 مشاركة الدفتر كلل قراءة — بيبنى snapshot خفيف وبيوجّه لينك عام. */
+  const createShareLink = useCallback(async () => {
+    setShareBusy(true);
+    setShareError(null);
+    setShareLink(null);
+    try {
+      const payload = {
+        pages: pages.map((page) => ({
+          id: page.id,
+          template: page.template,
+          content: page.content,
+        })),
+      };
+      const res = await fetch("/api/notes/share", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: notebookTitle, payload, pageCount: pages.length }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.shareId) {
+        setShareError(data?.error?.message ?? "مقدرناش نعمل لينك المشاركة.");
+        return;
+      }
+      setShareLink(`${window.location.origin}/notes-shared/${data.shareId}`);
+    } catch (error) {
+      console.error("[notes] share failed", error);
+      setShareError("مقدرناش نعمل لينك المشاركة — جرّب تاني.");
+    } finally {
+      setShareBusy(false);
+    }
+  }, [notebookTitle, pages]);
+
   /** يفتح ملف PDF (محلي أو من «ملفاتي») ويعرض اختيار النطاق. */
   const openPdfImport = useCallback(
     async (getDoc: () => Promise<File>, libraryFile: {
@@ -3269,6 +3307,15 @@ export default function NotebookEditor({
           >
             تصدير PDF
           </button>
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            disabled={pages.length === 0}
+            className="notes-btn"
+            title="لينك للقراءة فقط — تبعته لأي حد يشوف دفترك"
+          >
+            🔗 مشاركة
+          </button>
         </div>
       </div>
       </>
@@ -3565,6 +3612,89 @@ export default function NotebookEditor({
         onExport={() => void exportPdf()}
         onClose={() => setPdfOpen(false)}
       />
+
+      {/* 🔗 مشاركة للقراءة فقط */}
+      {shareOpen ? (
+        <div
+          className="notes-modal-backdrop"
+          onClick={() => setShareOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="notes-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="مشاركة الدفتر"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="notes-modal-title">🔗 مشاركة للقراءة فقط</h2>
+            <p className="notes-modal-sub">
+              بيبعت نسخة حالية من الدفتر ({pages.length} صفحة) — اللي بيفتح اللينك
+              يشوف ويقلّع الصفحات بس، من غير تسجيل ولا أدوات تحرير. التعديلات
+              اللي بتعملها بعد كده مش بتوصل لللينك القديم.
+            </p>
+            {shareBusy ? (
+              <p className="notes-hint" aria-live="polite">بنجهّز النسخة…</p>
+            ) : shareLink ? (
+              <>
+                <input
+                  type="text"
+                  value={shareLink}
+                  readOnly
+                  onFocus={(event) => event.target.select()}
+                  className="notes-input"
+                  dir="ltr"
+                />
+                <div className="notes-modal-actions">
+                  <div className="notes-spacer" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(shareLink);
+                      setShareLink(shareLink); // علامة النسخ
+                      setMessage("اللينك اتنسخ ✓");
+                    }}
+                    data-tone="primary"
+                    className="notes-btn"
+                  >
+                    نسخ اللينك
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShareOpen(false)}
+                    className="notes-btn notes-btn-sm"
+                  >
+                    تمام
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="notes-modal-actions">
+                <div className="notes-spacer" />
+                {shareError ? (
+                  <span className="notes-hint" style={{ color: "#c0392b" }}>{shareError}</span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setShareOpen(false)}
+                  className="notes-btn notes-btn-sm"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void createShareLink()}
+                  disabled={shareBusy}
+                  data-tone="primary"
+                  className="notes-btn"
+                >
+                  اعمل اللينك
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Handwriting beautify dialog */}
       {beautifyOpen ? (
