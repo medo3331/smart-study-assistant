@@ -34,7 +34,9 @@ export async function GET(req: Request){
   }
   const {data,error}=await activeQuery(supabase).order("created_at",{ascending:false});
   if(error){console.error("[announcements] GET",error.message);return NextResponse.json({success:false,error:"Failed to load announcements."},{status:500});}
-  return NextResponse.json({success:true,announcements:data??[]});
+  const { data: profile } = await supabase.from("profiles").select("persona").eq("id",user.id).maybeSingle();
+  const visible = (data ?? []).filter((announcement: any) => announcement.audience === "all" || (announcement.audience === "student" && profile?.persona === "student") || (announcement.audience === "graduate" && profile?.persona === "grad") || (announcement.audience === "freelancer" && profile?.persona === "freelancer"));
+  return NextResponse.json({success:true,announcements:visible});
  }catch(e){console.error("[announcements] GET",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
 }
 async function adminAllowed(user:any){

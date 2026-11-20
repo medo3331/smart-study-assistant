@@ -17,12 +17,16 @@ create table if not exists public.announcement_email_campaigns (
   accepted_count int not null default 0,
   failed_count int not null default 0,
   subject_override text,
+  sender_override text,
   last_error text,
   created_at timestamptz not null default now(),
   confirmed_at timestamptz,
   completed_at timestamptz,
   updated_at timestamptz not null default now()
 );
+
+alter table public.announcement_email_campaigns
+  add column if not exists sender_override text;
 
 create table if not exists public.announcement_email_recipients (
   id uuid primary key default gen_random_uuid(),

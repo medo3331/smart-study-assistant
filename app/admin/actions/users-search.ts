@@ -30,6 +30,18 @@ export interface UserSearchResult {
  * - createdAfter/createdBefore: نطاق تاريخ (YYYY-MM-DD) على profiles.created_at.
  * - ترتيب: الأحدث أولًا. حد أقصى 50.
  */
+async function listAllAuthUsers(privileged: ReturnType<typeof createServiceClient>) {
+  const users: Array<{ id: string; email?: string }> = [];
+  for (let page = 1; page <= 100; page++) {
+    const { data, error } = await privileged.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error("تعذر تحميل قائمة الحسابات المسجلة.");
+    const rows = data?.users ?? [];
+    users.push(...rows.map((user) => ({ id: user.id, email: user.email ?? undefined })));
+    if (rows.length < 1000) return users;
+  }
+  throw new Error("تجاوز دليل الحسابات حد المسح الآمن.");
+}
+
 export async function searchUsers(
   query: string,
   planFilter: string = "all",
@@ -92,14 +104,17 @@ export async function searchUsers(
       const { data: codeProfile } = await privileged.from("profiles").select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at").eq("id", codeMatchUserId).maybeSingle();
       if (codeProfile) searchRows = [codeProfile, ...searchRows].slice(0, 50);
     }
-    // Enrich emails from auth.users (profiles.email is often NULL)
+    // Enrich emails from auth.users (profiles.email is often NULL).
+    // Resolve only the current page's IDs so large auth directories are not rescanned per query.
     let emailMap: Record<string, string> = {};
     try {
-      const { data: listData } = await privileged.auth.admin.listUsers();
-      for (const u of listData?.users ?? []) {
-        if (u.email) emailMap[u.id] = u.email;
+      for (const id of searchRows.map((row: any) => row.id).filter(Boolean)) {
+        const { data: account, error: accountError } = await privileged.auth.admin.getUserById(id);
+        if (!accountError && account.user?.email) emailMap[id] = account.user.email;
       }
-    } catch {}
+    } catch (error) {
+      console.error("[admin users-search] auth email lookup failed", error);
+    }
 
     // Fetch related codes/entitlements separately (no FK dependency on PostgREST joins)
     const profileIds = searchRows.map((r: any) => r.id).filter(Boolean);
@@ -177,9 +192,9 @@ export async function searchUsers(
     // fallback: profiles.email غالباً NULL...
     if (q && enriched.length === 0) {
       try {
-        const { data: listData } = await privileged.auth.admin.listUsers();
+        const authUsers = await listAllAuthUsers(privileged);
         const needle = q.toLowerCase();
-        const matchedIds = (listData?.users ?? [])
+        const matchedIds = authUsers
           .filter((u) => (u.email ?? "").toLowerCase().includes(needle))
           .slice(0, 50)
           .map((u) => u.id);

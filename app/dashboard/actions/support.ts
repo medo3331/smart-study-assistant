@@ -81,11 +81,19 @@ export async function listMyNotifications() {
   const user = await getSessionUser();
   if (!user) return { data: [], error: "unauth" };
   const db = createServiceClient();
-  let { data, error } = await db.from("notifications").select("*").eq("recipient_id", user.id).order("created_at", { ascending: false }).limit(20);
-  if (error) ({ data, error } = await db.from("notifications").select("*").or(`user_id.eq.${user.id},user_id.is.null`).order("created_at", { ascending: false }).limit(20));
+  const { data: modern, error: modernError } = await db.from("notifications").select("*").eq("recipient_id", user.id).order("created_at", { ascending: false }).limit(20);
+  let legacy: any[] = [];
+  // Keep pre-migration user_id notices visible, but never include global NULL-recipient rows.
+  try {
+    const { data, error } = await db.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20);
+    if (!error) legacy = data ?? [];
+  } catch { /* legacy column may not exist in a newer-only schema */ }
+  const byId = new Map<string, any>();
+  for (const item of [...(modern ?? []), ...legacy]) byId.set(item.id, item);
+  const data = [...byId.values()].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 20);
   return {
-    data: (data ?? []).map((item) => ({ ...item, message: item.body ?? item.message ?? "", is_read: Boolean(item.read_at ?? item.is_read) })),
-    error: error?.message ?? null,
+    data: data.map((item) => ({ ...item, message: item.body ?? item.message ?? "", is_read: Boolean(item.read_at ?? item.is_read) })),
+    error: modernError?.message ?? null,
   };
 }
 
@@ -94,14 +102,13 @@ export async function markNotificationRead(id: string) {
   if (!user) return { ok: false };
   const db = createServiceClient();
   const modern = await db.from("notifications").select("recipient_id").eq("id", id).maybeSingle();
-  if (!modern.error && modern.data) {
-    if (modern.data.recipient_id !== user.id) return { ok: false };
+  if (!modern.error && modern.data?.recipient_id === user.id) {
     const { error } = await db.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id).eq("recipient_id", user.id);
     return { ok: !error };
   }
   const legacy = await db.from("notifications").select("user_id").eq("id", id).maybeSingle();
-  if (!legacy.data || (legacy.data.user_id !== null && legacy.data.user_id !== user.id)) return { ok: false };
-  const { error } = await db.from("notifications").update({ is_read: true }).eq("id", id);
+  if (!legacy.data || legacy.data.user_id !== user.id) return { ok: false };
+  const { error } = await db.from("notifications").update({ is_read: true }).eq("id", id).eq("user_id", user.id);
   return { ok: !error };
 }
 
@@ -110,13 +117,12 @@ export async function deleteMyNotification(id: string) {
   if (!user) return { ok: false };
   const db = createServiceClient();
   const modern = await db.from("notifications").select("recipient_id").eq("id", id).maybeSingle();
-  if (!modern.error && modern.data) {
-    if (modern.data.recipient_id !== user.id) return { ok: false };
+  if (!modern.error && modern.data?.recipient_id === user.id) {
     const { error } = await db.from("notifications").delete().eq("id", id).eq("recipient_id", user.id);
     return { ok: !error };
   }
   const legacy = await db.from("notifications").select("user_id").eq("id", id).maybeSingle();
-  if (!legacy.data || (legacy.data.user_id !== null && legacy.data.user_id !== user.id)) return { ok: false };
-  const { error } = await db.from("notifications").delete().eq("id", id);
+  if (!legacy.data || legacy.data.user_id !== user.id) return { ok: false };
+  const { error } = await db.from("notifications").delete().eq("id", id).eq("user_id", user.id);
   return { ok: !error };
 }
