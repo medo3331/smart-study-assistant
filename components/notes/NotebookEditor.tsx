@@ -34,6 +34,8 @@ import {
   loadPdfDocument,
   renderPdfPageToImage,
 } from "@/lib/notes/pdf";
+import PdfExportDialog from "@/components/notes/PdfExportDialog";
+import PdfImportDialog, { type PdfLibraryEntry } from "@/components/notes/PdfImportDialog";
 import { SaveCoordinator } from "@/lib/notes/editor-save";
 import { pageQuotaBlockedMessage, refundPageCredit, requestPageCredits, type PageQuotaResult } from "@/lib/notes/page-quota";
 import {
@@ -179,10 +181,7 @@ export default function NotebookEditor({
     fileName: string;
     url: string;
   } | null>(null);
-  const [pdfLibraryList, setPdfLibraryList] = useState<Array<{
-    id: string;
-    file_name: string;
-  }> | null>(null);
+  const [pdfLibraryList, setPdfLibraryList] = useState<PdfLibraryEntry[] | null>(null);
 
   // ---- Split-screen mode (opened beside a lesson) ----
   const [besideMode, setBesideMode] = useState(false);
@@ -3533,211 +3532,39 @@ export default function NotebookEditor({
       </p>
 
       {/* PDF import dialog */}
-      {pdfImportOpen ? (
-        <div
-          className="notes-modal-backdrop"
-          onClick={() => {
-            if (!pdfBusy) setPdfImportOpen(false);
-          }}
-          role="presentation"
-        >
-          <div
-            className="notes-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="استيراد PDF"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="notes-modal-title">استيراد PDF</h2>
-            <p className="notes-modal-sub">
-              كل صفحة PDF بتبقى خلفية لصفحة نوته — تكتب وترسم وتظلل عليها بكل
-              الأدوات، وبتفضل محفوظة على جهازك.
-            </p>
-            {pdfProgress ? (
-              <p className="notes-hint" aria-live="polite">{pdfProgress}</p>
-            ) : pdfPageCount > 0 ? (
-              <>
-                <p className="notes-modal-sub">
-                  الملف فيه {pdfPageCount} صفحة. اختار النطاق (حد أقصى {MAX_PDF_PAGES_PER_IMPORT} صفحة في المرة):
-                </p>
-                <div className="notes-modal-actions">
-                  <label className="notes-label">
-                    من
-                    <input
-                      type="number"
-                      min={1}
-                      max={pdfPageCount}
-                      value={pdfFrom}
-                      onChange={(event) => setPdfFrom(Number(event.target.value))}
-                      className="notes-input notes-btn-sm"
-                    />
-                  </label>
-                  <label className="notes-label">
-                    إلى
-                    <input
-                      type="number"
-                      min={1}
-                      max={pdfPageCount}
-                      value={pdfTo}
-                      onChange={(event) => setPdfTo(Number(event.target.value))}
-                      className="notes-input notes-btn-sm"
-                    />
-                  </label>
-                </div>
-                <div className="notes-modal-actions">
-                  <div className="notes-spacer" />
-                  <button
-                    type="button"
-                    onClick={() => setPdfImportOpen(false)}
-                    className="notes-btn notes-btn-sm"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void confirmPdfImport()}
-                    disabled={pdfBusy}
-                    data-tone="primary"
-                    className="notes-btn"
-                  >
-                    {pdfBusy ? "بنستورد…" : "استيراد"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              // 📁 منتقي المصدر: ملف محلي أو PDF من مكتبة «ملفاتي».
-              <>
-                <div className="notes-modal-actions">
-                  <div className="notes-spacer" />
-                  <button
-                    type="button"
-                    onClick={() => pdfInputRef.current?.click()}
-                    className="notes-btn"
-                    data-tone="primary"
-                  >
-                    اختار ملف من جهازك
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPdfImportOpen(false)}
-                    className="notes-btn notes-btn-sm"
-                  >
-                    إلغاء
-                  </button>
-                </div>
-                <p className="notes-modal-sub">أو استورد من مكتبة «ملفاتي»:</p>
-                {pdfLibraryList === null ? (
-                  <p className="notes-hint">
-                    <button
-                      type="button"
-                      onClick={() => void loadPdfLibrary()}
-                      className="notes-btn notes-btn-sm"
-                    >
-                      اعرض ملفاتي
-                    </button>
-                  </p>
-                ) : pdfLibraryList.length === 0 ? (
-                  <p className="notes-hint">
-                    مفيش PDF في مكتبتك —{" "}
-                    <a href="/files" className="notes-link">ارفع من صفحة «ملفاتي»</a>.
-                  </p>
-                ) : (
-                  <ul className="notes-import-library">
-                    {pdfLibraryList.map((entry) => (
-                      <li key={entry.id}>
-                        <button
-                          type="button"
-                          onClick={() => void handlePdfFromLibrary(entry.id, entry.file_name)}
-                          className="notes-btn notes-btn-sm"
-                          title={entry.file_name}
-                        >
-                          📕 {entry.file_name}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      ) : null}
+      <PdfImportDialog
+        open={pdfImportOpen}
+        busy={pdfBusy}
+        progress={pdfProgress}
+        pageCount={pdfPageCount}
+        from={pdfFrom}
+        to={pdfTo}
+        onFromChange={setPdfFrom}
+        onToChange={setPdfTo}
+        onConfirm={() => void confirmPdfImport()}
+        onClose={() => setPdfImportOpen(false)}
+        onPickDeviceFile={() => pdfInputRef.current?.click()}
+        libraryList={pdfLibraryList}
+        onReloadLibrary={() => void loadPdfLibrary()}
+        onPickLibraryFile={(fileId, fileName) => void handlePdfFromLibrary(fileId, fileName)}
+      />
 
-      {/* PDF export dialog */}
-      {pdfOpen ? (
-        <div
-          className="notes-modal-backdrop"
-          onClick={() => setPdfOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="notes-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="تصدير PDF"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="notes-modal-title">تصدير PDF</h2>
-            <p className="notes-modal-sub">
-              اختار الصفحات اللي عايز تطلعها في الملف — بيتصدّروا بنفس ترتيب الدفتر.
-            </p>
-            <div className="notes-modal-pages">
-              {pages.map((page, index) => (
-                <label key={page.id} className="notes-modal-page">
-                  <input
-                    type="checkbox"
-                    checked={pdfSelected.has(page.id)}
-                    onChange={(event) => {
-                      const next = new Set(pdfSelected);
-                      if (event.target.checked) next.add(page.id);
-                      else next.delete(page.id);
-                      setPdfSelected(next);
-                    }}
-                  />
-                  <span>صفحة {index + 1}</span>
-                  <span className="notes-modal-page-meta">
-                    {page.content.strokes.length} خط
-                    {page.content.images.length > 0 ? ` · ${page.content.images.length} صورة` : ""}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="notes-modal-actions">
-              <button
-                type="button"
-                onClick={() => setPdfSelected(new Set(pages.map((page) => page.id)))}
-                className="notes-btn notes-btn-sm"
-              >
-                تحديد الكل
-              </button>
-              <button
-                type="button"
-                onClick={() => setPdfSelected(new Set())}
-                className="notes-btn notes-btn-sm"
-              >
-                إلغاء التحديد
-              </button>
-              <div className="notes-spacer" />
-              <button
-                type="button"
-                onClick={() => setPdfOpen(false)}
-                className="notes-btn notes-btn-sm"
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                onClick={() => void exportPdf()}
-                disabled={pdfSelected.size === 0 || exportingPdf}
-                data-tone="primary"
-                className="notes-btn"
-              >
-                {exportingPdf ? "بنجهّز الملف…" : `تصدير (${pdfSelected.size})`}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <PdfExportDialog
+        open={pdfOpen}
+        pages={pages}
+        selected={pdfSelected}
+        exporting={exportingPdf}
+        onToggle={(pageId, checked) => {
+          const next = new Set(pdfSelected);
+          if (checked) next.add(pageId);
+          else next.delete(pageId);
+          setPdfSelected(next);
+        }}
+        onSelectAll={() => setPdfSelected(new Set(pages.map((page) => page.id)))}
+        onClearSelection={() => setPdfSelected(new Set())}
+        onExport={() => void exportPdf()}
+        onClose={() => setPdfOpen(false)}
+      />
 
       {/* Handwriting beautify dialog */}
       {beautifyOpen ? (
