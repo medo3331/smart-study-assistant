@@ -25,6 +25,8 @@ export default function NotesAssistant({
   getEditorContext,
   getSelectedText,
   getCanvasSnapshot,
+  /** بيبدأ مفتوح — وضع المذاكرة الجانبي. */
+  defaultOpen = false,
 }: {
   /** Current page context (title + typed texts). Called when sending. */
   getEditorContext: () => string;
@@ -32,8 +34,10 @@ export default function NotesAssistant({
   getSelectedText?: () => string | null;
   /** لقطة الصفحة الحالية كـ dataURL — يبعتها للذكاء الاصطناعي كصورة. */
   getCanvasSnapshot?: () => string | null;
+  /** بيبدأ مفتوح — وضع المذاكرة الجانبي. */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,20 +69,31 @@ export default function NotesAssistant({
     };
   }, [open, getSelectedText]);
 
-  const send = useCallback(
-    async (rawText: string) => {
-      const text = rawText.trim();
-      if (!text || busy) return;
+  // 🚦 طابور الطلبات — ضغط سريع على زر الإرسال مبيفقدش رسالة:
+  // كل طلب بينتظر لما اللي قبله يخلص (حتى 3 طلبات في الانتظار).
+  const messagesRef = useRef(messages);
+  const busyRef = useRef(false);
+  const queueRef = useRef<string[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const doSend = async (rawText: string) => {
+    const text = rawText.trim();
+      if (!text) return;
 
       const context = autoContext ? getEditorContext() : "";
       const composed = context
         ? `${text}\n\n[سياق من الدفتر]\n${context}`
         : text;
 
-      const next = [...messages, { role: "user" as const, content: composed }];
+      const history = messagesRef.current;
+      const next = [...history, { role: "user" as const, content: composed }];
       setMessages(next);
+      messagesRef.current = next;
       setInput("");
       setBusy(true);
+      busyRef.current = true;
       setError(null);
 
       try {
@@ -116,13 +131,25 @@ export default function NotesAssistant({
         setError(caught instanceof Error ? caught.message : "حصل خطأ غير متوقع.");
       } finally {
         setBusy(false);
+        busyRef.current = false;
+        // 🚦 الطلبات اللي في الانتظار — الأول يخلص التاني يبدأ.
+        const pending = queueRef.current.shift();
+        if (pending) void doSend(pending);
       }
-    },
-    [autoContext, busy, getEditorContext, messages],
-  );
+  };
+
+  const send = (rawText: string) => {
+    const text = rawText.trim();
+      if (!text) return;
+      if (busyRef.current) {
+        if (queueRef.current.length < 3) queueRef.current.push(text);
+        return;
+      }
+      void doSend(text);
+  };
 
   /** ✂️ اشرح النص المحدد — بيبعت للـ AI مع طلب شرح مفصّل. */
-  const explainSelection = useCallback(() => {
+  const explainSelection = () => {
     const text = (getSelectedText?.() ?? selectedText ?? "").trim();
     if (!text) {
       setError("حدد نص على الصفحة الأول (اضغط عليه من أداة التحديد). ثم جرّب تاني.");
@@ -138,7 +165,7 @@ ${text.slice(0, 4000)}`);
 
 ${text}`);
     }
-  }, [getSelectedText, selectedText, send]);
+  };
 
   /** 📸 صورة الصفحة — بيبعتها للـ AI كصورة عبر /api/ai/image-analysis. */
   const analyzeSnapshot = useCallback(async () => {

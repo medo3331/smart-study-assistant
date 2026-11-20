@@ -28,6 +28,7 @@ import { LectureLinkModal, type LinkLectureOption, type LinkSuggestion } from "@
 import { LessonCitedExplanationView } from "@/components/lesson/LessonCitations";
 import type { LessonCitedExplanation } from "@/lib/lesson/citations";
 import OpenNotesBeside from "@/components/notes/OpenNotesBeside";
+import NotesSplitToggle from "@/components/notes/NotesSplitPanel";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -344,10 +345,14 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
 
   return (
     <div dir="rtl">
-      <div className="flex justify-end mb-1">
+      <div className="flex justify-end mb-1 gap-1.5">
+        <NotesSplitToggle
+          className="btn btn-quiet text-xs px-2.5 py-1.5"
+          label="🖥️ نوت جانبية — تقسيم الشاشة"
+        />
         <OpenNotesBeside
           className="btn btn-quiet text-xs px-2.5 py-1.5"
-          label="📝 نوت جانبية"
+          label="📝 نوت في نافذة"
         />
       </div>
       {link ? (

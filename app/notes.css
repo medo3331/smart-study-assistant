@@ -1042,3 +1042,77 @@
   color: #6d5cff;
   font-weight: 700;
 }
+
+/* ---- 🖥️ وضع المذاكرة — لوحة النوت جانب الشرح ---- */
+.notes-split-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(46vw, 780px);
+  min-width: 340px;
+  background: var(--paper);
+  border-inline-end: 1px solid var(--rule);
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+}
+.notes-split-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-2);
+}
+.notes-split-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.notes-split-actions {
+  display: flex;
+  gap: 4px;
+}
+.notes-split-btn {
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.notes-split-btn:hover {
+  background: var(--paper-3);
+}
+.notes-split-frame {
+  flex: 1;
+  border: 0;
+  width: 100%;
+  background: var(--paper);
+}
+.notes-split-restore {
+  position: fixed;
+  left: 10px;
+  top: 12px;
+  z-index: 70;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* داخل الـ iframe — وضع مضغوط من غير هيدر كبير */
+.notes-page[data-beside="true"] {
+  padding: 8px 10px;
+}
+.notes-page[data-beside="true"] .notes-header {
+  gap: 6px;
+  flex-wrap: wrap;
+}

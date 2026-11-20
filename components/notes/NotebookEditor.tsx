@@ -308,11 +308,14 @@ export default function NotebookEditor({
     selectionRef.current = selection;
   }, [selection]);
 
-  // The editor may live in a side window launched from a lesson page.
-  // window.name is read after hydration to avoid an SSR mismatch.
+  // The editor may live in a side window launched from a lesson page, or
+  // embedded in the split panel iframe (?beside=1).
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setBesideMode(window.name === "smart-notes-beside");
+      const beside =
+        window.name === "smart-notes-beside" ||
+        new URLSearchParams(window.location.search).get("beside") === "1";
+      setBesideMode(beside);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -3051,13 +3054,23 @@ export default function NotebookEditor({
     : undefined;
 
   return (
-    <div className="notes-page" data-focus={focusMode ? "true" : undefined}>
+    <div
+      className="notes-page"
+      data-focus={focusMode ? "true" : undefined}
+      data-beside={besideMode ? "true" : undefined}
+    >
       <header className="notes-header">
-        <Link href="/notes" className="notes-btn notes-btn-sm">
-          → دفاتري
-        </Link>
-        <h1 className="notes-title">{notebookTitle}</h1>
-        {notebookId ? (
+        {!besideMode ? (
+          <>
+            <Link href="/notes" className="notes-btn notes-btn-sm">
+              → دفاتري
+            </Link>
+            <h1 className="notes-title">{notebookTitle}</h1>
+          </>
+        ) : (
+          <h1 className="notes-title" style={{ fontSize: 15 }}>{notebookTitle}</h1>
+        )}
+        {!besideMode && notebookId ? (
           <a
             href={`/notes/${notebookId}`}
             target="_blank"
@@ -3952,6 +3965,7 @@ export default function NotebookEditor({
         getEditorContext={getEditorContext}
         getSelectedText={getSelectedText}
         getCanvasSnapshot={getCanvasSnapshot}
+        defaultOpen={besideMode}
       />
 
       {/* 📝 معاينة قراءة خط اليد — تصحيح قبل الإدراج */}

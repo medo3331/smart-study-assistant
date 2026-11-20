@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 
-const CATEGORIES = new Set(["login", "account", "payment", "bug", "content", "performance", "other"]);
+const CATEGORIES = new Set(["login", "account", "payment", "bug", "content", "performance", "feedback", "other"]);
 
 export async function GET() {
   try {

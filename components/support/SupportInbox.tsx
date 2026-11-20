@@ -21,7 +21,7 @@ type Ticket = {
 type Message = { id: string; ticket_id: string; author_id: string; author_role: "user" | "admin"; body: string; created_at: string };
 
 const ISSUE_LABELS: Record<string, string> = {
-  login: "تسجيل الدخول", account: "الحساب", payment: "الاشتراك والدفع", bug: "خطأ تقني", content: "المحتوى والدروس", performance: "الأداء والسرعة", other: "مشكلة أخرى",
+  login: "تسجيل الدخول", account: "الحساب", payment: "الاشتراك والدفع", bug: "خطأ تقني", content: "المحتوى والدروس", performance: "الأداء والسرعة", feedback: "⭐ رأي طالب", other: "مشكلة أخرى",
 };
 const STATUS_LABELS: Record<string, string> = { open: "مفتوحة", pending: "بانتظار الطالب", resolved: "تم الحل", closed: "مغلقة" };
 const ADMIN_STATUS_OPTIONS: Record<string, string> = { open: "مفتوحة", resolved: "تم الحل", closed: "مغلقة" };

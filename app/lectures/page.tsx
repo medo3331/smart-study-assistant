@@ -23,6 +23,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell, DataNotice, EmptyState } from "@/app/dashboard/components/PageShell";
 import { LectureProcessActions } from "@/components/lectures/LectureProcessActions";
+import NotesSplitToggle from "@/components/notes/NotesSplitPanel";
 import { LectureNote } from "@/components/lectures/LectureNote";
 import { LectureSection, LectureToolbar, LectureWorkspace } from "@/components/lectures/LectureWorkspace";
 import LectureChat from "@/components/lectures/LectureChat";
@@ -311,14 +312,21 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                     الافتراضي: الملخص مفتوح لو موجود، والباقي مقفول. */}
                 <LectureWorkspace defaultOpen={lecture.summary ? ["summary"] : []}>
                   <div className="mt-3">
-                    {/* ✨ أدوات التوليد بره الأقسام عشان الطالب يلاقيها الأول. */}
-                    <LectureProcessActions
-                      lectureId={lecture.id}
-                      hasSummary={Boolean(lecture.summary?.trim())}
-                      hasExplanation={Boolean(lecture.explanation?.trim())}
-                      hasIntensive={Boolean(lecture.intensive_explanation)}
-                      hasTimings={segments.length > 0}
-                    />
+                    {/* ✨ أدوات التوليد بره الأقسام عشان الطالب يلاقيها الأول،
+                        وجنبها زر وضع المذاكرة — النوت جنب الشرح. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <LectureProcessActions
+                        lectureId={lecture.id}
+                        hasSummary={Boolean(lecture.summary?.trim())}
+                        hasExplanation={Boolean(lecture.explanation?.trim())}
+                        hasIntensive={Boolean(lecture.intensive_explanation)}
+                        hasTimings={segments.length > 0}
+                      />
+                      <NotesSplitToggle
+                        className="btn btn-quiet text-xs px-2.5 py-1.5"
+                        label="🖥️ نوت جانبية — مذاكرة وشرح"
+                      />
+                    </div>
                   </div>
 
                   <div className="mt-3 space-y-3">
