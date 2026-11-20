@@ -10,6 +10,7 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/lib/admin/audit-log-record";
 import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
+import { isUuid } from "@/lib/credits/grants";
 
 export type RewardType = "limit_boost" | "trial_week" | "pro_week" | "upload_credits";
 
@@ -71,9 +72,19 @@ export async function issueReward(
     const adminEmail = actor.userEmail;
 
     const privileged = createServiceClient();
+    const allowedTypes: RewardType[] = ["limit_boost", "trial_week", "pro_week", "upload_credits"];
+    const duration = input.durationDays ?? 7;
+    if (!allowedTypes.includes(input.rewardType) || !Number.isInteger(input.rewardValue) || input.rewardValue < 1 || input.rewardValue > 10000 || ((input.rewardType === "trial_week" || input.rewardType === "pro_week") && (!Number.isInteger(duration) || duration < 1 || duration > 365)) || (input.note ?? "").length > 500) {
+      return { ok: false, message: "بيانات الهدية غير صالحة (القيمة 1–10,000 والمدة 1–365 يومًا)", error: "invalid_input" };
+    }
 
-    // ── حل المستلم: الإيميل يُحلّ لـ UUID سيرفر-side (لا ثقة في UUID من العميل وحده)
+    // ── Resolve recipient by canonical UUID, or resolve email server-side.
     let recipientUserId = (input.recipientUserId ?? "").trim();
+    if (recipientUserId) {
+      if (!isUuid(recipientUserId)) return { ok: false, message: "معرّف المستخدم ليس UUID صالحًا", error: "invalid_user_id" };
+      const { data: profile } = await privileged.from("profiles").select("id").eq("id", recipientUserId).maybeSingle();
+      if (!profile) recipientUserId = "";
+    }
     const recipientEmail = (input.recipientEmail ?? "").trim().toLowerCase();
     if (!recipientUserId && recipientEmail) {
       // 1) profiles.email أولاً
@@ -148,15 +159,26 @@ export async function issueReward(
         return { ok: false, message: "المتلقي غير موجود في قاعدة البيانات", error: "recipient_not_found", subscriptionActivationUsed: true };
       }
 
-      // Check for existing user code (simplified: we don't enforce code lookup for rewards,
-      // but we reuse the activation table for persistence of the trial/pro grant)
+      // Use an active MAG code linked to this UUID; do not fabricate FK values.
+      const { data: codeRow } = await privileged
+        .from("user_codes")
+        .select("code")
+        .eq("user_id", recipientUserId)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!codeRow?.code) {
+        await recordAuditLog({ actor: adminUserId, actor_email: adminEmail, action: "rewards.manage", resource_type: "reward", resource_id: recipientUserId, details: { recipient_user_id: recipientUserId, reward_type: input.rewardType, reason: "recipient_has_no_active_user_code" }, result: "FAIL" });
+        return { ok: false, message: "لا يوجد كود مستخدم نشط مرتبط بالحساب لتسجيل هدية الاشتراك", error: "user_code_required", subscriptionActivationUsed: true };
+      }
       const { data: activationData, error: activationError } = await privileged
         .from("subscription_activations")
         .insert({
-          user_code: `REWARD-${recipientUserId.slice(0, 8)}-${Date.now().toString(36)}`,
+          user_code: codeRow.code,
           user_id: recipientUserId,
           plan_key: planKey,
-          duration_days: input.durationDays || 7,
+          duration_days: duration,
           activated_by: adminUserId,
           note: `مكافأة (${input.rewardType}) عبر نظام Rewards — ${input.note || ""}`.trim(),
         })
@@ -188,7 +210,7 @@ export async function issueReward(
 
       // Sync entitlements + quota so the granted plan/limits take effect immediately.
       try {
-        const expiresAt = new Date(Date.now() + (input.durationDays || 7) * 86400_000).toISOString();
+        const expiresAt = new Date(Date.now() + duration * 86400_000).toISOString();
         await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", recipientUserId).eq("kind", "plan").is("expires_at", null);
         await privileged.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", recipientUserId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
         await privileged.from("entitlements").insert({ user_id: recipientUserId, kind: "plan", value: planKey, expires_at: expiresAt });
@@ -215,7 +237,7 @@ export async function issueReward(
         recipient_user_id: recipientUserId,
         reward_type: input.rewardType,
         reward_value: input.rewardValue,
-        duration_days: (input.rewardType === "trial_week" || input.rewardType === "pro_week") ? (input.durationDays || 7) : null,
+        duration_days: (input.rewardType === "trial_week" || input.rewardType === "pro_week") ? duration : null,
         issued_by: adminUserId,
         note: input.note ? `مكافأة (${input.rewardType}) — ${input.note}` : `مكافأة (${input.rewardType})`,
       })
@@ -257,7 +279,7 @@ export async function issueReward(
         recipient_email: recipientEmail || null,
         reward_type: input.rewardType,
         reward_value: input.rewardValue,
-        duration_days: (input.rewardType === "trial_week" || input.rewardType === "pro_week") ? (input.durationDays || 7) : null,
+        duration_days: (input.rewardType === "trial_week" || input.rewardType === "pro_week") ? duration : null,
         note: input.note || "",
         subscription_activation_reused: subscriptionActivationUsed,
         subscription_activation_id: activationId,

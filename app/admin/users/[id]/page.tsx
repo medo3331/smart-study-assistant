@@ -1,12 +1,13 @@
 import Link from "next/link";
 import QRCode from "qrcode";
-import { ArrowRight, Coins, Crown, FolderOpen, MessageSquare, QrCode, RefreshCw, ShieldAlert } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, CheckCircle2, Coins, Crown, FileText, FolderOpen, GraduationCap, MessageSquare, QrCode, RefreshCw, ShieldAlert } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { hasPermission } from "@/lib/auth-roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { regenerateUserCodeFormAction } from "@/app/admin/actions/user-code-form-action";
 import { AdminCard, AdminNotice, AdminPageHeader } from "@/components/admin/ui";
 import { getUserConsumption } from "@/lib/admin/user-consumption";
+import { getUserProfileInsights } from "@/lib/admin/user-profile-insights";
 import { SITE_URL } from "@/lib/seo";
 
 /** تنسيق حجم الملف بالبايت لوحدة مقروءة */
@@ -54,15 +55,21 @@ export default async function AdminUserDetailsPage({
   const service = createServiceClient();
   const { data: profile } = await service
     .from("profiles")
-    .select("id, display_name, email, persona, role, public_user_code")
+    .select("id, display_name, email, persona, role, public_user_code, education_stage_id, education_grade_id, education_track_id, created_at")
     .eq("id", id)
     .maybeSingle();
 
-  const canRegenerate = await hasPermission(supabase, user.id, user.email ?? null, "users.regenerate_code");
-
-  // Phase 4.4: استهلاك حقيقي للمستخدم (ملفات/رسائل/رصيد/اشتراك/خطة) — كل رقم
-  // إما حقيقي من DATABASE_URL أو N/A بسبب مكتوب (شوف lib/admin/user-consumption.ts).
-  const consumption = profile ? await getUserConsumption(id) : null;
+  const [canRegenerate, consumption, insights, authUserResult, stageResult, gradeResult, trackResult] = await Promise.all([
+    hasPermission(supabase, user.id, user.email ?? null, "users.regenerate_code"),
+    profile ? getUserConsumption(id) : Promise.resolve(null),
+    profile ? getUserProfileInsights(id) : Promise.resolve(null),
+    service.auth.admin.getUserById(id),
+    profile?.education_stage_id ? service.from("education_stages").select("name").eq("id", profile.education_stage_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    profile?.education_grade_id ? service.from("education_grades").select("name").eq("id", profile.education_grade_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    profile?.education_track_id ? service.from("education_tracks").select("name").eq("id", profile.education_track_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+  ]);
+  const profileEmail = (profile?.email as string | null) || authUserResult.data.user?.email || null;
+  const education = [stageResult.data?.name, gradeResult.data?.name, trackResult.data?.name].filter(Boolean).join(" · ");
 
   const code = (profile?.public_user_code as string | null) ?? null;
   const profileUrl = code ? `${SITE_URL}/u/${code}` : null;
@@ -74,8 +81,8 @@ export default async function AdminUserDetailsPage({
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        title="تفاصيل المستخدم + QR Code"
-        subtitle="الكود العام (MAG-XXX-XXXX) وQR قابل للتحميل + توليد/إعادة توليد محكوم بالصلاحيات ومسجّل في audit_log."
+        title="ملف الطالب والتحليلات"
+        subtitle="الملف الشخصي، ما يدرسه الطالب، التقدم، الاستهلاك، نشاط الذكاء الاصطناعي، والاشتراك — جميع السجلات مرتبطة بـUUID الحساب؛ كود MAG معرّف مساعد."
         badge="users.read"
         permissionKey="users.regenerate_code"
       />
@@ -106,20 +113,32 @@ export default async function AdminUserDetailsPage({
               </div>
               <div>
                 <dt className="text-slate-500">الإيميل</dt>
-                <dd className="text-slate-200" dir="ltr">{profile.email || "—"}</dd>
+                <dd className="text-slate-200" dir="ltr">{profileEmail || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">المرحلة / الصف / المسار</dt>
+                <dd className="text-slate-200">{education || "غير مسجل"}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">الشخصية / الدور</dt>
                 <dd className="text-slate-200">{profile.persona || "—"} / {profile.role || "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">UUID</dt>
-                <dd className="text-slate-200 font-mono" dir="ltr">{profile.id}</dd>
+                <dt className="text-slate-500">UUID الموحد (مفتاح الربط)</dt>
+                <dd className="text-slate-200 font-mono break-all" dir="ltr">{profile.id}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">كود MAG</dt>
+                <dd className="text-amber-300 font-mono" dir="ltr">{profile.public_user_code || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">تاريخ التسجيل</dt>
+                <dd className="text-slate-200">{profile.created_at ? new Date(profile.created_at).toLocaleDateString("ar-EG") : "—"}</dd>
               </div>
             </dl>
           </AdminCard>
 
-          <AdminCard title="الاستهلاك والمزايا (المرحلة 4.4)" tone="purple">
+          <AdminCard title="الاستهلاك والمزايا" tone="purple">
             {consumption && consumption.errors.length > 0 ? (
               <AdminNotice tone="amber">
                 أرقام N/A: {consumption.errors.join(" | ")}
@@ -221,6 +240,50 @@ export default async function AdminUserDetailsPage({
                 مفيش اشتراك غير ملغٍّ لهذا المستخدم (أو الجدول غير متاح — راجع أسباب N/A بالأعلى).
               </p>
             ) : null}
+          </AdminCard>
+
+          <AdminCard title="ما يدرسه الطالب والتقدم" tone="blue">
+            {insights?.courses.length || insights?.workspaceSubjects.length ? (
+              <div className="space-y-3">
+                {insights.courses.map((course) => {
+                  const total = course.total_days;
+                  const completed = course.completed_days;
+                  const percent = total ? Math.round((completed / total) * 100) : 0;
+                  return <div key={course.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div><p className="flex items-center gap-2 text-sm font-bold text-slate-100"><BookOpen size={15} className="text-blue-300" />{course.subject}</p><p className="mt-1 text-[11px] text-slate-400">{[course.category, course.sub_category].filter(Boolean).join(" · ") || "منهج دراسي"} · {new Date(course.created_at).toLocaleDateString("ar-EG")}</p></div>
+                      <span className="text-xs text-emerald-300">{completed} / {total} درس مكتمل</span>
+                    </div>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800" role="progressbar" aria-label={`تقدم ${course.subject}`} aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-emerald-400" style={{ width: `${percent}%` }} /></div>
+                  </div>;
+                })}
+                {insights.workspaceSubjects.map((subject) => <div key={subject.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <p className="flex items-center gap-2 text-sm font-bold text-slate-100"><GraduationCap size={15} className="text-blue-300" />{subject.name}</p>
+                  <p className="mt-1 text-[11px] text-slate-400">{[subject.stage, subject.grade_or_year, subject.specialization, subject.curriculum].filter(Boolean).join(" · ")}</p>
+                </div>)}
+              </div>
+            ) : <AdminNotice>{insights?.errors.some((error) => error.source.includes("مواد") || error.source.includes("تقدم")) ? "بيانات المواد غير متاحة حاليًا — راجع تفاصيل المصدر بالأسفل." : "لا توجد مواد أو مسارات دراسة مسجلة لهذا الحساب."}</AdminNotice>}
+          </AdminCard>
+
+          <AdminCard title="تحليلات الاستخدام والنشاط الأخير" tone="purple">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-[11px] text-slate-400">عمليات AI الإجمالية</p><p className="mt-1 text-xl font-bold text-slate-100">{insights?.ai.total ?? "N/A"}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-[11px] text-slate-400">مكتملة</p><p className="mt-1 text-xl font-bold text-emerald-300">{insights?.ai.completed ?? "N/A"}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-[11px] text-slate-400">فاشلة</p><p className="mt-1 text-xl font-bold text-rose-300">{insights?.ai.failed ?? "N/A"}</p></div>
+            </div>
+            {insights?.ai.recent.length ? <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950/30 px-3">
+              {insights.ai.recent.map((operation, index) => <li key={`${operation.created_at}-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                <span className="flex items-center gap-2 text-slate-200"><Activity size={14} className="text-purple-300" />{operation.task_type} · <span dir="ltr">{operation.model}</span></span>
+                <span className={operation.status === "completed" ? "text-emerald-300" : "text-rose-300"}>{operation.status === "completed" ? "مكتملة" : "فاشلة"} · {new Date(operation.created_at).toLocaleString("ar-EG")}</span>
+              </li>)}
+            </ul> : <AdminNotice>لا يوجد نشاط AI مسجل أو أن سجل التحليلات غير متاح.</AdminNotice>}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="flex items-center gap-2 text-[11px] text-slate-400"><FileText size={14} />المحاضرات المحفوظة</p><p className="mt-1 font-bold text-slate-100">{insights?.lectures.length ?? "N/A"}{insights && insights.lectures.length === 10 ? "+ (آخر 10)" : ""}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="flex items-center gap-2 text-[11px] text-slate-400"><CheckCircle2 size={14} />جلسات الامتحان</p><p className="mt-1 font-bold text-slate-100">{insights?.exams.length ?? "N/A"}{insights && insights.exams.length === 10 ? "+ (آخر 10)" : ""}</p></div>
+            </div>
+            {insights?.lectures.length ? <div className="space-y-2"><h3 className="text-xs font-bold text-slate-300">آخر المحاضرات</h3>{insights.lectures.slice(0, 5).map((lecture) => <div key={lecture.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800 px-3 py-2 text-xs"><span className="text-slate-200">{lecture.title || lecture.original_filename || "محاضرة بدون عنوان"}</span><span className="text-slate-400">{lecture.status} · {new Date(lecture.created_at).toLocaleDateString("ar-EG")}</span></div>)}</div> : null}
+            {insights?.exams.length ? <div className="space-y-2"><h3 className="text-xs font-bold text-slate-300">آخر جلسات الامتحان</h3>{insights.exams.slice(0, 5).map((exam) => <div key={exam.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800 px-3 py-2 text-xs"><span className="text-slate-200">{exam.mode} · {exam.total_lectures} محاضرات</span><span className="text-slate-400">{exam.status} · {new Date(exam.created_at).toLocaleDateString("ar-EG")}</span></div>)}</div> : null}
+            {insights?.errors.length ? <AdminNotice tone="amber">مصادر غير متاحة: {insights.errors.map((error) => `${error.source}: ${error.message}`).join(" · ")}</AdminNotice> : null}
           </AdminCard>
 
           <AdminCard title="كود المستخدم + QR" tone="amber">

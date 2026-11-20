@@ -7,14 +7,15 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/lib/admin/audit-log-record";
-import type { AdminPermissionKey } from "@/lib/auth-roles";
+import { isUuid } from "@/lib/credits/grants";
 import { requireAdminActor } from "@/lib/admin/action-guard";
 
 export interface SubscriptionActivationInput {
+  recipientUserId?: string; // canonical UUID from profiles/auth.users
   email?: string;          // البريد الإلكتروني — يُحلّ لـ UUID سيرفر-side (يُفضّل)
   userCode?: string;       // MAG-XXXX (اختياري، للتوافق مع الاستدعاءات القديمة)
   planKey: string;           // free | pro | ultra
-  durationDays: number;      // e.g., 30, 90, 365
+  durationDays: number;      // 1..365 days
   note?: string;             // admin note (payment method, etc.)
 }
 
@@ -38,43 +39,48 @@ export async function activateSubscription(
     const adminUserId = actor.userId!;
     const adminEmail = actor.userEmail;
 
-    // ── EPIC-2 Authorization Guard: ONLY Owner can activate subscriptions (not Admin, not Support)
-    if (!actor.isOwner) {
-      // Explicit clear rejection — NOT silent fail, NOT bypass
+    // Effective subscriptions.manage includes Owner/Admin; the server guard is authoritative.
+    if (!actor.isOwner && actor.role !== "admin") {
       await recordAuditLog({
         actor: adminUserId,
         actor_email: adminEmail,
         action: "subscriptions.manage",
         resource_type: "subscription",
-        resource_id: input.userCode?.trim() ?? null,
-        details: { user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, rejected_by: adminUserId, reason: "non_owner_attempt_rejected" },
+        resource_id: input.recipientUserId?.trim() ?? input.userCode?.trim() ?? null,
+        details: { user_id: input.recipientUserId?.trim() ?? null, user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, rejected_by: adminUserId, reason: "role_not_allowed" },
         result: "BLOCKED",
       });
-      return {
-        ok: false,
-        message: "غير مصرح: تفعيل الاشتراكات متاح لـ Owner فقط (ليس Admin أو Support)",
-        error: "authorization_denied_non_owner",
-        activationId: null,
-        auditId: null,
-        userId: null,
-      };
+      return { ok: false, message: "غير مصرح: دورك لا يسمح بإدارة الاشتراكات", error: "authorization_denied_role", activationId: null, auditId: null, userId: null };
     }
 
     const privileged = createServiceClient();
+    if (!["free", "pro", "ultra"].includes(input.planKey) || !Number.isInteger(input.durationDays) || input.durationDays < 1 || input.durationDays > 365) {
+      return { ok: false, message: "بيانات غير صالحة: اختر خطة معتمدة ومدة من 1 إلى 365 يومًا", error: "invalid_input" };
+    }
 
-    // ── حل المستلم: الإيميل يُحلّ لـ UUID سيرفر-side؛ الكود كخيار احتياطي
+    // UUID is canonical. Email and MAG codes remain compatibility lookup options.
     const recipientEmail = (input.email ?? "").trim().toLowerCase();
     let recipientUserId: string | null = null;
-    let usedEmail = false;
+    let recipientCode: string | null = null;
 
-    if (recipientEmail) {
+    if (input.recipientUserId) {
+      const requestedId = input.recipientUserId.trim();
+      if (!isUuid(requestedId)) return { ok: false, message: "معرّف المستخدم ليس UUID صالحًا", error: "invalid_user_id" };
+      const { data: profileRow } = await privileged.from("profiles").select("id, public_user_code").eq("id", requestedId).maybeSingle();
+      if (profileRow) {
+        recipientUserId = String((profileRow as { id: string }).id);
+        recipientCode = (profileRow as { public_user_code?: string | null }).public_user_code ?? null;
+      }
+    }
+
+    if (!recipientUserId && recipientEmail) {
       const { data: profileRow } = await privileged
         .from("profiles")
-        .select("id")
+        .select("id, public_user_code")
         .eq("email", recipientEmail)
         .maybeSingle();
       recipientUserId = (profileRow as { id?: string } | null)?.id ?? null;
-      usedEmail = true;
+      recipientCode = (profileRow as { public_user_code?: string | null } | null)?.public_user_code ?? null;
       if (!recipientUserId) {
         try {
           let page = 1;
@@ -91,20 +97,24 @@ export async function activateSubscription(
       }
     }
     if (!recipientUserId && input.userCode) {
-      const { data: codeRow } = await privileged
-        .from("user_codes")
-        .select("user_id")
-        .eq("code", input.userCode.trim())
-        .maybeSingle();
-      recipientUserId = (codeRow as { user_id?: string } | null)?.user_id ?? null;
-      if (!recipientUserId) {
-        const { data: byPublic } = await privileged
-          .from("profiles")
-          .select("id")
-          .eq("public_user_code", input.userCode.trim())
-          .maybeSingle();
-        recipientUserId = (byPublic as { id?: string } | null)?.id ?? null;
+      const { data: codeRow } = await privileged.from("user_codes").select("user_id, code, is_active").eq("code", input.userCode.trim()).maybeSingle();
+      if (codeRow && (codeRow as { is_active?: boolean }).is_active) {
+        recipientUserId = (codeRow as { user_id?: string }).user_id ?? null;
+        recipientCode = (codeRow as { code?: string }).code ?? input.userCode.trim();
       }
+      if (!recipientUserId) {
+        const { data: byPublic } = await privileged.from("profiles").select("id, public_user_code").eq("public_user_code", input.userCode.trim()).maybeSingle();
+        recipientUserId = (byPublic as { id?: string } | null)?.id ?? null;
+        recipientCode = (byPublic as { public_user_code?: string | null } | null)?.public_user_code ?? null;
+      }
+    }
+    if (recipientUserId && input.recipientUserId && recipientUserId !== input.recipientUserId.trim()) {
+      await recordAuditLog({ actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage", resource_type: "subscription", resource_id: recipientUserId, details: { requested_user_id: input.recipientUserId, resolved_user_id: recipientUserId, reason: "recipient_id_mismatch" }, result: "BLOCKED" });
+      return { ok: false, message: "تعذر التحقق من تطابق المستخدم", error: "recipient_id_mismatch" };
+    }
+    if (!input.recipientUserId && recipientUserId && input.userCode && recipientCode && recipientCode !== input.userCode.trim()) {
+      await recordAuditLog({ actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage", resource_type: "subscription", resource_id: recipientUserId, details: { user_id: recipientUserId, user_code: input.userCode.trim(), reason: "recipient_code_mismatch" }, result: "BLOCKED" });
+      return { ok: false, message: "كود المستخدم لا يطابق الحساب المحدد", error: "recipient_code_mismatch" };
     }
 
     if (!recipientUserId) {
@@ -138,38 +148,23 @@ export async function activateSubscription(
 
     const userId = recipientUserId;
 
-    // 1. (إذا كان الكود مستخدماً) التحقق من الكود ونشاطه
-    if (input.userCode) {
-      const { data: codeRow, error: codeError } = await privileged
-        .from("user_codes")
-        .select("code, user_id, is_active")
-        .eq("code", input.userCode.trim())
-        .single();
-
-      if (codeError || !codeRow) {
-        // Audit FAIL for invalid code
-        await recordAuditLog({
-          actor: adminUserId,
-          actor_email: adminEmail,
-          action: "subscriptions.manage",
-          resource_type: "subscription",
-          resource_id: input.userCode.trim(),
-          details: { user_code: input.userCode.trim(), plan_key: input.planKey, reason: "invalid_or_inactive_user_code" },
-          result: "FAIL",
-        });
-        return { ok: false, message: "كود المستخدم غير موجود أو غير نشط", error: "invalid_user_code" };
-      }
-
-      if (!(codeRow as any).is_active) {
-        return { ok: false, message: "كود المستخدم غير نشط", error: "user_code_inactive" };
-      }
+    // subscription_activations.user_code has a real FK; resolve a code linked to the UUID.
+    const requestedCode = input.recipientUserId ? "" : (input.userCode ?? "").trim();
+    let codeQuery = privileged.from("user_codes").select("code, user_id, is_active").eq("user_id", userId).eq("is_active", true);
+    if (requestedCode) codeQuery = codeQuery.eq("code", requestedCode);
+    const { data: codeRow, error: codeError } = await codeQuery.order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (codeError || !codeRow?.code || codeRow.user_id !== userId) {
+      await recordAuditLog({ actor: adminUserId, actor_email: adminEmail, action: "subscriptions.manage", resource_type: "subscription", resource_id: userId, details: { user_id: userId, user_code: requestedCode || recipientCode, reason: requestedCode ? "invalid_or_inactive_user_code" : "recipient_has_no_active_user_code" }, result: "FAIL" });
+      return { ok: false, message: requestedCode ? "كود المستخدم غير موجود أو غير نشط لهذا الحساب" : "لا يوجد كود MAG نشط مرتبط بهذا الحساب", error: requestedCode ? "invalid_user_code" : "user_code_required" };
     }
+    const activationCode = String(codeRow.code);
 
     // 2. Verify plan exists
     const { data: planRow, error: planError } = await privileged
       .from("subscription_plans")
       .select("plan_key, name, profile_limit, messages_per_2h, uploads_daily, max_file_size_mb, video_audio_exclusive, is_active")
       .eq("plan_key", input.planKey)
+      .eq("is_active", true)
       .single();
 
     if (planError || !planRow) {
@@ -184,7 +179,7 @@ export async function activateSubscription(
     const { data: activationData, error: activationError } = await privileged
       .from("subscription_activations")
       .insert({
-        user_code: input.userCode?.trim() ?? null,
+        user_code: activationCode,
         user_id: userId,
         plan_key: input.planKey,
         duration_days: input.durationDays,
@@ -200,8 +195,8 @@ export async function activateSubscription(
         actor_email: adminEmail,
         action: "subscriptions.manage",
         resource_type: "subscription",
-        resource_id: input.userCode?.trim() ?? null,
-        details: { user_code: input.userCode?.trim() ?? null, plan_key: input.planKey, duration_days: input.durationDays, reason: "db_insert_failed" },
+        resource_id: userId,
+        details: { user_id: userId, user_code: activationCode, plan_key: input.planKey, duration_days: input.durationDays, reason: "db_insert_failed" },
         result: "FAIL",
       });
       return { ok: false, message: "فشل تسجيل التفعيل: " + activationError.message, error: activationError.message, activationId: null };
@@ -242,10 +237,10 @@ export async function activateSubscription(
       actor_email: adminEmail,
       action: "subscriptions.manage",
       resource_type: "subscription",
-      resource_id: (recipientEmail || input.userCode?.trim()) ?? null,
+      resource_id: userId,
       details: {
-        user_code: input.userCode?.trim() ?? null,
         user_id: userId,
+        user_code: activationCode,
         plan_key: input.planKey,
         duration_days: input.durationDays,
         note: input.note || "تفعيل يدوي عبر لوحة التحكم",
@@ -256,7 +251,7 @@ export async function activateSubscription(
 
     return {
       ok: true,
-      message: `تم تفعيل اشتراك ${planRow?.name || input.planKey} لمدة ${input.durationDays} يوم للمستخدم ${recipientEmail || input.userCode?.trim() || userId.slice(0, 8)}`,
+      message: `تم تفعيل اشتراك ${planRow?.name || input.planKey} لمدة ${input.durationDays} يوم للمستخدم ${userId.slice(0, 8)}`,
       activationId: activationId,
       auditId: auditResult.id,
       userId: userId,
