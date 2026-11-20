@@ -43,6 +43,8 @@ export type ExamGeneratorInitial = {
    *    الـAI العامة في الموضوع (من غير أي ملف).
    */
   topic?: string;
+  /** 📄 مستند جاهز (من رفع في الشات) — بيتحدّد كمصدر أوتوماتيك. */
+  document?: string;
 };
 
 type LectureRow = {
@@ -186,10 +188,13 @@ export function ExamGenerator({
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   /** المستندات المختارة (المصادر التانية من نفس المولّد). */
-  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  // 📄 مستند جاي من الـURL (رفع في الشات) ⇒ محدَّد من الأول.
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(
+    new Set(initial.document ? [initial.document] : []),
+  );
   /** التبويب المعروض: التسجيلات الصوتية ولا المستندات ولا الموضوع العام. */
   const [sourceTab, setSourceTab] = useState<SourceTab>(
-    initial.topic ? "topic" : "recordings"
+    initial.topic ? "topic" : initial.document ? "documents" : "recordings",
   );
   /**
    * 🌍 الموضوع العام — نص الطالب (امتحان من معلومات الـAI العامة).

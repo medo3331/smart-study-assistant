@@ -173,6 +173,7 @@
     radial-gradient(60% 50% at 5% 100%, var(--glow-ember), transparent 60%),
     linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 /* ---- الباليت: نهار، ورقة دفتر ----

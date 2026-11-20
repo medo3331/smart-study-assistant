@@ -4,6 +4,7 @@ import {
   getAdminPermissions,
   AdminPermissionKey,
   ADMIN_PERMISSION_KEYS,
+  ADMIN_PERMISSION_MAP,
 } from "@/lib/auth-roles";
 
 export type ActorRole = "owner" | "admin" | "support" | null;
@@ -100,6 +101,7 @@ export const OWNER_ONLY_PERMISSIONS: AdminPermissionKey[] = [
   "models.manage",
   "rewards.manage",
   "admins.manage",
+  "credits.manage",
 ];
 
 /** فحص ما إذا كان الفاعل يملك صلاحية معينة (المالك يتخطى تلقائياً) */
@@ -108,5 +110,6 @@ export function actorHasPermission(
   permissionKey: AdminPermissionKey
 ): boolean {
   if (actor.isOwner) return true;
+  if (!actor.role || !ADMIN_PERMISSION_MAP[permissionKey].allowed_roles.includes(actor.role)) return false;
   return actor.permissions.includes(permissionKey);
 }

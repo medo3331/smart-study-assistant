@@ -21,7 +21,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { User } from "@supabase/supabase-js";
 
 import { resolveActor, type ActorContext } from "@/lib/policy";
-import type { AdminPermissionKey } from "@/lib/auth-roles";
+import { hasPermission, type AdminPermissionKey } from "@/lib/auth-roles";
 
 /** رفض مُصنَّف — بنرجّعه للعميل كرسالة بدل ما نرمي استثناء غامض. */
 export class ActionAuthError extends Error {
@@ -79,7 +79,7 @@ export async function requireAdminActor(permission: AdminPermissionKey): Promise
     throw new ActionAuthError("forbidden", "غير مصرح: الحساب ده مش من فريق الإدارة");
   }
 
-  const allowed = actor.isOwner || actor.permissions.includes(permission);
+  const allowed = actor.isOwner || await hasPermission(supabase, user.id, user.email ?? null, permission);
   if (!allowed) {
     throw new ActionAuthError("forbidden", `غير مصرح — الصلاحية المطلوبة: ${permission}`);
   }

@@ -47,6 +47,23 @@ export type Dictionary = {
   video_title: string;
   video_lede: string;
   video_open: string;
+  /* قسم عرض ميزة الامتحانات (سكرينز متحركة) */
+  examsh_eyebrow: string;
+  examsh_title_a: string;
+  examsh_title_b: string;
+  examsh_lede: string;
+  examsh_step1_title: string;
+  examsh_step1_desc: string;
+  examsh_step2_title: string;
+  examsh_step2_desc: string;
+  examsh_step3_title: string;
+  examsh_step3_desc: string;
+  examsh_step4_title: string;
+  examsh_step4_desc: string;
+  examsh_cta: string;
+  examsh_prev: string;
+  examsh_next: string;
+  examsh_tab_label: string;
   /* الميزات: اتنين وعشرين مفتاح لاتناشر كارت. الترقيم مقصود إنه يفضل
      ترقيم مش أسماء وصفية — الكارت ممكن يتغير محتواه من غير ما يتغير مكانه. */
   feature1_title: string;
@@ -500,6 +517,23 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     video_lede:
       'شوف في دقايق بسيطة إزاي ملفك بيتحوّل لمذاكرة كاملة — من الرفع لأول كويز.',
     video_open: 'افتح الفيديو',
+    examsh_eyebrow: 'ميزة شغالة دلوقتي',
+    examsh_title_a: 'من محاضرتك',
+    examsh_title_b: 'لدرجة تعرف بيها مستواك',
+    examsh_lede:
+      'مش مجرد أسئلة — ماجيكلي بيقرا المحاضرة، يشرحلك المادة، يبني امتحان على قد مستواك، وبعد التسليم يقولك بالظبط أضعف جزء فين.',
+    examsh_step1_title: 'ارفع محاضرة أو ملف',
+    examsh_step1_desc: 'صوت أو PDF — النص بيتستخرج ويتخزن في مساحة عملك مرة واحدة.',
+    examsh_step2_title: 'اختار شكل الامتحان',
+    examsh_step2_desc: 'نوع الأسئلة، الصعوبة، والعدد — أو قول للمساعد وهو يظبطهم.',
+    examsh_step3_title: 'حلّ على مهلك',
+    examsh_step3_desc: 'إجاباتك بتتحفظ أول بأول، وتقدر تقفل وتكمل من نفس المكان.',
+    examsh_step4_title: 'اعرف أضعف جزء',
+    examsh_step4_desc: 'تقييم على أجزاء المحاضرة نفسها، و«إنت ضعيف في…» بكلام واضح.',
+    examsh_cta: 'جرّب امتحان مجاني',
+    examsh_prev: 'السكرين اللي قبله',
+    examsh_next: 'السكرين اللي بعده',
+    examsh_tab_label: 'سكرينات ميزة الامتحانات',
     feature1_title: 'يفهم ملفاتك',
     feature1_desc: 'ارفع PDF أو Word مرة واحدة، ويفضل مرجع دايم تسأل فيه من غير ما ترفعه تاني.',
     feature2_title: 'خطة على قد وقتك',
@@ -915,6 +949,23 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     video_lede:
       'See in a couple of minutes how your file turns into a full study plan — from upload to your first quiz.',
     video_open: 'Open the video',
+    examsh_eyebrow: 'Live feature',
+    examsh_title_a: 'From your lecture',
+    examsh_title_b: 'to a grade that means something',
+    examsh_lede:
+      'Not just questions. Magicly reads the lecture, explains the material, builds an exam that fits your level, and after you submit it tells you exactly which part is weakest.',
+    examsh_step1_title: 'Upload a lecture or file',
+    examsh_step1_desc: 'Audio or PDF — the text is extracted once and kept in your workspace.',
+    examsh_step2_title: 'Shape the exam',
+    examsh_step2_desc: 'Question types, difficulty, and count — or just ask the assistant.',
+    examsh_step3_title: 'Answer at your pace',
+    examsh_step3_desc: 'Answers save as you go; close the tab and continue from the same place.',
+    examsh_step4_title: 'See your weakest part',
+    examsh_step4_desc: 'A breakdown by the lecture’s own sections, in plain words.',
+    examsh_cta: 'Try a free exam',
+    examsh_prev: 'Previous screen',
+    examsh_next: 'Next screen',
+    examsh_tab_label: 'Exam feature screens',
     feature1_title: 'Reads what you give it',
     feature1_desc: 'Upload a PDF or Word file once; it stays a reference you can question without re-uploading.',
     feature2_title: 'A plan that fits your time',

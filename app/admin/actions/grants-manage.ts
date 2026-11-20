@@ -7,7 +7,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasPermission } from "@/lib/auth-roles";
 import { validateManualGrant, expiryFromDays } from "@/lib/credits/grants";
-import { recordAuditLog } from "./audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 /**
  * منح كريدت يدوي من لوحة الأدمن (Phase B2.4).

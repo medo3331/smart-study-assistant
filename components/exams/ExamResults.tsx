@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { ExamQuestion } from "@/lib/ai/exam-review";
+import { summarizeByTopic, weakestTopic } from "@/lib/ai/exam-topics";
 import type { ExamResultPayload } from "./ExamsHub";
 
 type ReviewRow = {
@@ -164,6 +165,23 @@ export function ExamResults({
     );
   }
 
+  /**
+   * 🏷️ تقييم الأجزاء: نستخدم اللي حفظه السيرفر وقت التسليم، ولو مش موجود
+   *    (جلسة اتسلّمت قبل الميزة) بنحسبه من الصفوف — نفس الصيغة بالظبط.
+   */
+  const weaknesses =
+    result?.weaknesses && result.weaknesses.length > 0
+      ? result.weaknesses
+      : summarizeByTopic(
+          rows.map((row) => ({
+            topic: (row.question as { topic?: string | null }).topic ?? null,
+            type: row.question.type,
+            correct: row.is_correct,
+            selfScore: row.self_score,
+          })),
+        );
+  const weakest = weakestTopic(weaknesses);
+
   return (
     <div className="space-y-6" dir="rtl">
       <button
@@ -226,6 +244,67 @@ export function ExamResults({
           </button>
         </div>
       </div>
+
+      {/* 🏷️ تقييم الأجزاء — أهم من الدرجة نفسها: «ضعيف في إيه؟» */}
+      {weaknesses.length > 0 && (
+        <section
+          aria-label="تقييم أجزاء المحاضرة"
+          className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-extrabold text-slate-200">تقييمك حسب أجزاء المحاضرة</h3>
+            <span className="text-[11px] text-slate-500">الأضعف فوق</span>
+          </div>
+
+          {weakest && weakest.percent < 100 && (
+            <p className="text-sm leading-relaxed text-slate-300">
+              أضعف جزء عندك{" "}
+              <span className="font-extrabold text-amber-300">«{weakest.topic}»</span> —{" "}
+              <span className="ltr-num">
+                {weakest.score}/{weakest.max}
+              </span>
+              . راجعه تاني قبل الامتحان.
+            </p>
+          )}
+
+          <ul className="space-y-3">
+            {weaknesses.map((topic) => {
+              const bar =
+                topic.percent >= 75
+                  ? "bg-emerald-400"
+                  : topic.percent >= 50
+                    ? "bg-amber-400"
+                    : "bg-red-400";
+              const tone =
+                topic.percent >= 75
+                  ? "text-emerald-300"
+                  : topic.percent >= 50
+                    ? "text-amber-300"
+                    : "text-red-300";
+              return (
+                <li key={topic.topic} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="font-bold text-slate-200 truncate">{topic.topic}</span>
+                    <span className={`shrink-0 font-extrabold ltr-num ${tone}`}>
+                      {topic.percent}% · {topic.score}/{topic.max}
+                    </span>
+                  </div>
+                  <div
+                    className="h-2 rounded-full bg-[#0D1029] overflow-hidden"
+                    role="img"
+                    aria-label={`${topic.topic}: ${topic.percent}%`}
+                  >
+                    <div
+                      className={`h-full ${bar}`}
+                      style={{ width: `${Math.max(3, topic.percent)}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* المراجعة */}
       <section aria-label="مراجعة الأسئلة" className="space-y-3">

@@ -2,7 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
-import { recordAuditLog } from "./audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 export async function sendAdminMessage(input: {
   subject: string;
@@ -10,12 +10,12 @@ export async function sendAdminMessage(input: {
   targetUserId?: string | null;
   sendEmail?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireAdminPermission("users.read");
+  const ctx = await requireAdminPermission("announcements.manage");
   const user = ctx.user;
   const supabase = ctx.supabase;
   // permission check
   const { hasPermission } = await import("@/lib/auth-roles");
-  const allowed = await hasPermission(supabase, user.id, user.email ?? null, "users.read");
+  const allowed = await hasPermission(supabase, user.id, user.email ?? null, "announcements.manage");
   if (!allowed) return { ok: false, error: "غير مصرح" };
 
   const subject = (input.subject || "").trim();
@@ -110,7 +110,7 @@ export async function sendAdminMessage(input: {
   await recordAuditLog({
     actor: user.id,
     actor_email: user.email ?? null,
-    action: "admin_message_send",
+    action: "announcements.manage",
     resource_type: "announcement",
     resource_id: ann.id,
     result: "PASS",

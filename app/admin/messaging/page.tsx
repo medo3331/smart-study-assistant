@@ -3,10 +3,10 @@ import { AdminPageHeader, AdminCard, AdminNotice } from "@/components/admin/ui";
 import { sendAdminMessage } from "@/app/admin/actions/messaging";
 
 export default async function AdminMessagingPage() {
-  await requireAdminPermission("users.read");
+  await requireAdminPermission("announcements.manage");
   return (
     <div className="space-y-6">
-      <AdminPageHeader title="الرسائل والإعلانات" subtitle="إرسال رسائل/إعلانات للمستخدمين" badge="messaging" permissionKey="users.read" />
+      <AdminPageHeader title="الرسائل والإعلانات" subtitle="إرسال رسائل/إعلانات للمستخدمين" badge="announcements.manage" permissionKey="announcements.manage" />
       <AdminCard title="إرسال رسالة" tone="amber">
         <form action={async (fd: FormData) => {
           "use server";

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasPermission } from "@/lib/auth-roles";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(v:any){return typeof v==="string"&&UUID_RE.test(v);}
 export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
@@ -19,8 +20,13 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   if(!ticket)return NextResponse.json({success:false,error:"Not found."},{status:404});
   const {data:msg,error}=await service.from("support_messages").insert({ticket_id:id,author_id:user.id,author_role:"admin",body:text}).select("*").single();
   if(error||!msg){console.error("[admin reply]",error?.message);return NextResponse.json({success:false,error:"Failed to reply."},{status:500});}
-  await service.from("support_tickets").update({status:"pending",updated_at:new Date().toISOString()}).eq("id",id);
-  await service.from("notifications").insert({recipient_id:ticket.user_id,type:"support_reply",title:"رد على تذكرتك",body:text.slice(0,200),link_url:"/support"});
+  await service.from("support_tickets").update({status:"open",updated_at:new Date().toISOString()}).eq("id",id);
+  try {
+   await service.from("notifications").insert({recipient_id:ticket.user_id,type:"support_reply",title:"رد على تذكرتك",body:text.slice(0,200),link_url:`/dashboard/support?ticket=${id}`});
+  } catch (notificationError) {
+   console.error("[admin reply notification]", notificationError instanceof Error ? notificationError.message : notificationError);
+  }
+  await recordAuditLog({actor:user.id,actor_email:user.email??null,action:"support.manage",resource_type:"support_ticket",resource_id:id,details:{op:"reply"},result:"PASS"});
   return NextResponse.json({success:true,message:msg},{status:201});
  }catch(e){console.error("[admin reply]",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
 }

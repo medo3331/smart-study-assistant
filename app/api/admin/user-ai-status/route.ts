@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies, headers } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { getAdminRole } from "@/lib/auth-roles";
+import { hasPermission } from "@/lib/auth-roles";
 import { FREE_TEXT_LIMIT, FREE_VISION_LIMIT, GUEST_LIMIT } from "@/lib/ai/rate-limit";
 import pg from "pg";
 
@@ -30,8 +30,10 @@ async function pgQuery<T=any>(sql: string, params: any[] = []): Promise<T[]> {
 export async function POST(req: Request) {
   const supabaseAuth = await getAuthClient();
   const { data: { user } } = await supabaseAuth.auth.getUser();
-  const role = await getAdminRole(supabaseAuth, user?.id || null, user?.email);
-  if (role !== "owner" && role !== "admin") {
+  const allowed = user && !user.is_anonymous
+    ? await hasPermission(supabaseAuth, user.id, user.email ?? null, "users.read")
+    : false;
+  if (!allowed) {
     return NextResponse.json({ ok: false, error: "غير مصرح", code: "FORBIDDEN" }, { status: 403 });
   }
 

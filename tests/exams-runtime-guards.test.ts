@@ -547,3 +547,71 @@ describe("قصّ المصادر — نفس السقف للمحاضرات وال�
     expect(sources).toContain("totalChars: full.length");
   });
 });
+
+/**
+ * 🛟 استرجاع الكريدت + 📈 تراكم نقاط الضعف + 📄 الرفع من الشات.
+ * كلها حاجات بتلمس فلوس الطالب أو وعده («إنت ضعيف في…») — فلازم
+ * يكون ليها حارس يمنع رجوعها.
+ */
+describe("استرجاع الكريدت عند فشل الجلسة", () => {
+  const ANSWERS_ROUTE = "app/api/exam-sessions/[id]/answers/route.ts";
+
+  it("راوت المعالجة بيسترجع الكريدت لو كل البنود فشلت", () => {
+    const route = read(PROCESS_ROUTE);
+    expect(route).toContain("refundIfSessionDead");
+    expect(route).toContain('rpc("refund_ai_credit"');
+    expect(route).toContain("exam_session:${sessionId}");
+    expect(route).toContain("credit_refunded_at");
+  });
+
+  it("الاسترجاع مش بيلمس جلسة مكتملة", () => {
+    expect(read(PROCESS_ROUTE)).toContain('session.status === "completed"');
+  });
+
+  it("الحاكم النقي بيحمي الشرط", () => {
+    expect(read("lib/ai/exam-sessions.ts")).toContain("export function isSessionExhausted");
+  });
+
+  it("الراوت بيسجل نقاط الضعف في user_weaknesses", () => {
+    const route = read(ANSWERS_ROUTE);
+    expect(route).toContain("summarizeByTopic");
+    expect(route).toContain('from("user_weaknesses")');
+    // «عام» مش جزء حقيقي ⇒ ممنوع يتسجل كضعف.
+    expect(route).toContain("FALLBACK_TOPIC");
+  });
+});
+
+describe("تقييم الأجزاء — ربط السؤال بالجزء", () => {
+  it("البرومبت بيطلب topic والـvalidator بيقبله", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain('الحقل "topic" إجباري');
+    expect(engine).toContain('"topic"');
+    expect(engine).toContain("function readTopic");
+  });
+
+  it("المولّد بيربط كل سؤال بقسم من الملخص، وبيحط بديل حتمي لو الموديل نساه", () => {
+    const engine = read("lib/ai/exam-review.ts");
+    expect(engine).toContain("extractSectionTitles(summary)");
+    expect(engine).toContain("snapTopic(question.topic, sections)");
+    expect(engine).toContain("`الجزء ${index + 1}`");
+  });
+
+  it("واجهة النتيجة بتعرض أضعف جزء", () => {
+    const results = read("components/exams/ExamResults.tsx");
+    expect(results).toContain("summarizeByTopic");
+    expect(results).toContain("أضعف جزء عندك");
+  });
+});
+
+describe("رفع ملف من الشات ⇒ امتحان منه", () => {
+  it("الشات بيرفع على /api/documents ويقترح امتحان", () => {
+    const chat = read("components/ChatWorkspace.tsx");
+    expect(chat).toContain('fetch("/api/documents"');
+    expect(chat).toContain("/exams?gen=1&document=");
+  });
+
+  it("صفحة الامتحانات بتقرا ?document= والمولّد بيحدده", () => {
+    expect(read("app/exams/page.tsx")).toContain('str("document", 64)');
+    expect(read("components/exams/ExamGenerator.tsx")).toContain("initial.document");
+  });
+});

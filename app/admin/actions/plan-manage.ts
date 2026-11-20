@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasPermission } from "@/lib/auth-roles";
-import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 export async function updatePlanLimits(input: {
   planKey: string;
