@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { recordAuditLog } from "./audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 const ACTION = "announcements.manage" as const;
 

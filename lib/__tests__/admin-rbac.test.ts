@@ -36,4 +36,20 @@ describe("admin RBAC defaults", () => {
     await expect(hasPermission(supabase, "admin-id", null, "credits.manage")).resolves.toBe(false);
     await expect(hasPermission(supabase, "admin-id", null, "admins.manage")).resolves.toBe(false);
   });
+
+  it("never lets explicit permissions exceed the assigned role", async () => {
+    const admin = mockSupabase({ role: "admin", permissions: ["credits.manage", "support.manage"] });
+    const support = mockSupabase({ role: "admin", permissions: ["support", "subscriptions.manage"] });
+
+    await expect(hasPermission(admin, "admin-id", null, "credits.manage")).resolves.toBe(false);
+    await expect(hasPermission(admin, "admin-id", null, "support.manage")).resolves.toBe(true);
+    await expect(hasPermission(support, "support-id", null, "subscriptions.manage")).resolves.toBe(false);
+    await expect(hasPermission(support, "support-id", null, "support.manage")).resolves.toBe(true);
+  });
+
+  it("treats an explicit empty allowlist as deny-all", async () => {
+    const supabase = mockSupabase({ role: "admin", permissions: ["unknown.permission"] });
+
+    await expect(hasPermission(supabase, "admin-id", null, "users.read")).resolves.toBe(false);
+  });
 });

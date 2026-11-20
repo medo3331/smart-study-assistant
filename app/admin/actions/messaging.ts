@@ -2,7 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
-import { recordAuditLog } from "./audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 export async function sendAdminMessage(input: {
   subject: string;

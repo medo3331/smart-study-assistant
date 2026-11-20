@@ -190,50 +190,76 @@ export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRec
   "support.manage": { key: "support.manage", allowed_roles: ["owner","admin","support"], is_sensitive: true },
 };
 
+/** الصلاحيات الافتراضية للأدوار عند غياب قائمة صريحة في قاعدة البيانات. */
+function defaultPermissionsForRole(role: Exclude<AdminRole, "owner" | null>): AdminPermissionKey[] {
+  if (role === "admin") {
+    return ADMIN_PERMISSION_KEYS.filter((key) =>
+      ADMIN_PERMISSION_MAP[key].allowed_roles.includes("admin")
+    );
+  }
+  // Support: صلاحيات قراءة محدودة وإدارة صندوق الدعم فقط.
+  return ["users.read", "files.moderate", "audit.read", "support.manage"];
+}
+
+/** قراءة الصلاحيات مع تمييز القائمة الصريحة الفارغة عن غياب إعداد الصلاحيات. */
+async function readAdminPermissionState(
+  supabase: SupabaseClient,
+  userId: string | null,
+  role: AdminRole
+): Promise<{ permissions: AdminPermissionKey[]; explicit: boolean }> {
+  if (!userId || role === null) return { permissions: [], explicit: false };
+  if (role === "owner") return { permissions: [...ADMIN_PERMISSION_KEYS], explicit: true };
+
+  try {
+    const { data, error } = await supabase
+      .from("site_admins")
+      .select("permissions, role")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      // توافق آمن مع المخطط القديم فقط عند غياب عمود permissions؛ أخطاء
+      // الاتصال/الصلاحيات الأخرى تفشل مغلقًا بدل منح صلاحيات افتراضية.
+      if (error.code === "42703" || error.code === "PGRST204") {
+        return { permissions: defaultPermissionsForRole(role), explicit: false };
+      }
+      return { permissions: [], explicit: true };
+    }
+
+    if (!data) return { permissions: [], explicit: true };
+
+    const permsArray: string[] = Array.isArray(data.permissions) ? data.permissions : [];
+    if (permsArray.length > 0) {
+      const explicitPermissions = permsArray.filter((p): p is AdminPermissionKey =>
+        ADMIN_PERMISSION_KEYS.includes(p as AdminPermissionKey) &&
+        ADMIN_PERMISSION_MAP[p as AdminPermissionKey].allowed_roles.includes(role)
+      );
+      if (explicitPermissions.length > 0) return { permissions: explicitPermissions, explicit: true };
+      // تمثيل Support القديم: role=admin مع marker "support" في permissions.
+      if (role === "support" && permsArray.includes("support")) {
+        return { permissions: defaultPermissionsForRole(role), explicit: false };
+      }
+      // أي قائمة صريحة أخرى تظل تقييدية حتى لو كانت مفاتيحها غير معروفة
+      // أو لا يسمح بها الدور؛ لا نحوّلها بالخطأ إلى صلاحيات افتراضية.
+      return { permissions: [], explicit: true };
+    }
+
+    return { permissions: defaultPermissionsForRole(role), explicit: false };
+  } catch {
+    return { permissions: [], explicit: false };
+  }
+}
+
 /** قراءة الصلاحيات من جدول site_admins (مع دعم الـpermissions column الجديد). */
 export async function getAdminPermissions(
   supabase: SupabaseClient,
   userId: string | null,
   role: AdminRole
 ): Promise<AdminPermissionKey[]> {
-  if (!userId || role === null) return [];
-
-  // Owner: كل الصلاحيات
-  if (role === "owner") return [...ADMIN_PERMISSION_KEYS];
-
-  try {
-    const { data } = await supabase
-      .from("site_admins")
-      .select("permissions, role")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    // إذا كانت الصلاحيات محددة صراحةً، لا نوسّعها عند وجود قيم غير معروفة.
-    const permsArray: string[] = Array.isArray(data?.permissions) ? data.permissions : [];
-    if (permsArray.length > 0) {
-      const explicitPermissions = permsArray.filter((p): p is AdminPermissionKey =>
-        ADMIN_PERMISSION_KEYS.includes(p as AdminPermissionKey)
-      );
-      if (explicitPermissions.length > 0) return explicitPermissions;
-      if (!(role === "support" && permsArray.includes("support"))) return [];
-    }
-
-    // إذا كان عمود permissions غير موجود/فارغ → اشتق الافتراضي من خريطة الأدوار نفسها.
-    if (role === "admin") {
-      return ADMIN_PERMISSION_KEYS.filter((key) =>
-        ADMIN_PERMISSION_MAP[key].allowed_roles.includes("admin")
-      );
-    }
-    // Support: صلاحيات قراءة محدودة وإدارة صندوق الدعم فقط.
-    return [
-      "users.read", "files.moderate", "audit.read", "support.manage"
-    ];
-  } catch {
-    return [];
-  }
+  return (await readAdminPermissionState(supabase, userId, role)).permissions;
 }
 
-/** فحص إذا كان الأدمن يملك صلاحية معينة. */
+/** فحص إذا كان الأدمن يملك صلاحية معينة، مع تطبيق قيود الدور حتى على القوائم الصريحة. */
 export async function hasPermission(
   supabase: SupabaseClient,
   userId: string | null,
@@ -242,17 +268,10 @@ export async function hasPermission(
 ): Promise<boolean> {
   const role = await getAdminRole(supabase, userId, userEmail);
   if (role === "owner") return true;
-  if (role === null) return false;
-  const perms = await getAdminPermissions(supabase, userId, role);
-  const record = ADMIN_PERMISSION_MAP[permissionKey];
-  // إذا الـ permission مسموح للدور حسب الخريطة
-  if (record && record.allowed_roles.includes(role)) {
-    // إذا الـ permissions array موجود، نتحقق من وجود المفتاح فيه أيضًا
-    if (perms.length > 0) return perms.includes(permissionKey);
-    // إذا لم يتم تنفيذ SQL بعد → نعتمد على الخريطة الافتراضية
-    return true;
-  }
-  return false;
+  if (role === null || !ADMIN_PERMISSION_MAP[permissionKey].allowed_roles.includes(role)) return false;
+
+  const { permissions } = await readAdminPermissionState(supabase, userId, role);
+  return permissions.includes(permissionKey);
 }
 
 /** فحص إذا كانت العملية تحتاج تسجيل في Audit Log. */

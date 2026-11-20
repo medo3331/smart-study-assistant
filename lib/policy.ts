@@ -4,6 +4,7 @@ import {
   getAdminPermissions,
   AdminPermissionKey,
   ADMIN_PERMISSION_KEYS,
+  ADMIN_PERMISSION_MAP,
 } from "@/lib/auth-roles";
 
 export type ActorRole = "owner" | "admin" | "support" | null;
@@ -109,5 +110,6 @@ export function actorHasPermission(
   permissionKey: AdminPermissionKey
 ): boolean {
   if (actor.isOwner) return true;
+  if (!actor.role || !ADMIN_PERMISSION_MAP[permissionKey].allowed_roles.includes(actor.role)) return false;
   return actor.permissions.includes(permissionKey);
 }

@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasPermission } from "@/lib/auth-roles";
-import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 const FREE_KEY = "billing_free_period_enabled";
 const PAY_KEY = "billing_payments_enabled";

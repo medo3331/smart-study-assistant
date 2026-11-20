@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasPermission } from "@/lib/auth-roles";
-import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(v:any){return typeof v==="string"&&UUID_RE.test(v);}
 async function adminAllowed(){const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)return false;const service=createServiceClient();return hasPermission(service,user.id,user.email??null,"support.manage");}

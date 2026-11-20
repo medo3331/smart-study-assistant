@@ -18,7 +18,7 @@ import { guardAction, requireAdminActor } from "@/lib/admin/action-guard";
  *     - `recorded_by` بقى `ctx.actor.userId` من الجلسة، والباراميتر اتشال.
  */
 
-const READ_PERMISSION = "users.read" as const;
+const READ_PERMISSION = "subscriptions.manage" as const;
 const WRITE_PERMISSION = "subscriptions.manage" as const;
 
 type PaymentResult = { ok: boolean; message: string };

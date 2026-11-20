@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { recordAuditLog } from "./audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 async function actor() {
   const ctx = await requireAdminPermission("support.manage");

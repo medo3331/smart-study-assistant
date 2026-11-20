@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasPermission } from "@/lib/auth-roles";
 import { validateSiteSettings } from "@/lib/settings/validation";
-import { recordAuditLog } from "./audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 /**
  * حفظ إعدادات المنصة (Phase B1.6).

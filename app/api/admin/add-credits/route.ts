@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { resolveActor, actorHasPermission } from "@/lib/policy";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { recordAuditLog } from "@/app/admin/actions/audit-log-record";
+import { recordAuditLog } from "@/lib/admin/audit-log-record";
 
 export async function POST(req: Request) {
   const cookieStore = cookies();
