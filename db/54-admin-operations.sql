@@ -129,8 +129,9 @@ BEGIN
   VALUES (p_user_code, p_user_id, p_plan_key, p_duration_days, p_activated_by, p_note)
   RETURNING id INTO v_activation_id;
 
-  UPDATE public.entitlements SET expires_at = v_now
-   WHERE user_id = p_user_id AND kind = 'plan' AND (expires_at IS NULL OR expires_at > v_now);
+  UPDATE public.entitlements AS e SET expires_at = v_now
+   WHERE e.user_id = p_user_id AND e.kind = 'plan'
+     AND (e.expires_at IS NULL OR e.expires_at > v_now);
   INSERT INTO public.entitlements(user_id, kind, value, expires_at, metadata)
   VALUES (p_user_id, 'plan', p_plan_key, v_expires,
     jsonb_build_object('source', 'admin_subscription_activation', 'activation_id', v_activation_id));

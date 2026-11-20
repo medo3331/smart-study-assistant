@@ -5,6 +5,7 @@ import path from "node:path";
 const root = path.join(process.cwd(), "db");
 const activationSql = fs.readFileSync(path.join(root, "54-admin-operations.sql"), "utf8");
 const campaignSql = fs.readFileSync(path.join(root, "phase1e-announcement-email-campaigns.sql"), "utf8");
+const activationFixSql = fs.readFileSync(path.join(root, "55-fix-admin-activation-expires-at.sql"), "utf8");
 
 describe("admin operations migrations (static safety checks)", () => {
   it("keeps activation migration manual and allows UUID-only accounts", () => {
@@ -24,6 +25,13 @@ describe("admin operations migrations (static safety checks)", () => {
     expect(rpc).toContain("INSERT INTO public.notifications");
     expect(rpc).toContain("ON CONFLICT (subscription_activation_id) DO NOTHING");
     expect(rpc).not.toContain("INSERT INTO public.ai_credit_ledger");
+  });
+
+  it("qualifies entitlement expiry references to avoid output-column ambiguity", () => {
+    expect(activationSql).toContain("UPDATE public.entitlements AS e");
+    expect(activationSql).toContain("e.expires_at IS NULL OR e.expires_at > v_now");
+    expect(activationFixSql).toContain("UPDATE public.entitlements AS e");
+    expect(activationFixSql).toContain("e.expires_at IS NULL OR e.expires_at > v_now");
   });
 
   it("recreates the notification type constraint idempotently", () => {
