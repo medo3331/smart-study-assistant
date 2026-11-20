@@ -2957,6 +2957,88 @@ export default function NotebookEditor({
   }, [canWrite, getCanvasSnapshot, handwritingBusy]);
 
   /** إدراج النص المقروء على الصفحة — الأصل (خط الطالب) مش بيتمس أبداً. */
+  /** 🤖 إدراج نص من الـ AI على الصفحة — بلوكات قابلة للتحريك والتعديل. */
+  const insertAiText = useCallback(
+    (text: string) => {
+      if (!canWrite) return;
+      const clean = text.trim();
+      if (!clean) return;
+      const content = contentRef.current;
+      const lines = clean
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 60);
+      const startX = PAGE_WIDTH - 64;
+      const startY = 72;
+      const lineHeight = 34;
+      const blocks: NoteText[] = lines.map((line, index) => ({
+        id: newId(),
+        kind: "text",
+        text: line,
+        x: Math.max(24, startX - line.length * 9),
+        y: startY + index * lineHeight,
+        size: 20,
+        color: "#111827",
+      }));
+      setContent({
+        strokes: content.strokes,
+        texts: [...content.texts, ...blocks],
+        images: content.images,
+      });
+      multiSelRef.current = new Set(blocks.map((block) => block.id));
+      setMultiCount(blocks.length);
+      selectionRef.current = null;
+      setSelection(null);
+      paint();
+      commitHistory();
+      scheduleSave();
+      setMessage(`اتدرج ${blocks.length} سطر من الـ AI على الصفحة — عدّلهم براحتك.`);
+    },
+    [canWrite, commitHistory, paint, scheduleSave, setContent],
+  );
+
+  /** 🎨 إدراج رسمة/مخطط AI في وسط الصفحة — الصورة بتتحفظ dataURL جوه الصفحة. */
+  const insertAiImage = useCallback(
+    (dataUrl: string) => {
+      if (!canWrite || !dataUrl.startsWith("data:image/")) return;
+      const content = contentRef.current;
+      const element = new Image();
+      element.onload = () => {
+        // نلزّق الرسمة في نص الصفحة بمقاس معقول (fit داخل A4).
+        const natural = Math.max(element.naturalWidth, element.naturalHeight) || 1;
+        const scale = Math.min(1, Math.min(PAGE_WIDTH - 80, PAGE_HEIGHT - 260) / natural);
+        const width = Math.round(element.naturalWidth * scale);
+        const height = Math.round(element.naturalHeight * scale);
+        const noteImage: NoteImage = {
+          id: newId(),
+          kind: "image",
+          src: dataUrl,
+          x: Math.round((PAGE_WIDTH - width) / 2),
+          y: 120,
+          width,
+          height,
+        };
+        setContent({
+          strokes: content.strokes,
+          texts: content.texts,
+          images: [...content.images, noteImage],
+        });
+        selectionRef.current = { kind: "image", id: noteImage.id };
+        setSelection({ kind: "image", id: noteImage.id });
+        multiSelRef.current.clear();
+        setMultiCount(0);
+        paint();
+        commitHistory();
+        scheduleSave();
+        setMessage("الرسمة اتحطت في نص الصفحة — تكبّر/تصغّر وتحركها براحتك.");
+      };
+      element.onerror = () => setMessage("مقدرناش نحط الرسمة على الصفحة.");
+      element.src = dataUrl;
+    },
+    [canWrite, commitHistory, paint, scheduleSave, setContent],
+  );
+
   const insertHandwritingText = useCallback(
     (mode: "lines" | "block") => {
       if (!canWrite) return;
@@ -3965,6 +4047,8 @@ export default function NotebookEditor({
         getSelectedText={getSelectedText}
         getCanvasSnapshot={getCanvasSnapshot}
         defaultOpen={besideMode}
+        onInsertToPage={canWrite ? insertAiText : undefined}
+        onInsertImage={canWrite ? insertAiImage : undefined}
       />
 
       {/* 📝 معاينة قراءة خط اليد — تصحيح قبل الإدراج */}
