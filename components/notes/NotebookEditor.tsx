@@ -887,7 +887,10 @@ export default function NotebookEditor({
         const names = boot.notebook.pageNames ?? {};
         pageNamesRef.current = names;
         setPageNames(names);
-        activatePage(active, uiPages, boot.notebook.id, boot.notebook.title);
+        // 🎯 وصلنا من نتيجة بحث عالمي؟ (?page=<pageId>) — افتحها بدل اللي اتحفظ.
+        const targetPageId = new URLSearchParams(window.location.search).get("page");
+        const target = targetPageId ? uiPages.find((page) => page.id === targetPageId) : null;
+        activatePage(target ?? active, uiPages, boot.notebook.id, boot.notebook.title);
         setLoaded(true);
       } catch (error) {
         if (cancelled) return;

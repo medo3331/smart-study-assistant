@@ -3,6 +3,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { pageContentStrokes } from "@/lib/notes/content";
+import {
+  buildSearchIndex,
+  searchIndex,
+  type GlobalSearchResult,
+} from "@/lib/notes/global-search";
 import type { NoteRepository } from "@/lib/notes/repository";
 import type { StorageNotebook } from "@/lib/notes/types";
 import {
@@ -36,12 +41,48 @@ export default function NotesLibrary() {
   const [newTitle, setNewTitle] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  // 🔍 بحث شامل عبر كل الدفاتر.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
-  // Latch the guide's initial open state once the first load resolves.
-  // Passing a freshly computed `open` on every render would re-open the panel
+  // Latch the guide's initial open state once the first load resolves.  // Passing a freshly computed `open` on every render would re-open the panel
   // while the student types in the name field, because `open` is a controlled
   // attribute on <details>.
   const initialGuideOpen = React.useRef<boolean | null>(null);
+
+  // 🔍 مؤشر البحث — بيتبنى مرة، وبيتحدّث مع كل تحميل للدفاتر.
+  const searchIndexRef = React.useRef<
+    Awaited<ReturnType<typeof buildSearchIndex>> | null
+  >(null);
+
+  useEffect(() => {
+    if (boot.phase !== "ready") return;
+    let cancelled = false;
+    void buildSearchIndex(boot.repo)
+      .then((index) => {
+        if (!cancelled) searchIndexRef.current = index;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [boot, notebooks]);
+
+  const runGlobalSearch = useCallback(async (raw: string) => {
+    const query = raw.trim();
+    if (query.length < 2 || !searchIndexRef.current) {
+      setSearchResults(null);
+      return;
+    }
+    setSearching(true);
+    try {
+      // نبني من جديد لو الدفاتر اتغيرت بعد آخر بناء.
+      setSearchResults(searchIndex(searchIndexRef.current, query));
+    } finally {
+      setSearching(false);
+    }
+  }, []);
 
   const load = useCallback(async (target: NoteRepository) => {
     try {
@@ -219,6 +260,55 @@ export default function NotesLibrary() {
           >
             {creating ? "بيتعمل…" : "＋ دفتر جديد"}
           </button>
+        </div>
+      ) : null}
+
+      {boot.phase === "ready" && notebooks.length > 0 ? (
+        <div className="notes-toolbar">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              void runGlobalSearch(event.target.value);
+            }}
+            placeholder="🔍 ابحث في كل الدفاتر — أسماء الصفحات والنصوص…"
+            aria-label="بحث في كل الدفاتر"
+            className="notes-input"
+            style={{ flex: 1 }}
+          />
+        </div>
+      ) : null}
+
+      {searchResults !== null ? (
+        <div className="notes-search-results">
+          {searching ? <p className="notes-hint">بنبحث…</p> : null}
+          {!searching && searchResults.length === 0 ? (
+            <p className="notes-hint">مفيش نتايج لـ «{searchQuery}».</p>
+          ) : null}
+          {searchResults.map((result) => (
+            <div key={result.notebookId} className="notes-card" style={{ width: "100%" }}>
+              <strong>{result.notebookTitle}</strong>
+              <span className="notes-hint"> — {result.hits.length} نتيجة</span>
+              <ul style={{ margin: "8px 0 0", paddingRight: "18px" }}>
+                {result.hits.map((hit) => (
+                  <li key={`${hit.pageId}:${hit.kind}`} style={{ margin: "4px 0" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(`/notes/${result.notebookId}?page=${hit.pageId}`)
+                      }
+                      className="notes-btn"
+                      style={{ padding: "2px 8px" }}
+                    >
+                      {hit.kind === "name" ? "🏷️" : "✍️"} صفحة {hit.pageIndex + 1}
+                    </button>{" "}
+                    <span className="notes-hint">{hit.snippet}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       ) : null}
 
