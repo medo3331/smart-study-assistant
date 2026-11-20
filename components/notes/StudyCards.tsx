@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { parseDeck, type StudyDeck } from "@/lib/notes/study-deck";
 
 /* ==========================================================================
    🎴 StudyCards — فلَش كاردز + أسئلة اختياري من النوته
@@ -12,75 +13,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
    بتصحح فوراً. الديك المولد بيتخزن محلياً (meta store) فمش بيتولد
    تاني مع كل فتح.
    ========================================================================== */
-
-export interface Flashcard {
-  q: string;
-  a: string;
-}
-
-export interface McqQuestion {
-  q: string;
-  options: string[];
-  /** فهرس الإجابة الصحيحة. */
-  answer: number;
-}
-
-type Deck =
-  | { kind: "flashcards"; cards: Flashcard[] }
-  | { kind: "mcq"; questions: McqQuestion[] }
-  | null;
-
-/** استخراج JSON متسامح — بينظف أي كلام حوالين الـ JSON أو code fences. */
-function extractJson(raw: string): unknown {
-  const stripped = raw
-    .replace(/```json/gi, "```")
-    .split("```")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("{") || part.startsWith("["));
-  const candidate = stripped ?? raw;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(candidate.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
-
-function parseDeck(kind: "flashcards" | "mcq", raw: string): Deck {
-  const data = extractJson(raw) as Record<string, unknown> | null;
-  if (!data) return null;
-  if (kind === "flashcards") {
-    const cards = Array.isArray(data.cards) ? data.cards : [];
-    const parsed = cards
-      .map((card) => {
-        const entry = card as { q?: unknown; a?: unknown; front?: unknown; back?: unknown };
-        const q = String(entry.q ?? entry.front ?? "").trim();
-        const a = String(entry.a ?? entry.back ?? "").trim();
-        return q && a ? { q, a } : null;
-      })
-      .filter((card): card is Flashcard => card !== null)
-      .slice(0, 30);
-    return parsed.length > 0 ? { kind: "flashcards", cards: parsed } : null;
-  }
-  const questions = Array.isArray(data.questions) ? data.questions : [];
-  const parsed = questions
-    .map((question) => {
-      const entry = question as { q?: unknown; options?: unknown; answer?: unknown };
-      const q = String(entry.q ?? "").trim();
-      const options = Array.isArray(entry.options)
-        ? entry.options.map((option) => String(option).trim()).filter(Boolean)
-        : [];
-      const answer = Number(entry.answer);
-      return q && options.length >= 2 && Number.isInteger(answer) && answer >= 0 && answer < options.length
-        ? { q, options, answer }
-        : null;
-    })
-    .filter((question): question is McqQuestion => question !== null)
-    .slice(0, 20);
-  return parsed.length > 0 ? { kind: "mcq", questions: parsed } : null;
-}
 
 export default function StudyCards({
   open,
@@ -97,12 +29,12 @@ export default function StudyCards({
   /** مفتاح التخزين المحلي للديك المولد (per notebook). */
   storageKey: string;
   /** تحميل الديك المحفوظ (meta store) — null لو مفيش. */
-  getSavedDeck?: (key: string) => Promise<Deck>;
+  getSavedDeck?: (key: string) => Promise<StudyDeck | null>;
   /** حفظ الديك المولد محلياً. */
-  saveDeck?: (key: string, deck: Deck) => Promise<void>;
+  saveDeck?: (key: string, deck: StudyDeck | null) => Promise<void>;
 }) {
   const [tab, setTab] = useState<"flashcards" | "mcq">("flashcards");
-  const [deck, setDeck] = useState<Deck>(null);
+  const [deck, setDeck] = useState<StudyDeck | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,7 +46,7 @@ export default function StudyCards({
       try {
         const saved = await getSavedDeck(storageKey);
         if (!cancelled && saved) {
-          setDeck(saved);
+          setDeck(saved as StudyDeck | null);
           setError(null);
         }
       } catch {
