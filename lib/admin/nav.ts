@@ -26,18 +26,11 @@ export interface AdminNavItem {
 
 export const ADMIN_NAV: AdminNavItem[] = [
   {
-    href: "/admin/users",
-    label: "المستخدمين",
-    description: "بحث، حظر/فك حظر، حالة الذكاء الاصطناعي لكل مستخدم",
+    href: "/admin/subscriptions",
+    label: "مركز المستخدمين",
+    description: "الملف والخطة والدفع والتصنيف والمشاكل والإجراءات من مكان واحد",
     permission: "users.read",
     icon: "Users",
-  },
-  {
-    href: "/admin/subscriptions",
-    label: "المستخدمون والاشتراكات",
-    description: "بحث الطلاب، الملفات، الاشتراكات، والكريدت والهدايا الجماعية",
-    permission: "subscriptions.manage",
-    icon: "CreditCard",
   },
   {
     href: "/admin/plans",
@@ -150,13 +143,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "اسم، إيميل، باقة، وعمليات AI لكل مستخدم",
     permission: "users.read",
     icon: "Users",
-  },
-  {
-    href: "/admin/payments",
-    label: "الدفعات (يدوي)",
-    description: "تسجيل دفعات يدوية وتاريخها",
-    permission: "subscriptions.manage",
-    icon: "CreditCard",
   },
   {
     href: "/admin/db-backup",

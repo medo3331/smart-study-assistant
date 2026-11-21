@@ -115,10 +115,11 @@ export function QuickNavigation({ items }: QuickNavigationProps) {
   );
 }
 
-/** Factory for the 8 standard items — callers wire onClick for signal items. */
+/** Factory for the 8 standard items — callers wire onClick for signal items.
+    الإعدادات بقت رابط صفحة، فـ onOpenSettings بقى اختياري للتوافق. */
 export function buildQuickNavItems(opts: {
   onOpenAi: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings?: () => void;
 }): QuickNavItem[] {
   return [
     {
@@ -183,8 +184,9 @@ export function buildQuickNavItems(opts: {
       id: "settings",
       label: "الإعدادات",
       icon: <Settings size={20} strokeWidth={2} aria-hidden />,
-      onClick: opts.onOpenSettings,
-      ariaLabel: "فتح الإعدادات",
+      // ⚙️ الإعدادات بقت صفحة كاملة /dashboard/settings بدل الدرج.
+      href: "/dashboard/settings",
+      ariaLabel: "الانتقال إلى الإعدادات",
     },
   ];
 }

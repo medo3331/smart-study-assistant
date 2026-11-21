@@ -37,15 +37,17 @@ export default async function AdminSubscriptionsPage({
   searchParams: Promise<{ success?: string; error?: string; sub_lookup?: string }>;
 }) {
   const sp = await searchParams;
-  const { user, isOwner, supabase } = await requireAdminPermission("subscriptions.manage");
+  const { user, isOwner, supabase } = await requireAdminPermission("users.read");
 
-  const [canGrantCredits, canGrantReward, canResetQuota, initialUsers] = await Promise.all([
+  const [canGrantCredits, canGrantReward, canManageSubscriptions, canBan, canUnban, initialUsers] = await Promise.all([
     hasPermission(supabase, user.id, user.email ?? null, "credits.manage"),
     hasPermission(supabase, user.id, user.email ?? null, "rewards.manage"),
     hasPermission(supabase, user.id, user.email ?? null, "subscriptions.manage"),
+    hasPermission(supabase, user.id, user.email ?? null, "users.ban"),
+    hasPermission(supabase, user.id, user.email ?? null, "users.unban"),
     searchUsers("", "all", "all", "all"),
   ]);
-  const canActivate = canResetQuota;
+  const canActivate = isOwner && canManageSubscriptions;
   const lookupRaw = (sp.sub_lookup ?? "").trim();
   const status = lookupRaw ? await getSubscriptionStatus(lookupRaw) : null;
   const lookupFailed = Boolean(lookupRaw) && !status;
@@ -53,23 +55,27 @@ export default async function AdminSubscriptionsPage({
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        title="تفعيل الاشتراكات"
-        subtitle="تفعيل يدوي عبر User Code (MAG-XXX-XXXX) أو UUID — مع تسجيل إلزامي في audit_log."
-        badge="subscriptions.manage"
-        permissionKey="subscriptions.manage"
+        title="مركز المستخدمين"
+        subtitle="الخطة والدفع والتصنيف والمشكلات والملف والاستخدام وإجراءات الاشتراك من مكان واحد."
+        badge="users.read"
+        permissionKey="users.read"
       />
 
       {sp.success ? <AdminNotice tone="emerald">تم: {sp.success}</AdminNotice> : null}
       {sp.error ? <AdminNotice tone="rose">خطأ: {sp.error}</AdminNotice> : null}
       {!canActivate ? (
         <AdminNotice tone="amber" title="صلاحيات محدودة لهذا القسم">
-          يمكنك الاطلاع وإعادة تعيين الحصص بصلاحية <code>subscriptions.manage</code>، أما تفعيل/تمديد/إلغاء الاشتراك فمحجوز للمالك فقط.
+          يمكنك الاطلاع على بيانات المستخدمين؛ تفعيل/تمديد/إلغاء الاشتراك محجوز للمالك فقط.
         </AdminNotice>
       ) : null}
 
       <SubscriptionCenter
         initialUsers={initialUsers}
         canActivate={canActivate}
+        canRevoke={isOwner && canManageSubscriptions}
+        canManageOps={canManageSubscriptions}
+        canBan={canBan}
+        canUnban={canUnban}
         canGrantCredits={canGrantCredits}
         canGrantReward={canGrantReward}
       />
@@ -213,7 +219,7 @@ export default async function AdminSubscriptionsPage({
         ) : null}
       </AdminCard>
 
-      {canActivate ? <AdminCard
+      {isOwner && canManageSubscriptions ? <AdminCard
         title="تفعيل اشتراك يدويًا"
         description="DB prerequisites: user_codes + subscription_plans + subscription_activations + audit_log."
         tone="emerald"
@@ -270,14 +276,14 @@ export default async function AdminSubscriptionsPage({
           <code>audit_log.action = &apos;subscriptions.manage&apos;</code> (حساس — إلزامي) · <code>user_codes</code>: code, user_id, is_active, activated_by, activation_note.
         </AdminNotice>
       </AdminCard> : null}
-      {canActivate ? <AdminCard title="إلغاء اشتراك" description="إلغاء آخر اشتراك نشط (Owner فقط، مسجّل في audit_log)." tone="rose">
+      {isOwner && canManageSubscriptions ? <AdminCard title="إلغاء اشتراك" description="إلغاء آخر اشتراك نشط (Owner فقط، مسجّل في audit_log)." tone="rose">
         <form action={async (formData: FormData) => { "use server"; const r = await revokeSubscription(formData.get("lookup")?.toString() || "", formData.get("note")?.toString() || null); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
           <input name="lookup" type="text" placeholder="MAG-XXX-XXXX أو UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
           <input name="note" type="text" placeholder="ملاحظة (اختياري)" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs" />
           <button type="submit" className="bg-rose-600 text-white font-bold rounded-lg px-4 py-2 text-xs hover:bg-rose-500">إلغاء</button>
         </form>
       </AdminCard> : null}
-      {canResetQuota ? <AdminCard title="إعادة تعيين الحصص" description="تصفير messages_24h / uploads_today لمن لديه صلاحية subscriptions.manage." tone="amber">
+      {canManageSubscriptions ? <AdminCard title="إعادة تعيين الحصص" description="تصفير messages_24h / uploads_today لمن لديه صلاحية subscriptions.manage." tone="amber">
         <form action={async (formData: FormData) => { "use server"; const r = await resetSubscriptionQuota(formData.get("lookup")?.toString() || ""); if (r.ok) redirect("/admin/subscriptions?success=" + encodeURIComponent(r.message)); redirect("/admin/subscriptions?error=" + encodeURIComponent(r.message)); }} className="flex flex-wrap gap-2 items-end">
           <input name="lookup" type="text" placeholder="MAG-XXX-XXXX أو UUID" className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs font-mono" required />
           <button type="submit" className="bg-amber-500 text-slate-950 font-bold rounded-lg px-4 py-2 text-xs hover:bg-amber-400">إعادة تعيين</button>

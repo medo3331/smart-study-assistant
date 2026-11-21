@@ -26,14 +26,18 @@ import { useAudio } from "@/components/audio/AudioProvider";
    المكتبة الصوتية
 
    ٣ تبويبات: قرآن (قارئ + سورة)، موسيقى (مجانية الحقوق)، صوتياتي
-   (روابط المستخدم). بتتحط جوه درج الإعدادات.
+   (روابط المستخدم).
 
-   🗓️ ٨ أغسطس: بديل «أصوات التركيز» القديمة — ٦ أزرار ثابتة (مطر/بحر/
-   غابة/…) اتشالت بالكامل بطلب المستخدم.
+   🗓️ تغيير التوزيع: الدرج اتشال — المكتبة اتقسمت:
+     • تبويب «قرآن» بقى في صفحة العبادات (/worship/quran) — مكانه الطبيعي
+       جنب القرّاء والورد اليومي.
+     • «موسيقى» و«صوتياتي» بقوا في «التريكز» (/dashboard/tracks) جنب
+       مؤقّت المذاكرة.
+   اللي بيحتاج تبويب واحد بس بيعدي `enabledTabs`، والافتراضي الكل.
 
-   القرّاء بييجوا من /api/quran/reciters. النداء بيحصل **أول ما تفتح
-   تبويب القرآن** مش أول ما الدرج يفتح — أغلب الناس بتفتح الإعدادات
-   لحاجة تانية خالص.
+   القرّاء بييجوا من /api/quran/reciters. النداء بيحصل **أول ما يفتح
+   تبويب القرآن** مش أول ما المكتبة تتركّب — عشان ما ننجّلش نداء
+   المستخدم مش محتاجه.
    ========================================================================== */
 
 type TabId = "quran" | "music" | "custom";
@@ -46,9 +50,12 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 
 interface SoundLibraryProps {
   themeStyles: ThemeStyles;
+  /** التبويبات المسموحة — الافتراضي الكل (قرآن + موسيقى + صوتياتي).
+      صفحة العبادات بتعدي ["quran"]، والتريكز بيعدي ["music","custom"]. */
+  enabledTabs?: TabId[];
 }
 
-export function SoundLibrary({ themeStyles }: SoundLibraryProps) {
+export function SoundLibrary({ themeStyles, enabledTabs }: SoundLibraryProps) {
   /* الحالة بتتقرا من المزوّد العام مباشرة مش بروبس. المشغّل عايش في
      `app/layout.tsx` عشان الصوت ما يفصلش مع التنقّل، فالحالة مابقتش
      ملك صفحة الداشبورد أصلاً — تمريرها كبروبس عبر Sidebar كان بيوهم
@@ -67,7 +74,11 @@ export function SoundLibrary({ themeStyles }: SoundLibraryProps) {
     [selectTrack]
   );
 
-  const [tab, setTab] = useState<TabId>("quran");
+  const activeTabs = useMemo(
+    () => TABS.filter((t) => (enabledTabs ?? TABS.map((t) => t.id)).includes(t.id)),
+    [enabledTabs],
+  );
+  const [tab, setTab] = useState<TabId>(activeTabs[0]?.id ?? "music");
 
   // معرّفات فريدة: لو الكومبوننت اتركّب مرتين (درج + صفحة مثلاً) الـ
   // IDs الثابتة كانت هتتكرّر و`aria-controls` هيشاور على الغلط.
@@ -150,7 +161,7 @@ export function SoundLibrary({ themeStyles }: SoundLibraryProps) {
       e.key === "ArrowLeft" ? 1 : e.key === "ArrowRight" ? -1 : e.key === "Home" ? -index : e.key === "End" ? TABS.length - 1 - index : 0;
     if (delta === 0) return;
     e.preventDefault();
-    const next = TABS[(index + delta + TABS.length) % TABS.length];
+    const next = activeTabs[(index + delta + activeTabs.length) % activeTabs.length];
     setTab(next.id);
     document.getElementById(tabId(next.id))?.focus();
   };
@@ -165,7 +176,7 @@ export function SoundLibrary({ themeStyles }: SoundLibraryProps) {
            الـ tabIndex المتنقّل: تبويب واحد بس في ترتيب التاب، والباقي
            بالأسهم. ده السلوك اللي قارئ الشاشة بيتوقعه من tablist. */}
       <div role="tablist" aria-label="نوع الصوت" className="flex gap-1 bg-paper p-1 rounded-[var(--r-sm)] border border-rule">
-        {TABS.map((t, i) => (
+        {activeTabs.map((t, i) => (
           <button
             key={t.id}
             role="tab"
@@ -202,7 +213,7 @@ export function SoundLibrary({ themeStyles }: SoundLibraryProps) {
           <div role="status" aria-live="polite">
             {failed && (
               <div className="notice notice-error text-[11px]">
-                <p className="m-0">مش قادر أجيب قائمة القرّاء دلوقتي. اتأكد من النت وافتح الإعدادات تاني.</p>
+                <p className="m-0">مش قادر أجيب قائمة القرّاء دلوقتي. اتأكد من النت وافتح المكتبة تاني.</p>
               </div>
             )}
 
