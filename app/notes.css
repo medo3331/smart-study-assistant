@@ -254,6 +254,37 @@
   outline-offset: 2px;
 }
 
+/* محرر النص — الغلاف + زر الحفظ ✓ */
+.notes-text-editor-wrap {
+  position: absolute;
+  min-width: 140px;
+  max-width: 70%;
+  z-index: 20;
+}
+.notes-text-editor-wrap .notes-text-editor {
+  position: relative;
+  width: 100%;
+  min-height: 110px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--paper);
+}
+.notes-text-editor-done {
+  position: absolute;
+  top: -14px;
+  left: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 /* ---- PDF export modal ---- */
 .notes-modal-backdrop {
   position: fixed;

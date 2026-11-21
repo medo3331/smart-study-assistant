@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { dataUrlToBlob } from "@/lib/notes/blob";
 import { useSpeak } from "@/lib/speech";
 
@@ -137,7 +137,12 @@ export default function NotesAssistant({
     setDiagramBusy(true);
     setError(null);
     try {
-      const topic = getEditorContext().slice(0, 300).trim() || "موضوع المحاضرة";
+      // الموضوع: نص الصفحة لو فيه حاجة، وإلا آخر سؤال من الطالب.
+      const pageText = getEditorContext().slice(0, 300).trim();
+      const lastQuestion = [...messages]
+        .reverse()
+        .find((message) => message.role === "user")?.content ?? "";
+      const topic = pageText || lastQuestion.slice(0, 200).trim() || "موضوع المحاضرة";
       const res = await fetch("/api/ai/diagram", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -198,14 +203,15 @@ export default function NotesAssistant({
 
   // 🚦 طابور الطلبات — ضغط سريع على زر الإرسال مبيفقدش رسالة:
   // كل طلب بينتظر لما اللي قبله يخلص (حتى 3 طلبات في الانتظار).
-  const messagesRef = useRef(messages);
   const busyRef = useRef(false);
   const queueRef = useRef<string[]>([]);
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
 
-  const doSend = async (rawText: string) => {
+  /** إضافة رسالة للحالة. */
+  const pushMessage = (message: ChatMessage) => {
+    setMessages((previous) => [...previous, message]);
+  };
+
+  const doSend = async (rawText: string, baseHistory?: ChatMessage[]) => {
     const text = rawText.trim();
       if (!text) return;
 
@@ -214,10 +220,11 @@ export default function NotesAssistant({
         ? `${text}\n\n[سياق من الدفتر]\n${context}`
         : text;
 
-      const history = messagesRef.current;
+      // 🔑 التاريخ بيمر صراحةً للطلبات المُصفّرة — من غير ref.
+      const history = baseHistory ?? messages;
+      let conversationAfter: ChatMessage[] = history;
       const next = [...history, { role: "user" as const, content: composed }];
       setMessages(next);
-      messagesRef.current = next;
       setInput("");
       setBusy(true);
       busyRef.current = true;
@@ -228,12 +235,18 @@ export default function NotesAssistant({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: next.slice(-8).map((message) => ({
+            messages: next.slice(-12).map((message) => ({
               role: message.role,
               content: message.content,
             })),
             systemInstruction:
-              "انت مساعد داخل دفتر ملاحظات الطالب. إجاباتك مختصرة وعملية وبالعربي، وتناسب المذاكرة السريعة. لو الطالب بعت سياق من دفتره فاعمله أساس لردك.",
+              "انت مساعد مذاكرة شخصي جوه دفتر الطالب في Magicly. اشرح كأنك مدرس خصوصي شاطر بيفهم الطالب، مش ردود عابرة أو مختصرة زيادة عن اللزوم. \n" +
+              "قواعد الرد:\n" +
+              "• رد كامل ومفيد: غطي السؤال بالتفصيل المهم، مش سطر واحد.\n" +
+              "• نظّم الرد: عنوان قصير لو الموضوع كبير، وبعدين نقاط قصيرة (•) أو خطوات مرقمة، وكل نقطة جملة واضحة.\n" +
+              "• بالعربي المصري البسيط، والمصطلح العلمي بالإنجليزي بين قوسين أول مرة.\n" +
+              "• اربط الإجابة بسياق الدفتر المرفق لو موجود، ولو الطالب سأل سؤال غامض خمن قصده من السياق وجاوب من غير ما تحرجله.\n" +
+              "• في الآخر لو فيه حاجة تستاهل، قول سؤال مراجعة صغير يساعده يثبت المعلومة.",
           }),
         });
         const data = await res.json().catch(() => null);
@@ -253,15 +266,18 @@ export default function NotesAssistant({
         const answer = typeof raw === "string" && raw.trim()
           ? raw
           : "المساعد رجع رد فاضي — حاول تاني.";
-        setMessages((previous) => [...previous, { role: "assistant", content: answer }]);
+        pushMessage({ role: "assistant", content: answer });
+        // التاريخ الكامل للرد ده — أساس أي طلب مُصفّر بعده.
+        conversationAfter = [...next, { role: "assistant" as const, content: answer }];
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "حصل خطأ غير متوقع.");
       } finally {
         setBusy(false);
         busyRef.current = false;
-        // 🚦 الطلبات اللي في الانتظار — الأول يخلص التاني يبدأ.
+        // 🚦 الطلبات اللي في الانتظار — الأول يخلص التاني يبدأ،
+        // وبياخد التاريخ الكامل اللي قبله.
         const pending = queueRef.current.shift();
-        if (pending) void doSend(pending);
+        if (pending) void doSend(pending, conversationAfter);
       }
   };
 
@@ -295,7 +311,7 @@ ${text}`);
   };
 
   /** 📸 صورة الصفحة — بيبعتها للـ AI كصورة عبر /api/ai/image-analysis. */
-  const analyzeSnapshot = useCallback(async () => {
+  const analyzeSnapshot = async () => {
     if (busy) return;
     if (!getCanvasSnapshot) {
       setError("مفيش دعم لقطة الصفحة هنا.");
@@ -307,15 +323,12 @@ ${text}`);
       return;
     }
     const question = input.trim();
-    setMessages((previous) => [
-      ...previous,
-      {
-        role: "user" as const,
-        content: question
-          ? `📸 صوّرت لك الصفحة — ${question}`
-          : "📸 صوّرت لك الصفحة — اشرح اللي فيها",
-      },
-    ]);
+    pushMessage({
+      role: "user",
+      content: question
+        ? `📸 صوّرت لك الصفحة — ${question}`
+        : "📸 صوّرت لك الصفحة — اشرح اللي فيها",
+    });
     setInput("");
     setBusy(true);
     setError(null);
@@ -346,13 +359,13 @@ ${text}`);
       const answer = typeof data?.result === "string" && data.result.trim()
         ? data.result
         : "المساعد رجع رد فاضي — حاول تاني.";
-      setMessages((previous) => [...previous, { role: "assistant", content: answer }]);
+      pushMessage({ role: "assistant", content: answer });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "حصل خطأ غير متوقع.");
     } finally {
       setBusy(false);
     }
-  }, [busy, getCanvasSnapshot, input]);
+  };
 
   return (
     <>

@@ -176,6 +176,8 @@ export default function NotebookEditor({
 
   // ---- PDF import state ----
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  /** 📁 رفع أي ملف على النوته مباشرة من الجهاز. */
+  const anyFileInputRef = useRef<HTMLInputElement>(null);
   const [pdfImportOpen, setPdfImportOpen] = useState(false);
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfFrom, setPdfFrom] = useState(1);
@@ -1731,6 +1733,12 @@ export default function NotebookEditor({
           const textIndex = textAt(content.texts, x, y, ctx, 6);
           if (textIndex >= 0) {
             const text = content.texts[textIndex];
+            // ✏️ ضغطة تانية على النص **المحدد فعلًا** = فتح المحرر فورًا
+            // (زي PowerPoint) — بدل ما الضغطة تحرك النص وما تقدرش تعدله.
+            if (selectionRef.current?.kind === "text" && selectionRef.current.id === text.id) {
+              openTextEditor({ id: text.id, x: text.x, y: text.y, value: text.text });
+              return;
+            }
             startSingleDrag("text", text.id, { ...text });
             return;
           }
@@ -3039,6 +3047,60 @@ export default function NotebookEditor({
     [canWrite, commitHistory, paint, scheduleSave, setContent],
   );
 
+  /** 📁 رفع ملف على النوته مباشرة — يوزع حسب النوع:
+   *  صورة → عنصر صورة على الصفحة · PDF → منتقي صفحات الخلفية ·
+   *  Word/نص → استخراج النص ودرجه بلوكات قابلة للتعديل. */
+  const handleDirectFile = useCallback(
+    async (file: File) => {
+      if (!canWrite) return;
+      const type = file.type.toLowerCase();
+      const name = file.name.toLowerCase();
+
+      if (type.startsWith("image/")) {
+        await insertImageFile(file);
+        return;
+      }
+
+      if (type === "application/pdf" || name.endsWith(".pdf")) {
+        handlePdfFile(file);
+        return;
+      }
+
+      if (type.includes("word") || name.endsWith(".docx") || name.endsWith(".doc")) {
+        try {
+          const mammoth = await import("mammoth/mammoth.browser");
+          const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+          const text = result.value?.trim();
+          if (!text) {
+            setMessage("ملف الـ Word ده مفيهوش نص مقروء.");
+            return;
+          }
+          insertAiText(text);
+        } catch {
+          setMessage("مقدرناش نقرا ملف الـ Word — جرّب تاني.");
+        }
+        return;
+      }
+
+      if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".csv")) {
+        try {
+          const text = (await file.text()).trim();
+          if (!text) {
+            setMessage("الملف فاضي.");
+            return;
+          }
+          insertAiText(text);
+        } catch {
+          setMessage("مقدرناش نقرا الملف — جرّب تاني.");
+        }
+        return;
+      }
+
+      setMessage("النوع ده مش مدعوم على النوته — صورة أو PDF أو Word أو نص.");
+    },
+    [canWrite, handlePdfFile, insertAiText, insertImageFile],
+  );
+
   const insertHandwritingText = useCallback(
     (mode: "lines" | "block") => {
       if (!canWrite) return;
@@ -3292,9 +3354,30 @@ export default function NotebookEditor({
         <div className="notes-group">
           <button
             type="button"
+            onClick={() => anyFileInputRef.current?.click()}
+            disabled={!canWrite}
+            title="ارفع ملف على النوته مباشرة: صورة → على الصفحة، PDF → صفحات خلفية، Word/نص → نص على الصفحة"
+            className="notes-btn"
+          >
+            <span aria-hidden="true">📁</span>
+            <span>ملف</span>
+          </button>
+          <input
+            ref={anyFileInputRef}
+            type="file"
+            accept="image/*,application/pdf,.pdf,.docx,.doc,.txt,.md,.csv"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleDirectFile(file);
+              event.target.value = "";
+            }}
+          />
+          <button
+            type="button"
             onClick={() => pdfInputRef.current?.click()}
             disabled={!canWrite}
-            title="استورد PDF واكتب عليه"
+            title="استورد PDF واكتب عليه (نطاق صفحات)"
             className="notes-btn"
           >
             <span aria-hidden="true">📄</span>
@@ -3623,29 +3706,41 @@ export default function NotebookEditor({
           onContextMenu={(event) => event.preventDefault()}
         />
         {textDraft && textEditorStyle ? (
-          <textarea
-            className="notes-text-editor"
-            style={textEditorStyle}
-            value={textDraft.value}
-            autoFocus
-            dir="rtl"
-            rows={2}
-            placeholder="اكتب هنا…"
-            onChange={(event) =>
-              setTextDraft({ ...textDraft, value: event.target.value })
-            }
-            onBlur={commitTextDraft}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                cancelTextDraft();
+          <div className="notes-text-editor-wrap" style={textEditorStyle}>
+            <textarea
+              className="notes-text-editor"
+              value={textDraft.value}
+              autoFocus
+              dir="rtl"
+              rows={5}
+              placeholder="اكتب هنا… (Enter سطر جديد — Enter مع Ctrl أو زر ✓ للحفظ)"
+              onChange={(event) =>
+                setTextDraft({ ...textDraft, value: event.target.value })
               }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                commitTextDraft();
-              }
-            }}
-          />
+              onBlur={commitTextDraft}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelTextDraft();
+                }
+                // Enter = سطر جديد؛ Ctrl+Enter = حفظ. (نص المذاكرة أغلبه
+                // متعدد الأسطر — والنقر بره بيحفظ كمان.)
+                if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  commitTextDraft();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="notes-text-editor-done"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => commitTextDraft()}
+              title="حفظ النص (Enter مع Ctrl)"
+            >
+              ✓
+            </button>
+          </div>
         ) : null}
       </div>
 
