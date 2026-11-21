@@ -14,7 +14,6 @@
    وبس — التحقق من النية المحفوظة بيتولّد منها، فمافيش مكان تاني تنساه. */
 export const NAV_SIGNALS = [
   "ai",
-  "settings",
   "emergency",
   "parentReport",
   "leaderboard",
@@ -46,6 +45,7 @@ export type NavIconName =
   | "calendar"
   | "missions"
   | "notes"
+  | "tracks"
   | "emergency"
   | "quran"
   | "worship"
@@ -163,6 +163,10 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
       // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — البند ده بينزّل
       // على كارت القرآن في الداشبورد، والكارت فيه زرار للمكتبة الكاملة.
+      // 🎧 التريكز: المكتبة الصوتية (موسيقى + صوتيات المستخدم) + مؤقّت
+      // المذاكرة — طلعوا من درج الإعدادات لمكان خاص بيهم. القرآن فاضل
+      // في بنده لوحده لأنه بقى في صفحة العبادات.
+      { id: "tracks", icon: "tracks", label: "التريكز", latin: "Tracks", href: "/dashboard/tracks" },
       { id: "quran", icon: "quran", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
       { id: "worship", icon: "worship", label: "عباداتي", latin: "Worship Center", href: "/worship" },
       { id: "break", icon: "break", label: "استراحة", latin: "Break Zone", href: "/break" },
@@ -215,7 +219,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     icon: "profile",
     items: [
       { id: "profile", icon: "profile", label: "الملف الشخصي", latin: "Profile", href: "/dashboard/profile" },
-      { id: "settings", icon: "settings", label: "الإعدادات", latin: "Settings", signal: "settings" },
+      // ⚙️ الإعدادات بقت صفحة كاملة مستقلة بدل درج الإعدادات الجانبي.
+      { id: "settings", icon: "settings", label: "الإعدادات", latin: "Settings", href: "/dashboard/settings" },
       { id: "career", icon: "career", label: "المسار المهني", latin: "Career", href: "/dashboard/career" },
       { id: "parentReport", icon: "report", label: "تقرير المتابعة", latin: "Report", signal: "parentReport" },
     ],

@@ -74,6 +74,10 @@ interface StudySectionsProps {
   onTogglePomoRunning: () => void;
   onResetPomo: () => void;
 
+  // 🗓️ تعديل اسم المادة — كان جوه درج الإعدادات، والدرج اتشال فالزرار
+  // بقى جنب عنوان المادة في مكانه الطبيعي.
+  onEditSubject: () => void;
+
   // تقدم الخطة + تحذير التأخير
   completedCount: number;
   overallProgress: number;
@@ -114,6 +118,7 @@ export function StudySections({
   isPomoRunning,
   onTogglePomoRunning,
   onResetPomo,
+  onEditSubject,
   completedCount,
   overallProgress,
   showLagWarning,
@@ -152,6 +157,9 @@ export function StudySections({
             {isEmergencyMode && (
               <span className="tag tag-box bg-red-950 text-red-400">وضع الطوارئ</span>
             )}
+            <button onClick={onEditSubject} className={QUIET_BTN}>
+              تعديل الاسم
+            </button>
             <button onClick={onTogglePomodoro} className={QUIET_BTN}>
               {showPomodoro ? "إخفاء المؤقّت" : "مؤقّت التركيز"}
             </button>

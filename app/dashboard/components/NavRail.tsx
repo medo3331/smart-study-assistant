@@ -274,9 +274,9 @@ export function NavRail({
               ولا لأ. لو الاسم نفسه بيتغيّر، قارئ الشاشة بيقرا زرار جديد. */}
           <span className="flex-1 min-w-0 text-sm font-semibold truncate">{item.label}</span>
           {isOn && <span className="tag tag-box shrink-0 border-current">شغّال</span>}
-          {/* نقطة الصوت على الإعدادات: كانت على زرار الترويسة القديم،
-              والإعدادات هي نفس الدرج اللي فيه مفتاح الصوت. */}
-          {item.signal === "settings" && audioOn && (
+          {/* نقطة الصوت على «التريكز»: المكتبة الصوتية بقى هناك بعد
+              ما طلعت من درج الإعدادات. */}
+          {item.id === "tracks" && audioOn && (
             <>
               <span aria-hidden className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <span className="sr-only">فيه صوت شغّال</span>

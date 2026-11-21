@@ -37,7 +37,6 @@ import SubscriptionQuotaCard from "./components/SubscriptionQuotaCard";
 import { StudySections } from "./components/StudySections";
 import { AnalyticsSection } from "./components/AnalyticsSection";
 import { useAudio } from "@/components/audio/AudioProvider";
-import { SettingsDrawer, type SettingsSectionId } from "./components/SettingsDrawer";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
 import { railAccountFromUser, takeNavIntent, type NavSignal } from "./components/nav-config";
@@ -231,12 +230,9 @@ export default function DashboardPage() {
   const { activeTrack, isPlaying: isPlayingAudio } = useAudio();
 
   // 4. المودالات والقوائم
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  /* ًں“– ١٢ أغسطس: الدرج بيفتح على قسم بعينه. كارت القرآن بيقول آ«كل السور
-     والقرّاءآ» — يعني افتح الإعدادات على آ«الصوتآ» على طول، مش سيب المستخدم
-     يدوّر. بيترجع `null` مع القفل عشان الفتحة اللي بعدها من âڑ™ï¸ڈ تبدأ
-     بالأقسام كلها مقفولة زي ما هي مفروض. */
-  const [settingsFocus, setSettingsFocus] = useState<SettingsSectionId | null>(null);
+  /* 🗓️ درج الإعدادات اتشال — بقى صفحة كاملة /dashboard/settings.
+     التعديل اللي فاضل من الدرج هو مودال اسم المادة، وبيفتح من زرار
+     جنب عنوان المادة في StudySections. */
   const [showSubjectModal, setShowSubjectModal] = useState(false);
   const [newSubjectInput, setNewSubjectInput] = useState("");
   const [showShopModal, setShowShopModal] = useState(false);
@@ -298,9 +294,11 @@ export default function DashboardPage() {
   }, [authUser, supabase]);
 
   // 9. تنبيهات تذكير الستريك
+  // 🗓️ التفعيل والـ Web Push بقوا في صفحة الإعدادات (/dashboard/settings)
+  // — الصفحة دي بتقرا نفس مفاتيح localStorage وبنطبّق هنا في تذكير بسي
+  // الحاجات بس (العداد + التنبيه الحقيقي عند الموعد).
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("20:00");
-  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
 
   // 10. لوحة المتصدرين
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -607,11 +605,6 @@ export default function DashboardPage() {
             /* ignore */
           }
         }
-        if (typeof window !== "undefined" && "Notification" in window) {
-          setNotifPermission(Notification.permission);
-        } else {
-          setNotifPermission("unsupported");
-        }
       } catch (err) {
         console.error("loadData failed:", err);
         setLoadError("حصل خطأ غير متوقع أثناء تحميل بياناتك. افتح Console (F12) لمزيد من التفاصيل.");
@@ -631,16 +624,6 @@ export default function DashboardPage() {
       supabase.from("profiles").update({ theme }).eq("id", authUser.id).then();
     }
   }, [theme, isInitialized, authUser]);
-
-  /* ًں“– تصفير الفتحة الموجّهة عند قفل الدرج.
-     كارت القرآن بيقول آ«افتح على الصوتآ»، والدرج بيفتح القسم ده. لو القيمة
-     فضلت متعلّقة، أي فتحة بعد كده من âڑ™ï¸ڈ كانت هتفتح آ«الصوتآ» تاني — وأسوأ:
-     لو المستخدم قفل القسم بنفسه، إعادة فتح الدرج كانت هتفتحه في وشه تاني
-     وتلغي اختياره الصريح. الشرط على القفل مش على الفتح عشان يشتغل مع أي
-     طريقة قفل (زرار الإكس، الضغط على الخلفية، أو إشارة تنقّل). */
-  useEffect(() => {
-    if (!isMenuOpen) setSettingsFocus(null);
-  }, [isMenuOpen]);
 
   // ًں”´ حفظ الفلاش كاردز محلياً
   useEffect(() => {
@@ -805,9 +788,6 @@ export default function DashboardPage() {
      آ«شغّل الطوارئآ» ماتتحولش لـ آ«اقفلهآ» بسبب تنقّل بينهم. */
   const handleNavSignal = (signal: NavSignal, opts?: { force?: boolean }) => {
     switch (signal) {
-      case "settings":
-        setIsMenuOpen(true);
-        break;
       case "emergency":
         setIsEmergencyMode((v) => (opts?.force ? true : !v));
         break;
@@ -851,70 +831,6 @@ export default function DashboardPage() {
       document.getElementById(intent.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [authUser]);
-
-  async function handleToggleNotifications(): Promise<void> {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      alert("ًںک… المتصفح ده لا يدعم التنبيهات.");
-      return;
-    }
-    if (notificationsEnabled) {
-      setNotificationsEnabled(false);
-      /* Phase 2: القفل لازم يشيل الاشتراك من السيرفر كمان — من غيره
-         cron تذكير السلسلة كان هيفضل يبعت إشعارات رغم إن الطالب قفلها. */
-      void (async () => {
-        try {
-          const registration = await navigator.serviceWorker?.getRegistration("/sw.js");
-          const subscription = await registration?.pushManager.getSubscription();
-          await subscription?.unsubscribe();
-          await fetch("/api/push/subscribe", { method: "DELETE" });
-        } catch (err) {
-          console.warn("push unsubscribe failed (متجاهَل):", err);
-        }
-      })();
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    setNotifPermission(permission);
-    if (permission === "granted") {
-      setNotificationsEnabled(true);
-      new Notification("ًں”” تم تفعيل تذكير الستريك!", { body: `هننبهك الساعة ${reminderTime} لو لسه ما ذاكرتش.` });
-    } else {
-      alert("محتاجين إذنك لإرسال التنبيهات من إعدادات المتصفح.");
-    }
-  }
-
-  const handleEnableWebPush = async () => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      alert("ًںک… المتصفح ده لا يدعم التنبيهات في الخلفية (Web Push).");
-      return;
-    }
-    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!vapidKey) {
-      alert("âڑ ï¸ڈ الميزة دي لسه محتاجة إعداد من ناحية السيرفر (VAPID key + API route). راجع التعليقات فوق الدالة دي في الكود.");
-      return;
-    }
-    try {
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: vapidKey,
-      });
-      // الـ user_id بياخده السيرفر من الجلسة، فمش بنبعته من هنا
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription }),
-      });
-      if (!res.ok) {
-        alert("âڑ ï¸ڈ مقدرناش نحفظ الاشتراك. تأكد إنك مسجّل دخول وحاول تاني.");
-        return;
-      }
-      alert("ًںژ‰ تم تفعيل التنبيهات في الخلفية!");
-    } catch (err) {
-      console.error("Web Push subscribe failed:", err);
-      alert("âڑ ï¸ڈ حصل خطأ أثناء تفعيل التنبيهات، حاول تاني.");
-    }
-  };
 
   const logActivity = (delta: { focusMinutes?: number; tasksCompleted?: number }) => {
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -982,7 +898,6 @@ export default function DashboardPage() {
     setDays(savedDays);
     localStorage.setItem("study_config", JSON.stringify(newConfig));
     setShowSubjectModal(false);
-    setIsMenuOpen(false);
     setIsChangingSubject(false);
   };
 
@@ -1515,7 +1430,7 @@ export default function DashboardPage() {
           onChangeRange={setAnalyticsRange}
           weeklyFocusHoursLabel={weeklyFocusHoursLabel}
           notificationsEnabled={notificationsEnabled}
-          onOpenSettings={() => setIsMenuOpen(true)}
+          onOpenSettings={() => router.push("/dashboard/settings")}
         />
         </div>
       </div>
@@ -1643,7 +1558,7 @@ export default function DashboardPage() {
           <QuickNavigation
             items={buildQuickNavItems({
               onOpenAi: handleOpenAiAssistant,
-              onOpenSettings: () => setIsMenuOpen(true),
+              onOpenSettings: () => router.push("/dashboard/settings"),
             })}
           />
         </div>
@@ -1790,6 +1705,10 @@ export default function DashboardPage() {
           isEmergencyMode={isEmergencyMode}
           showPomodoro={showPomodoro}
           onTogglePomodoro={() => setShowPomodoro(!showPomodoro)}
+          onEditSubject={() => {
+            setNewSubjectInput(config?.subject ?? "");
+            setShowSubjectModal(true);
+          }}
           pomoTime={pomoTime}
           isPomoRunning={isPomoRunning}
           onTogglePomoRunning={() => setIsPomoRunning(!isPomoRunning)}
@@ -1957,14 +1876,13 @@ export default function DashboardPage() {
             </button>
           </Link>
 
-          {/* ًں“– القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط المكتبة.
-              الصوت عايش في AudioProvider فالسورة بتكمّل في أي صفحة. */}
+          {/* ًں“– القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط مكتبة
+              التلاوة. المكتبة بقى في صفحة العبادات (/worship/quran)
+              بعد ما طلعت من درج الإعدادات. الصوت عايش في AudioProvider
+              فالسورة بتكمّل في أي صفحة. */}
           <QuranSection
             themeStyles={themeStyles}
-            onOpenLibrary={() => {
-              setSettingsFocus("sound");
-              setIsMenuOpen(true);
-            }}
+            onOpenLibrary={() => router.push("/worship/quran")}
           />
         </div>
 
@@ -2026,27 +1944,41 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <SettingsDrawer
-        isMenuOpen={isMenuOpen}
-        setIsMenuOpen={setIsMenuOpen}
-        showSubjectModal={showSubjectModal}
-        setShowSubjectModal={setShowSubjectModal}
-        newSubjectInput={newSubjectInput}
-        setNewSubjectInput={setNewSubjectInput}
-        isChangingSubject={isChangingSubject}
-        handleSubjectChange={handleSubjectChange}
-        theme={theme}
-        setTheme={setTheme}
-        themeStyles={themeStyles}
-        notificationsEnabled={notificationsEnabled}
-        handleToggleNotifications={handleToggleNotifications}
-        reminderTime={reminderTime}
-        setReminderTime={setReminderTime}
-        notifPermission={notifPermission}
-        handleEnableWebPush={handleEnableWebPush}
-        onNavigateHome={() => router.push("/")}
-        focusSection={settingsFocus}
-      />
+      {/* 🗓️ مودال اسم المادة — كان جوه درج الإعدادات، والدرج اتشال
+          لصالح صفحة /dashboard/settings. المودال عايش هنا لأنه بيعدّل
+          بيانات الخطة نفسها اللي الصفحة دي مالكها. */}
+      {showSubjectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 backdrop-blur-sm p-4">
+          <div className="sheet-card card-lift p-6 w-full max-w-md space-y-4">
+            <div>
+              <p className="eyebrow eyebrow-flush mb-1.5">تعديل</p>
+              <h3 className="h3">اسم المادة أو الهدف</h3>
+            </div>
+            <input
+              type="text"
+              value={newSubjectInput}
+              onChange={(e) => setNewSubjectInput(e.target.value)}
+              className="field"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowSubjectModal(false)}
+                disabled={isChangingSubject}
+                className="btn btn-quiet text-sm"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleSubjectChange}
+                disabled={isChangingSubject}
+                className="btn btn-marker text-sm"
+              >
+                {isChangingSubject ? "بيحفظ" : "حفظ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <LeaderboardModal
         isOpen={showLeaderboard}
@@ -2121,8 +2053,7 @@ export default function DashboardPage() {
           !showLeaderboard &&
           !showShopModal &&
           !showParentReport &&
-          !showWeeklySummary &&
-          !isMenuOpen
+          !showWeeklySummary
         }
       />
 
