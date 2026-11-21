@@ -75,7 +75,7 @@ const ANGLES_DEG = [270, 230, 190, 150, 110, 70, 30, -10, -50];
    تعريفات الأفرع — المسارات مستخرجة من app/ فعليًا (انضبطت يوم التنفيذ):
      /  ·  /dashboard/courses  ·  /lesson/[dayId]  ·  /dashboard/workspace
      /worship  ·  /chat  ·  /shop  ·  /dashboard/progress
-     والإعدادات إجراء (openSettings) مش صفحة — درج الإعدادات جوه الداشبورد.
+     و/الإعدادات بقت صفحة كاملة /dashboard/settings بدل الدرج.
    ========================================================================== */
 export type WheelBranchId =
   | "home" | "courses" | "lesson" | "workspace" | "worship"
@@ -113,7 +113,7 @@ export function buildWheelBranches(opts: { currentDay?: number | null; currentDa
     { id: "ai", label: "المساعد الذكي", latin: "AI Assistant", icon: <Sparkles size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/chat", note: "الشات الحقيقي (/chat) — بقرار من المستخدم" },
     { id: "shop", label: "المتجر", latin: "Shop", icon: <ShoppingBag size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/shop", note: "نقاطك والرفيق والبالتات" },
     { id: "analytics", label: "التحليلات", latin: "Analytics", icon: <BarChart3 size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/progress", note: "تقدم المنهج — صفحة فعلية" },
-    { id: "settings", label: "الإعدادات", latin: "Settings", icon: <Settings size={18} strokeWidth={2} aria-hidden />, kind: "action", note: "مفيش صفحة إعدادات — بيفتح درج الإعدادات جوه /dashboard" },
+    { id: "settings", label: "الإعدادات", latin: "Settings", icon: <Settings size={18} strokeWidth={2} aria-hidden />, kind: "link", href: "/dashboard/settings", note: "صفحة الإعدادات الكاملة /dashboard/settings" },
   ];
 }
 
@@ -271,7 +271,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
     currentDay, currentDayId, totalDays, subject, completedSteps, progressPct, currentChapter,
     streak, coursesCount, subjectBreakdown,
     activeChartData, analyticsRange, onChangeRange, weeklyFocusHoursLabel,
-    notificationsEnabled, onOpenSettings,
+    notificationsEnabled,
   } = props;
 
   const { theme, setTheme } = useTheme();
@@ -286,24 +286,12 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
 
   const branches = buildWheelBranches({ currentDay, currentDayId });
 
-  /* الإعدادات: إجراء مش مسار. من جوه الداشبورد بنفتح الدرج على طول؛ من أي
-     صفحة تانية بنكتب النية في sessionStorage وننقل — نفس مفتاح/فورمات
-     nav-config.ts (التكرار هنا مقصود زي ما الـ proxy بيكرر منطق الدور). */
+  /* الإعدادات: صفحة كاملة دلوقتي (/dashboard/settings). من جوه الداشبورد
+     بنروح ليها مباشرة؛ من أي صفحة تانية روح لها مباشرة كذلك — مفيش
+     نيّة محفوظة ولا درج تاني. */
   const openSettings = useCallback(() => {
-    if (onOpenSettings) {
-      onOpenSettings();
-      return;
-    }
-    try {
-      window.sessionStorage.setItem(
-        "nav_intent",
-        JSON.stringify({ kind: "modal", target: "settings" }),
-      );
-    } catch {
-      /* خاصية تصفح مقفلة — مجرد تنقّل للداشبورد كفاية */
-    }
-    router.push("/dashboard");
-  }, [onOpenSettings, router]);
+    router.push("/dashboard/settings");
+  }, [router]);
 
   /* 🎨 زرار الثيمات الأربعة — بيدور على MAGIC_THEME_CYCLE ويحفظ عبر
      ThemeProvider (localStorage.theme + data-theme) زي التصميم بالظبط. */
@@ -532,7 +520,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                 onClick={openSettings}
                 className="text-[0.62rem] font-bold underline-offset-2 hover:underline"
                 style={{ color: "var(--accent)" }}
-                aria-label="إدارة الإشعارات — يفتح درج الإعدادات"
+                aria-label="إدارة الإشعارات — صفحة الإعدادات"
               >
                 إدارة
               </button>

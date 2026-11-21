@@ -8,6 +8,8 @@ import {
   useSharedWorshipData,
   useWorshipReward,
 } from "@/components/worship/WorshipChrome";
+import { SoundLibrary } from "@/app/dashboard/components/SoundLibrary";
+import { THEME_STYLES } from "@/app/dashboard/components/theme-helpers";
 import { todayUtc } from "@/lib/worship-data";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -87,6 +89,19 @@ function QuranHome() {
       {/* Reciter quick-select bar + audio list */}
       <div className="flex-shrink-0">
         <ReciterSelector />
+
+        {/* 🗓️ مكتبة التلاوة: كانت جوه درج الإعدادات في الداشبورد — انتقلت
+            هنا (القرآن مكانها الطبيعي جنب الورد والقرّاء). التلاوة بتشتغل
+            على المشغّل العائم العام فبتكمل في أي صفحة. */}
+        <details className="mt-2 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-white hover:text-[#B69CFF] transition-colors marker:content-none">
+            🎧 مكتبة التلاوة — كل السور والقرّاء
+          </summary>
+          <div className="px-3 pb-3">
+            <SoundLibrary themeStyles={THEME_STYLES.amber} enabledTabs={["quran"]} />
+          </div>
+        </details>
+
         <div className="mt-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs text-[#9AA0C0]">
           <span>قائمة صوتية: </span>
           <span className="text-[#2DD4BF]">عبد الله بصفر</span>,{" "}
