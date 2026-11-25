@@ -1,52 +1,372 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import * as ui from "../../components/ui";
+import { Search, MessageCircle, Send, Paperclip, X, User as UserIcon } from "lucide-react";
+import Link from "next/link";
+
+type Conversation = {
+  id: string;
+  title: string;
+  status: string;
+  participant_count: number;
+  unread_count: number;
+  last_message_at: string | null;
+  message_count: number;
+};
+
+type Message = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  body: string;
+  is_deleted: boolean;
+  created_at: string;
+};
+
+type InboxCategory = "inbox" | "sent" | "notifications" | "conversations" | "archived";
 
 export default function InboxPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const [category, setCategory] = useState<InboxCategory>("inbox");
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedConv, setSelectedConv] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [draft, setDraft] = useState("");
+
+  const loadConversations = async (q?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      const url = `/api/conversations?${params.toString()}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.success) setError(data.error || "Failed to load conversations.");
+      else setConversations(data.conversations || []);
+    } catch (e) {
+      setError("Network error.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchUsers = async (query: string) => {
+    if (query.length < 2) { setUserSearchResults([]); return; }
+    setUserSearchLoading(true);
+    try {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setUserSearchResults(data.success ? (data.users || []) : []);
+    } catch {
+      setUserSearchResults([]);
+    } finally {
+      setUserSearchLoading(false);
+    }
+  };
+
+  const startConversation = async (userId: string) => {
+    if (!userId) return;
+    const res = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: userId, title: "محادثة جديدة" }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setSelectedConv(data.conversation.id);
+      loadConversations();
+      setUserSearchResults([]);
+      setSearchQuery("");
+    } else {
+      alert("Failed: " + (data.error || "Unknown error"));
+    }
+  };
+
+  const loadMessages = async (convId: string) => {
+    setMsgLoading(true);
+    try {
+      const res = await fetch(`/api/conversations/${convId}/messages?limit=50`);
+      const data = await res.json();
+      if (!data.success) setError(data.error || "Failed to load messages.");
+      else setMessages(data.messages || []);
+    } catch (e) {
+      setError("Network error.");
+    } finally {
+      setMsgLoading(false);
+    }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft.trim() || !selectedConv) return;
+    const res = await fetch(`/api/conversations/${selectedConv}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: draft }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setDraft("");
+      loadMessages(selectedConv);
+      const el = document.getElementById("messages-list");
+      if (el) el.scrollTop = el.scrollHeight;
+    } else {
+      alert("Failed: " + (data.error || "Unknown error"));
+    }
+  };
+
+  const loadConversation = async (convId: string) => {
+    setSelectedConv(convId);
+    setMsgLoading(true);
+    try {
+      const res = await fetch(`/api/conversations/${convId}`);
+      const data = await res.json();
+      if (data.success) setMessages(data.messages || []);
+    } catch (e) {
+      setError("Network error.");
+    } finally {
+      setMsgLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData();
+    const fileInput = document.getElementById("file-input") as HTMLInputElement;
+    const file = fileInput?.files?.[0];
+    if (!file || !selectedConv) return;
+    formData.append("file", file);
+    formData.append("conversation_id", selectedConv);
+    const res = await fetch("/api/files/message-attachments", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`Uploaded: ${data.file.name}`);
+      loadMessages(selectedConv);
+    } else {
+      alert("Upload failed: " + (data.error || "Unknown error"));
+    }
+  };
+
+  const sortedConversations = [...conversations].sort((a, b) => {
+    if (!a.last_message_at && !b.last_message_at) return 0;
+    if (!a.last_message_at) return 1;
+    if (!b.last_message_at) return -1;
+    return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
+  });
 
   useEffect(() => {
-    const supabase = createClient();
-    void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      const { data } = await supabase
-        .from("user_inbox")
-        .select("id, subject, body, is_read, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      setItems(data || []);
-      setLoading(false);
-    })();
-  }, []);
+    loadConversations(searchQuery);
+  }, [category, searchQuery]);
 
-  async function markRead(id: string) {
-    const supabase = createClient();
-    await supabase.from("user_inbox").update({ is_read: true, read_at: new Date().toISOString() }).eq("id", id);
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, is_read: true } : x)));
-  }
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (query) {
+      setUserSearchResults([]);
+      setTimeout(() => searchUsers(query), 300);
+    } else {
+      setUserSearchResults([]);
+    }
+  };
 
-  if (loading) return <div className="p-6">جاري التحميل...</div>;
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-xl font-bold">صندوق الرسائل</h1>
-      {items.length === 0 ? <p>لا توجد رسائل.</p> : null}
-      {items.map((m) => (
-        <div key={m.id} className="rounded border border-slate-700 p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold">{m.subject}</h2>
-            {!m.is_read ? (
-              <button onClick={() => markRead(m.id)} className="text-xs text-amber-400">تحديد كمقروء</button>
-            ) : (
-              <span className="text-xs text-slate-500">مقروء</span>
+    <div className="flex h-screen bg-paper">
+      {/* Sidebar */}
+      <div className="w-full md:w-1/3 lg:w-2/5 border-r border-border/30 bg-paper/50 flex flex-col">
+        <div className="p-4 border-b border-border/30">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <ui.Input
+              placeholder="ابحث عن شخص أو محادثة…"
+              value={searchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
+              className="pl-9"
+            />
+            {searchQuery && userSearchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-paper border border-border rounded-xl shadow-xl overflow-hidden">
+                {userSearchResults.map((u: any) => (
+                  <button
+                    key={u.id}
+                    onClick={() => startConversation(u.id)}
+                    className="w-full px-4 py-3 text-right hover:bg-paper/50 flex items-center gap-3"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white text-sm font-bold">
+                      {u.name?.charAt(0) || "?"}
+                    </div>
+                    <div className="text-sm text-ink">{u.name}</div>
+                    <div className="text-xs text-slate-400">{u.email}</div>
+                  </button>
+                ))}
+                {userSearchLoading && (
+                  <div className="px-4 py-3 text-xs text-slate-400">جاري البحث...</div>
+                )}
+              </div>
             )}
           </div>
-          <p className="mt-2 text-sm text-slate-300 whitespace-pre-wrap">{m.body}</p>
-          <p className="mt-2 text-[11px] text-slate-500">{new Date(m.created_at).toLocaleString()}</p>
         </div>
-      ))}
+
+        <div className="flex-1 overflow-y-auto py-4">
+          <div className="px-4 mb-4">
+            <h2 className="text-sm font-semibold text-ink">الرسائل</h2>
+          </div>
+
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map(i => <ui.Skeleton key={i} className="h-20 w-full" />)}
+                          </div>
+                        ) : sortedConversations.length === 0 ? (
+                          <div className="text-center py-8 text-slate-400">
+                            <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm">لا توجد محادثات</p>
+                            <p className="text-xs mt-1">ابدأ محادثة جديدة للاتصال</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {sortedConversations.map((conv, i) => (
+                <button
+                  key={conv.id}
+                  onClick={() => loadConversation(conv.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl text-right transition-colors ${
+                    selectedConv === conv.id
+                      ? "bg-paper-8/60 border-border/50"
+                      : "hover:bg-paper/40 border-border/30"
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-rose-500 flex-shrink-0 flex items-center justify-center text-white font-bold text-sm">
+                    {conv.participant_count > 0 ? conv.participant_count : "●"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-ink truncate">{conv.title}</h3>
+                      {conv.last_message_at && (
+                        <span className="text-xs text-slate-400">
+                          {new Date(conv.last_message_at).toLocaleDateString("ar-EG")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-400 truncate">
+                      {conv.message_count} رسالة
+                      {conv.unread_count > 0 && <span className="text-amber-500 font-medium">({conv.unread_count} غير مقروء)</span>}
+                    </p>
+                  </div>
+                  {selectedConv === conv.id && (
+                    <span className="text-xs text-emerald-400 flex-shrink-0 ml-2">مفتوح</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-border/30">
+          <button
+            onClick={() => document.getElementById("message-composer")?.classList.toggle("hidden")}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-paper/50 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white">
+              <Send className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-ink">رسالة جديدة</p>
+              <p className="text-xs text-slate-400">Ctrl+K للكتابة</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Main chat area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {!selectedConv ? (
+          <div className="flex-1 flex items-center justify-center">
+            <ui.Card className="max-w-xl w-full p-8">
+              <div className="text-center">
+                <MessageCircle className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+                <h1 className="text-2xl font-bold text-ink mb-2">صندوق الرسائل</h1>
+                <p className="text-slate-400 mb-4">ربط المتصفح بالتواصل مع الطلاب في مكان واحد</p>
+                <Link href="/dashboard"><ui.Button variant="primary">الرئيسية</ui.Button></Link>
+              </div>
+            </ui.Card>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col">
+            <div className="flex-1 overflow-hidden">
+              <div className="h-full flex flex-col">
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-border/30 bg-paper/30">
+                                  <button onClick={() => setSelectedConv(null)} className="p-1 rounded-lg hover:bg-paper/30">
+                                    <X className="w-5 h-5 text-slate-400" />
+                                  </button>
+                                  <h2 className="font-semibold text-ink flex-1">محادثة مع المستخدم</h2>
+                                  <ui.Badge variant="info">مفتوح</ui.Badge>
+                                  <button className="p-2 rounded-lg hover:bg-paper/30 text-slate-400">
+                                    <Paperclip className="w-5 h-5" />
+                                  </button>
+                                </div>
+
+                                <div id="messages-list" className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: "calc(100vh - 200px)" }}>
+                                  {msgLoading ? (
+                                    <div className="space-y-3">{[1,2,3,4].map(i => <ui.Skeleton key={i} className="h-16 w-full" />)}</div>
+                  ) : messages.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                      <p className="text-lg font-semibold">لا توجد رسائل</p>
+                      <p className="text-sm mt-1">ابدأ المحادثة بإرسال رسالة</p>
+                    </div>
+                  ) : (
+                    messages.map((msg: any) => (
+                      <div key={msg.id} className={`flex ${msg.sender_id === user.id ? "justify-end" : "justify-start"}`}>
+                                              <ui.Card className="max-w-[70%] rounded-2xl px-4 py-2 shadow-sm">
+                                                <div className="text-sm text-ink">{msg.body}</div>
+                                                <div className="text-[10px] text-slate-400 mt-1">
+                                                  {new Date(msg.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+                                                  {!msg.is_deleted && <span className="text-slate-300">•</span>}
+                                                  {msg.is_deleted && <span className="text-slate-300">(حذفت)</span>}
+                                                </div>
+                                              </ui.Card>
+                                            </div>
+                    ))
+                  )}
+                </div>
+
+                <form
+                  id="message-composer"
+                  onSubmit={handleSend}
+                  className="border-t border-border/30 p-4 bg-paper/30"
+                >
+                  <div className="flex gap-3">
+                    <div className="flex-1 relative">
+                      <textarea
+                        id="message-input"
+                        placeholder="اكتب رسالتك… (Ctrl+Enter لإرسال)"
+                        className="w-full min-h-[50px] max-h-[120px] resize-y p-3 border border-border/30 rounded-xl text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                        rows={2}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="p-3 rounded-xl border border-border/30 hover:bg-paper/30 cursor-pointer">
+                        <Paperclip className="w-5 h-5 text-slate-400" />
+                        <input id="file-input" type="file" className="hidden" accept="image/*,.pdf,.txt,.doc,.docx,.mp4" />
+                      </label>
+                      <ui.Button type="submit" disabled={!draft.trim()} className="bg-amber-500 hover:bg-amber-600 text-white">
+                        <Send className="w-4 h-4" />
+                      </ui.Button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
