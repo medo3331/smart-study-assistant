@@ -65,7 +65,6 @@ export async function GET(req: Request) {
       success: true,
       profiles: results.map((p: any) => ({
         profile_id: p.profile_id,
-        user_id: p.user_id,
         display_name: p.display_name,
         avatar_url: p.avatar_url,
         university: p.university,
@@ -75,6 +74,7 @@ export async function GET(req: Request) {
         interests: p.interests,
         bio: p.bio,
         is_visible: p.is_visible,
+        match_score: p.match_score,
       })),
       pagination: {
         limit,

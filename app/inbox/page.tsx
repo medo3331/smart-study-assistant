@@ -40,6 +40,8 @@ export default function InboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [draft, setDraft] = useState("");
+  const [inboxRequests, setInboxRequests] = useState<any[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
 
   const loadConversations = async (q?: string) => {
     setLoading(true);
@@ -166,8 +168,22 @@ export default function InboxPage() {
     return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
   });
 
+  // Load message requests
+  const loadMessageRequests = async () => {
+    try {
+      const res = await fetch("/api/messages/requests");
+      const data = await res.json();
+      if (data.success) {
+        setInboxRequests(data.requests || []);
+      }
+    } catch (e) {
+      // Ignore errors - fallback to empty
+    }
+  };
+
   useEffect(() => {
     loadConversations(searchQuery);
+    loadMessageRequests();
   }, [category, searchQuery]);
 
   const handleSearch = (query: string) => {
@@ -197,15 +213,20 @@ export default function InboxPage() {
               <div className="absolute left-0 right-0 top-full mt-1 bg-paper border border-border rounded-xl shadow-xl overflow-hidden">
                 {userSearchResults.map((u: any) => (
                   <button
-                    key={u.id}
-                    onClick={() => startConversation(u.id)}
+                    key={u.profile_id}
+                    onClick={() => {
+                      // Open discover page with search query pre-filled after selection
+                      startConversation(u.profile_id);
+                    }}
                     className="w-full px-4 py-3 text-right hover:bg-paper/50 flex items-center gap-3"
                   >
                     <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white text-sm font-bold">
-                      {u.name?.charAt(0) || "?"}
+                      {u.display_name?.charAt(0) || "?"}
                     </div>
-                    <div className="text-sm text-ink">{u.name}</div>
-                    <div className="text-xs text-slate-400">{u.email}</div>
+                    <div className="text-sm text-ink">{u.display_name}</div>
+                    {u.university && (
+                      <div className="text-xs text-slate-400 truncate">{u.university}</div>
+                    )}
                   </button>
                 ))}
                 {userSearchLoading && (
@@ -224,16 +245,16 @@ export default function InboxPage() {
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4].map(i => <ui.Skeleton key={i} className="h-20 w-full" />)}
-                          </div>
-                        ) : sortedConversations.length === 0 ? (
-                          <div className="text-center py-8 text-slate-400">
-                            <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                            <p className="text-sm">لا توجد محادثات</p>
-                            <p className="text-xs mt-1">ابدأ محادثة جديدة للاتصال</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            {sortedConversations.map((conv, i) => (
+            </div>
+          ) : sortedConversations.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">لا توجد محادثات</p>
+              <p className="text-xs mt-1">ابدأ محادثة جديدة للاتصال</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {sortedConversations.map((conv, i) => (
                 <button
                   key={conv.id}
                   onClick={() => loadConversation(conv.id)}
@@ -268,6 +289,77 @@ export default function InboxPage() {
             </div>
           )}
         </div>
+
+        {/* Message Requests Section */}
+        {requestsLoading ? (
+          <div className="px-4 py-2">
+            <ui.Skeleton className="h-24 w-full" />
+          </div>
+        ) : inboxRequests.length > 0 ? (
+          <div className="px-4 py-2 border-t border-border/30">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">طلبات الدخول</h3>
+            <div className="space-y-2">
+              {inboxRequests.map((req: any) => (
+                <div key={req.id} className="bg-paper/30 rounded-xl p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-bold">
+                        {req.sender_id?.slice(0, 2)}
+                      </div>
+                      <span className="text-sm text-ink truncate">مرسل الطلب</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        req.status === "pending" ? "bg-yellow-500/20 text-yellow-600" :
+                        req.status === "accepted" ? "bg-emerald-500/20 text-emerald-600" :
+                        req.status === "rejected" ? "bg-red-500/20 text-red-600" :
+                        req.status === "canceled" ? "bg-gray-500/20 text-gray-600" :
+                        "bg-gray-500/20 text-gray-600"
+                      }`}>
+                        {req.status === "pending" ? "قيد الانتظار" :
+                         req.status === "accepted" ? "مقبول" :
+                         req.status === "rejected" ? "مرفوض" :
+                         req.status === "canceled" ? "ملغي" : "منتهي"}
+                      </span>
+                      {req.status === "pending" && (
+                        <>
+                          <button
+                            onClick={async () => {
+                              setRequestsLoading(true);
+                              const res = await fetch(`/api/messages/requests/${req.id}/accept`, { method: "POST" });
+                              const data = await res.json();
+                              if (data.success) {
+                                setInboxRequests(inboxRequests.filter(r => r.id !== req.id));
+                              }
+                              setRequestsLoading(false);
+                            }}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600"
+                          >
+                            قبول
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setRequestsLoading(true);
+                              const res = await fetch(`/api/messages/requests/${req.id}/reject`, { method: "POST" });
+                              const data = await res.json();
+                              if (data.success) {
+                                setInboxRequests(inboxRequests.filter(r => r.id !== req.id));
+                              }
+                              setRequestsLoading(false);
+                            }}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600"
+                          >
+                            رفض
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="p-4 border-t border-border/30">
           <button
