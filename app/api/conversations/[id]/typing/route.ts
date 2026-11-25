@@ -123,7 +123,7 @@ export async function POST(
       user.id,
       user.id,
       user.id, // username — in production, fetch from user profiles
-      is_typing,
+      is_typing ?? false,
     );
 
     return NextResponse.json({
