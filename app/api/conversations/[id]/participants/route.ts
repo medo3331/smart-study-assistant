@@ -26,6 +26,12 @@ export async function POST(
       role?: string;
     };
 
+    // Support for group conversation participant management
+    const { action, participant_ids } = body as {
+      action?: "add" | "remove";
+      participant_ids?: string[];
+    };
+
     if (!new_participant_ids || !Array.isArray(new_participant_ids)) {
       return NextResponse.json({ success: false, error: "new_participant_ids is required." }, { status: 400 });
     }
@@ -42,68 +48,87 @@ export async function POST(
     }
 
     if (conversation.status !== "active") {
-      return NextResponse.json({ success: false, error: "Cannot add participants to archived/closed conversation." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Cannot modify participants in non-active conversation." }, { status: 400 });
     }
 
-    // User must be owner/administrator to add participants
-    const { data: currentParticipant, error: curPartError } = await serverClient
+    // Verify current user is owner, admin, or moderator
+    const { data: selfParticipant, error: partError } = await serverClient
       .from("conversation_participants")
       .select("role")
       .eq("conversation_id", params.id)
       .eq("participant_id", user.id)
       .single();
 
-    if (curPartError || !currentParticipant) {
-      return NextResponse.json({ success: false, error: "You are not a participant of this conversation." }, { status: 403 });
+    if (partError || !selfParticipant) {
+      return NextResponse.json({ success: false, error: "You are not a participant." }, { status: 403 });
     }
 
-    const allowedRoles = ["owner", "admin", "moderator"];
-    if (currentParticipant.role !== "owner" && allowedRoles.includes(currentParticipant.role)) {
-      // moderators and admins can add participants
-    } else {
-      return NextResponse.json({ success: false, error: "Only conversation owner or admins can add participants." }, { status: 403 });
+    if (!["owner", "admin", "moderator"].includes(selfParticipant.role)) {
+      return NextResponse.json({ success: false, error: "Only owner, admin, or moderator can manage participants." }, { status: 403 });
     }
 
-    // Validate new participants exist
-    if (new_participant_ids.length > 0) {
-      const { data: existingUsers, error: userErr } = await serverClient
-        .from("auth.users")
-        .select("id")
-        .in("id", new_participant_ids);
-
-      if (userErr) {
-        console.error("[conversations] POST participants validate", userErr);
-        return NextResponse.json({ success: false, error: "Failed to validate participants." }, { status: 500 });
+    // If action is specified, handle group participant management
+    if (action === "add" && participant_ids) {
+      // Add participants to group conversation
+      const validParticipants = [];
+      for (const pid of participant_ids) {
+        const { data: u, error: e } = await serverClient
+          .from("auth.users")
+          .select("id")
+          .eq("id", pid)
+          .single();
+        if (e || !u) {
+          return NextResponse.json({ success: false, error: `User ${pid} not found or inactive.` }, { status: 400 });
+        }
+        validParticipants.push(pid);
       }
 
-      const validIds = existingUsers?.map((u: any) => u.id) ?? [];
-      const invalidIds = new_participant_ids.filter((id) => !validIds.includes(id));
-      if (invalidIds.length > 0) {
-        // Only return first invalid for security (avoid user enumeration)
-        return NextResponse.json({ success: false, error: "One or more recipients do not exist." }, { status: 400 });
+      const inserts = validParticipants.map((pid) => ({
+        conversation_id: params.id,
+        participant_id: pid,
+        role: "member",
+        is_archived: false,
+        is_muted: false,
+        joined_at: new Date().toISOString(),
+      }));
+
+      const { error: partError } = await serverClient
+        .from("conversation_participants")
+        .insert(inserts);
+
+      if (partError) {
+        console.error("[conversations] POST participants add", partError);
+        return NextResponse.json({ success: false, error: "Failed to add participants." }, { status: 500 });
       }
+
+      return NextResponse.json({
+        success: true,
+        action: "add",
+        added: validParticipants,
+      });
     }
 
-    // Add participants
-    const participantsToAdd = new_participant_ids.map((id) => ({
-      conversation_id: params.id,
-      participant_id: id,
-      role: role || "member",
-      is_archived: false,
-      is_muted: false,
-      joined_at: new Date().toISOString(),
-    }));
+    if (action === "remove" && participant_ids) {
+      // Remove participants from group conversation
+      for (const pid of participant_ids) {
+        const { error: delError } = await serverClient
+          .from("conversation_participants")
+          .delete()
+          .eq("conversation_id", params.id)
+          .eq("participant_id", pid);
 
-    const { error: partError } = await serverClient
-      .from("conversation_participants")
-      .insert(participantsToAdd);
+        if (delError) {
+          console.error("[conversations] POST participants remove", delError);
+          return NextResponse.json({ success: false, error: `Failed to remove user ${pid}.` }, { status: 500 });
+        }
+      }
 
-    if (partError) {
-      console.error("[conversations] POST participants", partError);
-      return NextResponse.json({ success: false, error: "Failed to add participants." }, { status: 500 });
+      return NextResponse.json({
+        success: true,
+        action: "remove",
+        removed: participant_ids,
+      });
     }
-
-    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[conversations] POST participants", error);
     return NextResponse.json({ success: false, error: "Unexpected error." }, { status: 500 });
