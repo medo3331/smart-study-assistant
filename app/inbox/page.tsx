@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import * as ui from "../../components/ui";
 import SupportSection from "../../components/communication/SupportSection";
-import { Search, MessageCircle, Send, Paperclip, X, User as UserIcon } from "lucide-react";
+import { Search, MessageCircle, Send, Paperclip, X, User as UserIcon, Plus } from "lucide-react";
 import Link from "next/link";
 
 type Conversation = {
@@ -169,6 +169,13 @@ export default function InboxPage() {
     return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
   });
 
+  // === NEW CONVERSATION MODAL STATE ===
+  const [isNewConvOpen, setIsNewConvOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<"name" | "mag_id">("name");
+  const [magIdInput, setMagIdInput] = useState("");
+  const [magIdLoading, setMagIdLoading] = useState(false);
+  const [magIdResult, setMagIdResult] = useState<any>(null);
+
   // Load message requests
   const loadMessageRequests = async () => {
     try {
@@ -194,6 +201,32 @@ export default function InboxPage() {
       setTimeout(() => searchUsers(query), 300);
     } else {
       setUserSearchResults([]);
+    }
+  };
+
+  // === MAG ID LOOKUP ===
+  const handleMagIdLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!magIdInput.trim()) return;
+    setMagIdLoading(true);
+    setMagIdResult(null);
+    try {
+      const res = await fetch(`/api/users/mag-lookup?mag_id=${encodeURIComponent(magIdInput.trim())}`);
+      const data = await res.json();
+      if (data.success && data.user) {
+        setMagIdResult(data.user);
+        setSearchTarget("name"); // Switch to name search mode after lookup
+        // Open the name search with the found user's profile
+        setTimeout(() => {
+          // The search box will show the found user
+        }, 100);
+      } else {
+        setMagIdResult(null); // Generic "not found" (no user enumeration)
+      }
+    } catch {
+      setMagIdResult(null); // Generic error (no user enumeration)
+    } finally {
+      setMagIdLoading(false);
     }
   };
 
@@ -238,41 +271,180 @@ export default function InboxPage() {
           </div>
         </div>
 
-        <div className="border-b border-border/30">
-          <div className="flex flex-wrap gap-1 p-1 bg-paper/30 rounded-xl">
-            <button
-              onClick={() => setCategory("inbox")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                category === "inbox"
-                  ? "bg-paper-2 text-ink"
-                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
-              }`}
-            >
-              💬 الدردشة
-            </button>
-            <button
-              onClick={() => setCategory("requests")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                category === "requests"
-                  ? "bg-paper-2 text-ink"
-                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
-              }`}
-            >
-              📥 طلبات المراسلة
-            </button>
-            <button
-              onClick={() => setCategory("support")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                category === "support"
-                  ? "bg-paper-2 text-ink"
-                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
-              }`}
-            >
-              🛠️ الدعم الفني
-            </button>
-          </div>
+        <div className="flex flex-wrap gap-1 p-1 bg-paper/30 rounded-xl border border-border/30">
+          <button
+            onClick={() => setIsNewConvOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1.5 shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            محادثة جديدة
+          </button>
+          <button
+            onClick={() => setCategory("inbox")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${`${category === "inbox" ? "bg-paper-2 text-ink" : "text-ink-soft hover:text-ink hover:bg-paper/50"}`}`}
+          >
+            💬 الدردشة
+          </button>
+          <button
+            onClick={() => setCategory("requests")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${`${category === "requests" ? "bg-paper-2 text-ink" : "text-ink-soft hover:text-ink hover:bg-paper/50"}`}`}
+          >
+            📥 طلبات المراسلة
+          </button>
+          <button
+            onClick={() => setCategory("support")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${`${category === "support" ? "bg-paper-2 text-ink" : "text-ink-soft hover:text-ink hover:bg-paper/50"}`}`}
+          >
+            🛠️ الدعم الفني
+          </button>
         </div>
-        <div className="flex-1 overflow-y-auto py-4">
+        {isNewConvOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-paper border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-screen overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-border/30">
+                <h2 className="text-lg font-semibold text-ink">محادثة جديدة</h2>
+                <button
+                  onClick={() => setIsNewConvOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-paper/50 text-ink-soft"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Search Mode Selection */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => { setSearchTarget("name"); setMagIdInput(""); setMagIdResult(null); }}
+                    className={`p-3 rounded-xl border text-right transition-colors ${searchTarget === "name" ? "border-blue-500 bg-blue-50/50" : "border-border/30 hover:border-border"}`}
+                  >
+                    <div className="text-sm font-medium text-ink">بحث بالاسم</div>
+                    <div className="text-xs text-slate-400 mt-0.5">البحث بأسم المستخدم</div>
+                  </button>
+                  <button
+                    onClick={() => { setSearchTarget("mag_id"); setMagIdInput(""); setMagIdResult(null); }}
+                    className={`p-3 rounded-xl border text-right transition-colors ${searchTarget === "mag_id" ? "border-blue-500 bg-blue-50/50" : "border-border/30 hover:border-border"}`}
+                  >
+                    <div className="text-sm font-medium text-ink">بحث بـ MAG ID</div>
+                    <div className="text-xs text-slate-400 mt-0.5">البحث بالرقم الداخلي (آمن)</div>
+                  </button>
+                </div>
+
+                {/* Search Input */}
+                {searchTarget === "name" ? (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <ui.Input
+                      placeholder="ابحث عن طالب بالاسم…"
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); }}
+                      className="pl-9"
+                    />
+                    {searchQuery && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-paper border border-border rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto z-50">
+                        {userSearchLoading ? (
+                          <div className="px-4 py-3 text-xs text-slate-400">جاري البحث...</div>
+                        ) : userSearchResults.length > 0 ? (
+                          userSearchResults.map((u: any) => (
+                            <button
+                              key={u.profile_id}
+                              onClick={() => {
+                                setSearchQuery(u.display_name);
+                                startConversation(u.profile_id);
+                                setIsNewConvOpen(false);
+                              }}
+                              className="w-full px-4 py-3 text-right hover:bg-paper/50 flex items-center gap-3"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white text-sm font-bold">
+                                {u.display_name?.charAt(0) || "?"}
+                              </div>
+                              <div className="text-sm text-ink">{u.display_name}</div>
+                              {u.university && (
+                                <div className="text-xs text-slate-400 truncate">{u.university}</div>
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-4 py-3 text-xs text-slate-400">لم يتم العثور على مستخدمين</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <form onSubmit={handleMagIdLookup} className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <ui.Input
+                      placeholder="أدخل MAG ID... (private)"
+                      value={magIdInput}
+                      onChange={(e) => setMagIdInput(e.target.value)}
+                      className="pl-9"
+                      type="password"
+                    />
+                    <button
+                      type="submit"
+                      disabled={magIdLoading}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {magIdLoading ? "جاري..." : "بحث"}
+                    </button>
+                    {magIdResult && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-paper border border-border rounded-xl shadow-xl overflow-hidden">
+                        <div className="px-4 py-3 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white text-sm font-bold">
+                            {magIdResult.display_name?.charAt(0) || "?"}
+                          </div>
+                          <div className="text-sm text-ink">
+                            <div className="font-medium">{magIdResult.display_name}</div>
+                            <div className="text-xs text-slate-400">{magIdResult.university} · {magIdResult.faculty}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            startConversation(magIdResult.profile_id);
+                            setIsNewConvOpen(false);
+                          }}
+                          className="w-full px-4 py-3 text-right hover:bg-paper/50 flex items-center gap-3"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-sm font-bold">
+                            ✓
+                          </div>
+                          <div className="text-sm text-ink">إرسال طلب مراسلة إلى {magIdResult.display_name}</div>
+                        </button>
+                      </div>
+                    )}
+                  </form>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 p-4 border-t border-border/30">
+                <button
+                  onClick={() => setIsNewConvOpen(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-ink-soft hover:bg-paper/50"
+                >
+                  إغلاق
+                </button>
+                <button
+                  onClick={() => {
+                    if (searchQuery && userSearchResults.length > 0) {
+                      const selected = userSearchResults[0];
+                      startConversation(selected.profile_id);
+                      setIsNewConvOpen(false);
+                    } else if (magIdResult) {
+                      startConversation(magIdResult.profile_id);
+                      setIsNewConvOpen(false);
+                    } else {
+                      setIsNewConvOpen(false);
+                    }
+                  }}
+                  disabled={!searchQuery && !magIdResult}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  إرسال طلب مراسلة
+                </button>
+              </div>
+            </div>
+          </div>
+        )}        <div className="flex-1 overflow-y-auto py-4">
           <div className="px-4 mb-4">
             <h2 className="text-sm font-semibold text-ink">الرسائل</h2>
           </div>
