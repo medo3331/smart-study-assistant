@@ -153,6 +153,8 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
   {
     // مدرج في كتالوج الحساب لكنه يردّ 404 فعليًا (غير مفعّل للحساب حاليًا).
     // ممنوع تفعيله قبل إعادة التحقق — الراوتر يتخطاه ديناميكيًا وهو disabled.
+    // اتشال كمان من كل مصفوفات TASK_MODEL_PREFERENCE — التفضيلات للموديلات
+    // المفعّلة فقط (بعد إعادة التحقق يترجّع للمصفوفات يدويًا لو لزم).
     id: "deepseek-ai/deepseek-v4-flash-0731",
     provider: "nvidia",
     displayName: "DeepSeek V4 Flash (عبر NVIDIA)",

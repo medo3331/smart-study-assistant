@@ -155,6 +155,12 @@ const TASK_CAPABILITIES: Readonly<Record<AiTaskType, AiCapability[]>> = {
  * مصفوفة تفضيل موديلات Task 3A — ترتيب التجربة الفعلي للمهام الاستراتيجية.
  * دي تفضيلات مش تصاريح: الموديل بيتخطى لو موقوف أو غير صحي أو مش مؤهل.
  * المفتاح = معرّف موديل مسجّل في MODEL_REGISTRY (بيترمى خطأ لو اتغيّر غلط).
+ *
+ * ⚠️ **موديل معطّل (`enabled: false`) مكانُه مش هنا أصلًا**: الراوتر بيتخطّاه
+ *    ديناميكيًا، فالوجود في المصفوفة بيضيّع محاولة فاشلة قبل المرشّح التاني —
+ *    والأساسي تحديدًا لازم يكون مفعّل فعلاً. (deepseek-v4-flash اتشال من كل
+ *    المصفوفات على الأساس ده — ظل مسجّل في MODEL_REGISTRY بس معطّل لحد
+ *    ما يتحقق من جديد عبر scripts/verify-nvidia-models.mjs.)
  */
 export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]>> = {
   /**
@@ -168,8 +174,8 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   chat: [
     "openai/gpt-oss-20b",             // Groq — سريع (من غير استدلال)
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3-super-120b-a12b", // احتياطي أقوى عند NVIDIA قبل الرجوع لـ Groq
     "openai/gpt-oss-120b",            // Groq كمان احتياطي (استدلال)
-    "deepseek-ai/deepseek-v4-flash-0731",
   ],
   /**
    * 🔥 **توليد الامتحانات** — سريع + JSON موثوق (و**مش** استدلال).
@@ -199,17 +205,14 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
     "nvidia/nemotron-3.5-lightning-30b-a3b",
   ],
   coding: [
-    // ⚠️ **`deepseek-v4-flash` اتشال من.Primary**: الموديل ده معطّل في
-    //    السجل (بيرجّع 404 فعليًا على حساب NVIDIA — اتأكد مرتين).
-    //    الأساسي لازم يكون موديل **مفعّل** فعلاً؛ وإلا كل نداء بيبدأ
-    //   Trying موديل محجوب وبيستهلك وقت قبل ما ينتقل للتاني.
+    // ⚠️ `deepseek-v4-flash` اتشال — معطّل (404 فعليًا، اتأكد مرتين).
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "openai/gpt-oss-120b",            // Groq كمان احتياطي
-    "deepseek-ai/deepseek-v4-flash-0731",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   agent: [
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "deepseek-ai/deepseek-v4-flash-0731",
+    "nvidia/nemotron-3-super-120b-a12b",
     "openai/gpt-oss-120b",
   ],
   // B4.0.2g-d1: تفضيلات المهام المنتقلة من gemini — مفيش أي موديل Gemini هنا.
@@ -218,20 +221,23 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   flashcards: [
     "openai/gpt-oss-20b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   mind_map: [
     "openai/gpt-oss-20b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   data_analysis: [
     "openai/gpt-oss-20b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   // تجميعة reasoning: gpt-oss-120b أولًا (نصوص + استدلال — curriculum وخطط).
   study_plan: [
     "openai/gpt-oss-120b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "deepseek-ai/deepseek-v4-flash-0731",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   lesson_analysis: [
     "openai/gpt-oss-120b",
@@ -256,12 +262,12 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   tutor: [
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "openai/gpt-oss-120b",            // Groq ثانياً حسب المصفوفة
-    "deepseek-ai/deepseek-v4-flash-0731",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   quiz: [
     "openai/gpt-oss-20b",             // Groq أولاً — والمهمة محتاجة structured_output
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "deepseek-ai/deepseek-v4-flash-0731",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   rag_embeddings: [
     "nvidia/nemotron-3-embed-1b",     // الوحيد المسجّل لمهمة الـ embeddings
