@@ -83,3 +83,11 @@ dev.log
 
 backups/
 *.dump
+
+# artifacts ملفات تشغيل/اختبار لمرة واحدة — خارج Git
+chunks.json
+insert-chunks.sql
+stages_resp.json
+test-insert-first*.sql
+test-insert-first*.json
+*.bak
