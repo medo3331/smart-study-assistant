@@ -43,6 +43,10 @@ async function listModels() {
     const data = await res.json();
     const ids = Array.isArray(data?.data) ? data.data.map((m) => m?.id).filter(Boolean) : [];
     console.log(`/v1/models -> HTTP 200، عدد الموديلات المتاحة: ${ids.length}`);
+    // تشخيص: الكتالوج بيتغيّر من NVIDIA — بنعرض المرشّحين المتعلّقين عشان
+    // نعرف "غير موجود في قائمة حسابك" تغيّر حقيقي ولا مرشّح اتسمّى غيره.
+    const relevant = ids.filter((id) => /nemotron|embed|deepseek/i.test(id));
+    if (relevant.length) console.log(`  متاح من عايلة المرشّحين: ${relevant.join(" · ")}`);
     return new Set(ids);
   } catch (error) {
     console.log(`/v1/models -> NETWORK ERROR (${error?.cause?.code ?? error?.name ?? "unknown"})`);
@@ -62,8 +66,10 @@ async function probeChat(modelId) {
       body: JSON.stringify({
         model: modelId,
         messages: [{ role: "user", content: 'Say "OK"' }],
-        max_tokens: 8,
         temperature: 0,
+        // ⚠️ من غير قيد max_tokens — موديلات الاستدلال (nemotron) لو اتقيدت
+        //    بميزانية صغيرة بتحرقها كلها في التفكير و`content` بترجع فاضية
+        //    (نفس ملاحظة lib/ai/nvidia.ts). الـ production بيبعت 2048+ أو مفيش.
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -74,8 +80,12 @@ async function probeChat(modelId) {
     }
     const body = await res.json();
     const content = body?.choices?.[0]?.message?.content;
+    const reasoning = body?.choices?.[0]?.message?.reasoning_content;
     const ok = typeof content === "string" && content.trim().length > 0;
-    console.log(`  ${modelId} -> HTTP 200 (${latency}ms) ${ok ? "VALID ✓" : "EMPTY_RESPONSE ✗"}`);
+    // تشخيص: تفكير من غير محتوى = نفس سلوك الـ app (فشل EMPTY_RESPONSE) —
+    // بس بنميّزه هنا عشان ماتتلخبطش مع موديل ميّت.
+    const note = !ok && typeof reasoning === "string" && reasoning.trim() ? " REASONING_ONLY (فكّر من غير ما يرد)" : "";
+    console.log(`  ${modelId} -> HTTP 200 (${latency}ms) ${ok ? "VALID ✓" : `EMPTY_RESPONSE ✗${note}`}`);
     return ok;
   } catch (error) {
     const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
