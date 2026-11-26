@@ -293,6 +293,47 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     freeEndpoint: true,
     enabled: false, // ← مش موجود في الكتالوج الحي (2026-11-06)
   },
+  {
+    // مرشّح لمهام الاستدلال الثقيلة (الخطط/الشرح الطويل/المراجع) — 280B MoE / 14B active
+    // وسياق 1.02M مع structured_outputs. لسه محتاج بروب حي قبل التفعيل:
+    // شغّل scripts/verify-openrouter-models.mjs بعد إضافته للائحة البروب.
+    id: "baidu/ernie-5.5-flash-preview:free",
+    provider: "openrouter",
+    displayName: "ERNIE 5.5 Flash Preview (OpenRouter, Free)",
+    capabilities: ["text", "reasoning", "structured_output", "streaming"],
+    contextWindow: 1_024_000,
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: false, // ← ممنوع التفعيل قبل التحقق الحي (D-REAL-008)
+  },
+  {
+    // مرشّح للسياق الضخم + الرؤية — hybrid reasoning وحدّ 200 صورة/طلب.
+    // الـ contextWindow بالرقم مش مؤكد → اتساب فاضي لحد ما البروب الحي يأكده.
+    id: "inclusionai/ling-3.2-flash:free",
+    provider: "openrouter",
+    displayName: "Ling 3.2 Flash (OpenRouter, Free)",
+    capabilities: ["text", "vision", "reasoning", "streaming"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: false, // ← ممنوع التفعيل قبل التحقق الحي (D-REAL-008)
+  },
+  {
+    // مرشّح للكود Agentic — مبني على DeepSeek V4.1 Flash. البروب الحي رجّع 429/فاضي
+    // لسه → محتاج إعادة تشغيل السكربت بعد إصلاح max_tokens (commit 31f11d6).
+    id: "particle-ai/particle-1:free",
+    provider: "openrouter",
+    displayName: "Particle 1 (OpenRouter, Free)",
+    capabilities: ["text", "coding", "streaming"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: false, // ← ممنوع التفعيل قبل التحقق الحي (D-REAL-008)
+  },
 ];
 
 const BY_ID = new Map(MODEL_REGISTRY.map((model) => [model.id, model]));
