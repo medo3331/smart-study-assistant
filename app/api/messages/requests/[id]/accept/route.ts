@@ -26,7 +26,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Authentication required." }, { status: 401 });
     }
 
-    // 1. Fetch the incoming request
+    // 1. Fetch the incoming request (verify receiver)
     const { data: request, error: reqError } = await serverClient
       .from("message_requests")
       .select("id, sender_id, receiver_id, status, created_at")
@@ -39,82 +39,65 @@ export async function POST(
     }
 
     if (request.status !== "pending") {
-      return NextResponse.json({ success: false, error: "Request is no longer pending." }, { status: 400 });
+      // Idempotency: request already accepted/rejected → return existing conversation
+      const { data: existingConvo, error: convError } = await serverClient
+        .from("conversations")
+        .select("id, title, status")
+        .eq("user_a_id", request.sender_id)
+        .eq("user_b_id", user.id)
+        .eq("status", "active")
+        .single();
+
+      if (convError || !existingConvo) {
+        return NextResponse.json({ success: false, error: "Request is no longer pending." }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        request: { id: params.id, status: request.status },
+        conversation: { id: existingConvo.id, title: existingConvo.title, status: existingConvo.status },
+      }, { status: 200 });
     }
 
-    // 2. Check sender exists
-    const { data: sender, error: senderError } = await serverClient
-      .from("auth.users")
-      .select("id")
-      .eq("id", request.sender_id)
-      .single();
+    // 2. Accept the request (atomic via RPC)
+    const { data, error: rpcError } = await serverClient.rpc("public.accept_message_request", {
+      p_request_id: params.id,
+      p_user_id: user.id,
+    });
 
-    if (senderError || !sender) {
-      return NextResponse.json({ success: false, error: "Sender not found." }, { status: 404 });
-    }
+    if (rpcError || !data || data.length === 0) {
+      // Check if the request was already processed (idempotent)
+      const { data: existingConvo, error: convError } = await serverClient
+        .from("conversations")
+        .select("id, title, status")
+        .eq("user_a_id", request.sender_id)
+        .eq("user_b_id", user.id)
+        .eq("status", "active")
+        .single();
 
-    // 3. Create conversation and participants
-    // Owner = current user (receiver)
-    const { data: conversation, error: convError } = await serverClient
-      .from("conversations")
-      .insert({
-        title: `${sender.full_name || "مستخدم"}: مراسلة مستقبلية`,
-        status: "active",
-      })
-      .select("*")
-      .single();
+      if (convError || !existingConvo) {
+        console.error("[accept] RPC failed:", rpcError);
+        return NextResponse.json({ success: false, error: "Failed to accept request." }, { status: 500 });
+      }
 
-    if (convError) {
-      console.error("[message_requests] Accept conversation creation error:", convError);
-      return NextResponse.json({ success: false, error: "Failed to create conversation." }, { status: 500 });
-    }
-
-    // Add participants
-    const participants = [
-      { conversation_id: conversation.id, participant_id: user.id, role: "member" },
-      { conversation_id: conversation.id, participant_id: request.sender_id, role: "member" },
-    ];
-
-    const { error: partError } = await serverClient
-      .from("conversation_participants")
-      .insert(participants);
-
-    if (partError) {
-      console.error("[message_requests] Accept participant insert error:", partError);
-      return NextResponse.json({ success: false, error: "Failed to add participants." }, { status: 500 });
-    }
-
-    // 4. Mark request as accepted
-    const { error: updateError } = await serverClient
-      .from("message_requests")
-      .update({
-        status: "accepted",
-        responded_at: new Date().toISOString(),
-        responded_by: user.id,
-      })
-      .eq("id", params.id);
-
-    if (updateError) {
-      console.error("[message_requests] Accept update error:", updateError);
-      return NextResponse.json({ success: false, error: "Failed to update request." }, { status: 500 });
+      return NextResponse.json({
+        success: true,
+        request: { id: params.id, status: request.status },
+        conversation: { id: existingConvo.id, title: existingConvo.title, status: existingConvo.status },
+      }, { status: 200 });
     }
 
     return NextResponse.json({
       success: true,
-      request: {
-        id: params.id,
-        status: "accepted",
-        responded_at: new Date().toISOString(),
-        responded_by: user.id,
-      },
+      request: { id: params.id, status: data[0].status || "accepted" },
       conversation: {
-        id: conversation.id,
-        title: conversation.title,
-        status: conversation.status,
+        id: data[0].conversation_id,
+        title: data[0].conversation_title,
+        status: data[0].status,
       },
     }, { status: 200 });
   } catch (error) {
-    console.error("[message_requests] Accept unexpected error:", error);
+    console.error("[message_requests] Accept error:", error);
     return NextResponse.json({ success: false, error: "Unexpected error." }, { status: 500 });
   }
 }
