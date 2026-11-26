@@ -49,9 +49,20 @@ import {
   type ThemeId,
 } from "@/theme/ThemeProvider";
 import { useReducedMotion } from "@/lib/useReducedMotion";
-import {
-  Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+
+/* ⚡ الأداء: recharts (~360KB غير مضغوط مع d3) كانت جزء من أول حزمة
+   لـ `/dashboard` وهي مجرد كروت تحت الطيّة. الكروت اتنقلت لملف منفصل
+   وبتتحمّل بعد الهيدريشن. المكوّنان بيرجّعوا `null` لو الداتا فاضية،
+   والـ placeholder بياخد نفس ارتفاع الكارت عشان مفيش layout shift. */
+const WheelBarChart = dynamic(() => import("./magic-wheel/WheelCharts").then((m) => m.WheelBarChart), {
+  ssr: false,
+  loading: () => <div className="h-36 w-full md:h-40" aria-hidden />,
+});
+const WheelDonutChart = dynamic(() => import("./magic-wheel/WheelCharts").then((m) => m.WheelDonutChart), {
+  ssr: false,
+  loading: () => <div className="h-36 w-36 shrink-0 md:h-40 md:w-40" aria-hidden />,
+});
 
 /* --------------------------------------------------------------------------
    ألوان الأفرع — وضع «الملون» بس (في باقي الثيمات الفرع بياخد لون الأكسنت).
@@ -559,30 +570,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </div>
             {activeChartData && activeChartData.length > 0 ? (
               <>
-                <div className="h-36 w-full md:h-40" dir="ltr">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activeChartData} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: colors.muted, fontSize: 9 }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis tick={{ fill: colors.muted, fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        cursor={{ fill: colors.rule, opacity: 0.35 }}
-                        contentStyle={{
-                          backgroundColor: colors.card,
-                          border: `1px solid ${colors.rule}`,
-                          borderRadius: 10,
-                          fontSize: 11,
-                          direction: "rtl",
-                        }}
-                      />
-                      <Bar dataKey="minutes" name="دقايق تركيز" radius={[3, 3, 0, 0]} fill={colors.accent} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <WheelBarChart data={activeChartData} colors={colors} />
                 {weeklyFocusHoursLabel && (
                   <p className="mt-2 font-mono text-[0.6rem]" style={{ color: "var(--muted)" }}>
                     الإجمالي: {weeklyFocusHoursLabel} — من جدول النشاط (activity_log)
@@ -607,48 +595,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </div>
             {subjectBreakdown && subjectBreakdown.length > 0 ? (
               <div className="flex items-center gap-4">
-                <div className="relative h-36 w-36 shrink-0 md:h-40 md:w-40" dir="ltr">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={subjectBreakdown}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius="58%"
-                        outerRadius="82%"
-                        paddingAngle={3}
-                        stroke={colors.card}
-                        strokeWidth={2}
-                        isAnimationActive={!reduced}
-                      >
-                        {subjectBreakdown.map((_, i) => (
-                          <Cell key={i} fill={BRANCH_COLORS[i % BRANCH_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: colors.card,
-                          border: `1px solid ${colors.rule}`,
-                          borderRadius: 10,
-                          fontSize: 11,
-                          direction: "rtl",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-lg font-extrabold md:text-xl" style={{ color: "var(--text)" }}>
-                      {Math.round(
-                        (subjectBreakdown.reduce((s, d) => s + d.completed, 0) /
-                          Math.max(1, subjectBreakdown.reduce((s, d) => s + d.value, 0))) * 100,
-                      )}
-                      %
-                    </span>
-                    <span className="font-mono text-[0.5rem] uppercase tracking-widest" style={{ color: "var(--muted)" }}>
-                      مكتمل
-                    </span>
-                  </div>
-                </div>
+                <WheelDonutChart data={subjectBreakdown} colors={colors} reduced={reduced} />
                 <ul className="min-w-0 flex-1 space-y-1.5" aria-label="اكتمال كل مادة">
                   {subjectBreakdown.slice(0, 6).map((d, i) => {
                     const pct = d.value ? Math.round((d.completed / d.value) * 100) : 0;

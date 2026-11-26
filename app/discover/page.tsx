@@ -79,18 +79,18 @@ export default function DiscoverPage() {
     }
   };
 
-  const handleSendRequest = async (profile: Profile) => {
+  const handleSendRequest = async (profileId: string) => {
     setSelectedProfile(null);
-    setSendingRequest(profile.profile_id);
+    setSendingRequest(profileId);
     try {
       const res = await fetch("/api/messages/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiver_profile_id: profile.profile_id, note: "مراسلة جديد" }),
+        body: JSON.stringify({ receiver_profile_id: profileId, note: "مراسلة جديد" }),
       });
       const data = await res.json();
       if (data.success) {
-        setResults(results.filter(r => r.profile_id !== profile.profile_id));
+        setResults(results.filter(r => r.profile_id !== profileId));
         // Refresh incoming requests
         const reqRes = await fetch("/api/messages/requests");
         const reqData = await reqRes.json();

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { MessageCircle, Search, CheckCircle, XCircle, Clock, X, ArrowLeft, User, Send, Paperclip } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import * as ui from "../../components/ui";
+import * as ui from "../../../components/ui";
 import Link from "next/link";
 
 type Request = {
   id: string;
   sender_id: string;
+  receiver_id: string;
   status: string;
   note: string | null;
   created_at: string;
@@ -78,10 +79,10 @@ export default function MessageRequestsPage() {
         const incoming = data.requests || [];
         setIncomingRequests(incoming);
 
-        // Also fetch outgoing requests via a different approach
-        const outgoing = incoming.filter((r: Request) => r.receiver_id === (await (await import("@/lib/supabase/client")).createClient().auth.getUser()).data?.user?.id);
-        // Actually, the API returns incoming requests only. We need to compute outgoing from there.
-        setOutgoingRequests([]);
+        // Compute outgoing requests: requests where user is the sender
+        const { data: { user } } = await (await import("@/lib/supabase/client")).createClient().auth.getUser();
+        const outgoing = incoming.filter((r: Request) => r.sender_id === user?.id);
+        setOutgoingRequests(outgoing);
       } else {
         setError(data.error || "Failed to load requests.");
       }
@@ -178,7 +179,10 @@ export default function MessageRequestsPage() {
       const data = await res.json();
       if (data.success) {
         setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
-        setRequestDetail(null);
+        setRequestDetail(prev => {
+          if (!prev) return null;
+          return { ...prev, status: "canceled" as const };
+        });
         loadRequests();
       } else {
         setDetailError(data.error || "Failed to cancel request.");
@@ -210,7 +214,7 @@ export default function MessageRequestsPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Link href="/inbox">
-              <ui.Button variant="ghost" size="sm">
+              <ui.Button variant="ghost">
                 <ArrowLeft className="w-4 h-4" />
                 رجوع
               </ui.Button>
@@ -382,7 +386,7 @@ export default function MessageRequestsPage() {
                   {req.status === "pending" && (
                     <div className="mt-4 flex gap-2">
                       <button
-                        onClick={() => setRequestDetail(req)}
+                        onClick={() => setRequestDetail({ ...req, status: req.status as Request["status"] } as Request)}
                         className="flex-1 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600"
                       >
                         <X className="w-4 h-4 inline mr-1" /> إلغاء
@@ -453,7 +457,7 @@ export default function MessageRequestsPage() {
                 <h4 className="text-lg font-semibold text-emerald-600">تم قبول الطلب</h4>
                 <p className="text-sm text-slate-400">أنت الآن في محادثة مع هذا المستخدم</p>
                 <Link href="/inbox">
-                  <ui.Button variant="primary" size="sm">
+                  <ui.Button variant="primary">
                     الانتقال إلى المحادثة
                   </ui.Button>
                 </Link>

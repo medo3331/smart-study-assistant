@@ -6,11 +6,8 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { LanguageProvider } from '../lib/i18n/LanguageProvider';
 import { AudioProvider } from '@/components/audio/AudioProvider';
 import { QuranAudioProvider } from '@/hooks/useQuranAudio';
-import { SupportWidget } from '@/components/SupportWidget';
-import NotificationBell from '@/components/NotificationBell';
-import AnnouncementToast from '@/components/AnnouncementToast';
+import { DeferredOverlays } from '@/components/layout/DeferredOverlays';
 import { ReferralBootstrap } from "@/components/ReferralBootstrap";
-import { FloatingAssistant } from '@/components/FloatingAssistant';
 import { UnifiedNavbar } from '@/components/UnifiedNavbar';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { JsonLd } from '@/components/JsonLd';
@@ -224,12 +221,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <UnifiedNavbar />
             {children}
           </QuranAudioProvider>
-              <SupportWidget />
-<NotificationBell />
-<AnnouncementToast />
+              {/* ودجتس عائمة (دعم/إشعارات/إعلانات/مساعد) — chunks منفصلة
+                  بتتحمّل بعد الترطيب بدل ما تدخل الحزمة المشتركة لكل الصفحات. */}
+              <DeferredOverlays />
               {/* لاقط تتبع الإحالات: ?ref= → localStorage → تسجيل أول دخول. null UI. */}
               <ReferralBootstrap />
-              <FloatingAssistant />
             </AudioProvider>
           </LanguageProvider>
         </ThemeProvider>

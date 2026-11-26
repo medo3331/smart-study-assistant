@@ -19,7 +19,7 @@ export async function POST(
 ) {
   try {
     const { createClient } = await import("@/lib/supabase/server");
-    const serverClient = createClient();
+    const serverClient = await createClient();
 
     const { data: { user }, error: authError } = await serverClient.auth.getUser();
     if (authError || !user) {

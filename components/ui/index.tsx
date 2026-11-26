@@ -15,3 +15,4 @@ export { Reveal } from "./Reveal";
 export { ScrollReveal } from "./ScrollReveal";
 export { AnimatedNumber } from "./AnimatedNumber";
 export { AvatarOrbit } from "./AvatarOrbit";
+export { MagiclyLoader } from "./MagiclyLoader";

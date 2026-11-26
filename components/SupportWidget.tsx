@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { OPEN_SUPPORT_EVENT } from "@/lib/support/open-support";
+
+/* مفتاح `openSupport` بقى في `lib/support/open-support.ts` عشان الصفحات اللي
+   محتاجة الزرار بس ماتشدّش كود الودجت (اللي بتتحمّل lazily من الـlayout).
+   إعادة التصدير دي بتحافظ على أي استيراد قديم من الملف ده. */
+export { openSupport } from "@/lib/support/open-support";
 
 // الرقم الافتراضي هو نفس واتساب التواصل الموجود في lib/site-links.ts.
 // تقدر تغيّره في Vercel بمتغير NEXT_PUBLIC_SUPPORT_WHATSAPP كرابط wa.me كامل.
@@ -26,18 +32,9 @@ const ISSUE_TYPES = [
 const MAX_DETAILS_CHARS = 1000;
 
 /**
- * بيفتح نافذة الدعم من أي مكان في التطبيق (مع تعبئة تلقائية للتفاصيل).
- *
- * الاستخدام: زرار «محتاج مساعدة؟» تحت رسائل الأخطاء — بيبلّغ الودجت عبر
- * custom event لأنها عايشة في الـ layout مش جنب الرسالة نفسها.
+ * ملاحظة: الزرار بيبعت الحدث عن طريق `openSupport()` من
+ * `lib/support/open-support.ts` — عشان الوحدتين مايبقوش محتاجين بعض.
  */
-export function openSupport(prefill = "") {
-  window.dispatchEvent(
-    new CustomEvent<{ prefill: string }>("ssa:open-support", {
-      detail: { prefill },
-    })
-  );
-}
 
 function whatsappLink(details: string) {
   const message = [
@@ -77,8 +74,8 @@ export function SupportWidget() {
       setError(null);
       if (prefill) setDetails(prefill.slice(0, MAX_DETAILS_CHARS));
     };
-    window.addEventListener("ssa:open-support", onOpen);
-    return () => window.removeEventListener("ssa:open-support", onOpen);
+    window.addEventListener(OPEN_SUPPORT_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_SUPPORT_EVENT, onOpen);
   }, []);
 
   // في الداشبورد الرئيسي (/dashboard) فيه زرار "اسأل ماجيكلي" (الشات بوت)
