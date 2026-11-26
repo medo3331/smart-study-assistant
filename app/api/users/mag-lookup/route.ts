@@ -51,7 +51,9 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const magId = url.searchParams.get("mag_id");
 
-    // Validate exact input
+    // Validate and normalize MAG ID format
+    // Expected format: MAG-XXXX-XXXX (uppercase, hyphenated)
+    const magIdPattern = /^MAG-[0-9]{4}-[0-9]{4}$/;
     if (!magId || typeof magId !== "string") {
       return NextResponse.json(
         { success: false, error: "MAG ID is required." },
@@ -59,30 +61,46 @@ export async function GET(req: Request) {
       );
     }
 
-    // Reject potentially dangerous input
-    if (magId.length < 6 || magId.length > 100) {
+    // Normalize: trim and uppercase
+    const normalizedMagId = magId.trim().toUpperCase();
+
+    // Validate exact format - no logs of MAG ID values
+    if (!magIdPattern.test(normalizedMagId)) {
       return NextResponse.json(
         { success: false, error: "Invalid MAG ID format." },
         { status: 400 }
       );
     }
 
-    // Rate limiting: simple in-memory counter (for app-level protection)
+    // ---- RATE LIMITING (server-side, in-memory) ----
+    // Safer limit: 3 requests per minute per user for exact account lookup.
+    // This prevents brute-force guessing of account codes.
     const rateLimitKey = `mag_lookup:${user.id}`;
-    const rateLimit = (global as any)?.rateLimit || {};
+    const rateLimit =
+      ((globalThis as unknown as { rateLimit?: Record<string, { count: number; timestamp: number }> })
+        .rateLimit) || {};
     const now = Date.now();
-    if (rateLimit[rateLimitKey] && rateLimit[rateLimitKey].count > 50) {
-      // Wait before resetting
-      if (now - rateLimit[rateLimitKey].timestamp < 60000) {
+    const windowMs = 60 * 1000; // 1 minute
+    const maxRequests = 3;
+
+    if (rateLimit[rateLimitKey]?.timestamp && now - rateLimit[rateLimitKey].timestamp < windowMs) {
+      rateLimit[rateLimitKey].count += 1;
+      if (rateLimit[rateLimitKey].count > maxRequests) {
+        // Log abuse attempt (without logging the MAG ID itself)
+        console.warn(`[users/mag-lookup] Rate limit exceeded for user ${user.id}`, {
+          filteredReason: "Rate limit exceeded",
+          count: rateLimit[rateLimitKey].count,
+        });
         return NextResponse.json(
           { success: false, error: "Too many requests. Please slow down." },
           { status: 429 }
         );
       }
-      delete rateLimit[rateLimitKey];
+    } else {
+      rateLimit[rateLimitKey] = { count: 1, timestamp: now };
     }
-    rateLimit[rateLimitKey] = { count: 1, timestamp: now };
-    (global as any).rateLimit = rateLimit;
+    (globalThis as unknown as { rateLimit?: Record<string, { count: number; timestamp: number }> }).rateLimit =
+      rateLimit;
 
     // Look up the user by MAG ID.
     // NOTE: This is server-side only. The response NEVER includes the raw MAG ID.

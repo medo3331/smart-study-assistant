@@ -73,13 +73,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ success: false, error: "Unexpected error." }, { status: 500 });
   }
 }
-
-/**
- * POST /api/conversations
- *
- * Create a new conversation.
- * Body: { recipient_id?: string; participant_ids?: string[]; title?: string }
- */
 export async function POST(req: Request) {
   try {
     const serverClient = await (await import("@/lib/supabase/server")).createClient();
@@ -93,87 +86,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid request body." }, { status: 400 });
     }
 
-    const { recipient_id, participant_ids, title } = body as {
-      recipient_id?: string;
-      participant_ids?: string[];
-      title?: string;
-    };
+    const { conversation_id } = body as { conversation_id?: string };
 
-    if (!recipient_id && !participant_ids) {
-      return NextResponse.json({ success: false, error: "recipient_id or participant_ids is required." }, { status: 400 });
+    if (!conversation_id) {
+      return NextResponse.json(
+        { success: false, error: "conversation_id is required." },
+        { status: 400 }
+      );
     }
 
-    // Validate recipients exist
-    const { data: recipients, error: recipError } = await serverClient
-      .from("auth.users")
-      .select("id")
-      .in("id", recipient_id ? [recipient_id] : (participant_ids ?? []));
-
-    if (recipError) {
-      console.error("[conversations] POST validation", recipError);
-      return NextResponse.json({ success: false, error: "Failed to validate recipients." }, { status: 500 });
-    }
-
-    // Create conversation
-    const { data: conversation, error: convError } = await serverClient
-      .from("conversations")
-      .insert({
-        title: title || "محادثة جديدة",
-        status: "active",
-      })
-      .select("*")
+    // Verify the user is a participant of this conversation
+    // This is enforced by RLS, but we verify explicitly to give a clear error
+    const { data: participant, error: partError } = await serverClient
+      .from("conversation_participants")
+      .select("participant_id")
+      .eq("conversation_id", conversation_id)
+      .eq("participant_id", user.id)
       .single();
 
-    if (convError) {
-      console.error("[conversations] POST create", convError);
-      return NextResponse.json({ success: false, error: "Failed to create conversation." }, { status: 500 });
+    if (partError || !participant) {
+      // Check if the user already has an existing conversation with this ID (different issue)
+      // For now, return a clear error: not a participant
+      return NextResponse.json(
+        { success: false, error: "You are not a participant of this conversation. Send a message request first." },
+        { status: 403 }
+      );
     }
 
-    // Get participants to add
-    const participantsToAdd: Array<{ participant_id: string; role: "member" }> = [
-      { participant_id: user.id, role: "member" },
-    ];
-    if (recipient_id) {
-      participantsToAdd.push({ participant_id: recipient_id, role: "member" });
-    }
-    if (participant_ids) {
-      // Map to "member" role; the cast preserves literal type for TS
-      const added = participant_ids.map((id: string): { participant_id: string; role: "member" } => ({
-        participant_id: id,
-        role: "member",
-      })) as Array<{ participant_id: string; role: "member" }>;
-      participantsToAdd.push(...added);
-    }
-
-    // Remove duplicates (keep first occurrence) — all roles are "member"
-    const seen = new Set<string>();
-    const uniqueParticipants = participantsToAdd.filter((p) => {
-      if (seen.has(p.participant_id)) return false;
-      seen.add(p.participant_id);
-      return true;
-    }) as Array<{ participant_id: string; role: "member" }>;
-
-    // Insert participants (all are "member" role)
-    const { error: partError } = await serverClient
-      .from("conversation_participants")
-      .insert(uniqueParticipants.map((p: { participant_id: string; role: "member" }) => ({
-        conversation_id: conversation.id,
-        participant_id: p.participant_id,
-        role: p.role,
-        is_archived: false,
-        is_muted: false,
-        joined_at: new Date().toISOString(),
-      })));
-
-    if (partError) {
-      console.error("[conversations] POST participants", partError);
-      return NextResponse.json({ success: false, error: "Failed to add participants." }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      conversation,
-    }, { status: 201 });
+    // Conversation exists and user is a participant - open it
+    return NextResponse.json({ success: true, conversation: participant }, { status: 200 });
   } catch (error) {
     console.error("[conversations] POST", error);
     return NextResponse.json({ success: false, error: "Unexpected error." }, { status: 500 });

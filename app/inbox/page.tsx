@@ -78,21 +78,42 @@ export default function InboxPage() {
 
   const startConversation = async (userId: string) => {
     if (!userId) return;
-    const res = await fetch("/api/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipient_id: userId, title: "محادثة جديدة" }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setSelectedConv(data.conversation.id);
-      loadConversations();
-      setUserSearchResults([]);
-      setSearchQuery("");
-    } else {
-      alert("Failed: " + (data.error || "Unknown error"));
+
+    // 1. Send a message request (DO NOT create conversation directly)
+    // The recipient must accept it, THEN the conversation opens.
+    try {
+      const res = await fetch("/api/messages/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiver_profile_id: userId, note: "" }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        // Request sent successfully - show pending state
+        setNewRequestSent(true);
+        setNewRequestError(null);
+        // Close the modal
+        setIsNewConvOpen(false);
+        // Clear search
+        setSearchQuery("");
+        setUserSearchResults([]);
+        // Notify the user to wait for acceptance
+        alert("تم إرسال طلب المراسلة. يرجى انتظار قبول الطرف الآخر.");
+      } else {
+        setNewRequestError(data.error || "Failed to send request.");
+        // Allow user to try again or cancel
+        setTimeout(() => setNewRequestError(null), 5000);
+      }
+    } catch {
+      setNewRequestError("Network error. Please try again.");
+      setTimeout(() => setNewRequestError(null), 5000);
     }
   };
+
+  // New request state
+  const [newRequestSent, setNewRequestSent] = useState(false);
+  const [newRequestError, setNewRequestError] = useState<string | null>(null);
 
   const loadMessages = async (convId: string) => {
     setMsgLoading(true);
@@ -413,6 +434,30 @@ export default function InboxPage() {
                       </div>
                     )}
                   </form>
+                )}
+
+                {/* Request Sent State */}
+                {newRequestSent && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-4 text-center">
+                    <div className="text-emerald-600 text-sm font-medium">
+                      ✓ تم إرسال طلب المراسلة
+                    </div>
+                    <div className="text-emerald-500 text-xs mt-1">
+                      يرجى انتظار قبول الطرف الآخر. لا توجد محادثة جديدة حتى يتم قبول الطلب.
+                    </div>
+                  </div>
+                )}
+
+                {/* Request Error State */}
+                {newRequestError && (
+                  <div className="bg-red-50 border border-red-300 rounded-xl p-4 text-center">
+                    <div className="text-red-600 text-sm font-medium">
+                      {newRequestError}
+                    </div>
+                    <div className="text-red-400 text-xs mt-1">
+                      يمكنك المحاولة مرة أخرى أو إغلاق النافذة.
+                    </div>
+                  </div>
                 )}
               </div>
 
