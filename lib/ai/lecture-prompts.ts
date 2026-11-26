@@ -20,6 +20,12 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import type { AiChatMessage } from "./types";
+import {
+  isHeadingLine,
+  sentenceSuffixForOverlap,
+  splitHeadingSections,
+  unwrapHardWraps,
+} from "../text-structure";
 
 /** نوع المحتوى المطلوب من المحاضرة. */
 export type LectureAnalysisKind = "summary" | "explanation";
@@ -111,18 +117,112 @@ const SYNTHESIS_SYSTEM = [
   "اكتب الإجابة Markdown بالعربي.",
 ].join("\n");
 
+/** حجم الـ overlap المقصود بين القطع المتتالية (حروف). */
+const OVERLAP_CHARS = 150;
+
+/**
+ * الكاسكاد القديم نفسه — فواصل مرتبة من الأقوى للأضعف، وأول فاصل يعطي
+ * قطعتين فأكثر بيتبنى عليه. **وظيفته للحالات اللي مالهاش عناوين**
+ * (تفريغ صوت مثلاً) وللأقسام الأطول من الحد اللي محتاجة تقسيم داخلي.
+ *
+ * ⚠️ العقد: كل قطعة راجعة ≤ `max` حرف بالظبط (القطع الصلب بيضمن ده)،
+ * ومافيش نص بيضيع — القطع بتتجمع وتغطي النص كله.
+ */
+function cascadeSplit(value: string, max: number): string[] {
+  // ⚠️ بنعبّي للحد **ناقص الـ overlap**: لو القطع اتعبّت للحظ آخرة،
+  //    مافيش مكان لسياق القطعة اللي بعدها والـ overlap هيتلغي دايماً.
+  //    الحجز الصغير ده (150 حرف) هو اللي بيخلي الـ overlap حقيقي.
+  const limit = Math.max(1, max - OVERLAP_CHARS);
+
+  // الفواصل مرتبة من الأقوى للأضعف: فاصل سطرين، سطر، جملة، مسافة.
+  const boundaries: Array<(input: string) => string[]> = [
+    (input) => input.split(/\n{2,}/),
+    (input) => input.split(/\n/),
+    // Lookbehind بيخلّي الفاصل **بعد** علامة الجملة، فآخر جملة في
+    // القطعة بتفضل كاملة ومش بتتقطع.
+    (input) => input.split(/(?<=[.!؟?،])\s+/),
+    (input) => input.split(/\s+/),
+  ];
+
+  for (const split of boundaries) {
+    const pieces = split(value)
+      .map((piece) => piece.trim())
+      .filter((piece) => piece !== "");
+    if (pieces.length <= 1) continue;
+
+    const packed: string[] = [];
+    let current = "";
+    for (const piece of pieces) {
+      const candidate = current === "" ? piece : `${current}\n${piece}`;
+      if (candidate.length > limit && current !== "") {
+        packed.push(current);
+        current = piece;
+      } else {
+        current = candidate;
+      }
+    }
+    if (current !== "") packed.push(current);
+
+    // ⚠️ شرط مهم: لو القطع رجعت عملياً نفس النص (الحد كبير أوي أو
+    // النص كله فاصل واحد)، ما نرجعش قطعة واحدة ضخمة ونعتبرها
+    // «اتقسّمت» — ده كذب. في الحالة دي نكمل للمحاولة اللي بعدها.
+    if (packed.length <= 1) continue;
+
+    // ⚠️ القطعة اللي لسه أكبر من الحد (فقرة عملاقة مثلاً) بتتقسّم تاني
+    // بالفاصل الأضعف — العقد: كل قطعة راجعة من الدالة ≤ الحد أبداً.
+    const chunks: string[] = [];
+    for (const packedChunk of packed) {
+      if (packedChunk.length > limit) {
+        chunks.push(...cascadeSplit(packedChunk, max));
+      } else {
+        chunks.push(packedChunk);
+      }
+    }
+    return chunks;
+  }
+
+  // آخر ملجأ: قطع صلب — خطر قطع الجملة، أحسن من إرسال نص يتجاوز
+  // النافذة ويرفضه المزوّد كله.
+  const hard: string[] = [];
+  for (let i = 0; i < value.length; i += limit) {
+    hard.push(value.slice(i, i + limit));
+  }
+  return hard;
+}
+
 /**
  * يحوّل تفريغ طويل لقطع صالحة للإرسال.
  *
  * ⚠️ **ليه بنقسّم أصلاً**: تفريغ محاضرة ٣ ساعات ≈ ٩٠ ألف كلمة، وده
  * يتجاوز نافذة الموديل. في الحالة دي المزوّد بيرجّع 400 والـ fallback
- * كله يفشل، فالطالب يخسر المعالجة كلها بسبب طول المحاضرة. القطع
- * حوالين **حدود الجُمل** مش قطع عشوائي: القطع في نص جملة بيبوّخ
- * المعنى وبيخلّي الموديل يكمّل آخر جملة ناقصة من أول القطعة اللي بعده.
+ * كله يفشل، فالطالب يخسر المعالجة كلها بسبب طول المحاضرة.
  *
- * ⚠️ **الفكرة الأساسية**: كل جزء بيتبعت **لحده** ويطلّع ملاحظاته،
+ * ⚠️ **الفكرة الأساسية**: كل جزء بيتبعث **لحده** ويطلّع ملاحظاته،
  * وبعدين الأجزاء بتتجمّع في نداء ثانٍ. ده **map-reduce** مش قص —
  * يعني مفيش جزء من المحاضرة بيضيع.
+ *
+ * ════ الطبقات الأربعة (بالترتيب) ════
+ * 1. **فك الكسر البصري** (`unwrapHardWraps`): سطور الـ PDF المكسورة
+ *    بترجع فقرات كاملة — من غيرها «حدود الجمل» بتبقى حدود سطور طباعة.
+ * 2. **التقسيم عند العناوين** (`splitHeadingSections`): «الفصل/الباب/
+ *    Chapter/…» بيبدأ قطعة جديدة — كل قطعة بتبقى موضوع واحد متماسك
+ *    بدل موضوعين نصين في قطعة وخلاصة ناقصة. العنوان بيفضل أول سطر
+ *    في قطعته.
+ * 3. **دمج جشع للأقسام الصغيرة**: قسمين صغار متجاورين بيتلموا في قطعة
+ *    واحدة طالما المجموع ≤ الحد — حماية من انفجار عدد النداءات
+ *    (والكروت) في الملازم اللي عناوينها كتير وصغيرة.
+ * 4. **الكاسكاد القديم** (`cascadeSplit`) للأقسام الأطول من الحد +
+ *    قطع صلب كآخر ملجأ.
+ *
+ * ════ الـ overlap ════
+ * القطعة بتبدأ بآخر ~`OVERLAP_CHARS` حرف من القطعة اللي قبلها (جمل
+ * كاملة) — السؤال في آخر القطعة وسياقه بيبقى موجود في أول القطعة
+ * اللي بعدها، فالملخص مابيفقدش الرابط بين الجملتين على حدود القطع.
+ * الـ overlap **داخل الميزانية دايماً**: مفيش قطعة بتتجاوز
+ * `maxCharsPerChunk` أبداً، ولو المساحة مابتسمحش بنسقطه بس لما يلزم.
+ *
+ * ⚠️ **بسبب الـ overlap**: إعادة انضمام القطع بترجّع النص الأصلي **زد
+ * تكرار بسيط** عند الحدود (زيادة، مش نقص) — المهم إن مافيش كلمة ضايعة.
  */
 export function chunkTranscript(
   text: string,
@@ -131,49 +231,60 @@ export function chunkTranscript(
   const clean = text.trim();
   if (clean === "") return [];
   if (clean.length <= maxCharsPerChunk) return [clean];
+  if (maxCharsPerChunk <= 0) return cascadeSplit(clean, 1);
 
-  // الفواصل مرتبة من الأقوى للأضعف: فاصل سطرين، سطر، جملة، مسافة.
-  const boundaries: Array<(value: string) => string[]> = [
-    (value) => value.split(/\n{2,}/),
-    (value) => value.split(/\n/),
-    // Lookbehind بيخلي الفاصل **بعد** علامة الجملة، فآخر جملة في
-    // القطعة بتفضل كاملة ومش بتتقطع.
-    (value) => value.split(/(?<=[.!؟?،])\s+/),
-    (value) => value.split(/\s+/),
-  ];
+  const unwrapped = unwrapHardWraps(clean);
+  if (unwrapped.length <= maxCharsPerChunk) return [unwrapped];
 
-  for (const split of boundaries) {
-    const pieces = split(clean)
-      .map((piece) => piece.trim())
-      .filter((piece) => piece !== "");
-    if (pieces.length <= 1) continue;
+  const sections = splitHeadingSections(unwrapped);
 
-    const chunks: string[] = [];
-    let current = "";
-    for (const piece of pieces) {
-      const candidate = current === "" ? piece : `${current}\n${piece}`;
-      if (candidate.length > maxCharsPerChunk && current !== "") {
-        chunks.push(current);
-        current = piece;
-      } else {
-        current = candidate;
+  // دمج جشع: الأقسام الصغيرة المتجاورة بتتلزق في قطعة واحدة طالما
+  // المجموع ≤ الحد — عدد النداءات (والكروت) بيفضل مضبوط حتى لو
+  // الملزمة عناوينها كتير وصغيرة. الأقسام الأطول من الحد بتروح
+  // للكاسكاد لوحدها.
+  const merged: string[] = [];
+  let buffer = "";
+  for (const section of sections) {
+    if (section.length > maxCharsPerChunk) {
+      if (buffer !== "") {
+        merged.push(buffer);
+        buffer = "";
       }
+      merged.push(...cascadeSplit(section, maxCharsPerChunk));
+      continue;
     }
-    if (current !== "") chunks.push(current);
-
-    // ⚠️ شرط مهم: لو القطع رجعت عملياً نفس النص (الحد كبير أوي أو
-    // النص كله فاصل واحد)، ما نرجعش قطعة واحدة ضخمة ونعتبرها
-    // «اتقسمت» — ده كدب. في الحالة دي نكمل للمحاولة اللي بعدها.
-    if (chunks.length > 1) return chunks;
+    if (buffer === "") {
+      buffer = section;
+    } else if (buffer.length + 2 + section.length <= maxCharsPerChunk) {
+      buffer = `${buffer}\n\n${section}`;
+    } else {
+      merged.push(buffer);
+      buffer = section;
+    }
   }
+  if (buffer !== "") merged.push(buffer);
 
-  // آخر ملجأ: قطع صلب — خطر قطع الجملة، أحسن من إرسال نص يتجاوز
-  // النافذة ويرفضه المزوّد كله.
-  const hard: string[] = [];
-  for (let i = 0; i < clean.length; i += maxCharsPerChunk) {
-    hard.push(clean.slice(i, i + maxCharsPerChunk));
+  // ⚠️ نفس شرط الكاسكاد: لو النص رجع قطعة واحدة، مفيش تقسيم حصل أصلاً
+  // — نرجّعه زي ما هو من غير overlap (مافيش حد قبلها).
+  if (merged.length <= 1) return merged;
+
+  const chunks: string[] = [merged[0]];
+  for (let i = 1; i < merged.length; i += 1) {
+    // ⚠️ القطعة اللي بتبدأ بعنوان = بداية موضوع جديد بالظبط — الـ overlap
+    //    هنا هيبلشط بداية الموضوع بذيل موضوع قديم، فبنسيبه والحد نفسه
+    //    هو الفاصل النظيف.
+    const firstLine = merged[i].split("\n")[0];
+    if (isHeadingLine(firstLine)) {
+      chunks.push(merged[i]);
+      continue;
+    }
+    // ميزانية الـ overlap = الحد ناقص القطعة الحالية — يعني القطعة
+    // مع الـ overlap مابتعدّيش `maxCharsPerChunk` أبداً.
+    const budget = Math.min(OVERLAP_CHARS, maxCharsPerChunk - merged[i].length - 1);
+    const overlap = sentenceSuffixForOverlap(merged[i - 1], budget);
+    chunks.push(overlap === "" ? merged[i] : `${overlap}\n${merged[i]}`);
   }
-  return hard;
+  return chunks;
 }
 
 /**
