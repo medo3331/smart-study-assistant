@@ -113,12 +113,13 @@ for (const task of Object.keys(expected)) {
   }
 }
 
-// RAG بيمشي على موديل الـ embeddings المتحقق منه فقط.
+// RAG: embed-1b القديم اختفى من حساب NVIDIA (تأكيد 2026-11-06) والبديل 3.5
+// معطّل لحين بروب ناجح على /v1/embeddings — فيرجّع المرشّح العام للمزوّد
+// (default عند nvidia.ts) وده السلوك الصح لحد التفعيل.
 const ragCandidates = routeCandidates("rag_embeddings");
-assert.deepEqual(
-  ragCandidates.map((c) => c.model),
-  ["nvidia/nemotron-3-embed-1b"]
-);
+assert.equal(ragCandidates.length, 1);
+assert.equal(ragCandidates[0].provider, "nvidia");
+assert.equal(ragCandidates[0].model, undefined);
 
 delete process.env.GROQ_API_KEY;
 delete process.env.NVIDIA_API_KEY;

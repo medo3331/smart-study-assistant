@@ -122,7 +122,7 @@ export class NvidiaProvider implements AiTextProvider, AiEmbeddingProvider {
     if (texts.length === 0) {
       throw new AiProviderError("NVIDIA embeddings need at least one non-empty text", 400, this.name);
     }
-    const model = input.model ?? "nvidia/nemotron-3-embed-1b";
+    const model = input.model ?? "nvidia/nemotron-3.5-embed-1b";
 
     let response: Response;
     try {

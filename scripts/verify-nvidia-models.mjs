@@ -21,6 +21,9 @@ const CANDIDATES = [
   { id: "nvidia/nemotron-3-ultra-550b-a55b", kind: "chat" },
   { id: "deepseek-ai/deepseek-v4-flash-0731", kind: "chat" },
   { id: "nvidia/nemotron-3-embed-1b", kind: "embeddings" },
+  // الجيل الجديد من embeds — ظهروا في قائمة الحساب 2026-11-06.
+  { id: "nvidia/nemotron-3.5-embed-1b", kind: "embeddings" },
+  { id: "nvidia/nemotron-3.5-embed-8b", kind: "embeddings" },
 ];
 
 const apiKey = process.env.NVIDIA_API_KEY?.trim();

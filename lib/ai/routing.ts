@@ -174,7 +174,7 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   chat: [
     "openai/gpt-oss-20b",             // Groq — سريع (من غير استدلال)
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b", // احتياطي أقوى عند NVIDIA قبل الرجوع لـ Groq
+    "nvidia/nemotron-3-ultra-550b-a55b", // احتياطي أقوى عند NVIDIA قبل الرجوع لـ Groq
     "openai/gpt-oss-120b",            // Groq كمان احتياطي (استدلال)
   ],
   /**
@@ -190,7 +190,7 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   exam_generation: [
     "openai/gpt-oss-20b",             // Groq — سريع + structured_output ✓
     "nvidia/nemotron-3.5-lightning-30b-a3b", // سريع جداً (لو مفتاح NVIDIA صالح)
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
     "openai/gpt-oss-120b",            // آخر resort (استدلال — أبطأ)
   ],
   /**
@@ -201,18 +201,18 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
    */
   explain: [
     "openai/gpt-oss-120b",            // Groq — استدلال (الشرح محتاج تفكير)
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
   ],
   coding: [
     // ⚠️ `deepseek-v4-flash` اتشال — معطّل (404 فعليًا، اتأكد مرتين).
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "openai/gpt-oss-120b",            // Groq كمان احتياطي
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   agent: [
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
     "openai/gpt-oss-120b",
   ],
   // B4.0.2g-d1: تفضيلات المهام المنتقلة من gemini — مفيش أي موديل Gemini هنا.
@@ -221,27 +221,27 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   flashcards: [
     "openai/gpt-oss-20b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   mind_map: [
     "openai/gpt-oss-20b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   data_analysis: [
     "openai/gpt-oss-20b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   // تجميعة reasoning: gpt-oss-120b أولًا (نصوص + استدلال — curriculum وخطط).
   study_plan: [
     "openai/gpt-oss-120b",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   lesson_analysis: [
     "openai/gpt-oss-120b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   planning: [
     "nvidia/nemotron-3.5-lightning-30b-a3b", // nvidia أولًا — زي المصفوفة الأصلية
@@ -249,29 +249,31 @@ export const TASK_MODEL_PREFERENCE: Partial<Record<AiTaskType, readonly string[]
   ],
   business_plan: [
     "openai/gpt-oss-120b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   marketing_plan: [
     "openai/gpt-oss-120b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   roadmap: [
     "openai/gpt-oss-120b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   tutor: [
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "openai/gpt-oss-120b",            // Groq ثانياً حسب المصفوفة
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
   quiz: [
     "openai/gpt-oss-20b",             // Groq أولاً — والمهمة محتاجة structured_output
     "nvidia/nemotron-3.5-lightning-30b-a3b",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-ultra-550b-a55b",
   ],
-  rag_embeddings: [
-    "nvidia/nemotron-3-embed-1b",     // الوحيد المسجّل لمهمة الـ embeddings
-  ],
+  // ⚠️ rag_embeddings مفيش له مصفوفة تفضيل هنا: embed-1b القديم اتأكد اختفاؤه
+  //    من الحساب (2026-11-06) والبديل 3.5 معطّل لحين بروب /v1/embeddings
+  //    (D-REAL-008) — وعقد الترتيب ممنوع فيه معطّل في المصفوفات. الراوتر
+  //    بيلمّ موديل embeddings من MODEL_REGISTRY لوحده؛ لما 3.5-embed يتفعّل
+  //    بعد البروب هيبقى الأساسي تلقائيًا.
 };
 
 export function capabilitiesForTask(task: AiTaskType): AiCapability[] {

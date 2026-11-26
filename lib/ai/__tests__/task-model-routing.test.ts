@@ -113,10 +113,23 @@ describe("عقد الترتيب المجاني — مفيش موديل معطّ�
     }
   });
 
-  it("nemotron-3-super (المتحقّق) احتياطي في chat/quiz/flashcards/agent/study_plan", () => {
+  it("nemotron-3-ultra (المتحقّق 2026-11-06) احتياطي في chat/quiz/flashcards/agent/study_plan", () => {
     for (const task of ["chat", "quiz", "flashcards", "agent", "study_plan"] as const) {
-      expect(TASK_MODEL_PREFERENCE[task], task).toContain("nvidia/nemotron-3-super-120b-a12b");
+      expect(TASK_MODEL_PREFERENCE[task], task).toContain("nvidia/nemotron-3-ultra-550b-a55b");
     }
+  });
+
+  it("nemotron-3-super (المؤكد اختفاؤه من الحساب) مش مرشّح ولا مفعّل", () => {
+    for (const [task, list] of Object.entries(TASK_MODEL_PREFERENCE)) {
+      expect(list ?? [], task).not.toContain("nvidia/nemotron-3-super-120b-a12b");
+    }
+    expect(getModel("nvidia/nemotron-3-super-120b-a12b").enabled).toBe(false);
+  });
+
+  it("embed-1b القديم معطّل والبديل 3.5 مسجّل — ومفيش مصفوفة تفضيل للـ RAG لحين البروب", () => {
+    expect(getModel("nvidia/nemotron-3-embed-1b").enabled).toBe(false);
+    expect(getModel("nvidia/nemotron-3.5-embed-1b").capabilities).toContain("embeddings");
+    expect(TASK_MODEL_PREFERENCE.rag_embeddings).toBeUndefined();
   });
 
   it("الشرح والخطط بتبدأ بالموديل القوي (استدلال) — الشات بالسريع", () => {
