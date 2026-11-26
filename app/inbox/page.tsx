@@ -25,7 +25,7 @@ type Message = {
   created_at: string;
 };
 
-type InboxCategory = "inbox" | "sent" | "notifications" | "conversations" | "archived";
+type InboxCategory = "inbox" | "sent" | "notifications" | "conversations" | "archived" | "requests" | "support" | "announcements";
 
 export default function InboxPage() {
   const [category, setCategory] = useState<InboxCategory>("inbox");
@@ -42,6 +42,11 @@ export default function InboxPage() {
   const [draft, setDraft] = useState("");
   const [inboxRequests, setInboxRequests] = useState<any[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
 
   const loadConversations = async (q?: string) => {
     setLoading(true);
@@ -181,6 +186,36 @@ export default function InboxPage() {
     }
   };
 
+  const loadSupportTickets = async () => {
+    setSupportLoading(true);
+    try {
+      const res = await fetch("/api/tickets");
+      const data = await res.json();
+      if (data.success) {
+        setSupportTickets(data.tickets || []);
+      }
+    } catch (e) {
+      setError("Failed to load support tickets.");
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const loadAnnouncements = async () => {
+    setAnnouncementsLoading(true);
+    try {
+      const res = await fetch("/api/notifications/unread-count");
+      const data = await res.json();
+      if (data.success) {
+        setAnnouncements(data.announcements || []);
+      }
+    } catch (e) {
+      // Ignore errors - fallback to empty
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadConversations(searchQuery);
     loadMessageRequests();
@@ -237,6 +272,56 @@ export default function InboxPage() {
           </div>
         </div>
 
+        <div className="border-b border-border/30">
+          <div className="flex flex-wrap gap-1 p-1 bg-paper/30 rounded-xl">
+            <button
+              onClick={() => setCategory("inbox")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                category === "inbox"
+                  ? "bg-paper-2 text-ink"
+                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
+              }`}
+            >
+              💬 الدردشة
+            </button>
+            <button
+              onClick={() => setCategory("requests")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                category === "requests"
+                  ? "bg-paper-2 text-ink"
+                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
+              }`}
+            >
+              📥 طلبات المراسلة
+            </button>
+            <button
+              onClick={() => setCategory("support")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                category === "support"
+                  ? "bg-paper-2 text-ink"
+                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
+              }`}
+            >
+              🛠️ الدعم الفني
+              {supportTickets.filter(t => t.status === "open").length > 0 && (
+                <span className="ml-1 text-[10px] text-amber-500">({supportTickets.filter(t => t.status === "open").length})</span>
+              )}
+            </button>
+            <button
+              onClick={() => setCategory("announcements")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                category === "announcements"
+                  ? "bg-paper-2 text-ink"
+                  : "text-ink-soft hover:text-ink hover:bg-paper/50"
+              }`}
+            >
+              📢 الإعلانات
+              {announcements.length > 0 && (
+                <span className="ml-1 text-[10px] text-blue-500">({announcements.length})</span>
+              )}
+            </button>
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto py-4">
           <div className="px-4 mb-4">
             <h2 className="text-sm font-semibold text-ink">الرسائل</h2>
@@ -294,7 +379,159 @@ export default function InboxPage() {
         {requestsLoading ? (
           <div className="px-4 py-2">
             <ui.Skeleton className="h-24 w-full" />
+                  {category === "support" && (
+          <div className="px-4 py-4">
+            <h3 className="text-sm font-semibold text-ink mb-3">رموز الدعم</h3>
+            {supportLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <ui.Skeleton key={i} className="h-16 w-full" />)}
+              </div>
+            ) : supportTickets.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <p className="text-sm">لا توجد تذاكر دعم</p>
+                <p className="text-xs mt-1">ابدأ تذكرة جديدة للطلب على الدعم</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {supportTickets.map((ticket) => (
+                  <div key={ticket.id} className={`p-3 rounded-xl border ${ticket.status === "open" ? "bg-paper-2 border-border/30" : "bg-paper/30 border-border/20"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-semibold text-ink">{ticket.subject}</h4>
+                        <p className="text-xs text-slate-400">رسالة: {ticket.last_message || "لا توجد رسائل"}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            ticket.status === "open" ? "bg-emerald-500/20 text-emerald-600" :
+                            ticket.status === "in_progress" ? "bg-blue-500/20 text-blue-600" :
+                            ticket.status === "resolved" ? "bg-purple-500/20 text-purple-600" :
+                            "bg-gray-500/20 text-gray-600"
+                          }`}>
+                            {ticket.status === "open" ? "مفتوح" :
+                             ticket.status === "in_progress" ? "قيد التنفيذ" :
+                             ticket.status === "resolved" ? "مُحلّى" : "أغلِق"}
+                          </span>
+                          <span className="text-xs text-slate-400">{new Date(ticket.updated_at).toLocaleDateString("ar-EG")}</span>
+                        </div>
+                      </div>
+                      <button className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600">
+                        فتح التفاصيل
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+        )}
+
+        {category === "announcements" && (
+          <div className="px-4 py-4">
+            <h3 className="text-sm font-semibold text-ink mb-3">الأخبار والنُشرات</h3>
+            {announcementsLoading ? (
+              <div className="space-y-2">
+                {[1, 2].map(i => <ui.Skeleton key={i} className="h-20 w-full" />)}
+              </div>
+            ) : announcements.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <p className="text-sm">لا توجد إعلانات</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {announcements.map((ann: any, i: number) => (
+                  <div key={i} className="p-3 rounded-xl border border-border/30 bg-paper/30">
+                    <div className="flex items-start gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                        {i + 1}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-ink">{ann.title}</h4>
+                        <p className="text-xs text-slate-400">{ann.body}</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {new Date(ann.created_at).toLocaleDateString("ar-EG")}
+                          {ann.is_read === false && <span className="text-blue-500 font-medium"> (غير مقروء)</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Message Requests Section */}
+        {category === "requests" && (
+          <div className="px-4 py-4">
+            <h3 className="text-sm font-semibold text-ink mb-3">طلبات المراسلة</h3>
+            {requestsLoading ? (
+              <div className="space-y-2">
+                <ui.Skeleton className="h-24 w-full" />
+              </div>
+            ) : inboxRequests.length > 0 ? (
+              <div className="space-y-2">
+                {inboxRequests.map((req: any) => (
+                  <div key={req.id} className="bg-paper/30 rounded-xl p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-bold">
+                          {req.sender_id?.slice(0, 2)}
+                        </div>
+                        <span className="text-sm text-ink truncate">{req.sender_name || "مرسل الطلب"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          req.status === "pending" ? "bg-yellow-500/20 text-yellow-600" :
+                          req.status === "accepted" ? "bg-emerald-500/20 text-emerald-600" :
+                          req.status === "rejected" ? "bg-red-500/20 text-red-600" :
+                          req.status === "canceled" ? "bg-gray-500/20 text-gray-600" :
+                          "bg-gray-500/20 text-gray-600"
+                        }`}>
+                          {req.status === "pending" ? "قيد الانتظار" :
+                           req.status === "accepted" ? "مقبول" :
+                           req.status === "rejected" ? "مرفوض" :
+                           req.status === "canceled" ? "ملغي" : "منتهي"}
+                        </span>
+                        {req.status === "pending" && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                const res = await fetch(`/api/messages/requests/${req.id}/accept`, { method: "POST" });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setInboxRequests(inboxRequests.filter(r => r.id !== req.id));
+                                }
+                              }}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600"
+                            >
+                              قبول
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const res = await fetch(`/api/messages/requests/${req.id}/reject`, { method: "POST" });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setInboxRequests(inboxRequests.filter(r => r.id !== req.id));
+                                }
+                              }}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600"
+                            >
+                              رفض
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">
+                <p className="text-sm">لا توجد طلبات مراسلة</p>
+              </div>
+            )}
+          </div>
+        )}
+</div>
         ) : inboxRequests.length > 0 ? (
           <div className="px-4 py-2 border-t border-border/30">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">طلبات الدخول</h3>
