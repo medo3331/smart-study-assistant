@@ -90,6 +90,8 @@ import {
   rememberSessionContext,
   type MagiclyContextInput,
 } from "@/lib/magicly-ai";
+import { selectPersona } from "@/lib/magic/persona-router";
+import { buildPersonaIdentityPrompt } from "@/lib/magic/personas";
 
 // 🎨 أساليب الشرح — chips الواجهة تحقن تعليمات تعليمية في الـ system
 // (المفتاح هنا تعليم تعليمي مش نص حر — منع الحقن بأي شيء حر من الكلاينت).
@@ -754,6 +756,24 @@ export async function POST(req: Request) {
     }
     const intentResult = classifyChatIntent(prompt, ctxInput as any);
     console.log("[UNIFIED-AI DEBUG]", { intent: intentResult.intent, prompt: prompt.slice(0, 80) });
+    // 🧠 Persona Orchestrator — اختيار الشخصية في الخلفية (اختيار المستخدم > محتوى الرسالة > الصفحة).
+    const rawPersona = (context as Record<string, unknown>)?.persona;
+    const rawPage = (context as Record<string, unknown>)?.page;
+    const personaSelection = selectPersona({
+      explicitPersona: typeof rawPersona === "string" ? rawPersona : null,
+      page: typeof rawPage === "string" ? rawPage : null,
+      message: prompt,
+      mode: typeof rawMode === "string" ? rawMode : null,
+      hasLessonContext: Boolean(ctxInput?.lesson || ctxInput?.subject),
+    });
+    console.log("[UNIFIED-AI DEBUG]", { persona: personaSelection.persona, personaReason: personaSelection.reason });
+    if (input.usage) {
+      input.usage.diagnostics = {
+        ...(input.usage.diagnostics ?? {}),
+        persona: personaSelection.persona,
+        personaReason: personaSelection.reason,
+      };
+    }
     // 🧠 ذاكرة المحادثة (أدوار سابقة من نفس المحادثة) — كانت بتتقري للكشف
     //    عن نية الامتحان بس ومكانتش بتوصل للموديل، فكان «بينسى» رسالة قبلها.
     let conversationTurns: ChatTurn[] = [];
@@ -776,7 +796,7 @@ export async function POST(req: Request) {
         } catch (e) {
           console.error("[UNIFIED-AI DEBUG] recent questions failed:", e);
         }
-        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest, recentQuestions);
+        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest, recentQuestions, personaSelection.persona);
         let personaPrompt = "";
         try {
           personaPrompt = await buildSystemPrompt(userId);
@@ -817,6 +837,11 @@ export async function POST(req: Request) {
       } catch (e) {
         console.warn("[unified-ai] student context build failed, continuing without it:", e);
       }
+    } else {
+      // 🙋 الزوار — نفس توجيه الشخصية بدون سياق قاعدة البيانات.
+      input.system = buildPersonaIdentityPrompt(personaSelection.persona, {
+        mode: typeof rawMode === "string" ? rawMode : null,
+      });
     }
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
@@ -869,7 +894,7 @@ export async function POST(req: Request) {
               href: buildExamHref(examRequest, { topic: topicMode }),
             },
           ],
-          metadata: { modelUsed: modelToUse, resolvedVia },
+          metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
           conversationId: savedConversationId || incomingConversationId || undefined,
         });
       }
@@ -878,7 +903,7 @@ export async function POST(req: Request) {
         if (reserveRef) {
           try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
         }
-        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
       }
       // RECORDED_LECTURES_SEARCH now flows through WORKSPACE_SEARCH path below
       // (buildWorkspaceSourceContext supports lecture family — transcript_text)
@@ -912,7 +937,7 @@ export async function POST(req: Request) {
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
         } else if (ws.resolution.status === "not_found") {
           // 🤔 بدل «مش لاقي» — أسئلة توضيحية + رفع مباشر من الشات.
           // 🎧 قبل كل ده: ممكن المطلوب موجود تسجيل صوتي محفوظ باسم قريب — نقترحه أولاً.
@@ -941,7 +966,7 @@ export async function POST(req: Request) {
               ok: true,
               answer: relatedAnswer,
               actions: [...relatedActions, { label: "📎 ارفع ملف/محاضرة", href: "#upload-file" }],
-              metadata: { modelUsed: modelToUse, resolvedVia },
+              metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
               conversationId: incomingConversationId || undefined,
             });
           }
@@ -955,7 +980,7 @@ export async function POST(req: Request) {
             ok: true,
             answer,
             actions: [{ label: "📎 ارفع ملف/محاضرة", href: "#upload-file" }],
-            metadata: { modelUsed: modelToUse, resolvedVia },
+            metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
             conversationId: incomingConversationId || undefined,
           });
         } else if (ws.resolution.status === "empty_source") {
@@ -963,13 +988,13 @@ export async function POST(req: Request) {
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
         } else if (ws.resolution.status === "error") {
           const answer = "تعذّر الوصول للمصدر تقنيًا. حاول مرة أخرى أو حدد الملف.";
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
         }
       } catch (e) {
         console.warn("[unified-ai] workspace source resolution failed:", e);
@@ -1139,7 +1164,7 @@ export async function POST(req: Request) {
       sourceTitle: workspaceSourceTitle || undefined,
       agentUsed: result.agentUsed,
       extractedText: result.extractedText,
-      metadata: { ...result.metadata, modelUsed: modelToUse, resolvedVia },
+      metadata: { ...result.metadata, modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
       reasoning: result.reasoning,
       conversationId: savedConversationId || undefined,
     };
