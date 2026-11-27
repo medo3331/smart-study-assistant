@@ -1164,3 +1164,100 @@
   z-index: 60;
   min-width: 180px;
 }
+
+/* ---- ✨ Magic Write — اشرح واكتب على النوتة ---- */
+.magic-write {
+  width: min(680px, 100%);
+  max-height: min(720px, 92vh);
+  overflow-y: auto;
+}
+
+.magic-write-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.magic-write-topic {
+  width: 100%;
+  resize: vertical;
+}
+
+.magic-write-styles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.magic-write-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.magic-write-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: 12px;
+  background: var(--paper-2, var(--paper));
+}
+
+.magic-write-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  line-height: 1.7;
+  cursor: pointer;
+}
+
+.magic-write-block:hover {
+  background: var(--paper-3);
+  border-color: var(--rule);
+}
+
+.magic-write-icon {
+  flex: none;
+  width: 20px;
+  text-align: center;
+}
+
+.magic-write-heading {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.magic-write-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.magic-write-table td {
+  border: 1px solid var(--rule);
+  padding: 4px 10px;
+}
+
+.magic-write-diagram {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: #fff;
+}
+
+.magic-write-diagram-pending {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.magic-write-hint {
+  border: 1px dashed var(--rule);
+  border-radius: var(--r-md);
+  padding: 12px;
+}

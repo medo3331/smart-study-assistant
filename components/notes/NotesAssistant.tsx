@@ -80,6 +80,8 @@ export default function NotesAssistant({
   onInsertToPage,
   /** 🎨 إدراج رسمة/مخطط AI على الصفحة — من المحرر. */
   onInsertImage,
+  /** ✅ فتح Magic Write — اشرح واكتب على الصفحة بلوكات منظّمة. */
+  onOpenMagicWrite,
 }: {
   /** Current page context (title + typed texts). Called when sending. */
   getEditorContext: () => string;
@@ -93,6 +95,8 @@ export default function NotesAssistant({
   onInsertToPage?: (text: string) => void;
   /** 🎨 إدراج رسمة AI على الصفحة. */
   onInsertImage?: (dataUrl: string) => void;
+  /** ✅ فتح Magic Write. */
+  onOpenMagicWrite?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -466,6 +470,18 @@ ${text}`);
                 title="آخر رد من الـ AI يتكتب على الصفحة كبلوكات قابلة للتعديل"
               >
                 ✍️ اكتبها على النوته
+              </button>
+            ) : null}
+            {onOpenMagicWrite ? (
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                data-tone="primary"
+                disabled={busy}
+                onClick={onOpenMagicWrite}
+                title="Magic يشرح ويكتب على الصفحة بمعاينة قبل الإدراج"
+              >
+                ✅ اشرح واكتب
               </button>
             ) : null}
             {onInsertImage ? (

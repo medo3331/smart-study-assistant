@@ -75,6 +75,8 @@ import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
 import PageThumbs from "@/components/notes/PageThumbs";
 import NotesAssistant from "@/components/notes/NotesAssistant";
+import MagicWriteDialog from "@/components/notes/MagicWriteDialog";
+import type { AiLayoutResult } from "@/lib/notes/ai-layout";
 import StudyCards from "@/components/notes/StudyCards";
 
 /**
@@ -3047,6 +3049,47 @@ export default function NotebookEditor({
     [canWrite, commitHistory, paint, scheduleSave, setContent],
   );
 
+  /** ✅ Magic Write — إدراج بلوكات منظّمة (نصوص + صور مخططات + خطوط جداول) كعناصر حقيقية. */
+  const insertAiBlocks = useCallback(
+    (applied: AiLayoutResult) => {
+      if (!canWrite) return;
+      const content = contentRef.current;
+      const added = applied.texts.length + applied.images.length;
+      if (added === 0) return;
+      setContent({
+        strokes: [...content.strokes, ...applied.strokes],
+        texts: [...content.texts, ...applied.texts],
+        images: [...content.images, ...applied.images],
+      });
+      multiSelRef.current = new Set([
+        ...applied.texts.map((text) => text.id),
+        ...applied.images.map((image) => image.id),
+      ]);
+      setMultiCount(added);
+      selectionRef.current = null;
+      setSelection(null);
+      paint();
+      commitHistory();
+      scheduleSave();
+      setMessage(
+        applied.clipped
+          ? "Magic كتب المحتوى على الصفحة — في بلوكات زائدة ما اتّسعت، قلّل المحدد وجرّب تاني."
+          : `Magic كتب ${added} عنصر على الصفحة — عدّلهم براحتك.`,
+      );
+    },
+    [canWrite, commitHistory, paint, scheduleSave, setContent],
+  );
+
+  /** ✅ Magic Write dialog — الموضوع المبدئي من النص المحدد. */
+  const [magicWriteOpen, setMagicWriteOpen] = useState(false);
+  const [magicWriteTopic, setMagicWriteTopic] = useState("");
+  const openMagicWrite = useCallback(() => {
+    if (!canWrite) return;
+    const selected = getSelectedText();
+    setMagicWriteTopic(selected?.trim().slice(0, 4000) ?? "");
+    setMagicWriteOpen(true);
+  }, [canWrite, getSelectedText]);
+
   /** 📁 رفع ملف على النوته مباشرة — يوزع حسب النوع:
    *  صورة → عنصر صورة على الصفحة · PDF → منتقي صفحات الخلفية ·
    *  Word/نص → استخراج النص ودرجه بلوكات قابلة للتعديل. */
@@ -3563,6 +3606,15 @@ export default function NotebookEditor({
             className="notes-btn"
           >
             🎴 مذاكرة
+          </button>
+          <button
+            type="button"
+            onClick={openMagicWrite}
+            disabled={!canWrite}
+            title="Magic يشرح الموضوع ويكتبه على الصفحة بعناوين ونقاط وأمثلة ومخططات"
+            className="notes-btn"
+          >
+            ✨ Magic Write
           </button>
           <button
             type="button"
@@ -4137,6 +4189,14 @@ export default function NotebookEditor({
         </div>
       ) : null}
 
+      <MagicWriteDialog
+        open={magicWriteOpen}
+        onClose={() => setMagicWriteOpen(false)}
+        initialTopic={magicWriteTopic}
+        pageContext={getEditorContext}
+        onApply={insertAiBlocks}
+      />
+
       <NotesAssistant
         getEditorContext={getEditorContext}
         getSelectedText={getSelectedText}
@@ -4144,6 +4204,7 @@ export default function NotebookEditor({
         defaultOpen={besideMode}
         onInsertToPage={canWrite ? insertAiText : undefined}
         onInsertImage={canWrite ? insertAiImage : undefined}
+        onOpenMagicWrite={canWrite ? openMagicWrite : undefined}
       />
 
       {/* 📝 معاينة قراءة خط اليد — تصحيح قبل الإدراج */}
