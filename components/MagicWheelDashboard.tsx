@@ -387,7 +387,9 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
           </nav>
         ) : (
           /* ═════ العرض الدائري ═════ */
-          <div className="relative mx-auto flex aspect-square w-full max-w-[720px] items-center justify-center">
+          <div
+            className={`mw-wheel-square relative mx-auto flex aspect-square w-full max-w-[720px] items-center justify-center${reduced ? "" : " mw-cycle"}`}
+          >
             <div
               className="mw-ring mw-ring-dash"
               style={{ width: "clamp(320px, 62vw, 470px)", height: "clamp(320px, 62vw, 470px)" }}
@@ -404,7 +406,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                 يعيشوا في نفس نظام 0–100 (في النسخة القديمة كانت الخطوط %
                 والنقاط px فتتضارب). */}
             <svg
-              className="pointer-events-none absolute inset-0 z-[5] h-full w-full overflow-visible"
+              className={`pointer-events-none absolute inset-0 z-[5] h-full w-full overflow-visible${reduced ? "" : " mw-orbit"}`}
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
               aria-hidden
@@ -456,7 +458,10 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </Link>
 
             {/* الأفرع التسعة */}
-            <nav aria-label="تنقل العجلة — عرض دائري" className="contents">
+            <nav
+              aria-label="تنقل العجلة — عرض دائري"
+              className={reduced ? "contents" : "mw-orbit"}
+            >
               {branches.map((b, i) => {
                 const a = ANGLES_DEG[i];
                 const r = 36;
@@ -467,7 +472,11 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                   <div
                     key={b.id}
                     className="absolute"
-                    style={{ top: `${cy}%`, left: `${cx}%` }}
+                    style={{
+                      top: `${cy}%`,
+                      left: `${cx}%`,
+                      ["--mw-delay" as string]: `${i * 800}ms`,
+                    }}
                   >
                     <WheelBranch
                       branch={b}
@@ -482,6 +491,12 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                 );
               })}
             </nav>
+
+            {!reduced && (
+              <div className="mw-shimmer" aria-hidden>
+                <span className="mw-shimmer-band" />
+              </div>
+            )}
           </div>
         )}
 
