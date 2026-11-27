@@ -7,19 +7,32 @@ import { useLectureCitation, formatTimestamp } from "./lecture-citation-context"
 import type { TimedSegment } from "@/lib/ai/lecture-intensive-prompts";
 
 /* ==========================================================================
-   🎧 مشغّل الاستوديو — Phase 23
+   🎧 مشغّل الاستوديو — Phase 23 + 24ب
    ==========================================================================
    تجربة «استوديو المحاضرة»: الصوت + التفريغ + الشرح المكثف في تزامن واحد.
 
    - الصوت مش بيتحمّل ولا الرابط بيتولّد غير عند أول ضغطة تشغيل (lazy) —
      صفحة القائمة فيها محاضرات كتير، ومفيش داعي N روابط موقّعة.
+   - ⚠️ التشغيل مش معتمد على `autoPlay` بعد الـ fetch: المتصفحات (خصوصًا
+     Safari/iOS) بتحجب التشغيل التلقائي اللي بيحصل بعد عملية شبكة بره
+     إيماءة المستخدم. الحل: بنطلب `play()` فعليًا أول ما العنصر والرابط
+     يبقوا جاهزين (pendingPlay)، ولو اتمنع بنورّي رسالة واضحة وزر إعادة المحاولة.
+   - أخطاء التحميل (`onError`) مش بتفضل صامتة زي زمان — بتظهر للطالب.
    - كل قفزة زمنية في الكارت (chip مرجع، مقطع تفريغ) بتعدي `seekTo` في
      السياق — فالتشغيل بينتقل مع المحتوى.
-   - «تتبّع»: أثناء التشغيل بنحدّد المقطع الحالي عبر focusSegment — فيتلوّن
+   - «تتبّع»: أثناء التشغيل بنحدّد المقطع الحالي عبر focusSegment — فيتلون
      ويتمرّر له تلقائيًا في التفريغ وفي عبارات الشرح المكثف.
    ========================================================================== */
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
+
+const PLAY_BLOCKED_MESSAGE = "المتصفح منع التشغيل التلقائي — اضغط زر التشغيل مرة تانية.";
+const PLAY_FAILED_MESSAGE = "حصلت مشكلة في تشغيل الصوت — جرّب تاني.";
+const LOAD_ERROR_MESSAGE = "حصلت مشكلة في تحميل الصوت — جرّب تاني أو حدّث الصفحة.";
+
+function isAutoplayBlock(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "NotAllowedError";
+}
 
 export function LectureAudioPlayer({
   lectureId,
@@ -29,7 +42,7 @@ export function LectureAudioPlayer({
   lectureId: string;
   /** المدة المعروفة من قاعدة البيانات — fallback قبل ما الميتاداتا تيجي. */
   durationSeconds: number | null;
-  /** المقاطع بتوقيتها — للنقطية (تتبّع الصوت في التفريغ والشرح). */
+  /** المقاطع بتوقيتها — للنقطة (تتبّع الصوت في التفريغ والشرح). */
   segments: TimedSegment[];
 }) {
   const { registerAudio, focusSegment } = useLectureCitation();
@@ -39,17 +52,31 @@ export function LectureAudioPlayer({
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playError, setPlayError] = useState<string | null>(null);
+  const [pendingPlay, setPendingPlay] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [total, setTotal] = useState(durationSeconds ?? 0);
   const [rate, setRate] = useState<number>(1);
   const [follow, setFollow] = useState(true);
 
+  /** محاولة تشغيل فعلية — بترفض بهدوء مش بصمت: أي رفض بيبان للطالب. */
+  const attemptPlay = useCallback((el: HTMLAudioElement) => {
+    el.play()
+      .then(() => setPlaying(true))
+      .catch((err: unknown) => {
+        setPlaying(false);
+        setPlayError(isAutoplayBlock(err) ? PLAY_BLOCKED_MESSAGE : PLAY_FAILED_MESSAGE);
+      })
+      .finally(() => setPendingPlay(false));
+  }, []);
+
   /** أول تشغيل → نجيب رابطًا موقّعًا (مرة واحدة). */
   const ensureUrl = useCallback(async () => {
     if (url || loading) return url;
     setLoading(true);
     setError(null);
+    setPlayError(null);
     try {
       const res = await fetch(`/api/lectures/${lectureId}/audio`);
       const data = await res.json().catch(() => null);
@@ -71,19 +98,29 @@ export function LectureAudioPlayer({
   }, [lectureId, url, loading]);
 
   const onToggle = useCallback(async () => {
+    setPlayError(null);
     const el = audioRef.current;
     if (!el) {
       const next = await ensureUrl();
       if (!next) return;
-      setPlaying(true);
+      setPendingPlay(true);
       return;
     }
     if (el.paused) {
-      void el.play().catch(() => {});
+      attemptPlay(el);
     } else {
       el.pause();
     }
-  }, [ensureUrl]);
+  }, [attemptPlay, ensureUrl]);
+
+  // بعد ما الرابط يوصل والعنصر يتولّد — نشغّل فعليًا بدل الاعتماد على
+  // autoPlay اللي المتصفحات بتحجبه بعد fetch خارج إيماءة المستخدم.
+  useEffect(() => {
+    if (!pendingPlay || !url) return;
+    const el = audioRef.current;
+    if (!el) return;
+    attemptPlay(el);
+  }, [attemptPlay, pendingPlay, url]);
 
   /** تتبّع: المقطع الحالي = آخر مقطع بدايته ≤ currentTime. */
   const onTimeUpdate = useCallback(() => {
@@ -139,6 +176,7 @@ export function LectureAudioPlayer({
   }, [registerAudio]);
 
   const dur = total > 0 ? formatTimestamp(total) : null;
+  const visibleError = error ?? playError;
 
   return (
     <div className="rounded-xl border border-[var(--rule)] bg-[var(--card-primary)] p-3">
@@ -151,7 +189,7 @@ export function LectureAudioPlayer({
         <button
           type="button"
           onClick={onToggle}
-          disabled={loading || Boolean(error)}
+          disabled={loading}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           aria-label={playing ? "إيقاف مؤقت" : "تشغيل التسجيل"}
         >
@@ -210,30 +248,35 @@ export function LectureAudioPlayer({
         </button>
       </div>
 
-      {error && (
+      {visibleError && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-red-600" role="alert">
           <AlertTriangle size={12} aria-hidden />
-          {error}
+          {visibleError}
         </p>
       )}
 
-      {url && (
-        <audio
-          ref={(el) => {
-            audioRef.current = el;
-            registerAudio(el);
-          }}
-          src={url}
-          preload="metadata"
-          autoPlay={playing}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onTimeUpdate={onTimeUpdate}
-          onLoadedMetadata={onLoadedMetadata}
-          onEnded={onEnded}
-          className="hidden"
-        />
-      )}
+      <audio
+        ref={(el) => {
+          audioRef.current = el;
+          registerAudio(el);
+        }}
+        src={url ?? undefined}
+        preload={url ? "metadata" : "none"}
+        onPlay={() => {
+          setPlaying(true);
+          setPlayError(null);
+        }}
+        onPause={() => setPlaying(false)}
+        onTimeUpdate={onTimeUpdate}
+        onLoadedMetadata={onLoadedMetadata}
+        onEnded={onEnded}
+        onError={() => {
+          setPlaying(false);
+          setPendingPlay(false);
+          if (url) setPlayError(LOAD_ERROR_MESSAGE);
+        }}
+        className="hidden"
+      />
     </div>
   );
 }

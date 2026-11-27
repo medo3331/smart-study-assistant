@@ -5,9 +5,12 @@
    ============================================================================
 
    القواعد (زي ما اتطلبت):
-   • المودال بيكشف بس محاضرات **نفس مادة الدرس** (`study_configs.subject`
+   • المودال بيكشف أولاً محاضرات **نفس مادة الدرس** (`study_configs.subject`
      ↔ `workspace_subjects`/`university_subjects`/`lectures.subject`) —
      مافيش قائمة مبعثرة لكل المواد.
+   • **24ب**: بعد قائمة المادة بنعرض «تسجيلات تانية عندك» — كل تسجيلات
+     الطالب اللي رفعها قبل كده حتى لو مادتها مختلفة — عشان ميفضلش
+     الحل الوحيد أمامه هو الرفع من جديد.
    • **مفيش محاضرات للمادة** ⇒ رسالة واضحة + زرار يوديك لرفع محاضرة.
    • **اقتراح ذكي**: لو عنوان محاضرة مطابق لاسم الدرس (مثل «Network Lec2»
      ودرس «Network Lec2») بيتحط فوق القائلة بعلامة ⭐.
@@ -47,6 +50,7 @@ export function LectureLinkModal({
   onClose,
   subjectName,
   lectures,
+  otherLectures = [],
   suggestion,
   currentLectureId,
   onLink,
@@ -59,6 +63,8 @@ export function LectureLinkModal({
   /** مادة الدرس (اسم حرفي من study_configs) — بيظهر في العنوان. */
   subjectName: string;
   lectures: LinkLectureOption[];
+  /** تسجيلات بره مادة الدرس — اختيارية (قد ميجيش من ردود قديمة). */
+  otherLectures?: LinkLectureOption[];
   suggestion: LinkSuggestion | null;
   currentLectureId: string | null;
   onLink: (lectureId: string) => void;
@@ -69,7 +75,7 @@ export function LectureLinkModal({
   const showSuggestion =
     suggestion && suggestion.id !== currentLectureId && !suggestion.inList;
 
-  const hasAny = lectures.length > 0 || Boolean(showSuggestion);
+  const hasAny = lectures.length > 0 || otherLectures.length > 0 || Boolean(showSuggestion);
   const allWithoutTranscript =
     lectures.length > 0 && lectures.every((lecture) => !lecture.hasTranscript);
 
@@ -168,6 +174,51 @@ export function LectureLinkModal({
               );
             })}
           </ul>
+        )}
+
+        {/* تسجيلات تانية عندك — بره مادة الدرس، بس الطالب يقدر يربطها لو عايز */}
+        {otherLectures.length > 0 && (
+          <div className="space-y-2">
+            <p className="tag">تسجيلات تانية عندك — من مواد مختلفة</p>
+            <ul className="space-y-2 max-h-48 overflow-y-auto">
+              {otherLectures.map((lecture) => {
+                const isCurrent = lecture.id === currentLectureId;
+                const duration = formatDuration(lecture.durationSeconds);
+                return (
+                  <li key={lecture.id}>
+                    <button
+                      type="button"
+                      onClick={() => onLink(lecture.id)}
+                      disabled={busy || isCurrent || !lecture.hasTranscript}
+                      aria-current={isCurrent || undefined}
+                      className={`w-full text-right rounded-[var(--r-sm)] border p-3 flex items-start gap-3 transition disabled:cursor-not-allowed ${
+                        isCurrent
+                          ? "border-ink bg-ink text-paper-2"
+                          : "border-rule bg-paper hover:bg-paper-3 disabled:opacity-50"
+                      }`}
+                    >
+                      <Mic size={15} className="shrink-0 mt-0.5 opacity-70" aria-hidden />
+                      <span className="min-w-0 flex-1">
+                        <span className={`block text-sm font-semibold break-words ${isCurrent ? "" : "text-ink"}`}>
+                          {lecture.title}
+                        </span>
+                        <span className={`tag mt-1 inline-flex flex-wrap items-center gap-1.5 ${isCurrent ? "opacity-80" : ""}`}>
+                          {lecture.createdAt && <span>{shortDate(lecture.createdAt)}</span>}
+                          {duration && <span>· {duration}</span>}
+                          {!lecture.hasTranscript && <span>· بدون تفريغ</span>}
+                        </span>
+                      </span>
+                      {isCurrent ? (
+                        <span className="text-xs shrink-0 mt-0.5">مرتبطة ✓</span>
+                      ) : (
+                        <Link2 size={15} className="text-ink-soft shrink-0 mt-0.5" aria-hidden />
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
 
         {error && (
