@@ -10,6 +10,7 @@ interface WelcomeCardProps {
   totalSteps: number;
   isNew: boolean;
   isLagging: boolean;
+  avatarUrl?: string | null;
 }
 
 const ar = (n: number) => n.toLocaleString("ar-EG");
@@ -22,6 +23,7 @@ export function WelcomeCard({
   totalSteps,
   isNew,
   isLagging,
+  avatarUrl,
 }: WelcomeCardProps) {
   let title: string;
   let subtitle: string;
@@ -49,7 +51,7 @@ export function WelcomeCard({
       className="dashboard-entrance flex items-center gap-4 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4 sm:p-5"
       style={{ animationDelay: "0ms" }}
     >
-      <ProfileAvatar initial={initial} name={name} size={64} />
+      <ProfileAvatar initial={initial} name={name} size={64} accountUrl={avatarUrl} />
       <div className="min-w-0 flex-1">
         <h1 className="text-base font-bold leading-snug text-[var(--color-text-primary)] sm:text-lg">
           {title}

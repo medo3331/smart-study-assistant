@@ -1489,10 +1489,34 @@ export default function DashboardPage() {
           totalSteps={days.length}
           isNew={days.length === 0}
           isLagging={showLagWarning}
+          avatarUrl={railAccountFromUser(authUser)?.avatarUrl}
         />
 
 
       <div className="max-w-6xl mx-auto space-y-10">
+          <DashboardSection id="wheel" title="عجلة ماجيك" hint="نظرة الخطة الكاملة">
+              <div className="motion-safe:group-open:animate-[mw-spin-in_700ms_cubic-bezier(0.22,1,0.36,1)]">
+              <MagicWheelDashboard
+            currentDay={currentDayNumber}
+            currentDayId={currentTaskForCoach?.id}
+            totalDays={days.length}
+            subject={config?.subject ?? ""}
+            completedSteps={completedCount}
+            progressPct={overallProgress}
+            currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+            streak={streak}
+            coursesCount={coursesCount}
+            subjectBreakdown={subjectBreakdown}
+            activeChartData={activeChartData}
+            analyticsRange={analyticsRange}
+            onChangeRange={setAnalyticsRange}
+            weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+            notificationsEnabled={notificationsEnabled}
+            onOpenSettings={() => router.push("/dashboard/settings")}
+          />
+            </div>
+          </DashboardSection>
+
         <div className="dashboard-entrance" style={{ animationDelay: "0ms" }}>
           <NextBestAction
             action={nextBestAction}
@@ -1740,27 +1764,6 @@ export default function DashboardPage() {
             <EconomyStrip />
             <PlanQuotaCard />
             <SubscriptionQuotaCard />
-          </DashboardSection>
-
-          <DashboardSection id="wheel" title="عجلة ماجيك" hint="نظرة الخطة الكاملة" defaultOpen={false}>
-              <MagicWheelDashboard
-            currentDay={currentDayNumber}
-            currentDayId={currentTaskForCoach?.id}
-            totalDays={days.length}
-            subject={config?.subject ?? ""}
-            completedSteps={completedCount}
-            progressPct={overallProgress}
-            currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
-            streak={streak}
-            coursesCount={coursesCount}
-            subjectBreakdown={subjectBreakdown}
-            activeChartData={activeChartData}
-            analyticsRange={analyticsRange}
-            onChangeRange={setAnalyticsRange}
-            weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-            notificationsEnabled={notificationsEnabled}
-            onOpenSettings={() => router.push("/dashboard/settings")}
-          />
           </DashboardSection>
 
           <DashboardSection id="worship" title="عباداتي" defaultOpen={false}>
