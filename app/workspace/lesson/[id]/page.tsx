@@ -13,6 +13,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell } from "@/app/dashboard/components/PageShell";
 import { LessonWorkspace } from "@/components/lesson/LessonWorkspace";
+import { DocumentWorkspace } from "@/components/lesson/DocumentWorkspace";
 import { extractSegments, planParts, reconcileExplanation } from "@/lib/ai/lecture-intensive";
 import { INTENSIVE_CHUNK_CHARS } from "@/lib/ai/lecture-intensive-prompts";
 import type { Flashcard, Mcq } from "@/lib/ai/lecture-study";
@@ -61,7 +62,31 @@ export default async function LessonWorkspacePage({ params }: { params: Promise<
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!data) notFound();
+  // مش محاضرة؟ نجرب مكتبة المستندات (materials) — كل ملف يبقى درس (24ج).
+  if (!data) {
+    const { data: material } = await supabase
+      .from("materials")
+      .select("id, title, content, summary, note")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!material) notFound();
+    return (
+      <PageShell
+        eyebrow="مساحة التعلّم"
+        title={material.title ?? "مستند"}
+        lede="كل أدوات الدرس في مكان واحد: الشرح، Magic، المصادر، وNotebook."
+      >
+        <DocumentWorkspace
+          materialId={material.id}
+          title={material.title ?? "مستند"}
+          summary={typeof material.summary === "string" ? material.summary : null}
+          note={typeof material.note === "string" ? material.note : null}
+          content={typeof material.content === "string" ? material.content : ""}
+        />
+      </PageShell>
+    );
+  }
   const lecture = data as LessonRecord;
 
   const segments: TimedSegment[] = extractSegments(lecture.transcript_data);

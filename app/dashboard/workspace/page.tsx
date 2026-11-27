@@ -1267,6 +1267,15 @@ export default function WorkspacePage() {
                   )}
 
                   <div className="flex items-center justify-end gap-2 border-t border-rule pt-2">
+                    {/* 🚀 كل ملف له نص مستخرج → درس في مساحة التعلّم */}
+                    {material.content.trim() && (
+                      <Link
+                        href={`/workspace/lesson/${material.id}`}
+                        className="btn btn-quiet text-xs px-3 py-1.5"
+                      >
+                        🚀 مساحة الدرس
+                      </Link>
+                    )}
                     <button
                       onClick={() => openFile(material.id)}
                       className="btn btn-quiet text-xs px-3 py-1.5"

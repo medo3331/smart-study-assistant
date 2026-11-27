@@ -9,7 +9,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle, Square, Pencil, Trash2, FileText } from "lucide-react";
+import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle, Square, Pencil, Trash2, FileText, Globe } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExplanationView } from "@/components/unified-ai/ExplanationView";
@@ -141,6 +141,8 @@ export function UnifiedChat({
   useEffect(() => { void loadCreditUsage(); }, [loadCreditUsage]);
   // 🎨 أسلوب الشرح المختار — بيحقن كتعليمات تعليمية في السيرفر.
   const [styleModifier, setStyleModifier] = useState<string | null>(null);
+  // 🌐 بحث في الإنترنت — زر صريح زي ChatGPT: الطالب يتحكم بدل تخمين الكلام.
+  const [webSearchOn, setWebSearchOn] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -392,6 +394,7 @@ export function UnifiedChat({
       if (conversationId) ctx.conversationId = conversationId;
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
       if (styleModifier) ctx.style = styleModifier;
+      if (webSearchOn) ctx.web = true;
       //                                             API    hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
@@ -855,6 +858,18 @@ export function UnifiedChat({
 
       {/* Input bar */}
       <div className="flex items-end gap-2 bg-paper border border-rule rounded-2xl px-3 py-2 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setWebSearchOn((v) => !v)}
+          aria-pressed={webSearchOn}
+          title="بحث في الإنترنت"
+          aria-label="بحث في الإنترنت"
+          className={`p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl transition ${
+            webSearchOn ? "bg-[var(--accent)]/15 text-[var(--accent)]" : "hover:bg-paper-3 text-ink-soft"
+          }`}
+        >
+          <Globe size={20} />
+        </button>
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}

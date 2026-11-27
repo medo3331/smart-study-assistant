@@ -1005,10 +1005,13 @@ export async function POST(req: Request) {
     const EXPLICIT_WEB_RE = /(ابحث في (النت|الإنترنت|الانترنت|الويب|جوجل)|دور في (النت|الإنترنت|الانترنت|الويب|جوجل)|search (the )?(web|internet)|google it)/i;
     const RECENCY_RE = /(20(2[4-9]|3[0-9])|أحدث|احدث|الأخبار|اخبار|أخبار|latest|news|سعر)/i;
     if (continuationPart === 0) {
-      const explicitWeb = EXPLICIT_WEB_RE.test(userPromptForMemory);
+      // 🌐 زر «بحث في الإنترنت» من الواجهة (context.web) = طلب صريح كمان.
+      const contextWeb = (context as Record<string, unknown> | undefined)?.web === true;
+      const explicitWeb = contextWeb || EXPLICIT_WEB_RE.test(userPromptForMemory);
       const wantsWeb = explicitWeb || (intentResult.intent === "GENERAL_CHAT" && RECENCY_RE.test(userPromptForMemory));
       if (wantsWeb) {
         const outcome = await webSearch(userPromptForMemory, { deep: explicitWeb });
+        if (!outcome.ok) console.warn("[unified-ai] web search unavailable:", outcome.error);
         const block = formatWebSearchBlock(outcome);
         if (block) {
           input.system = `${input.system || ""}\n\n--- 🌐 نتائج بحث الويب (مصدر خارجي — استشهد بالروابط) ---\n${block}\nاستخدم هذه النتائج في إجابتك مع ذكر المصادر، ووضّح لو المعلومة ناقصة أو قديمة.`;

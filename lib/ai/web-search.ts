@@ -35,9 +35,9 @@ export async function webSearch(query: string, opts?: { deep?: boolean }): Promi
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const res = await fetch(TAVILY_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Tavily الحالية بتفضّل Authorization: Bearer — api_key في الـ body بقى legacy.
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        api_key: apiKey,
         query: q,
         search_depth: opts?.deep ? "advanced" : "basic",
         include_answer: true,
@@ -46,7 +46,12 @@ export async function webSearch(query: string, opts?: { deep?: boolean }): Promi
       signal: controller.signal,
     });
     clearTimeout(timer);
-    if (!res.ok) return { ok: false, results: [], error: "TAVILY_FAILED" };
+    if (!res.ok) {
+      console.warn(
+        `[web-search] Tavily HTTP ${res.status}${res.status === 401 || res.status === 403 ? " — راجع TAVILY_API_KEY" : ""}`,
+      );
+      return { ok: false, results: [], error: "TAVILY_FAILED" };
+    }
     const data = (await res.json().catch(() => null)) as {
       answer?: string;
       results?: { title?: string; url?: string; content?: string }[];
@@ -60,7 +65,8 @@ export async function webSearch(query: string, opts?: { deep?: boolean }): Promi
         snippet: (r.content ?? "").slice(0, 500),
       }));
     return { ok: true, answer: data?.answer || undefined, results };
-  } catch {
+  } catch (e) {
+    console.warn("[web-search] Tavily request failed:", e);
     return { ok: false, results: [], error: "TAVILY_FAILED" };
   }
 }
