@@ -9,7 +9,7 @@
 
 import { NextResponse } from "next/server";
 
-async function getAuthedClient() {
+export async function getAuthedClient() {
   const { createClient } = await import("@/lib/supabase/server");
   const client = await createClient();
   const { data: { user }, error } = await client.auth.getUser();
@@ -170,4 +170,31 @@ export async function profilePatchHandler(req: Request) {
     return NextResponse.json({ success: false, error: "Failed to save profile." }, { status: 500 });
   }
   return NextResponse.json({ success: true });
+}
+
+// ------------------------------------------------------- social notifier ---
+// إشعار اجتماعي (لايك/تعليق/منشن) في الجدول الموحد — لا يُشعر المستخدم بنشاطه
+// على نفسه، والفشل يُسجَّل فقط ولا يفشل الإجراء الأصلي.
+
+export type SupabaseClient = Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
+
+export async function socialNotify(
+  client: SupabaseClient,
+  recipientId: string,
+  title: string,
+  body: string,
+  linkUrl: string,
+): Promise<void> {
+  try {
+    const { error } = await client.from("notifications").insert({
+      recipient_id: recipientId,
+      type: "social",
+      title,
+      body,
+      link_url: linkUrl,
+    });
+    if (error) console.error("[community/notify] insert error:", error.message);
+  } catch (e) {
+    console.error("[community/notify] unexpected:", e);
+  }
 }

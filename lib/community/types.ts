@@ -51,3 +51,68 @@ export function relationErrorAr(code: string | undefined, fallback: string): str
   if (code && RELATION_ERROR_AR[code]) return RELATION_ERROR_AR[code];
   return fallback;
 }
+
+/** أنواع المنشورات التعليمية في مجتمع Magicly. */
+export type PostKind = "text" | "achievement" | "question" | "tip" | "summary" | "challenge";
+
+/** خصوصية المنشور الواحد. */
+export type PostVisibility = "public" | "friends" | "private";
+
+/** صف منشور راجع من RPCs القراءة (الفيد/البروفايل/المحفوظات/الهاشتاج). */
+export type CommunityPostRow = {
+  post_id: string;
+  kind: PostKind;
+  body: string;
+  visibility: PostVisibility;
+  image_url: string | null;
+  created_at: string;
+  author_id: string;
+  author_name: string | null;
+  author_code: string | null;
+  author_avatar: string | null;
+  like_count: number;
+  comment_count: number;
+  liked_by_me: boolean;
+  saved_by_me: boolean;
+};
+
+/** صف تعليق راجع من get_post_comments. */
+export type CommunityCommentRow = {
+  comment_id: string;
+  parent_id: string | null;
+  body: string;
+  created_at: string;
+  author_id: string;
+  author_name: string | null;
+  author_code: string | null;
+  author_avatar: string | null;
+  can_delete: boolean;
+};
+
+/** أخطاء RPCs المنشورات بالعربي. */
+export const POST_ERROR_AR: Record<string, string> = {
+  auth_required: "محتاج تسجّل دخولك الأول.",
+  invalid_body: "اكتب حاجة في المنشور الأول (حتى 2000 حرف).",
+  invalid_kind: "نوع المنشور غير معروف.",
+  invalid_visibility: "قيمة خصوصية غير صالحة.",
+  invalid_image: "صورة المنشور غير صالحة.",
+  invalid_parent: "التعليق الأب غير موجود.",
+  rate_limited: "نشرت منشورات كتير في الآخر — استنى شوية.",
+  not_found: "المنشور أو التعليق مش موجود.",
+  not_allowed: "مش مسموح لك بالإجراء ده.",
+};
+
+export function postErrorAr(code: string | undefined, fallback: string): string {
+  if (code && POST_ERROR_AR[code]) return POST_ERROR_AR[code];
+  return fallback;
+}
+
+/** أسماء أنواع المنشورات بالعربي. */
+export const POST_KIND_AR: Record<PostKind, string> = {
+  text: "منشور",
+  achievement: "إنجاز دراسي",
+  question: "سؤال أكاديمي",
+  tip: "معلومة مفيدة",
+  summary: "ملخص أو مصدر",
+  challenge: "تحدي",
+};

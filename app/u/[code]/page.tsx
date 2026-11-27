@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/server";
 import ProfileActions from "@/components/community/ProfileActions";
+import UserPosts from "@/components/community/UserPosts";
 import type { RelationState } from "@/lib/community/types";
 
 type SocialProfileData = {
@@ -119,6 +120,9 @@ export default async function UserPublicPage({ params }: { params: Promise<{ cod
             canFriendRequest={profile.allow_friend_requests !== false}
           />
         </div>
+
+        {/* منشوراته — بتظهر حسب الخصوصية والعلاقة (فاضية للسير لو ممنوع) */}
+        <UserPosts userId={profile.user_id!} />
 
         <div className="grid gap-6 py-6 md:grid-cols-[1fr_200px]">
           <div className="space-y-5">

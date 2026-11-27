@@ -9,9 +9,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle } from "lucide-react";
-import type { SocialProfileSummary } from "@/lib/community/types";
-import { relationErrorAr } from "@/lib/community/types";
+import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle, Rss, Bookmark, ImagePlus, Loader2 } from "lucide-react";
+import type { SocialProfileSummary, CommunityPostRow } from "@/lib/community/types";
+import { relationErrorAr, postErrorAr, POST_KIND_AR } from "@/lib/community/types";
+import PostCard from "@/components/community/PostCard";
 
 type FriendRow = {
   friend_id: string;
@@ -46,7 +47,7 @@ type SocialProfile = {
   show_academic_info: boolean;
 };
 
-type Tab = "discover" | "friends" | "requests" | "profile";
+type Tab = "feed" | "discover" | "friends" | "requests" | "saved" | "profile";
 
 const btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed";
 const primaryBtn = `${btn} bg-marker text-white hover:opacity-90`;
@@ -55,15 +56,36 @@ const smallBtn = "inline-flex items-center gap-1.5 rounded-lg border border-rule
 const inputCls = "w-full rounded-xl border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-marker";
 
 const TABS: { id: Tab; label: string; icon: typeof Search }[] = [
+  { id: "feed", label: "الفيد", icon: Rss },
   { id: "discover", label: "اكتشف", icon: Search },
   { id: "friends", label: "الأصدقاء", icon: Users },
   { id: "requests", label: "الطلبات", icon: Bell },
+  { id: "saved", label: "المحفوظات", icon: Bookmark },
   { id: "profile", label: "ملفي", icon: UserIcon },
 ];
 
 export default function CommunityHubPage() {
-  const [tab, setTab] = useState<Tab>("discover");
+  const [tab, setTab] = useState<Tab>("feed");
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // feed
+  const [feed, setFeed] = useState<CommunityPostRow[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedBefore, setFeedBefore] = useState<string | null>(null);
+  const [feedDone, setFeedDone] = useState(false);
+  // composer
+  const [postKind, setPostKind] = useState("text");
+  const [postVisibility, setPostVisibility] = useState("public");
+  const [postBody, setPostBody] = useState("");
+  const [postImage, setPostImage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  // saved
+  const [savedPosts, setSavedPosts] = useState<CommunityPostRow[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
 
   // discover
   const [query, setQuery] = useState("");
@@ -127,12 +149,94 @@ export default function CommunityHubPage() {
       const data = await res.json();
       if (data.success && data.profile) {
         setProfile(data.profile);
+        if (data.profile.user_id) setCurrentUserId(data.profile.user_id);
         setInterestsText((data.profile.interests || []).join("، "));
       }
     } catch {
       // تجاهل
     }
   }, []);
+
+  const loadFeed = useCallback(async (before?: string | null, append = false) => {
+    setFeedLoading(true);
+    try {
+      const url = `/api/community/posts${before ? `?before=${encodeURIComponent(before)}` : ""}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const posts: CommunityPostRow[] = data.success ? data.posts || [] : [];
+      setFeed((prev) => (append ? [...prev, ...posts] : posts));
+      if (posts.length < 20) setFeedDone(true);
+      else setFeedBefore(posts[posts.length - 1]?.created_at ?? null);
+    } catch {
+      setFeed([]);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, []);
+
+  const loadSaved = useCallback(async () => {
+    setSavedLoading(true);
+    try {
+      const res = await fetch("/api/community/saved-posts");
+      const data = await res.json();
+      setSavedPosts(data.success ? data.posts || [] : []);
+    } catch {
+      setSavedPosts([]);
+    } finally {
+      setSavedLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "feed" && feed.length === 0 && !feedDone) void loadFeed(null, false);
+    if (tab === "saved" && savedPosts.length === 0) void loadSaved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    setPublishError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/community/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.success) setPostImage(data.url);
+      else setPublishError(data.error || "تعذّر رفع الصورة.");
+    } catch {
+      setPublishError("مشكلة شبكة أثناء رفع الصورة.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const publish = async () => {
+    const body = postBody.trim();
+    if (!body || publishing) return;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const res = await fetch("/api/community/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: postKind, body, visibility: postVisibility, imageUrl: postImage }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPostBody("");
+        setPostImage(null);
+        setPostKind("text");
+        setFeedDone(false);
+        await loadFeed(null, false);
+      } else {
+        setPublishError(postErrorAr(data.code, data.error || "تعذّر النشر."));
+      }
+    } catch {
+      setPublishError("مشكلة شبكة — حاول تاني.");
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   useEffect(() => {
     void loadRelations();
@@ -313,6 +417,121 @@ export default function CommunityHubPage() {
           </button>
         ))}
       </nav>
+
+      {/* -------------------------------------------------------- الفيد --- */}
+      {tab === "feed" && (
+        <section className="space-y-4">
+          {/* الكومبوزر */}
+          <div className="rounded-2xl border border-rule bg-paper-2 p-4">
+            <textarea
+              value={postBody}
+              onChange={(e) => setPostBody(e.target.value)}
+              placeholder="ايه اللي في بالك؟ شارك إنجازك، اسأل سؤال، أو اكتب معلومة تفيد زمايلك... (#هاشتاج و@MAG-XXX-XXXX مدعومين)"
+              className={`${inputCls} min-h-24 resize-y`}
+              maxLength={2000}
+              aria-label="منشور جديد"
+            />
+            {postImage && (
+              <div className="relative mt-3 inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={postImage} alt="" className="max-h-40 rounded-xl" />
+                <button
+                  onClick={() => setPostImage(null)}
+                  aria-label="إزالة الصورة"
+                  className="absolute left-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select value={postKind} onChange={(e) => setPostKind(e.target.value)} className={`${inputCls} w-auto`} aria-label="نوع المنشور">
+                {Object.entries(POST_KIND_AR).map(([k, label]) => (
+                  <option key={k} value={k}>{label}</option>
+                ))}
+              </select>
+              <select value={postVisibility} onChange={(e) => setPostVisibility(e.target.value)} className={`${inputCls} w-auto`} aria-label="من يشوف المنشور">
+                <option value="public">🌍 عام</option>
+                <option value="friends">👥 الأصدقاء فقط</option>
+                <option value="private">🔒 خاص بي</option>
+              </select>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rule px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-paper-2">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                صورة
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadImage(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <button onClick={() => void publish()} disabled={publishing || !postBody.trim()} className={primaryBtn}>
+                {publishing ? "جارٍ النشر..." : "نشر"}
+              </button>
+            </div>
+            {publishError && <p className="mt-2 text-xs text-red-600">{publishError}</p>}
+          </div>
+
+          {/* المنشورات */}
+          {feedLoading && feed.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              جارٍ تحميل الفيد...
+            </p>
+          ) : feed.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              الفيد فاضي لسه — انشر أول منشور، أو ضيف أصدقاء من تاب «اكتشف» عشان تشوف منشوراتهم هنا.
+            </p>
+          ) : (
+            <>
+              {feed.map((p) => (
+                <PostCard
+                  key={p.post_id}
+                  post={p}
+                  currentUserId={currentUserId}
+                  onDeleted={(id) => setFeed((prev) => prev.filter((x) => x.post_id !== id))}
+                />
+              ))}
+              {!feedDone && feedBefore && (
+                <button
+                  onClick={() => void loadFeed(feedBefore, true)}
+                  disabled={feedLoading}
+                  className={`${ghostBtn} mx-auto block`}
+                >
+                  {feedLoading ? "جارٍ التحميل..." : "تحميل المزيد"}
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* --------------------------------------------------- المحفوظات --- */}
+      {tab === "saved" && (
+        <section>
+          {savedLoading ? (
+            <p className="text-sm text-ink-soft">جارٍ التحميل...</p>
+          ) : savedPosts.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              مفيش منشورات محفوظة — اضغط «حفظ» على أي منشور في الفيد.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {savedPosts.map((p) => (
+                <PostCard
+                  key={p.post_id}
+                  post={p}
+                  currentUserId={currentUserId}
+                  onDeleted={(id) => setSavedPosts((prev) => prev.filter((x) => x.post_id !== id))}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ------------------------------------------------------- اكتشف --- */}
       {tab === "discover" && (
