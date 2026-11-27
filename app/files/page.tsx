@@ -1,13 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { FileManager } from "@/components/files/FileManager";
-import "../files.css";
-
-export const metadata: Metadata = {
-  title: "ملفاتي — Magicly",
-  description: "ملفات الطالب المرفوعة — فتح، تحميل، وذاكرة منها.",
-};
-
+/* 📚 دمج المكتبات — «ملفاتي» جزء من مساحة العمل دلوقتي (مصدر واحد للملفات والـ AI). */
 export default function FilesPage() {
-  return <FileManager />;
+  redirect("/dashboard/workspace?tab=files");
 }

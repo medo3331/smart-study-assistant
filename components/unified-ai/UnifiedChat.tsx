@@ -702,7 +702,16 @@ export function UnifiedChat({
               {(msg.actions?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {(msg.actions ?? []).map((action) =>
-                    action.external ? (
+                    action.href.startsWith("#") ? (
+                      <button
+                        key={action.href + action.label}
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-extrabold text-[var(--on-marker)] transition hover:brightness-110"
+                      >
+                        {action.label}
+                      </button>
+                    ) : action.external ? (
                       <a
                         key={action.href}
                         href={action.href}

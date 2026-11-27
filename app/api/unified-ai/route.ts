@@ -36,6 +36,10 @@ import { classifyChatIntent } from "@/lib/ai/chat-intent";
 
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import { getCreditCost } from "@/lib/ai/credit-pricing";
+import { syncMaterialToWorkspace } from "@/lib/ai/library-sync";
+import { formatWebSearchBlock, webSearch } from "@/lib/ai/web-search";
+import { buildFilePath, ensureFileBucket, fileCategory, uploadObject } from "@/lib/files/storage";
+import { createServiceClient } from "@/lib/supabase/admin";
 import type { UnifiedAIInput, UnifiedAIResult } from "@/lib/unified-ai/types";
 import { getModelAccessPolicy, CURRENT_AI_MODEL, filterAccessibleModels } from "@/lib/ai/model-access";
 import {
@@ -897,11 +901,20 @@ export async function POST(req: Request) {
           }
           return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
         } else if (ws.resolution.status === "not_found") {
-          const answer = "لم أجد مصدرًا مطابقًا في مساحة عملك. جرّب تحديد الاسم أو الرقم.";
+          // 🤔 بدل «مش لاقي» — أسئلة توضيحية + رفع مباشر من الشات.
+          const answer = `مش لاقي مصدر بالاسم ده في مساحة عملك 🤔
+قولّي: اسم المحاضرة أو الملف بالظبط إيه؟ (وممكن اسم المادة كمان)
+ولّى الأسرع — ارفعه هنا على طول وهفهمه وأشرحه لك فورًا 👇`;
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({
+            ok: true,
+            answer,
+            actions: [{ label: "📎 ارفع ملف/محاضرة", href: "#upload-file" }],
+            metadata: { modelUsed: modelToUse, resolvedVia },
+            conversationId: incomingConversationId || undefined,
+          });
         } else if (ws.resolution.status === "empty_source") {
           const answer = "المصدر موجود لكنه لا يحتوي على محتوى قابل للاستخدام.";
           if (reserveRef) {
@@ -944,6 +957,24 @@ export async function POST(req: Request) {
       input.system = `${input.system || ""}\n\n--- أسلوب الشرح المطلوب ---\n${EXPLANATION_STYLES[styleKey]}`;
     }
 
+    // 🌐 بحث الويب — طلب صريح أو سؤال معرفي محتاج معلومات حديثة (Tavily).
+    //    النتائج تتحقن كمرجع خارجي مع الروابط — ولو الخدمة مش مفعّلة الرد يكمل عادي.
+    const EXPLICIT_WEB_RE = /(ابحث في (النت|الإنترنت|الانترنت|الويب|جوجل)|دور في (النت|الإنترنت|الانترنت|الويب|جوجل)|search (the )?(web|internet)|google it)/i;
+    const RECENCY_RE = /(20(2[4-9]|3[0-9])|أحدث|احدث|الأخبار|اخبار|أخبار|latest|news|سعر)/i;
+    if (continuationPart === 0) {
+      const explicitWeb = EXPLICIT_WEB_RE.test(userPromptForMemory);
+      const wantsWeb = explicitWeb || (intentResult.intent === "GENERAL_CHAT" && RECENCY_RE.test(userPromptForMemory));
+      if (wantsWeb) {
+        const outcome = await webSearch(userPromptForMemory, { deep: explicitWeb });
+        const block = formatWebSearchBlock(outcome);
+        if (block) {
+          input.system = `${input.system || ""}\n\n--- 🌐 نتائج بحث الويب (مصدر خارجي — استشهد بالروابط) ---\n${block}\nاستخدم هذه النتائج في إجابتك مع ذكر المصادر، ووضّح لو المعلومة ناقصة أو قديمة.`;
+        } else if (explicitWeb) {
+          input.system = `${input.system || ""}\n\n--- 🌐 بحث الويب ---\nخدمة البحث في الإنترنت غير متاحة حاليًا — أخبر الطالب بذلك بصراحة وأجب من معرفتك مع التنويه أن المعلومة قد تكون قديمة.`;
+        }
+      }
+    }
+
     // REAL INFERENCE
     const result: UnifiedAIResult = await unifiedAI(input);
 
@@ -961,6 +992,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: "PROVIDER_ERROR" }, { status: 502 });
     }
 
+    // 📚 مرفق الشات بيتحفظ في المكتبة الموحّدة — Storage + files + materials
+    //    (best-effort: فشله ما يمنعش الرد) — الطالب يرفع من الشات على طول
+    //    والملف يبقى موجود في مساحة العمل والـ AI يقرأ منه في المحادثات الجاية.
+    if (userId && supabase && !isAnonymous && fileInput && attachmentName && result.extractedText) {
+      try {
+        const privileged = createServiceClient();
+        const category = fileCategory(attachmentName);
+        if (category) {
+          await ensureFileBucket();
+          const storagePath = buildFilePath(userId, attachmentName);
+          await uploadObject(storagePath, await fileInput.arrayBuffer());
+          await privileged.from("files").insert({
+            profile_id: userId,
+            file_name: attachmentName,
+            original_name: attachmentName,
+            file_size: fileInput.size,
+            file_type: category,
+            storage_path: storagePath,
+            stage: "ready",
+          });
+        }
+        await syncMaterialToWorkspace(privileged, {
+          userId,
+          title: attachmentName,
+          fileType: category,
+          fileSize: fileInput.size,
+          content: result.extractedText,
+        });
+      } catch (e) {
+        console.warn("[unified-ai] chat attachment library sync failed (non-blocking):", e);
+      }
+    }
     // SUCCESS → consume is implicit (reserve = consume); no extra ledger write
     // حفظ المحادثة best-effort (نفس نمط /api/chat) — الفشل هنا لا يحرم الطالب من الرد.
     let savedConversationId = incomingConversationId;
