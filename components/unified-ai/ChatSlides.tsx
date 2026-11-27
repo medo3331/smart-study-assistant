@@ -19,8 +19,42 @@ export interface ChatSlide {
 
 export function ChatSlides({ topic, slides }: { topic: string; slides: ChatSlide[] }) {
   const [idx, setIdx] = useState(0);
+  const [exporting, setExporting] = useState<"pptx" | "pdf" | "docx" | null>(null);
+  const [exportError, setExportError] = useState(false);
   const slide = slides[Math.min(idx, slides.length - 1)];
   if (!slide) return null;
+
+  /**
+   * 💾 تحميل الشرح كملف حقيقي (PowerPoint / PDF / Word) — شرح كتير مش سطرين.
+   * 💡 **ليه سيرفر؟** مولّد الـ deck في `lib/ai/slides-generator.tsx` بيتعامل مع
+   *    node:fs (خطوط PDF) — نفس الآلة الموحّدة اللي بتخدم /dashboard/slides.
+   */
+  const exportDeck = async (format: "pptx" | "pdf" | "docx") => {
+    setExporting(format);
+    setExportError(false);
+    try {
+      const res = await fetch("/api/slides-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, slides, format }),
+      });
+      if (!res.ok) throw new Error("export-failed");
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename\*=UTF-8''([^;]+)/);
+      const name = match ? decodeURIComponent(match[1]) : `${topic || "شرح"}.${format}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError(true);
+    } finally {
+      setExporting(null);
+    }
+  };
 
   return (
     <div className="mt-2 rounded-xl border border-[var(--rule)] bg-paper overflow-hidden" dir="rtl">
@@ -39,6 +73,21 @@ export function ChatSlides({ topic, slides }: { topic: string; slides: ChatSlide
             <code>{slide.code}</code>
           </pre>
         )}
+      </div>
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-[var(--rule)] bg-paper-3/50 flex-wrap">
+        <span className="text-[10px] font-bold text-ink-soft">تحميل الشرح كملف:</span>
+        {(["pptx", "pdf", "docx"] as const).map((fmt) => (
+          <button
+            key={fmt}
+            type="button"
+            onClick={() => exportDeck(fmt)}
+            disabled={exporting !== null}
+            className="text-[10px] font-bold px-2 py-1 rounded-lg border border-[var(--rule)] text-ink-soft hover:bg-paper-3 transition disabled:opacity-50"
+          >
+            {exporting === fmt ? "⏳ جارٍ…" : fmt === "pptx" ? "⬇ PowerPoint" : fmt === "pdf" ? "⬇ PDF" : "⬇ Word"}
+          </button>
+        ))}
+        {exportError && <span className="text-[10px] text-rose-600">فشل التحميل — جرّب تاني.</span>}
       </div>
       <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--rule)]">
         <button

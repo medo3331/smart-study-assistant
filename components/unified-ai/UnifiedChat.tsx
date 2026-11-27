@@ -9,7 +9,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle, Square } from "lucide-react";
+import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle, Square, Pencil, Trash2, FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExplanationView } from "@/components/unified-ai/ExplanationView";
@@ -64,7 +64,7 @@ export function UnifiedChat({
   const { locale } = useLanguage();
   const isAr = locale === "ar";
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "Hello! I am your AI study assistant. How can I help you today?", },
+    { role: "assistant", content: "أهلاً! أنا مساعد Magicly الذكي 🧠 — اسألني عن أي حاجة في مذاكرتك، أو ارفع ملف/صورة وهشرحها لك. تقدر تطلب: شرح، تلخيص، اختبار سريع، أو خطة مراجعة.", },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -84,6 +84,23 @@ export function UnifiedChat({
   const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
   const audioRefs = useRef<HTMLAudioElement[]>([]);
   const speakTokenRef = useRef(0);
+  const browserSpeakingRef = useRef(false);
+  // 🔇 رسالة فشل الصوت — بتظهر لما TTS السيرفر وصوت المتصفح الاتنين يفشلوا.
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  // 📚 مكتبتي — ملفات مساحة العمل المرتبطة بالمساعد (نفس مصدر /api/files).
+  const [libraryFiles, setLibraryFiles] = useState<Array<{ id: string; original_name?: string | null; file_name?: string | null; file_size?: number | null }>>([]);
+  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [libraryError, setLibraryError] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/files");
+        if (!res.ok) { setLibraryError(true); return; }
+        const d = await res.json().catch(() => ({}));
+        if (Array.isArray(d?.files)) setLibraryFiles(d.files);
+      } catch { setLibraryError(true); }
+    })();
+  }, []);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -127,7 +144,7 @@ export function UnifiedChat({
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
   const newChat = useCallback(() => {
-    setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magic. اكتب سؤالك، أو ارفع صورة/ملف â€” وسأساعدك." }]);
+    setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magicly الذكي 🧠 — اسألني عن أي حاجة في مذاكرتك، أو ارفع ملف/صورة وهشرحها لك." }]);
     setConversationId(null);
     setInput("");
     removeAttachment();
@@ -169,6 +186,7 @@ export function UnifiedChat({
     audioRefs.current.forEach((a) => a.pause());
     audioRefs.current = [];
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    browserSpeakingRef.current = false;
     setSpeakingIdx(null);
   }, []);
 
@@ -179,6 +197,23 @@ export function UnifiedChat({
     stopSpeech();
     const token = ++speakTokenRef.current;
     setSpeakingIdx(index);
+    setVoiceNotice(null);
+    // 🔇 بديل المتصفح — بيشتغل لو TTS السيرفر فشل (ElevenLabs/Groq) بدل الصمت التام.
+    const speakBrowser = () => {
+      if (speakTokenRef.current !== token) return;
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        setVoiceNotice("خدمة الصوت غير متاحة حالياً — جرّب تاني، ولو المشكلة استمرت أبلغ الدعم.");
+        setSpeakingIdx(null);
+        return;
+      }
+      const clean = answer.replace(/[#*_>|~]/g, " ").replace(/\s+/g, " ").trim().slice(0, 1200);
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = "ar-EG";
+      u.onend = () => { browserSpeakingRef.current = false; if (speakTokenRef.current === token) setSpeakingIdx(null); };
+      u.onerror = () => { browserSpeakingRef.current = false; if (speakTokenRef.current === token) setSpeakingIdx(null); };
+      browserSpeakingRef.current = true;
+      window.speechSynthesis.speak(u);
+    };
     try {
       const res = await fetch("/api/voice/speak", {
         method: "POST",
@@ -197,7 +232,7 @@ export function UnifiedChat({
         await new Promise<void>((resolve) => {
           audio.onended = () => resolve();
           audio.onerror = () => resolve();
-          // ⏹ الإيقاف اليدوي (pause) لازم يفض الحلقة المعلّقة — من غيرها الـ await يفضل مستني للأبد.
+          // ⏹ الإيقاف اليدوي (pause) لازم يفض الحلقة المعلّقة — من غيره الـ await يفضل مستني للأبد.
           audio.onpause = () => resolve();
           void audio.play().catch(() => resolve());
         });
@@ -213,10 +248,13 @@ export function UnifiedChat({
       } else {
         await play(await res.blob());
       }
-    } catch {} finally {
-      if (speakTokenRef.current === token) setSpeakingIdx(null);
+    } catch {
+      speakBrowser();
+    } finally {
+      // لو صوت المتصفح شغّال، الإيقاف بيتظبط من onend/onerror — من غيرها هينقطع فوراً.
+      if (speakTokenRef.current === token && !browserSpeakingRef.current) setSpeakingIdx(null);
     }
-  }, [speakingIdx, stopSpeech]);
+    }, [speakingIdx, stopSpeech]);
 
   // 📊 شرائح من جواب المساعد — نفس خط /dashboard/slides بس جوه الشات.
   const generateSlides = useCallback(async (index: number, answer: string) => {
@@ -283,7 +321,7 @@ export function UnifiedChat({
     const text = input.trim();
     if (!text && !attachment) return;
 
-    const userMsg: ChatMsg = { role: "user", content: text || "(   /          ", attachmentName: attachment?.file.name };
+    const userMsg: ChatMsg = { role: "user", content: text || "📎 مرفق", attachmentName: attachment?.file.name };
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
@@ -339,10 +377,10 @@ export function UnifiedChat({
           (data?.message as string | undefined) ||
           (typeof data?.error === "string" ? data.error : data?.error?.message) ||
           (res.status === 429
-            ? "                                                    .                            ."
-            : "        ");
+            ? "وصلت الحد الأقصى للطلبات المتاحة حالياً. جرّب تاني بعد شوية أو طوّر باقتك."
+            : "حدث خطأ غير متوقع. جرّب تاني.");
         const supportHref = supportWhatsappHref(code || String(res.status), rawError);
-        const supportAction = { label: "                        ", href: supportHref, external: true };
+        const supportAction = { label: "التواصل مع الدعم عبر واتساب", href: supportHref, external: true };
 
         // ??      AI Credits     (402)              ??
         if (res.status === 402 || code === "INSUFFICIENT_CREDITS") {
@@ -366,9 +404,9 @@ export function UnifiedChat({
         if (res.status === 403 || code === "MODEL_ACCESS_REQUIRED") {
           const info = {
             error: rawError || "Model access required.",
-            message: "You need to upgrade your plan to access this model. Please visit the pricing page.",
+            message: "محتاج ترقية باقتك للوصول للموديل ده. زور صفحة الباقات.",
             actions: [
-              { label: "Upgrade Plan", href: "/pricing" },
+              { label: "ترقية الباقة", href: "/pricing" },
               supportAction,
             ],
             kind: "access" as const,
@@ -382,10 +420,10 @@ export function UnifiedChat({
         if (res.status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "GUEST_RATE_LIMIT") {
           const info = {
             error: rawError,
-            message: data?.message || "                                                                                                    ",
+            message: data?.message || "خد نفسك وقفة قصيرة وجرّب تاني — أو قسّم طلبك لأجزاء أصغر.",
             actions: (data?.actions as { label: string; href: string }[]) || [
-              { label: "                          ", href: "/pricing" },
-              { label: "Buy Credits", href: "/store" },
+              { label: "ترقية الباقة", href: "/pricing" },
+              { label: "شراء كريدت", href: "/store" },
               supportAction,
             ],
             retryAfterHours: data?.retryAfterHours as number | undefined,
@@ -409,7 +447,7 @@ export function UnifiedChat({
           timestamp: new Date().toISOString(),
         });
         const technicalInfo = {
-          error: "حصل عطل فني",
+          error: "حصل عطل فني مؤقت",
           message: `حدثت مشكلة أثناء معالجة طلبك. كود العطل: ${code}${incidentId ? ` | معرّف البلاغ: ${incidentId}` : ""}`,
           actions: supportPhone
             ? [{ label: "الإبلاغ عبر واتساب", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
@@ -449,10 +487,10 @@ export function UnifiedChat({
         timestamp: new Date().toISOString(),
       });
       setRateLimitInfo({
-        error: "Network Error.",
-        message: "Unable to connect to the server. Please check your internet connection.",
+        error: isAr ? "مشكلة في الاتصال" : "Network Error.",
+        message: isAr ? "مش قادر أوصل للسيرفر. اتأكد من اتصالك بالإنترنت وجرّب تاني." : "Unable to connect to the server.",
         actions: supportPhone
-          ? [{ label: "Contact Support", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
+          ? [{ label: isAr ? "التواصل مع الدعم عبر واتساب" : "Contact Support", href: buildWhatsAppUrl(supportPhone, waMessage), external: true }]
           : [],
         kind: "technical",
       });
@@ -480,13 +518,47 @@ export function UnifiedChat({
       {/* ⚠️ الـ aside على الموبايل `fixed` — لازم يبدأ **تحت** الشريط
           العلوي (`--nav-h`) وإلا غطّاه. وعلى الديسكتوب `md:static` فيصير
           جوّه الـ flex عادي. */}
-      <aside className={`${sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-[var(--nav-h)] right-0 h-[calc(100%-var(--nav-h))] w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform`}>
+      <aside className={`${sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-[var(--nav-h)] right-0 h-[calc(100%-var(--nav-h))] w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform flex flex-col`}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-sm">المحادثات</h2>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="إغلاق">âœ•</button>
+          <h2 className="font-bold text-sm">المحادثات المحفوظة</h2>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="إغلاق"><X size={14} /></button>
         </div>
         <button onClick={newChat} className="w-full mb-3 px-3 py-2 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-bold">+ محادثة جديدة</button>
-        <div className="overflow-y-auto h-[calc(100%-80px)] space-y-1">
+        {/* 📚 مكتبتي — ربط مساحة العمل بالمساعد: ملفات الطالب الجاهزة للسؤال */}
+        <div className="mb-3 border border-[var(--border)] rounded-xl p-2">
+          <button onClick={() => setLibraryOpen((v) => !v)} className="w-full flex items-center justify-between text-xs font-bold text-ink">
+            <span className="flex items-center gap-1.5"><FileText size={13} /> 📚 مكتبتي — ملفات مساحة العمل</span>
+            <span className="text-[10px] text-ink-soft">{libraryOpen ? "▲" : "▼"}</span>
+          </button>
+          {libraryOpen && (
+            <div className="mt-2 max-h-44 overflow-y-auto space-y-0.5">
+              {libraryFiles.length === 0 && (
+                <p className="text-[11px] text-ink-soft leading-relaxed px-1 py-1">
+                  {libraryError
+                    ? "سجّل دخولك عشان تشوف ملفاتك هنا."
+                    : "مفيش ملفات لسه — ارفع ملفاتك في مساحة العمل وهتظهر هنا، والمساعد هيجاوبك منها."}
+                </p>
+              )}
+              {libraryFiles.map((f) => {
+                const name = f.original_name || f.file_name || "ملف";
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => { setInput(`اشرح لي الملف «${name}» اللي رفعته في مساحة العمل`); setSidebarOpen(false); }}
+                    className="w-full text-right rounded-lg px-2 py-1.5 text-xs hover:bg-black/5 transition flex items-center gap-1.5"
+                    title={`اسأل عن: ${name}`}
+                  >
+                    <FileText size={12} className="shrink-0 text-ink-soft" />
+                    <span className="truncate flex-1">{name}</span>
+                    {typeof f.file_size === "number" && <span className="text-[9px] text-ink-soft shrink-0">{Math.max(1, Math.round(f.file_size / 1024))} KB</span>}
+                  </button>
+                );
+              })}
+              <Link href="/dashboard/workspace" className="block text-[11px] text-[var(--accent)] hover:underline px-2 pt-1">＋ ارفع ملف جديد في مساحة العمل →</Link>
+            </div>
+          )}
+        </div>
+        <div className="overflow-y-auto flex-1 min-h-0 space-y-1">
           {loadingConversations && <p className="text-xs text-ink-soft">جارٍ التحميل...</p>}
           {conversations.map((c) => (
             <div key={c.id} className={`group rounded-xl px-2 py-2 text-sm cursor-pointer ${conversationId === c.id ? "bg-[var(--accent)]/10" : "hover:bg-black/5"}`}>
@@ -496,15 +568,15 @@ export function UnifiedChat({
                 <div onClick={() => openConversation(c.id)} className="flex items-center justify-between gap-1">
                   <span className="truncate flex-1">{c.title}</span>
                   <span className="opacity-0 group-hover:opacity-100 flex gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.title); }} className="text-[10px]" aria-label="إعادة تسمية">âœژ</button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }} className="text-[10px]" aria-label="حذف">ًں—‘</button>
+                    <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameValue(c.title); }} className="text-[10px]" aria-label="إعادة تسمية"><Pencil size={12} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }} className="text-[10px]" aria-label="حذف"><Trash2 size={12} /></button>
                   </span>
                 </div>
               )}
               <p className="text-[10px] text-ink-soft mt-0.5">{new Date(c.updated_at).toLocaleString("ar")}</p>
             </div>
           ))}
-          {!loadingConversations && conversations.length === 0 && <p className="text-xs text-ink-soft">لا توجد محادثات سابقة.</p>}
+          {!loadingConversations && conversations.length === 0 && <p className="text-xs text-ink-soft leading-relaxed">ابدأ أول محادثة — هتتخزن هنا تلقائياً وتقدر ترجع لها في أي وقت.</p>}
         </div>
       </aside>
       {/* ⚠️ عمود المحتوى: صفّان في CSS grid —
@@ -520,7 +592,7 @@ export function UnifiedChat({
         {/* منطقة الرسائل — هي اللي بتسكرول */}
         <div className="min-h-0 overflow-y-auto">
         <button onClick={() => setSidebarOpen((v) => !v)} className="m-2 px-2 py-1 border rounded" aria-label="إظهار/إخفاء المحادثات">☰</button>
-        <div className="max-w-3xl mx-auto px-4 py-5" dir="rtl">
+        <div className="max-w-3xl md:max-w-4xl xl:max-w-5xl mx-auto px-4 py-5" dir="rtl">
       {/* 📌 دليل الاستخدام — أول حاجة في العمود، قبل المحادثة نفسها.
           هنا بالذات محتاجه: أربع أوضاع (`Explain` / `Quiz` / `Summarize` /
           `Review`) مكتوبة بالإنجليزي ومن غير شرح، فالمستخدم الجديد
@@ -528,29 +600,21 @@ export function UnifiedChat({
       <FeatureGuide {...guides.chat} storageKey="guide:chat" />
 
       <div className="flex items-center justify-between gap-2 mb-3">
-        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="                   ">
-          ?            
+        <button onClick={() => router.push("/dashboard")} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition flex items-center gap-1" aria-label="العودة إلى لوحة التحكم">
+          ← لوحة التحكم
         </button>
-        <button
-          onClick={() => {
-             setMessages([{ role: "assistant", content: "Hello! How can I help you?" }]);
-            setConversationId(null);
-            setRateLimitInfo(null);
-          }}
-          className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition"
-          aria-label="            "
-        >
-          ?             
+        <button onClick={newChat} className="text-xs font-medium text-[var(--ink-soft)] hover:text-[var(--accent)] transition" aria-label="بدء محادثة جديدة">
+          + محادثة جديدة
         </button>
       </div>
 
       {/*                (                                    ) */}
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Study Modes">
+      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="أوضاع الدراسة">
         {([
-           { id: "explain", label: "Explain" },
-           { id: "quiz", label: "Quiz" },
-           { id: "summarize", label: "Summarize" },
-           { id: "review", label: "Review" },
+           { id: "explain", label: "شرح" },
+           { id: "quiz", label: "اختبار سريع" },
+           { id: "summarize", label: "تلخيص" },
+           { id: "review", label: "مراجعة" },
         ] as const).map((m) => (
           <button
             key={m.id}
@@ -572,14 +636,14 @@ export function UnifiedChat({
       <div className="space-y-3 mb-4 min-h-[240px]">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--card-primary)] border border-[var(--rule)] text-ink shadow-sm"}`}>
+            <div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--card-primary)] border border-[var(--rule)] text-ink shadow-sm"}`}>
               {msg.role === "user" ? (
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
                 <ExplanationView content={msg.content} />
               )}
               {msg.attachmentName && (
-                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>
+                <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
               )}
               {(msg.actions?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -634,7 +698,7 @@ export function UnifiedChat({
         {loading && (
           <div className="flex justify-end">
             <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
-              <LoaderCircle className="w-4 h-4 animate-spin" />              ...
+              <LoaderCircle className="w-4 h-4 animate-spin" /> جارٍ التفكير…
             </div>
           </div>
         )}
@@ -654,7 +718,7 @@ export function UnifiedChat({
              من ورا الشريط لما بتسكرول.
           ═══════════════════════════════════════════════════════════════ */}
       <div className="border-t border-rule bg-paper">
-        <div className="mx-auto max-w-3xl px-4 py-3" dir="rtl">
+        <div className="mx-auto max-w-3xl md:max-w-4xl xl:max-w-5xl px-4 py-3" dir="rtl">
 
       {/* Attachment preview (visible, user controls) */}
       {attachment && (
@@ -663,7 +727,7 @@ export function UnifiedChat({
             {attachment.kind === "image" ? (
               <img src={attachment.previewUrl} alt="preview" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF /    </div>
+              <div className="w-full h-full flex items-center justify-center text-xs text-ink-soft">PDF / ملف</div>
             )}
             <button
               onClick={removeAttachment}
@@ -675,9 +739,13 @@ export function UnifiedChat({
           </div>
           <div className="text-xs">
             <p className="font-medium">{attachment.file.name}</p>
-            <p>OCR processing...</p>
+            <p>المساعد هيقرأ محتواه تلقائياً</p>
           </div>
         </div>
+      )}
+
+      {voiceNotice && (
+        <p className="mb-2 text-[11px] text-rose-600" role="alert">🔇 {voiceNotice}</p>
       )}
 
       {/* Input bar */}
@@ -685,7 +753,7 @@ export function UnifiedChat({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          aria-label="       "
+          aria-label="إرفاق ملف"
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <Paperclip size={20} />
@@ -693,7 +761,7 @@ export function UnifiedChat({
         <button
           type="button"
           onClick={() => imageInputRef.current?.click()}
-          aria-label="        "
+          aria-label="إرفاق صورة"
           className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-paper-3 text-ink-soft transition"
         >
           <ImagePlus size={20} />
@@ -721,7 +789,7 @@ export function UnifiedChat({
              وبيحسب ارتفاع غلط. */
           data-navsmoke="chat-composer"
           className="flex-1 bg-transparent text-sm font-body resize-none outline-none py-2 min-h-[36px] max-h-[120px]"
-          placeholder="           .. (                            OCR)"
+          placeholder="اسأل أي حاجة.. أو ارفع ملف/صورة (PDF والصور بتتقري تلقائياً)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
@@ -746,9 +814,9 @@ export function UnifiedChat({
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-         <p className="text-[11px] text-ink-soft">Magic</p>
+         <p className="text-[11px] text-ink-soft">Magicly — شرح، تلخيص، اختبارات، وصوت</p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
-          <Sparkles size={12} /> <span>Magic</span>
+          <Sparkles size={12} /> <span>Magicly</span>
         </div>
       </div>
 
@@ -766,7 +834,7 @@ export function UnifiedChat({
               {rateLimitInfo.retryAfterHours && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2 flex items-center gap-1">
                   <Clock size={12} />
-                                               {rateLimitInfo.retryAfterHours}                         {rateLimitInfo.retryAfter ? ` (       {Math.ceil(rateLimitInfo.retryAfter / 60)}      )` : ""}
+                                               تقدر تجرب تاني بعد {rateLimitInfo.retryAfterHours} ساعة تقريباً{rateLimitInfo.retryAfter ? ` (حوالي ${Math.ceil(rateLimitInfo.retryAfter / 60)} دقيقة)` : ""}
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-3">
@@ -788,7 +856,7 @@ export function UnifiedChat({
                       href={a.href}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] text-[var(--on-marker)] text-xs font-bold px-4 py-2 hover:brightness-110 transition"
                     >
-                      {a.label.includes("        ") ? <Crown size={14} /> : <ShoppingBag size={14} />}
+                      {a.label.includes("ترقية") ? <Crown size={14} /> : <ShoppingBag size={14} />}
                       {a.label}
                     </Link>
                   )
@@ -798,7 +866,7 @@ export function UnifiedChat({
             <button
               onClick={() => setRateLimitInfo(null)}
               className="shrink-0 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-amber-700 dark:text-amber-300"
-              aria-label="     "
+              aria-label="إغلاق"
             >
               <X size={16} />
             </button>

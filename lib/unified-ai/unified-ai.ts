@@ -98,9 +98,9 @@ async function callGroqWithModel(
   // ًںŒگ Language handling: honour the requested language instead of discarding it.
   const langDirective =
     _language === "ar"
-      ? "أجب باللغة العربية (Arabic) إلا إذا طلب المستخدم غير ذلك."
+      ? "اللغة: اتبع لغة سؤال الطالب — سؤال عربي يُجاب بالعربية، وسؤال إنجليزي يُجاب بالإنجليزية أولاً ثم أضف في نهاية الرد قسم قصير بعنوان «الملخص بالعربية» يشرح نفس الفكرة بالعربية."
       : _language === "en"
-        ? "Respond in English unless the user explicitly asks otherwise."
+        ? "Respond in the student's language: an English question gets an English answer followed by a short Arabic summary section titled «الملخص بالعربية»."
         : "";
   const fullSystem = [langDirective, system]
     .filter((s) => typeof s === "string" && s.trim().length > 0)
