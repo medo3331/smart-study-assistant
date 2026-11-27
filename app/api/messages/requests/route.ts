@@ -23,7 +23,7 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const { createClient } = await import("@/lib/supabase/server");
-    const serverClient = createClient();
+    const serverClient = await createClient();
 
     const { data: { user }, error: authError } = await serverClient.auth.getUser();
     if (authError || !user) {
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const { createClient } = await import("@/lib/supabase/server");
-    const serverClient = createClient();
+    const serverClient = await createClient();
 
     const { data: { user }, error: authError } = await serverClient.auth.getUser();
     if (authError || !user) {
