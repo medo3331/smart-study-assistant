@@ -1,44 +1,166 @@
+// ===========================================================================
+// MAGICLY — Social Profile Page /u/[code] (MAG-XXX-XXXX)
+// ===========================================================================
+// صفحة الطالب الاجتماعية في مجتمع Magicly — بياناتها بتيجي من
+// get_social_profile_by_code (security definer) اللي بيطبق الخصوصية:
+//   - الحساب الخاص أو المعلومات المخبّية → هوية مختصرة فقط (اسم + كود + صورة)
+//   - المحظور (بأي اتجاه) → الصفحة مش موجودة أصلًا
+// + بطاقة QR للرابط العام (من المرحلة السابقة — نفس البيانات المعروضة).
+// ===========================================================================
+
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
-import { SITE_URL } from "@/lib/seo";
+import { createClient } from "@/lib/supabase/server";
+import ProfileActions from "@/components/community/ProfileActions";
+import type { RelationState } from "@/lib/community/types";
+
+type SocialProfileData = {
+  found: boolean;
+  user_id?: string;
+  public_user_code?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  cover_url?: string | null;
+  bio?: string | null;
+  university?: string | null;
+  faculty?: string | null;
+  major?: string | null;
+  year?: string | null;
+  interests?: string[] | null;
+  account_privacy?: "public" | "private";
+  allow_messages?: boolean;
+  allow_friend_requests?: boolean;
+  is_self?: boolean;
+  relation?: { state: RelationState; request_id?: string };
+};
 
 export default async function UserPublicPage({ params }: { params: Promise<{ code?: string }> }) {
   const sp = await params;
   const code = sp?.code || "";
 
-  // Basic validation: must match the canonical generator format MAG-XXX-XXXX
-  // (db/epic6-user-code.sql — generate_public_user_code). Phase 1.5: كان
-  // /^MAG-[A-Z0-9]{6}$/i وده بيرفض كل الأكواد اللي الـtrigger بيولّدها فعليًا.
+  // نفس تحقق النسخة السابقة — الصيغة الكانونية الوحيدة (db/epic6-user-code.sql)
   if (!/^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(code)) {
     redirect("/?error=كود_غير_صالح");
   }
 
-  // Phase 3 (QR): الـQR بيشفّر الرابط العام الكامل — نفس المعلومة اللي الصفحة
-  // بتعرضها أصلًا (مفيش بيانات جديدة بتتكشف). قراءة فقط: مفيش هنا أي زر
-  // توليد/تعديل — التوليد/إعادة التوليد متاح للأدمن فقط من /admin/users/[id].
-  // التوليد server-side بمكتبة qrcode (SVG محلي — بلا API خارجي وبلا endpoint).
-  const profileUrl = `${SITE_URL}/u/${code}`;
-  const qrSvg = await QRCode.toString(profileUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M", width: 200 });
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login?next=/u/" + encodeURIComponent(code));
+  }
+
+  const { data, error } = await supabase.rpc("get_social_profile_by_code", { p_code: code });
+  if (error || !data || !(data as SocialProfileData).found) {
+    // مش موجود أو محظور — نفس السلوك: لا نكشف السبب
+    redirect("/community?error=الحساب_مش_متاح");
+  }
+
+  const profile = data as SocialProfileData;
+  const relation = profile.relation ?? { state: "none" as RelationState };
+  const isPrivate = profile.account_privacy === "private";
+  const isFriend = relation.state === "friends";
+  const showAcademic = !isPrivate || isFriend;
+
+  // QR للرابط العام — نفس معلومة الصفحة المعروضة (من المرحلة السابقة)
+  const { SITE_URL } = await import("@/lib/seo");
+  const profileUrl = `${SITE_URL}/u/${profile.public_user_code}`;
+  const qrSvg = await QRCode.toString(profileUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M", width: 160 });
   const qrDataUri = `data:image/svg+xml;base64,${Buffer.from(qrSvg).toString("base64")}`;
 
-  // Minimal safe display — no sensitive data exposed
+  const infoRow = (label: string, value?: string | null) =>
+    value ? (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-ink-soft">{label}:</span>
+        <span className="font-medium text-ink">{value}</span>
+      </div>
+    ) : null;
+
   return (
-    <div className="min-h-screen bg-[#090d16] text-white p-10 flex items-center justify-center dir-rtl">
-      <div className="max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-8 space-y-4 shadow-xl text-center">
-        <h1 className="text-2xl font-extrabold text-amber-400">كود المستخدم</h1>
-        <p className="text-sm text-slate-400">تم التعرف على كود: <span className="font-mono text-amber-300">{code}</span></p>
-        <div className="flex flex-col items-center gap-3 py-2">
-          <div
-            className="bg-white p-3 rounded-2xl inline-block shadow-lg [&>svg]:block"
-            dangerouslySetInnerHTML={{ __html: qrSvg }}
-          />
-          <a href={qrDataUri} download={`${code}.svg`} className="text-[11px] text-amber-400 underline hover:text-amber-300">
-            تحميل QR (SVG)
-          </a>
+    <div className="min-h-screen bg-paper text-ink" dir="rtl">
+      {/* الغلاف */}
+      <div
+        className="h-40 w-full bg-gradient-to-l from-marker/30 via-paper-2 to-paper-3 border-b border-rule"
+        style={profile.cover_url ? { backgroundImage: `url(${profile.cover_url})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+      />
+
+      <div className="mx-auto max-w-3xl px-4">
+        {/* الهوية */}
+        <div className="-mt-10 flex items-end justify-between gap-4">
+          <div className="flex items-end gap-4">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border-2 border-paper bg-paper-3 shadow-md">
+              {profile.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatar_url} alt={profile.display_name ?? "الطالب"} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-2xl font-extrabold text-ink-soft">
+                  {(profile.display_name ?? "؟").slice(0, 1)}
+                </div>
+              )}
+            </div>
+            <div className="pb-1">
+              <h1 className="text-xl font-extrabold">{profile.display_name ?? "طالب Magicly"}</h1>
+              <p className="mono text-xs text-ink-soft" dir="ltr">{profile.public_user_code}</p>
+            </div>
+          </div>
+          {isPrivate && (
+            <span className="mb-1 rounded-full border border-rule bg-paper-2 px-3 py-1 text-xs text-ink-soft">
+              🔒 حساب خاص
+            </span>
+          )}
         </div>
-        <p className="text-xs text-slate-500">هذا رابط عام — لا يحتوي على بيانات حساسة، والـQR بيشفّر نفس هذا الرابط. لتفعيل الاشتراك، يجب التواصل مع الدعم عبر واتساب مع إرسال هذا الكود.</p>
-        <div className="pt-4">
-          <a href="/" className="inline-block bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-sm transition">العودة للرئيسية</a>
+
+        {/* الأزرار */}
+        <div className="mt-4 border-y border-rule py-4">
+          <ProfileActions
+            targetUserId={profile.user_id!}
+            initialState={relation.state}
+            initialRequestId={relation.request_id ?? null}
+            canMessage={profile.allow_messages !== false}
+            canFriendRequest={profile.allow_friend_requests !== false}
+          />
+        </div>
+
+        <div className="grid gap-6 py-6 md:grid-cols-[1fr_200px]">
+          <div className="space-y-5">
+            {profile.bio && <p className="leading-relaxed text-ink">{profile.bio}</p>}
+
+            {/* المعلومات الأكاديمية — مخفية تلقائيًا للخصوصية */}
+            {showAcademic && (
+              <section className="space-y-2">
+                <h2 className="text-sm font-bold text-ink-soft">المعلومات الأكاديمية</h2>
+                <div className="space-y-1 rounded-xl border border-rule bg-paper-2/50 p-4">
+                  {infoRow("الجامعة", profile.university)}
+                  {infoRow("الكلية", profile.faculty)}
+                  {infoRow("التخصص", profile.major)}
+                  {infoRow("السنة", profile.year)}
+                  {!profile.university && !profile.faculty && !profile.major && (
+                    <p className="text-sm text-ink-soft">مفيش معلومات أكاديمية معروضة.</p>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {showAcademic && profile.interests && profile.interests.length > 0 && (
+              <section className="space-y-2">
+                <h2 className="text-sm font-bold text-ink-soft">الاهتمامات</h2>
+                <div className="flex flex-wrap gap-2">
+                  {profile.interests.map((tag) => (
+                    <span key={tag} className="rounded-full bg-marker/10 px-3 py-1 text-xs font-medium text-marker">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* بطاقة QR — نفس ميزة المرحلة السابقة */}
+          <aside className="space-y-3 rounded-xl border border-rule bg-paper-2/50 p-4 text-center">
+            <p className="text-xs font-bold text-ink-soft">كودك أو كود صاحبك</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qrDataUri} alt={`QR — ${profile.public_user_code}`} className="mx-auto h-40 w-40" />
+            <p className="mono break-all text-[11px] text-ink-soft" dir="ltr">{profileUrl}</p>
+          </aside>
         </div>
       </div>
     </div>
