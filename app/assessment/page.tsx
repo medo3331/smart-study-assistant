@@ -168,10 +168,17 @@ export default function AssessmentPage() {
   const [gradesDB, setGradesDB] = useState<{ id: string; stage_id: string; name: string; code: string; order_index: number }[]>([]);
   const [tracksDB, setTracksDB] = useState<{ id: string; stage_id: string; grade_id: string | null; name: string; code: string }[]>([]);
   const [tracksLoading, setTracksLoading] = useState(false);
-  // University branch (faculty suggestion list is suggestions-only; stored value is free text)
-  const [uniFaculty, setUniFaculty] = useState("");
-  const [uniFacultyFree, setUniFacultyFree] = useState("");
-  const [uniYear, setUniYear] = useState<number | null>(null);
+  // University branch — sequential DB-driven wizard: university, faculty, department, level, semester
+  const [universitiesDB, setUniversitiesDB] = useState<{ id: string; name: string }[]>([]);
+  const [facultiesDB, setFacultiesDB] = useState<{ id: string; name: string; university_id: string }[]>([]);
+  const [departmentsDB, setDepartmentsDB] = useState<{ id: string; name: string; faculty_id: string }[]>([]);
+  const [levelsDB, setLevelsDB] = useState<{ id: string; name: string; order_index: number }[]>([]);
+  const [semestersDB, setSemestersDB] = useState<{ id: string; name: string }[]>([]);
+  const [universityId, setUniversityId] = useState<string | null>(null);
+  const [facultyId, setFacultyId] = useState<string | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const [academicLevelId, setAcademicLevelId] = useState<string | null>(null);
+  const [semesterId, setSemesterId] = useState<string | null>(null);
   // Auto-resolved subjects (live from curricula→subjects; never hardcoded)
   const [subjectsAuto, setSubjectsAuto] = useState<string[]>([]);
   // نظام الأسيسمنت السريع — كل مواد المستخدم بتتحفظ في البروفايل مرة واحدة
@@ -191,23 +198,21 @@ export default function AssessmentPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, education_track_id, subject, subjects").eq("id", user.id).maybeSingle();
+        const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, education_track_id, subject, subjects, university_id, faculty_id, department_id, academic_level_id, semester_id").eq("id", user.id).maybeSingle();
         if (p) {
           if (p.persona && isPersona(p.persona)) setPersona(p.persona);
           if (p.student_level) setStudentLevel(p.student_level as StudentLevel);
           if (p.education_stage_id) { setEduStageId(p.education_stage_id); }
           if (p.education_grade_id) { setEduGradeId(p.education_grade_id); }
           if (p.education_track_id) { setEduTrackId(p.education_track_id); }
+          if (p.university_id) { setUniversityId(p.university_id); }
+          if (p.faculty_id) { setFacultyId(p.faculty_id); }
+          if (p.department_id) { setDepartmentId(p.department_id); }
+          if (p.academic_level_id) { setAcademicLevelId(p.academic_level_id); }
+          if (p.semester_id) { setSemesterId(p.semester_id); }
           if (Array.isArray(p.subjects) && p.subjects.length) { setSelectedSubjects(p.subjects as string[]); }
           if (p.subject) { setSubject(p.subject); setStep("quiz"); } // sec 6: skip subject if already set
         }
-        // University-branch context (separate guarded read: columns exist after step-2 SQL)
-        try {
-          const { data: u } = await supabase.from("profiles").select("faculty_name, edu_year").eq("id", user.id).maybeSingle();
-          const row = u as { faculty_name?: string | null; edu_year?: number | null } | null;
-          if (row?.faculty_name) setUniFacultyFree(row.faculty_name);
-          if (row?.edu_year) setUniYear(row.edu_year);
-        } catch {}
       } catch {}
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,12 +265,47 @@ export default function AssessmentPage() {
     })();
   }, [eduStageId, eduGradeId, gradesDB, persona, stagesDB, supabase]);
 
+  // University taxonomy — sequential wizard data (loaded when the UNIVERSITY stage is chosen)
+  useEffect(() => {
+    const stageCode = stagesDB.find((s) => s.id === eduStageId)?.code;
+    if (stageCode !== "UNIVERSITY" || universitiesDB.length > 0) return;
+    void (async () => {
+      try {
+        const [univ, fac, dept, lvl, sem] = await Promise.all([
+          supabase.from("universities").select("id, name, code").order("name"),
+          supabase.from("university_faculties").select("id, name, code, university_id").order("name"),
+          supabase.from("university_departments").select("id, name, code, faculty_id").order("name"),
+          supabase.from("university_levels").select("id, name, code, order_index").order("order_index"),
+          supabase.from("university_semesters").select("id, name, code").order("name"),
+        ]);
+        setUniversitiesDB((univ.data ?? []) as typeof universitiesDB);
+        setFacultiesDB((fac.data ?? []) as typeof facultiesDB);
+        setDepartmentsDB((dept.data ?? []) as typeof departmentsDB);
+        setLevelsDB((lvl.data ?? []) as typeof levelsDB);
+        setSemestersDB((sem.data ?? []) as typeof semestersDB);
+      } catch {}
+    })();
+  }, [eduStageId, stagesDB, universitiesDB.length, supabase]);
+
   // Auto subjects — live from curricula→subjects (single source of truth, admin-editable via SQL).
   // Track-specific when a track is chosen; base curriculum otherwise. Never hardcoded.
   useEffect(() => {
-    if (persona !== "student" || !eduStageId || !eduGradeId) { setSubjectsAuto([]); return; }
+    if (persona !== "student" || !eduStageId) { setSubjectsAuto([]); return; }
     const code = stagesDB.find((s) => s.id === eduStageId)?.code;
-    if (code === "UNIVERSITY") { setSubjectsAuto([]); return; }
+    if (code === "UNIVERSITY") {
+      if (!(universityId && facultyId && departmentId && academicLevelId && semesterId)) { setSubjectsAuto([]); return; }
+      void (async () => {
+        try {
+          const { data: subs } = await supabase.from("university_subjects").select("name").eq("university_id", universityId).eq("department_id", departmentId).eq("academic_level_id", academicLevelId).eq("semester_id", semesterId);
+          const names = ((subs ?? []) as { name: string }[]).map((s) => s.name);
+          setSubjectsAuto(names);
+          setSelectedSubjects((prev) => (prev.length > 0 ? prev : names));
+          setSubject((prev) => prev || names[0] || "");
+        } catch { setSubjectsAuto([]); }
+      })();
+      return;
+    }
+    if (!eduGradeId) { setSubjectsAuto([]); return; }
     const order = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? 0;
     const trackRequired = (code === "SECONDARY" || code === "BACCALAUREATE") && order >= 2;
     if (trackRequired && !eduTrackId) { setSubjectsAuto([]); return; }
@@ -288,7 +328,7 @@ export default function AssessmentPage() {
         setSelectedSubjects((prev) => (prev.length > 0 ? prev : names));
       } catch { setSubjectsAuto([]); }
     })();
-  }, [eduStageId, eduGradeId, eduTrackId, gradesDB, persona, stagesDB, supabase]);
+  }, [academicLevelId, departmentId, eduGradeId, eduStageId, eduTrackId, facultyId, gradesDB, persona, semesterId, stagesDB, supabase, universityId]);
 
   useEffect(() => {
     const pending = readPendingChoice();
@@ -303,11 +343,19 @@ export default function AssessmentPage() {
   const suggestedTracks = persona === "student" && subjectsAuto.length > 0 ? subjectsAuto : getTracks(field, persona);
   const needsStudentLevel = persona === "student";
 
+  function resetUniversity() {
+    setUniversityId(null);
+    setFacultyId(null);
+    setDepartmentId(null);
+    setAcademicLevelId(null);
+    setSemesterId(null);
+  }
+
   function choosePersona(nextPersona: Persona) {
     setPersona(nextPersona);
     // المستوى خاص بالطالب؛ إبقاؤه بعد اختيار شخصية تانية يخلّي بيانات
     // الحساب تقول حاجتين متناقضتين.
-    if (nextPersona !== "student") { setStudentLevel(null); setEduStageId(null); setEduGradeId(null); setEduTrackId(null); setUniFaculty(""); setUniFacultyFree(""); setUniYear(null); setSubjectsAuto([]); }
+    if (nextPersona !== "student") { setStudentLevel(null); setEduStageId(null); setEduGradeId(null); setEduTrackId(null); resetUniversity(); setSubjectsAuto([]); }
     else { setEduTrackId(null); setSubjectsAuto([]); }
   }
 
@@ -413,7 +461,14 @@ export default function AssessmentPage() {
       window.location.href = currentNext() || roleHome(personaToRole(persona) ?? "student");
     } catch (error) {
       console.error("Failed to save profile:", error);
-      setSaveError(locale === "ar" ? "حصل خطأ أثناء تجهيز البروفايل. جرّب تاني." : "Couldn't save your profile. Try again.");
+      const saveMsg = error instanceof Error ? error.message : "";
+      setSaveError(
+        /subjects|column/i.test(saveMsg)
+          ? (locale === "ar"
+            ? "عمود المواد ناقص في قاعدة البيانات — شغّل db/40-profiles-subjects.sql في Supabase SQL Editor وجرّب تاني."
+            : "Missing profiles.subjects column — run db/40-profiles-subjects.sql in Supabase SQL Editor and try again.")
+          : (locale === "ar" ? "حصل خطأ أثناء تجهيز البروفايل. جرّب تاني." : "Couldn't save your profile. Try again.")
+      );
       setSavingProfile(false);
     }
   }
@@ -437,8 +492,13 @@ export default function AssessmentPage() {
       education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
       education_grade_id: persona === "student" && !isUni ? (eduGradeId ?? null) : null,
       education_track_id: persona === "student" && !isUni ? (eduTrackId ?? null) : null,
-      faculty_name: isUni ? ((uniFaculty || uniFacultyFree.trim()) || null) : null,
-      edu_year: isUni ? (uniYear ?? null) : null,
+      university_id: isUni ? universityId : null,
+      faculty_id: isUni ? facultyId : null,
+      department_id: isUni ? departmentId : null,
+      academic_level_id: isUni ? academicLevelId : null,
+      semester_id: isUni ? semesterId : null,
+      faculty_name: isUni ? (facultiesDB.find((f) => f.id === facultyId)?.name ?? null) : null,
+      edu_year: isUni ? (levelsDB.find((l) => l.id === academicLevelId)?.order_index ?? null) : null,
     };
 
     if (existingProfile) {
@@ -596,7 +656,7 @@ export default function AssessmentPage() {
     if (!eduStageId) return true;
     const stageCode = stagesDB.find((s) => s.id === eduStageId)?.code;
     if (stageCode === "UNIVERSITY") {
-      return !((uniFaculty || uniFacultyFree.trim()) && uniYear);
+      return !(universityId && facultyId && departmentId && academicLevelId && semesterId);
     }
     if (!eduGradeId) return true;
     const gradeOrder = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? 0;
@@ -608,7 +668,7 @@ export default function AssessmentPage() {
     persona, needsStudentLevel, studentLevel,
     eduStageId, eduGradeId, eduTrackId,
     stagesDB, gradesDB, tracksDB, tracksLoading,
-    uniFaculty, uniFacultyFree, uniYear
+    universityId, facultyId, departmentId, academicLevelId, semesterId
   ]);
 
   return (
@@ -722,9 +782,7 @@ export default function AssessmentPage() {
                         setEduStageId(v || null);
                         setEduGradeId(null);
                         setEduTrackId(null);
-                        setUniFaculty("");
-                        setUniFacultyFree("");
-                        setUniYear(null);
+                        resetUniversity();
                         setSubjectsAuto([]);
                       }}
                       className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
@@ -740,6 +798,7 @@ export default function AssessmentPage() {
                       {stagesDB.length === 0 && <option disabled>جارٍ التحميل…</option>}
                     </select>
                   </div>
+                  {stagesDB.find((s) => s.id === eduStageId)?.code !== "UNIVERSITY" && (
                   <div>
                     <label htmlFor="edu-grade-select" className="field-label">الصف</label>
                     <select
@@ -767,43 +826,99 @@ export default function AssessmentPage() {
                       })}
                     </select>
                   </div>
+                  )}
                   {eduStageId && stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY" && (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <div>
-                        <label htmlFor="uni-faculty-select" className="field-label">الكلية / التخصص</label>
-                        <select
-                          id="uni-faculty-select"
-                          value={uniFaculty || ""}
-                          onChange={(e) => { setUniFaculty(e.target.value || ""); setUniFacultyFree(""); }}
-                          className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
-                        >
-                          <option value="">اختر الكلية…</option>
-                          {["الهندسة","الطب","الصيدلة","التجارة","الحقوق","الآداب","العلوم","الحاسبات والمعلومات","التربية","الإعلام"].map((f) => (
-                            <option key={f} value={f}>{f}</option>
+                        <p className="field-label">{locale === "ar" ? "جامعتك؟" : "Your university?"}</p>
+                        <div className="chip-row" role="list">
+                          {universitiesDB.map((u) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => { resetUniversity(); setUniversityId(u.id); }}
+                              aria-pressed={universityId === u.id}
+                              className={`chip transition ${universityId === u.id ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                            >
+                              {u.name}
+                            </button>
                           ))}
-                        </select>
-                        <input
-                          value={uniFacultyFree}
-                          onChange={(e) => { setUniFacultyFree(e.target.value); if (e.target.value) setUniFaculty(""); }}
-                          placeholder="لو مش موجودة — اكتب تخصصك"
-                          className="field text-sm mt-2 w-full h-[44px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2"
-                        />
+                          {universitiesDB.length === 0 && <span className="text-xs text-ink-soft">{locale === "ar" ? "جارِي التحميل…" : "Loading…"}</span>}
+                        </div>
                       </div>
+                      {universityId && (
                       <div>
-                        <label htmlFor="uni-year-select" className="field-label">الفرقة الدراسية</label>
-                        <select
-                          id="uni-year-select"
-                          value={uniYear ?? ""}
-                          onChange={(e) => setUniYear(e.target.value ? Number(e.target.value) : null)}
-                          className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
-                        >
-                          <option value="">اختر الفرقة…</option>
-                          {[1,2,3,4,5].map((y) => (
-                            <option key={y} value={y}>{y}</option>
+                        <p className="field-label">{locale === "ar" ? "الكلية" : "Faculty"}</p>
+                        <div className="chip-row" role="list">
+                          {facultiesDB.filter((f) => f.university_id === universityId).map((f) => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => { setFacultyId(f.id); setDepartmentId(null); }}
+                              aria-pressed={facultyId === f.id}
+                              className={`chip transition ${facultyId === f.id ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                            >
+                              {f.name}
+                            </button>
                           ))}
-                        </select>
+                        </div>
                       </div>
-                      <p className="text-xs text-ink-soft">لا مواد ثابتة للجامعة — هتضيف مواد كل كورس بنفسك.</p>
+                      )}
+                      {facultyId && (
+                      <div>
+                        <p className="field-label">{locale === "ar" ? "القسم" : "Department"}</p>
+                        <div className="chip-row" role="list">
+                          {departmentsDB.filter((d) => d.faculty_id === facultyId).map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => { setDepartmentId(d.id); setAcademicLevelId(null); setSemesterId(null); }}
+                              aria-pressed={departmentId === d.id}
+                              className={`chip transition ${departmentId === d.id ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                            >
+                              {d.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      )}
+                      {departmentId && (
+                      <div>
+                        <p className="field-label">{locale === "ar" ? "المستوى الدراسي" : "Academic level"}</p>
+                        <div className="chip-row" role="list">
+                          {levelsDB.map((l) => (
+                            <button
+                              key={l.id}
+                              type="button"
+                              onClick={() => { setAcademicLevelId(l.id); setSemesterId(null); }}
+                              aria-pressed={academicLevelId === l.id}
+                              className={`chip transition ${academicLevelId === l.id ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                            >
+                              {l.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      )}
+                      {academicLevelId && (
+                      <div>
+                        <p className="field-label">{locale === "ar" ? "الترم" : "Semester"}</p>
+                        <div className="chip-row" role="list">
+                          {semestersDB.map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setSemesterId(m.id)}
+                              aria-pressed={semesterId === m.id}
+                              className={`chip transition ${semesterId === m.id ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                            >
+                              {m.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      )}
+                      <p className="text-xs text-ink-soft">{locale === "ar" ? "بعد ما تخلّص الأسئلة دي، موادك بتظهر لك تلقائي حسب قسمك وترمك." : "Once done, your subjects appear automatically based on your department and semester."}</p>
                     </div>
                   )}
                   {eduStageId && eduGradeId && stagesDB.find((s) => s.id === eduStageId)?.code !== "UNIVERSITY" && tracksDB.length > 0 && (
@@ -877,6 +992,7 @@ export default function AssessmentPage() {
                 </p>
               </div>
 
+              {!(persona === "student" && subjectsAuto.length > 0) && (
               <div>
                 <label htmlFor="subject-input" className="field-label">
                   إيه الموضوع أو التراك اللي عايز تبدأ فيه؟
@@ -890,6 +1006,7 @@ export default function AssessmentPage() {
                   className="field text-sm"
                 />
               </div>
+              )}
 
               {/* 🌍 المجال — يظهر لغير الطالب فقط؛ الطالب المنهجي واخد تخصصه من المرحلة/الشعبة */}
               {!(persona === "student" && subjectsAuto.length > 0) && (
@@ -975,6 +1092,11 @@ export default function AssessmentPage() {
                 </div>
               </div>
 
+              {saveError && (
+                <div className="notice notice-error" role="alert">
+                  <p className="m-0">{saveError}</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   onClick={() => subject.trim() && setStep("curriculum")}
