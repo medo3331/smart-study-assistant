@@ -132,6 +132,66 @@ const METHOD_NAMES: Record<number, string> = {
   99: "Custom",
 };
 
+/**
+ * AlAdhan (iso8601=false) returns times like "05:12 (EET)" — strip the
+ * timezone suffix before parsing, otherwise Number("12 (EET)") = NaN.
+ */
+function cleanTime(timeStr: string): string {
+  return timeStr.replace(/\s*\(.*?\)\s*$/, "").trim();
+}
+
+/**
+ * Offset (ms) of `timeZone` from UTC at the given instant (DST-aware).
+ */
+function tzOffsetMs(instant: Date, timeZone: string): number {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const parts = dtf.formatToParts(instant);
+    const get = (type: string) =>
+      Number(parts.find((p) => p.type === type)?.value ?? "0");
+    const asUtc = Date.UTC(
+      get("year"),
+      get("month") - 1,
+      get("day"),
+      get("hour") % 24,
+      get("minute"),
+      get("second"),
+    );
+    return asUtc - instant.getTime();
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Convert a "HH:MM" wall-clock time in `timeZone` on the calendar day of
+ * `day` to an epoch timestamp. Building timestamps with the server-local
+ * setHours() instead shifted every prayer by the timezone offset and broke
+ * the next-prayer countdown for anyone outside the server timezone.
+ */
+function wallTimeToEpochMs(hhmm: string, timeZone: string, day: Date): number {
+  const [hours, minutes] = hhmm.split(":").map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return 0;
+  const naiveUtc = Date.UTC(
+    day.getUTCFullYear(),
+    day.getUTCMonth(),
+    day.getUTCDate(),
+    hours,
+    minutes,
+    0,
+  );
+  return naiveUtc - tzOffsetMs(new Date(naiveUtc), timeZone);
+}
+
 // ============================================================================
 // Cache Key Generation
 // ============================================================================
@@ -197,17 +257,15 @@ function normalizeAlAdhanResponse(
   // Compute methodId for METHOD_NAMES lookup
   const methodId = CALCULATION_METHOD_MAP[params.calculationMethod] || DEFAULT_METHOD;
   
-  // Parse timestamps for each prayer
-  const now = new Date();
-  const baseDate = new Date(now);
-  baseDate.setHours(0, 0, 0, 0);
-  
-  const parseTimeToTimestamp = (timeStr: string, base: Date): number => {
-    const [hours, minutes] = timeStr.split(":").map(Number);
-    const result = new Date(base);
-    result.setHours(hours, minutes, 0, 0);
-    return result.getTime();
-  };
+  // Parse timestamps for each prayer — anchored to the REQUESTED timezone
+  // (and the requested date), not the server clock.
+  const baseDay = new Date(
+    Date.UTC(
+      params.date.getUTCFullYear(),
+      params.date.getUTCMonth(),
+      params.date.getUTCDate(),
+    ),
+  );
 
   const prayerNames = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha", "Imsak", "Midnight"] as const;
   const timestamps: Record<string, number> = {};
@@ -215,12 +273,12 @@ function normalizeAlAdhanResponse(
   for (const prayer of prayerNames) {
     const timeStr = timings[prayer];
     if (timeStr) {
-      timestamps[prayer.toLowerCase()] = parseTimeToTimestamp(timeStr, baseDate);
+      timestamps[prayer.toLowerCase()] = wallTimeToEpochMs(cleanTime(timeStr), params.timezone, baseDay);
     }
   }
 
   // Determine next prayer
-  const nextPrayer = getNextPrayerFromTimestamps(timestamps, now);
+  const nextPrayer = getNextPrayerFromTimestamps(timestamps, new Date());
 
   // Build display location name
   const displayName = params.latitude && params.longitude 
@@ -249,14 +307,14 @@ function normalizeAlAdhanResponse(
       name: params.madhab === "shafi" ? "الشافعي" : "الحنفي",
     },
     prayers: {
-      fajr: timings.Fajr,
-      sunrise: timings.Sunrise,
-      dhuhr: timings.Dhuhr,
-      asr: timings.Asr,
-      maghrib: timings.Maghrib,
-      isha: timings.Isha,
-      imsak: timings.Imsak,
-      midnight: timings.Midnight,
+      fajr: cleanTime(timings.Fajr),
+      sunrise: cleanTime(timings.Sunrise),
+      dhuhr: cleanTime(timings.Dhuhr),
+      asr: cleanTime(timings.Asr),
+      maghrib: cleanTime(timings.Maghrib),
+      isha: cleanTime(timings.Isha),
+      imsak: timings.Imsak ? cleanTime(timings.Imsak) : undefined,
+      midnight: timings.Midnight ? cleanTime(timings.Midnight) : undefined,
     },
     timestamps: {
       fajr: timestamps.fajr,
@@ -370,10 +428,11 @@ export async function getTodayPrayerTimes(
   longitude: number,
   timezone: string,
   calculationMethod: CalculationMethodId = "egyptian",
-  madhab: MadhabId = "shafi"
+  madhab: MadhabId = "shafi",
+  date: Date = new Date()
 ): Promise<PrayerTimes> {
   return getPrayerTimes({
-    date: new Date(),
+    date,
     latitude,
     longitude,
     timezone,

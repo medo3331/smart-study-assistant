@@ -41,13 +41,13 @@ export function QuranWirdCard({
     <Reveal index={index}>
       <GlassCard glow className="p-6 relative overflow-hidden">
         {/* Subtle background pattern */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#7C5CFF]/5 via-transparent to-[#2DD4BF]/5" aria-hidden />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#10B981]/5 via-transparent to-[#34D399]/5" aria-hidden />
         
         <div className="relative z-10">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <IconBadge icon={BookOpen} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={44} />
+              <IconBadge icon={BookOpen} color="text-[#34D399]" bg="bg-[#34D399]/15" size={44} />
               <div>
                 <p className="text-sm text-[#9AA0C0]">ورد القرآن اليومي</p>
                 <p className="text-xl font-bold text-white">{arabicSurahName}</p>
@@ -55,7 +55,7 @@ export function QuranWirdCard({
             </div>
             <div className="text-left">
               <p className="text-xs text-[#9AA0C0]">جزء {juzNumber}</p>
-              <p className="text-xs text-[#7C5CFF] font-medium">{surahName}</p>
+              <p className="text-xs text-[#10B981] font-medium">{surahName}</p>
             </div>
           </div>
 
@@ -63,13 +63,13 @@ export function QuranWirdCard({
           <div className="mb-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] font-mono text-xl font-bold">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34D399]/15 text-[#34D399] font-mono text-xl font-bold">
                   {startAyah}
                 </div>
                 <div className="text-center">
                   <div className="w-px h-8 bg-white/[0.1] mx-auto" />
                 </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-[#2DD4BF] font-mono text-xl font-bold">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34D399]/15 text-[#34D399] font-mono text-xl font-bold">
                   {endAyah}
                 </div>
               </div>
@@ -87,12 +87,12 @@ export function QuranWirdCard({
                 pct={progress}
                 size={100}
                 stroke={10}
-                color="#2DD4BF"
+                color="#34D399"
                 centerLabel={`${currentAyah}/${targetAyah}`}
                 className="flex-shrink-0"
               />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <IconBadge icon={BookOpen} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/10" size={40} />
+                <IconBadge icon={BookOpen} color="text-[#34D399]" bg="bg-[#34D399]/10" size={40} />
               </div>
             </div>
 
@@ -103,13 +103,13 @@ export function QuranWirdCard({
               </div>
               <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-[#2DD4BF] to-[#7C5CFF] rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-[#34D399] to-[#10B981] rounded-full transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
               <p className="text-xs text-[#9AA0C0]">
                 {currentAyah} / {targetAyah} آيات
-                {progress >= 100 && <span className="ml-2 text-[#2DD4BF] font-medium">✓ تم الهدف اليومي</span>}
+                {progress >= 100 && <span className="ml-2 text-[#34D399] font-medium">✓ تم الهدف اليومي</span>}
               </p>
             </div>
           </div>
@@ -117,7 +117,7 @@ export function QuranWirdCard({
           {/* Stats Row */}
           <div className="flex items-center justify-between text-sm text-[#9AA0C0] mb-4">
             <div className="flex items-center gap-1">
-              <CheckCircle size={14} className="text-[#2DD4BF]" aria-hidden />
+              <CheckCircle size={14} className="text-[#34D399]" aria-hidden />
               <span>{currentAyah} آيات مقروءة</span>
             </div>
             <div className="flex items-center gap-1">

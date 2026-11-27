@@ -56,7 +56,7 @@ export function WorshipCard({
           </div>
           {completed && (
             <div className="flex-shrink-0 flex items-center justify-center">
-              <IconBadge icon={CheckCircle} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={32} />
+              <IconBadge icon={CheckCircle} color="text-[#34D399]" bg="bg-[#34D399]/15" size={32} />
             </div>
           )}
         </div>
@@ -91,7 +91,7 @@ export function WorshipCard({
                 </div>
                 <p className="text-xs text-[#9AA0C0]">
                   {current} / {target} {unit}
-                  {completed && <span className="ml-2 text-[#2DD4BF] font-medium">✓ مكتمل</span>}
+                  {completed && <span className="ml-2 text-[#34D399] font-medium">✓ مكتمل</span>}
                 </p>
               </div>
             </div>
@@ -154,8 +154,8 @@ export function TodaysWorshipCards({
           title="الأذكار"
           arabicTitle="أذكار الصباح والمساء"
           icon={Sparkles}
-          iconColor="text-[#7C5CFF]"
-          iconBg="bg-[#7C5CFF]/15"
+          iconColor="text-[#10B981]"
+          iconBg="bg-[#10B981]/15"
           progress={adhkarProgress.target > 0 ? (adhkarProgress.current / adhkarProgress.target) * 100 : 0}
           target={adhkarProgress.target}
           current={adhkarProgress.current}
@@ -171,8 +171,8 @@ export function TodaysWorshipCards({
           title="القرآن"
           arabicTitle={`ورد القرآن - ${quranProgress.surahName}`}
           icon={BookOpen}
-          iconColor="text-[#2DD4BF]"
-          iconBg="bg-[#2DD4BF]/15"
+          iconColor="text-[#34D399]"
+          iconBg="bg-[#34D399]/15"
           progress={quranProgress.target > 0 ? (quranProgress.current / quranProgress.target) * 100 : 0}
           target={quranProgress.target}
           current={quranProgress.current}

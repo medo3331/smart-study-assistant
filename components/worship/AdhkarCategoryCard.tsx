@@ -45,7 +45,7 @@ export function AdhkarCategoryCard({
       <Link href={href} className="block">
         <GlassCard className={cn(
           "p-5 h-full transition-all hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)]",
-          completed ? "border-[#2DD4BF]/30" : "border-white/[0.06]"
+          completed ? "border-[#34D399]/30" : "border-white/[0.06]"
         )}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -56,7 +56,7 @@ export function AdhkarCategoryCard({
               </div>
             </div>
             {completed && (
-              <IconBadge icon={CheckCircle} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={32} />
+              <IconBadge icon={CheckCircle} color="text-[#34D399]" bg="bg-[#34D399]/15" size={32} />
             )}
           </div>
 
@@ -76,7 +76,7 @@ export function AdhkarCategoryCard({
             </div>
             <div className="flex items-center justify-between text-xs text-[#9AA0C0]">
               <span>{count} / {total} أذكار</span>
-              {completed && <span className="text-[#2DD4BF] font-medium">مكتمل ✓</span>}
+              {completed && <span className="text-[#34D399] font-medium">مكتمل ✓</span>}
             </div>
           </div>
 
