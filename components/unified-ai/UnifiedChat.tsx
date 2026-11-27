@@ -9,7 +9,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
+import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle, Square } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExplanationView } from "@/components/unified-ai/ExplanationView";
@@ -97,6 +97,9 @@ export function UnifiedChat({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  // 📡 التوصيل التدريجي — الشرح الطويل بيتولّد على أجزاء متتالية وجزء جزء ورا بعض.
+  const [continuing, setContinuing] = useState(false);
+  const continueAbortRef = useRef(false);
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>, kind: "file" | "image") => {
     const f = e.target.files?.[0];
@@ -237,6 +240,44 @@ export function UnifiedChat({
       setSlidesPanel({ index, loading: false, slides: [] });
     }
   }, [slidesPanel]);
+
+  /**
+   * 📡 استكمال تلقائي — لما السيرفر يرجّع `hasMore` بنطلب باقي الأجزاء واحد ورا
+   *    التاني وكل جزء بيظهر كرسالة مستقلة (جزء جزء ورا بعض). كل طلب صغير وسريع
+   *    فمش بيضرب حدود TPM ولا مهلة الدالة — ده حل مشكلة rate limit في الشرح الطويل.
+   */
+  const runContinuation = async (baseForm: FormData, firstPart: string) => {
+    setContinuing(true);
+    continueAbortRef.current = false;
+    const MAX_PARTS = 4;
+    let accumulated = firstPart;
+    try {
+      for (let part = 2; part <= MAX_PARTS; part++) {
+        if (continueAbortRef.current) break;
+        setLoading(true);
+        const form = new FormData();
+        for (const [k, v] of baseForm.entries()) form.append(k, v);
+        form.append("continuationPart", String(part));
+        form.append("previousTail", accumulated.slice(-1200));
+        let data: { ok?: boolean; answer?: string; hasMore?: boolean } = {};
+        try {
+          const res = await fetch("/api/unified-ai", { method: "POST", body: form });
+          data = await res.json().catch(() => ({}));
+        } catch {
+          break;
+        } finally {
+          setLoading(false);
+        }
+        if (!data?.ok || !data.answer) break;
+        accumulated += `\n\n${data.answer}`;
+        setMessages((m) => [...m, { role: "assistant", content: data.answer as string }]);
+        if (!data.hasMore) break;
+      }
+    } finally {
+      setLoading(false);
+      setContinuing(false);
+    }
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -396,6 +437,10 @@ export function UnifiedChat({
         { role: "assistant", content: assistantText, ...(replyActions ? { actions: replyActions } : {}) },
       ]);
       removeAttachment();
+      // 📡 لو الجزء الأول لوّم بـ [[متابعة]] — نطلب الباقي تلقائيًا جزء جزء.
+      if (data?.hasMore && typeof data.answer === "string" && data.answer) {
+        await runContinuation(formData, data.answer);
+      }
     } catch {
       setLoading(false);
       const supportPhone = getSupportPhone();
@@ -681,9 +726,19 @@ export function UnifiedChat({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
         />
+        {continuing && (
+          <button
+            onClick={() => { continueAbortRef.current = true; }}
+            aria-label="إيقاف استكمال الشرح"
+            title="إيقاف استكمال الشرح"
+            className="p-2 rounded-full border border-[var(--border)] text-[var(--ink-soft)] hover:text-[var(--accent)] transition"
+          >
+            <Square size={16} />
+          </button>
+        )}
         <button
           onClick={send}
-          disabled={loading || (!input.trim() && !attachment)}
+          disabled={loading || continuing || (!input.trim() && !attachment)}
            aria-label="Send message"
         >
           <Send size={18} />

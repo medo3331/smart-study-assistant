@@ -323,6 +323,11 @@ export async function POST(req: Request) {
     let requestedTask: AiTaskType | undefined;
       let lectureId: string | undefined;
 
+    // 📡 التوصيل التدريجي — الطلاب يطلب تكملة جزء سابق (جزء جزء ورا بعض).
+    // التصريح هنا قبل فرع الـ parsing عشان الاتنين (multipart/json) يملوه.
+    let continuationPart = 0;
+    let previousTail = "";
+
     if (isMultipart) {
       const formData = await req.formData();
       const p = formData.get("prompt");
@@ -345,6 +350,10 @@ export async function POST(req: Request) {
       requestedModel = clampModel(m);
       const t = formData.get("task");
       requestedTask = clampTask(t);
+      const cp = formData.get("continuationPart");
+      continuationPart = Number(typeof cp === "string" ? cp : "") || 0;
+      const pt = formData.get("previousTail");
+      previousTail = typeof pt === "string" ? pt : "";
     } else {
       const body = await req.json().catch(() => null);
       if (!body || typeof body !== "object") {
@@ -357,6 +366,8 @@ export async function POST(req: Request) {
       requestedTask = clampTask((body as Record<string, unknown>).task);
       // Optional: lectureId bypasses title matching in workspace source resolver
       lectureId = (body as Record<string, unknown>).lectureId as string | undefined;
+      continuationPart = Number((body as Record<string, unknown>).continuationPart) || 0;
+      previousTail = String((body as Record<string, unknown>).previousTail ?? "");
       // Legacy: body.model as X handled above
     }
 
@@ -793,7 +804,7 @@ export async function POST(req: Request) {
     }
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
-    if (userId && supabase && !isAnonymous) {
+    if (userId && supabase && !isAnonymous && continuationPart === 0) {
       // ⚡ **طلب امتحان ⇒ تحويل فوري للواجهة** (الزر + الرابط).
       //
       //    ⚠️ **التاريخ مش آخر رسالة**: المساعد كان بيدخل في حلقة مفرغة
@@ -896,6 +907,23 @@ export async function POST(req: Request) {
       }
     }
 
+    // 🔧 إصلاح جذر: حقن مصدر الـ workspace فوق بيعدّل المتغير المحلي `prompt` فقط
+    //    بعد إنشاء `input` بالـ shorthand — فنص المحاضرة كان مش بيوصل للموديل
+    //    خالص (الشرح كان بيطلع من غير المحتوى الفعلي).
+    input.prompt = prompt;
+
+    // 📡 طلب تكملة — توجيه صريح: تابع من نفس النقطة بلا تكرار.
+    // الموديل عنده الجزء السابق جوه history والمصدر محقون فوق — الدالة
+    // دي بس بتقولله انت في وسط إجابة وكمّل.
+    if (continuationPart > 0) {
+      const tail = previousTail.slice(-1200);
+      input.system = `${input.system || ""}\n\n--- تكملة إجابة مقسّمة ---
+أنت تُكمل إجابة سابقة مقسّمة لأجزاء (هذا الجزء رقم ${continuationPart}). آخر ما انتهيت منه:
+«${tail}»
+تابع من نفس النقطة مباشرة — بلا تكرار ولا مقدمات.`;
+      input.prompt = "تابع الشرح — الجزء التالي من حيث توقفت.";
+    }
+
     // REAL INFERENCE
     const result: UnifiedAIResult = await unifiedAI(input);
 
@@ -943,10 +971,15 @@ export async function POST(req: Request) {
             ? `\n\n[مرفق: ${attachmentName || "بدون اسم"}]${result.extractedText ? `\nمقتطف من المرفق:\n${result.extractedText.slice(0, 1200)}` : ""}`
             : "";
         if (savedConversationId) {
-          await supabase.from("chat_messages").insert([
-            { conversation_id: savedConversationId, user_id: userId, role: "user", content: `${userPromptForMemory}${attachmentMemory}` },
-            { conversation_id: savedConversationId, user_id: userId, role: "assistant", content: result.answer },
-          ]);
+          // 📡 جزء تكملة: رسالة الطالب الأصلية محفوظة مع الجزء الأول —
+          // تكرارها هنا يلوث الذاكرة بأسئلة مكررة.
+          const rows = continuationPart > 0
+            ? [{ conversation_id: savedConversationId, user_id: userId, role: "assistant", content: result.answer }]
+            : [
+                { conversation_id: savedConversationId, user_id: userId, role: "user", content: `${userPromptForMemory}${attachmentMemory}` },
+                { conversation_id: savedConversationId, user_id: userId, role: "assistant", content: result.answer },
+              ];
+          await supabase.from("chat_messages").insert(rows);
           await supabase
             .from("chat_conversations")
             .update({ updated_at: new Date().toISOString() })
@@ -975,6 +1008,7 @@ export async function POST(req: Request) {
     const uiResponse = {
       ok: true,
       answer: result.answer,
+      hasMore: result.hasMore === true,
       agentUsed: result.agentUsed,
       extractedText: result.extractedText,
       metadata: { ...result.metadata, modelUsed: modelToUse, resolvedVia },

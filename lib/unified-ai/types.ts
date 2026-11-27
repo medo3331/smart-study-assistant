@@ -67,6 +67,14 @@ export interface UnifiedAIResult {
     visionFallback?: boolean;
   };
   reasoning?: string;             // why router chose this agent (for debug / coach context)
+  /**
+   * 📡 التوصيل التدريجي — الإجابة اكتملت جزئيًا والموديل لوّم بـ `[[متابعة]]`.
+   *
+   * 💡 **ليه:** الشرح الطويل في رد واحد بياخد توكنز كتير (TPM) ووقت تفكير طويل
+   *   فيضرب حدود المزوّد المجاني (429) أو مهلة الدالة. بتقسيم الشرح لأجزاء
+   *   متتالية، كل طلب صغير وسريع — والواجهة تعرض جزء جزء ورا بعض.
+   */
+  hasMore?: boolean;
   error?: string;
   code?: string;
   errorCode?: string;

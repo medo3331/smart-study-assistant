@@ -108,10 +108,14 @@ beforeEach(() => {
  *
  * `runBlocked` already proved the call could not resolve while the gate was
  * closed — i.e. the recording is genuinely `await`ed. This is the other half:
- * once released, exactly one row must land.
+ * once released, exactly `count` rows must land.
+ *
+ * 💡 **ليه بارامتر؟** من إضافة سلسلة الـ fallback في `unifiedAI`، أي فشل دائم
+ *    للمزوّد يعني محاولتين (أساسي 20b + بديل 120b) — كل محاولة بتتكتب كصف
+ *    usage مستقل بحالتها الصحيحة. الاختبارات الناجحة بتفضل محاولة واحدة.
  */
-function expectWriteWasAwaited() {
-  expect(h.settled).toBe(1);
+function expectWriteWasAwaited(count = 1) {
+  expect(h.settled).toBe(count);
 }
 
 describe("C5 — /api/unified-ai usage coverage", () => {
@@ -168,12 +172,15 @@ describe("C5 — /api/unified-ai usage coverage", () => {
     expectWriteWasAwaited();
   });
 
-  it("✅ provider HTTP error → failed_no_response, still recorded and awaited", async () => {
+  it("✅ provider HTTP error → failed_no_response on primary + fallback, still recorded and awaited", async () => {
+    // ⚠️ retry-after "0" إلزامي: من غيره الـ retry delay الافتراضي (2500ms)
+    //    بيضرب سقف testTimeout=5000ms — وفي الاختبار عايزين التوقيت صفري.
     globalThis.fetch = vi.fn(async () => ({
       ok: false,
       status: 429,
       text: async () => "rate limited",
       json: async () => null,
+      headers: { get: () => "0" },
     })) as unknown as typeof fetch;
 
     const { pending, wasResolvedWhileBlocked } = await runBlocked({ prompt: "explain this", usage });
@@ -182,9 +189,13 @@ describe("C5 — /api/unified-ai usage coverage", () => {
     const res = await pending;
 
     expect(res.ok).toBe(false);
-    expect(h.recordAiUsage).toHaveBeenCalledTimes(1);
+    // 🛡️ سلسلة الـ fallback: فشل 20b دائم → محاولة 120b — صف usage لكل محاولة.
+    expect(h.recordAiUsage).toHaveBeenCalledTimes(2);
     expect(h.recordAiUsage.mock.calls[0][0].status).toBe("failed_no_response");
-    expectWriteWasAwaited();
+    expect(h.recordAiUsage.mock.calls[0][0].model).toBe("openai/gpt-oss-20b");
+    expect(h.recordAiUsage.mock.calls[1][0].status).toBe("failed_no_response");
+    expect(h.recordAiUsage.mock.calls[1][0].model).toBe("openai/gpt-oss-120b");
+    expectWriteWasAwaited(2);
   });
 
   it("✅ empty content → failed_after_response (NOT completed), still awaited", async () => {
@@ -196,8 +207,9 @@ describe("C5 — /api/unified-ai usage coverage", () => {
     const res = await pending;
 
     expect(res.ok).toBe(false);
+    expect(h.recordAiUsage).toHaveBeenCalledTimes(2);
     expect(h.recordAiUsage.mock.calls[0][0].status).toBe("failed_after_response");
-    expectWriteWasAwaited();
+    expectWriteWasAwaited(2);
   });
 
   it("✅ network throw → failed_no_response, awaited, and the caller's contract is unchanged", async () => {
@@ -211,8 +223,9 @@ describe("C5 — /api/unified-ai usage coverage", () => {
     const res = await pending;
 
     expect(res.ok).toBe(false);
+    expect(h.recordAiUsage).toHaveBeenCalledTimes(2);
     expect(h.recordAiUsage.mock.calls[0][0].status).toBe("failed_no_response");
-    expectWriteWasAwaited();
+    expectWriteWasAwaited(2);
   });
 
   it("✅ no usage context → no row (back-compat for other callers)", async () => {
