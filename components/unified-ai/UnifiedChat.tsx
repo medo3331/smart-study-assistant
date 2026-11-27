@@ -19,6 +19,18 @@ import { guides } from "@/lib/guides";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
+import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
+// 🎨 chips أساليب الشرح — قيم معروفة مسبقًا تطابق EXPLANATION_STYLES في السيرفر.
+const STYLE_CHIPS = [
+  { id: "simpler", label: "🪄 أبسط" },
+  { id: "example", label: "🧪 بمثال" },
+  { id: "analogy", label: "🎯 بتشبيه" },
+  { id: "steps", label: "🪜 خطوة بخطوة" },
+  { id: "english", label: "🌍 بالإنجليزي" },
+] as const;
+// 📡 أقصى عدد أجزاء التكملة — نفس القيمة اللي في الواجهة لعرض التكلفة القصوى للطالب.
+const MAX_CONTINUATION_PARTS = 4;
+
 function supportWhatsappHref(code?: string, detail?: string) {
   const phone = getSupportPhone();
   if (!phone) return "";
@@ -34,6 +46,10 @@ type ChatMsg = {
   role: "user" | "assistant";
   content: string;
   attachmentName?: string;
+  /** ⚡ استهلاك الطلب — من السيرفر (مصدر التكلفة الوحيد). */
+  creditsUsed?: number;
+  /** 📖 عنوان المصدر المرتبط بالإجابة (workspace/lecture) — citation بسيط. */
+  sourceTitle?: string;
   /** إجراءات مقترحة (مثال: زر «افتح مولّد الامتحان»). */
   actions?: { label: string; href: string; external?: boolean }[];
 };
@@ -101,6 +117,21 @@ export function UnifiedChat({
       } catch { setLibraryError(true); }
     })();
   }, []);
+  // ⚡ شفافية الـ credits — الرصيد من السيرفر (مصدر التكلفة الوحيد)، والكلاينت عارض بس.
+  const [creditUsage, setCreditUsage] = useState<{ used: number; limit: number } | null>(null);
+  const loadCreditUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/usage");
+      if (!res.ok) { setCreditUsage(null); return; }
+      const d = await res.json().catch(() => null);
+      if (d?.ok && d?.daily && typeof d.daily.used === "number" && typeof d.daily.limit === "number") {
+        setCreditUsage({ used: d.daily.used, limit: d.daily.limit });
+      } else setCreditUsage(null);
+    } catch { setCreditUsage(null); }
+  }, []);
+  useEffect(() => { void loadCreditUsage(); }, [loadCreditUsage]);
+  // 🎨 أسلوب الشرح المختار — بيحقن كتعليمات تعليمية في السيرفر.
+  const [styleModifier, setStyleModifier] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -297,7 +328,7 @@ export function UnifiedChat({
         for (const [k, v] of baseForm.entries()) form.append(k, v);
         form.append("continuationPart", String(part));
         form.append("previousTail", accumulated.slice(-1200));
-        let data: { ok?: boolean; answer?: string; hasMore?: boolean } = {};
+        let data: { ok?: boolean; answer?: string; hasMore?: boolean; creditsUsed?: number } = {};
         try {
           const res = await fetch("/api/unified-ai", { method: "POST", body: form });
           data = await res.json().catch(() => ({}));
@@ -308,12 +339,17 @@ export function UnifiedChat({
         }
         if (!data?.ok || !data.answer) break;
         accumulated += `\n\n${data.answer}`;
-        setMessages((m) => [...m, { role: "assistant", content: data.answer as string }]);
+        setMessages((m) => [...m, {
+          role: "assistant",
+          content: data.answer as string,
+          ...(typeof data.creditsUsed === "number" ? { creditsUsed: data.creditsUsed } : {}),
+        }]);
         if (!data.hasMore) break;
       }
     } finally {
       setLoading(false);
       setContinuing(false);
+      void loadCreditUsage();
     }
   };
 
@@ -346,6 +382,7 @@ export function UnifiedChat({
       //                +              (         /api/chat              )
       if (conversationId) ctx.conversationId = conversationId;
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
+      if (styleModifier) ctx.style = styleModifier;
       //                                             API    hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
@@ -472,9 +509,16 @@ export function UnifiedChat({
         : undefined;
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: assistantText, ...(replyActions ? { actions: replyActions } : {}) },
+        {
+          role: "assistant",
+          content: assistantText,
+          ...(typeof data?.creditsUsed === "number" ? { creditsUsed: data.creditsUsed } : {}),
+          ...(typeof data?.sourceTitle === "string" && data.sourceTitle ? { sourceTitle: data.sourceTitle } : {}),
+          ...(replyActions ? { actions: replyActions } : {}),
+        },
       ]);
       removeAttachment();
+      void loadCreditUsage();
       // 📡 لو الجزء الأول لوّم بـ [[متابعة]] — نطلب الباقي تلقائيًا جزء جزء.
       if (data?.hasMore && typeof data.answer === "string" && data.answer) {
         await runContinuation(formData, data.answer);
@@ -645,6 +689,16 @@ export function UnifiedChat({
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
               )}
+              {(msg.sourceTitle || typeof msg.creditsUsed === "number") && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
+                  {msg.sourceTitle && (
+                    <span className="rounded-full bg-black/5 px-2 py-0.5">📖 المصدر: {msg.sourceTitle}</span>
+                  )}
+                  {typeof msg.creditsUsed === "number" && (
+                    <span className="rounded-full bg-black/5 px-2 py-0.5">⚡ {msg.creditsUsed} credit</span>
+                  )}
+                </div>
+              )}
               {(msg.actions?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {(msg.actions ?? []).map((action) =>
@@ -748,6 +802,25 @@ export function UnifiedChat({
         <p className="mb-2 text-[11px] text-rose-600" role="alert">🔇 {voiceNotice}</p>
       )}
 
+      {/* 🎨 أساليب الشرح — شرح تفاعلي بأكثر من طريقة (زي المدرس الشطور) */}
+      <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label="أسلوب الشرح">
+        {STYLE_CHIPS.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setStyleModifier((v) => (v === c.id ? null : c.id))}
+            aria-pressed={styleModifier === c.id}
+            className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${
+              styleModifier === c.id
+                ? "bg-[var(--accent)] text-[var(--on-marker)] border-transparent"
+                : "border-rule bg-paper text-ink-soft hover:bg-paper-3"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
       {/* Input bar */}
       <div className="flex items-end gap-2 bg-paper border border-rule rounded-2xl px-3 py-2 shadow-sm">
         <button
@@ -814,7 +887,11 @@ export function UnifiedChat({
       </div>
 
       <div className="flex items-center justify-between mt-3 px-1">
-         <p className="text-[11px] text-ink-soft">Magicly — شرح، تلخيص، اختبارات، وصوت</p>
+         <p className="text-[11px] text-ink-soft">
+          {creditUsage
+            ? `⚡ رصيد اليوم: ${creditUsage.used}/${creditUsage.limit} credit — الطلب = ${CREDIT_COSTS["unified-ai"]} · الشرائح = ${CREDIT_COSTS["generate-slides"]} · الشرح الطويل يكمّل تلقائيًا على أجزاء (حتى ${MAX_CONTINUATION_PARTS})`
+            : `⚡ الطلب = ${CREDIT_COSTS["unified-ai"]} credit · الشرائح = ${CREDIT_COSTS["generate-slides"]} credits · الشرح الطويل يكمّل تلقائيًا على أجزاء`}
+        </p>
         <div className="flex items-center gap-1 text-[11px] text-ink-soft">
           <Sparkles size={12} /> <span>Magicly</span>
         </div>
