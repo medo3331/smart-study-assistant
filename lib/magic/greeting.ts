@@ -90,7 +90,7 @@ export function buildMagicGreeting(input: MagicGreetingInput): MagicGreeting {
     id: "ask_magic",
     icon: "⚡",
     label: "اسألني أي حاجة عن المنصة أو مذاكرتك",
-    href: "/dashboard/mentor",
+    href: "/chat",
     hint: "أنا معاك في كل الصفحات",
   });
 

@@ -34,6 +34,7 @@ export default async function ChatPage({
   const lessonTopic = first(params, "lesson") || first(params, "topic");
   const title = first(params, "title");
   const content = first(params, "content");
+  const q = first(params, "q");
 
   const initialContext: Record<string, unknown> = {};
   if (configId) initialContext.configId = configId;
@@ -60,6 +61,7 @@ export default async function ChatPage({
         initialContext={hasContext ? initialContext : undefined}
         lesson={lesson}
         initialConversationId={conversationId || undefined}
+        initialDraft={q ? q.slice(0, 500) : undefined}
       />
     </>
   );

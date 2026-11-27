@@ -77,10 +77,13 @@ export function UnifiedChat({
   initialContext,
   lesson,
   initialConversationId,
+  initialDraft,
 }: {
   initialContext?: any;
   lesson?: LessonContext;
   initialConversationId?: string;
+  /** رسالة جاهزة في خانة الكتابة — من ردود سريعة خارجية (?q=). */
+  initialDraft?: string;
 }) {
   const router = useRouter();
   const { locale } = useLanguage();
@@ -88,7 +91,7 @@ export function UnifiedChat({
   const [messages, setMessages] = useState<ChatMsg[]>([
     { role: "assistant", content: buildChatWelcomeGreeting(null, typeof window !== "undefined" ? new Date().getHours() : 12), },
   ]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialDraft ?? "");
   const [loading, setLoading] = useState(false);
   const [conversations, setConversations] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
