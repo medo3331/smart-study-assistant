@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/set-state-in-effect -- Syncing with localStorage (external system) is intentional */
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
