@@ -218,6 +218,7 @@ export type Dictionary = {
   login_otp_hint: string;
   login_otp_err: string;
   login_otp_sent: string;
+  login_err_auth_failed: string;
   login_otp_back: string;
   login_help_btn: string;
   login_help_title: string;
@@ -670,6 +671,7 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     login_otp_resend: 'إعادة إرسال الكود',
     login_otp_hint: 'ابعتنا كود من 6 أرقام على إيميلك — اكتبه هنا، أو افتح الرابط اللي في الإيميل لو فضّلت.',
     login_otp_err: 'الكود غير صحيح أو منتهي الصلاحية. جرّب تاني.',
+    login_err_auth_failed: 'رابط تأكيد التسجيل غير صالح أو انتهت صلاحيته. سجّل دخولك من هنا أو أنشئ الحساب من جديد.',
     login_otp_sent: 'الكود وصلك على إيميلك — اكتبه هنا.',
     login_otp_back: 'رجوع',
     login_help_btn: '؟ إرشادات',
@@ -1102,6 +1104,7 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     login_otp_resend: 'Resend code',
     login_otp_hint: 'We sent a 6-digit code to your email — enter it here, or open the link in the email if you prefer.',
     login_otp_err: 'Wrong or expired code. Try again.',
+    login_err_auth_failed: 'That confirmation link is invalid or expired. Sign in below, or create the account again.',
     login_otp_sent: 'The code is in your email — enter it here.',
     login_otp_back: 'Back',
     login_help_btn: '? Guide',

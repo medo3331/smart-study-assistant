@@ -48,8 +48,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
-  /** OTP معلّق بعد signUp — يدخل الكود في نفس الصفحة. */
-  const [pendingVerify, setPendingVerify] = useState<"signup" | null>(null);
+  /** OTP معلّق بعد signUp أو ترقية حساب زائر — نوع التأكيد بيحدد verifyOtp وresend. */
+  const [pendingVerify, setPendingVerify] = useState<"signup" | "email_change" | null>(null);
   const [otpCode, setOtpCode] = useState("");
 
   /* حساب حقيقي داخل بالفعل؟ ملوش شغل هنا (تأكيد إضافي فوق شغل الـproxy). */
@@ -95,8 +95,17 @@ export default function RegisterPage() {
         setMessage({ type: "error", text: error.message.includes("already") ? t.login_err_exists : t.login_err_signup });
         return;
       }
+      // لو إعدادات Supabase مش محتاجة تأكيد لتغيير الإيميل، الحساب بقى حقيقي فورًا —
+      // نكمّل على طول بدل ما نعلّق المستخدم على شاشة كود عمره ما هيوصله.
+      const { data: afterData } = await supabase.auth.getUser();
+      if (afterData.user && !afterData.user.is_anonymous) {
+        window.location.href = currentNext();
+        return;
+      }
+      // تحديث إيميل حساب زائر = تأكيد من نوع email_change مش signup —
+      // استخدام النوع الغلط كان بيفشّل الكود دايمًا ويحبس المستخدم في حلقة مقفولة.
       setMessage({ type: "success", text: t.login_ok_linked });
-      setPendingVerify("signup");
+      setPendingVerify("email_change");
       setOtpCode("");
       return;
     }
@@ -173,11 +182,11 @@ export default function RegisterPage() {
     setMessage(null);
     if (!supabaseRef.current) supabaseRef.current = createClient();
     const supabase = supabaseRef.current;
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email,
-      options: { emailRedirectTo: authCallbackUrl(currentNext()) },
-    });
+    const { error } = await supabase.auth.resend(
+      pendingVerify === "email_change"
+        ? { type: "email_change", email, options: { emailRedirectTo: authCallbackUrl(currentNext()) } }
+        : { type: "signup", email, options: { emailRedirectTo: authCallbackUrl(currentNext()) } },
+    );
     setLoading(false);
     setMessage({
       type: error ? "error" : "success",
