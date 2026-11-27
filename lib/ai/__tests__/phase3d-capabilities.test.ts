@@ -11,7 +11,9 @@ describe("Phase 3D capabilities", () => {
   });
   it("selects gemini for image only when key exists", () => {
     expect(selectModelForTask("image_understanding", { GEMINI_API_KEY: "k", GROQ_API_KEY: "g" })).toBe("gemini-3.6-flash");
-    expect(selectModelForTask("image_understanding", { GROQ_API_KEY: "g" })).toBe("llama-3.2-11b-vision-preview");
+    // llama-3.2-11b-vision-preview اتشالت من Groq — Groq لوحده مبقاش بيرجّع موديل رؤية.
+    expect(selectModelForTask("image_understanding", { GROQ_API_KEY: "g" })).toBeNull();
+    expect(selectModelForTask("image_understanding", { OPENROUTER_API_KEY: "o" })).toBe("nvidia/nemotron-3.5-super-vl:free");
     expect(selectModelForTask("image_understanding", {})).toBeNull();
   });
   it("text tasks use groq", () => {

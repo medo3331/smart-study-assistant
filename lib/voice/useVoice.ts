@@ -65,6 +65,30 @@ export function useVoice(_opts: UseVoiceOptions = {}): UseVoiceResult {
           body: JSON.stringify({ text }),
         });
         if (!res.ok) throw new Error("server-tts-failed");
+        const contentType = res.headers.get("content-type") || "";
+        // 🧩 رد Groq Orpheus = JSON {segments} — حد Orpheus 200 حرف/طلب،
+        //    فالمقاطع بتترجّع WAV مستقلة وبنشغّلها بالترتيب.
+        if (contentType.includes("application/json")) {
+          const data = (await res.json()) as { ok?: boolean; segments?: string[] };
+          const segments = (data.segments ?? []).filter(Boolean);
+          if (segments.length === 0) throw new Error("empty-tts-segments");
+          for (const seg of segments) {
+            const url = URL.createObjectURL(
+              new Blob([Uint8Array.from(atob(seg), (c) => c.charCodeAt(0))], { type: "audio/wav" })
+            );
+            const audio = new Audio(url);
+            audioRef.current = audio;
+            await new Promise<void>((resolve) => {
+              audio.onended = () => resolve();
+              audio.onerror = () => resolve();
+              void audio.play().catch(() => resolve());
+            });
+            URL.revokeObjectURL(url);
+          }
+          audioRef.current = null;
+          setSpeaking(false);
+          return;
+        }
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);

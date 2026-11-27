@@ -22,21 +22,22 @@ const expected = {
   agent: "nvidia",
   coding: "nvidia",
   quiz: "groq",
-  flashcards: "gemini",
-  study_plan: "gemini",
-  lesson_analysis: "gemini",
-  mind_map: "gemini",
+  flashcards: "groq",
+  study_plan: "groq",
+  lesson_analysis: "groq",
+  mind_map: "groq",
+  data_analysis: "groq",
+  planning: "groq",
+  business_plan: "groq",
+  marketing_plan: "groq",
+  roadmap: "groq",
   file_analysis: "gemini",
   image_analysis: "gemini",
-  data_analysis: "gemini",
-  planning: "gemini",
-  business_plan: "gemini",
-  marketing_plan: "gemini",
-  roadmap: "gemini",
   image_generation: "gemini",
   image_edit: "gemini",
   video_generation: "gemini",
   rag_embeddings: "nvidia",
+  exam_generation: "groq",
 };
 
 assert.deepEqual(AI_PROVIDER_BY_TASK, expected);
@@ -79,15 +80,15 @@ const routablePrimary = {
   content: "groq",
   marketing_copy: "groq",
   quiz: "groq",
-  flashcards: "gemini",
-  study_plan: "gemini",
-  lesson_analysis: "gemini",
-  mind_map: "gemini",
-  data_analysis: "gemini",
+  flashcards: "groq",
+  study_plan: "groq",
+  lesson_analysis: "groq",
+  mind_map: "groq",
+  data_analysis: "groq",
   planning: "nvidia",
-  business_plan: "gemini",
-  marketing_plan: "gemini",
-  roadmap: "gemini",
+  business_plan: "groq",
+  marketing_plan: "groq",
+  roadmap: "groq",
 };
 for (const [task, providerName] of Object.entries(routablePrimary)) {
   const response = await router.completeChat(task, {
@@ -112,12 +113,13 @@ for (const task of Object.keys(expected)) {
   }
 }
 
-// RAG بيمشي على موديل الـ embeddings المتحقق منه فقط.
+// RAG: embed-1b القديم اختفى من حساب NVIDIA (تأكيد 2026-11-06) والبديل 3.5
+// معطّل لحين بروب ناجح على /v1/embeddings — فيرجّع المرشّح العام للمزوّد
+// (default عند nvidia.ts) وده السلوك الصح لحد التفعيل.
 const ragCandidates = routeCandidates("rag_embeddings");
-assert.deepEqual(
-  ragCandidates.map((c) => c.model),
-  ["nvidia/nemotron-3-embed-1b"]
-);
+assert.equal(ragCandidates.length, 1);
+assert.equal(ragCandidates[0].provider, "nvidia");
+assert.equal(ragCandidates[0].model, undefined);
 
 delete process.env.GROQ_API_KEY;
 delete process.env.NVIDIA_API_KEY;

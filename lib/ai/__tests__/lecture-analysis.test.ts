@@ -40,12 +40,25 @@ describe("chunkTranscript — تقسيم التفريغ الطويل", () => {
     expect(chunks.length).toBeGreaterThan(1);
 
     // الدمج بتقسيم على مسافة عشان الفواصل بين القطع ماتأثرش على
-    // مقارنة المحتوى — اللي بيتأكد منه هو إن **مفيش كلمة ضايعة**.
+    // مقارنة المحتوى.
+    //
+    // ⚠️ **بسبب الـ overlap**: القطعة بتبدأ بجمل كاملة من آخر القطعة
+    // اللي قبلها — يعني إعادة الانضمام بترجّع النص **زد تكرار بسيط**
+    // (زيادة، مش نقص). فالعقد اتطوّر من «نفس عدد الكلمات» لـ «كل كلمة
+    // في الأصل موجودة بنفس العدد على الأقل» — مافيش كلمة ضايعة.
     const rejoined = chunks.join("\n").replace(/\s+/g, " ").trim();
     const original = text.replace(/\s+/g, " ").trim();
-    expect(rejoined.split(" ").filter(Boolean).length).toBe(
-      original.split(" ").filter(Boolean).length,
-    );
+    const wordCounts = (value: string) => {
+      const counts = new Map<string, number>();
+      for (const word of value.split(" ").filter(Boolean)) {
+        counts.set(word, (counts.get(word) ?? 0) + 1);
+      }
+      return counts;
+    };
+    const rejoinedCounts = wordCounts(rejoined);
+    for (const [word, count] of wordCounts(original)) {
+      expect(rejoinedCounts.get(word) ?? 0).toBeGreaterThanOrEqual(count);
+    }
   });
 
   it("بيحترم الحد الأقصى للحجم في كل القطع", () => {

@@ -15,7 +15,8 @@ export function selectModelForTask(task: TaskType, env: Record<string, string | 
   const hasOpenRouter = !!env.OPENROUTER_API_KEY?.trim();
   if (task === "image_understanding") {
     if (hasGemini) return "gemini-3.6-flash";
-    if (hasGroq) return "llama-3.2-11b-vision-preview";
+    // llama-3.2-11b-vision-preview اتشالت من Groq (تأكيد قائمة الحساب 2026-11-06)
+    // — super-vl:free متحقّق منها حيًّا فيعتبر البديل الأول والمباشر.
     if (hasOpenRouter) return "nvidia/nemotron-3.5-super-vl:free";
     return null;
   }
