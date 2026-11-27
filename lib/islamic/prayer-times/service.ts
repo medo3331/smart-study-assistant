@@ -392,9 +392,12 @@ export async function getPrayerTimes(params: PrayerTimesRequestParams): Promise<
   const cacheKey = generateCacheKey(params);
   const cached = prayerTimesCache.get(cacheKey);
 
-  // Return cached data if still valid
+  // Return cached data if still valid — nextPrayer يعاد حسابه لأن الكاش بيفضل صالح لحد 12 ساعة
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+    return {
+      ...cached.data,
+      nextPrayer: getNextPrayerFromTimestamps(cached.data.timestamps, new Date()),
+    };
   }
 
   try {
