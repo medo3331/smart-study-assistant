@@ -1777,7 +1777,7 @@ export default function DashboardPage() {
         <button
           onClick={handleOpenAiAssistant}
           className={`fixed left-6 z-40 bg-emerald-500 hover:opacity-90 text-onmarker text-sm font-bold px-4 py-3 rounded-[var(--r-sm)] shadow-[0_18px_44px_-18px_var(--shade-lift)] flex items-center gap-2.5 transition active:scale-95 ${
-            activeTrack ? "bottom-24" : "bottom-6"
+            activeTrack ? "bottom-40 lg:bottom-24" : "bottom-24 lg:bottom-6"
           }`}
         >
           <MagicAvatar size="sm" />

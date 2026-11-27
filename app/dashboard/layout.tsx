@@ -6,6 +6,7 @@ import AnnouncementBanner from '@/components/AnnouncementBanner';
 import { LowCreditsBanner } from '@/components/upsell/LowCreditsBanner';
 import { ExhaustedGuard } from '@/components/upsell/ExhaustedGuard';
 import { MagicTopBar } from './components/MagicTopBar';
+import { MagicBottomNav } from './components/MagicBottomNav';
 export const metadata: Metadata = pageMeta({
   title: 'مساحتك',
   description: 'خطتك وتقدّمك وملفاتك في مكان واحد.',
@@ -29,6 +30,7 @@ export default async function DashboardLayout({
       </div>
       <ExhaustedGuard />
       {children}
+      <MagicBottomNav />
     </>
   );
 }

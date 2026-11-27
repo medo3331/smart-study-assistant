@@ -141,6 +141,13 @@ export function NavRail({
   const drawerRef = useRef<HTMLElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
 
+  // شريط التنقل السفلي (موبايل) بيطلب فتح الدرج بالحدث ده بدل ما نرفع الحالة لـ layout.
+  useEffect(() => {
+    const openDrawer = () => setIsMenuOpen(true);
+    window.addEventListener("magicly:open-nav", openDrawer);
+    return () => window.removeEventListener("magicly:open-nav", openDrawer);
+  }, []);
+
   // درج الموبايل مودال حقيقي (aria-modal)، فلازم يتصرف كده: Escape بيقفله،
   // الصفحة ورا الدرج ماتسكرولش، والـ Tab مايخرجش منه. الشريط الثابت على
   // الشاشات الكبيرة مش مودال — هو جزء من الصفحة — فالسلوك ده للموبايل بس.
