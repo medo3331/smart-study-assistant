@@ -12,6 +12,12 @@
 
 import type { AiUsageContext } from "@/lib/ai/usage-context";
 
+/** دور محادثة واحد — أضيق من ChatTurn العام (بدون nullables) للبناء النظيف. */
+export interface UnifiedChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface UnifiedAIInput {
   prompt: string;
   imageInput?: File | unknown;     // from Magic upload button (existing)
@@ -24,6 +30,15 @@ export interface UnifiedAIInput {
   // Unified brain: server-built system prompt (persona + student context + study facts).
   // Built server-side only — client must never send it.
   system?: string;
+  /**
+   * 🧠 ذاكرة المحادثة — أدوار المحادثة الحالية من `chat_messages` (server-side فقط).
+   *
+   * ⚠️ **ليه:** UnifiedChat بيبعت آخر رسالة بس، و`unifiedAI` كان بيبنى
+   *   `[system, user]` من غير أي سجل — فالموديل كان بي«نسى»رسالة قبلها
+   *   («الملف اللي لسه بتعمله»). السجل بيتقري من الداتابيز في الـ route
+   *   ويتمرّر هنا — العميل لا يرسله ولا يعدّله.
+   */
+  history?: UnifiedChatTurn[];
   /**
    * 🧾 Phase 5-C5 — shadow usage context.
    *

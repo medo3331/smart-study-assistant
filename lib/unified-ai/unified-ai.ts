@@ -14,7 +14,7 @@
  *   �¢ Router choice logged server-side only; never shown as picker to user.
  *   �¢ OCR failure → continue with prompt only (resilient), log low confidence.
  */
-import type { UnifiedAIInput, UnifiedAIResult } from "./types";
+import type { UnifiedAIInput, UnifiedAIResult, UnifiedChatTurn } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
@@ -37,7 +37,8 @@ async function callGroqWithModel(
   model: string,
   _language: string = "ar",
   system?: string,
-  usage?: AiUsageContext
+  usage?: AiUsageContext,
+  history?: UnifiedChatTurn[]
 ): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
   const key = process.env.GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
@@ -93,8 +94,14 @@ async function callGroqWithModel(
   };
 
   try {
+    // 🧠 ترتيب الرسائل: system ← سجل المحادثة ← رسالة الطالب. تقييد كل دور
+    //    بحد أقصى عشان المرفقات المحفوظة (مقتطفات طويلة) ما تسحبش النموذج.
     const messages = [
       ...(fullSystem ? [{ role: "system", content: fullSystem }] : []),
+      ...(history ?? []).map((t) => ({
+        role: t.role,
+        content: t.content.slice(0, 3000),
+      })),
       { role: "user", content: prompt },
     ];
     const res = await fetch(GROQ_URL, {
@@ -375,7 +382,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // Unified brain: system من السيرفر (شخصية + سياق الطالب) + إرشادات المخططات.
     const serverSystem = typeof input.system === "string" ? input.system.trim() : "";
     const systemPrompt = serverSystem ? `${serverSystem}\n\n${DIAGRAM_GUIDELINES}` : DIAGRAM_GUIDELINES;
-    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemPrompt, input.usage);
+    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemPrompt, input.usage, input.history);
     if (!providerResult.ok) {
       return {
         ok: false,
