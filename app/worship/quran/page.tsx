@@ -79,7 +79,7 @@ function QuranHome() {
         </div>
         <Link
           href="/worship"
-          className="flex items-center gap-1 text-sm text-[#B69CFF] transition-colors hover:text-[#7C5CFF]"
+          className="flex items-center gap-1 text-sm text-[#6EE7B7] transition-colors hover:text-[#10B981]"
         >
           <ArrowLeft size={18} aria-hidden />
           <span>عباداتي</span>
@@ -94,7 +94,7 @@ function QuranHome() {
             هنا (القرآن مكانها الطبيعي جنب الورد والقرّاء). التلاوة بتشتغل
             على المشغّل العائم العام فبتكمل في أي صفحة. */}
         <details className="mt-2 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-white hover:text-[#B69CFF] transition-colors marker:content-none">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-white hover:text-[#6EE7B7] transition-colors marker:content-none">
             🎧 مكتبة التلاوة — كل السور والقرّاء
           </summary>
           <div className="px-3 pb-3">
@@ -104,8 +104,8 @@ function QuranHome() {
 
         <div className="mt-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs text-[#9AA0C0]">
           <span>قائمة صوتية: </span>
-          <span className="text-[#2DD4BF]">عبد الله بصفر</span>,{" "}
-          <span className="text-[#B69CFF]">مشاري العفاسي</span>,{" "}
+          <span className="text-[#34D399]">عبد الله بصفر</span>,{" "}
+          <span className="text-[#6EE7B7]">مشاري العفاسي</span>,{" "}
           <span className="text-[#FB923C]">سعد الغامدي</span>
         </div>
       </div>

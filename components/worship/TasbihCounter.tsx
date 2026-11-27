@@ -106,7 +106,7 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
                   className={cn(
                     "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                     activeId === d.id
-                      ? "bg-[#2DD4BF]/15 text-[#2DD4BF]"
+                      ? "bg-[#34D399]/15 text-[#34D399]"
                       : "bg-white/[0.04] text-[#9AA0C0] hover:bg-white/[0.08] hover:text-white"
                   )}
                 >
@@ -127,7 +127,7 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
                 "relative flex h-44 w-44 select-none flex-col items-center justify-center rounded-full",
                 "border transition-colors duration-200",
                 done
-                  ? "border-[#2DD4BF]/60 bg-[#2DD4BF]/10"
+                  ? "border-[#34D399]/60 bg-[#34D399]/10"
                   : "border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05]",
                 done && "cursor-default"
               )}
@@ -151,7 +151,7 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
                   cy={88}
                   r={80}
                   fill="none"
-                  stroke="#2DD4BF"
+                  stroke="#34D399"
                   strokeWidth={6}
                   strokeLinecap="round"
                   strokeDasharray={2 * Math.PI * 80}
@@ -182,7 +182,7 @@ export function TasbihCounter({ index = 0 }: TasbihCounterProps) {
 
             {/* Current dhikr + reset */}
             <div className="flex items-center gap-3">
-              <p className="text-base font-bold text-[#2DD4BF]" dir="rtl">
+              <p className="text-base font-bold text-[#34D399]" dir="rtl">
                 {active.text}
               </p>
               <button

@@ -53,8 +53,8 @@ export function ReciterSelector() {
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <IconBadge
             icon={Sparkles}
-            color="text-[#7C5CFF]"
-            bg="bg-[#7C5CFF]/15"
+            color="text-[#10B981]"
+            bg="bg-[#10B981]/15"
             size={36}
           />
           <div className="min-w-0 text-right">
@@ -99,7 +99,7 @@ export function ReciterSelector() {
                   placeholder="ابحث عن قارئ..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full h-10 pl-10 pr-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-[#9AA0C0] focus:outline-none focus:border-[#7C5CFF]/50"
+                  className="w-full h-10 pl-10 pr-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-[#9AA0C0] focus:outline-none focus:border-[#10B981]/50"
                   dir="rtl"
                 />
               </div>
@@ -141,7 +141,7 @@ export function ReciterSelector() {
                           className={cn(
                             "w-full flex items-center justify-between gap-3 rounded-xl px-3 py-3 text-right transition-colors",
                             isSelected
-                              ? "bg-[#7C5CFF]/10 text-[#B69CFF]"
+                              ? "bg-[#10B981]/10 text-[#6EE7B7]"
                               : "hover:bg-white/[0.04] text-[#C7CBE6]"
                           )}
                           role="option"
@@ -151,14 +151,14 @@ export function ReciterSelector() {
                             <span
                               className={cn(
                                 "font-mono text-sm",
-                                isSelected ? "text-[#B69CFF]" : "text-[#9AA0C0]"
+                                isSelected ? "text-[#6EE7B7]" : "text-[#9AA0C0]"
                               )}
                             >
                               #{reciter.id}
                             </span>
                             {reciter.surahs.includes(1) &&
                             reciter.surahs.includes(114) ? (
-                              <span className="px-2 py-0.5 rounded-full text-xs bg-[#2DD4BF]/15 text-[#2DD4BF]">
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-[#34D399]/15 text-[#34D399]">
                                 114 سورة
                               </span>
                             ) : (
@@ -174,7 +174,7 @@ export function ReciterSelector() {
                             </p>
                           </div>
                           {isSelected && (
-                            <Check size={18} className="text-[#B69CFF] flex-shrink-0" />
+                            <Check size={18} className="text-[#6EE7B7] flex-shrink-0" />
                           )}
                         </button>
                       );

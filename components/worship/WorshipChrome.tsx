@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { QuranAudioPlayer } from "@/components/worship/QuranAudioPlayer";
+import { WorshipReminders } from "@/components/worship/WorshipReminders";
 import { RewardToast, useRewardToast, type RewardToastState } from "./RewardToast";
 import {
   useWorshipData,
@@ -175,6 +176,7 @@ function WorshipDataProvider({
     <WorshipDataContext.Provider value={dataValue}>
       <WorshipRewardContext.Provider value={value}>
         <RewardToast reward={reward} onDone={clear} />
+        <WorshipReminders />
         {children}
       </WorshipRewardContext.Provider>
     </WorshipDataContext.Provider>

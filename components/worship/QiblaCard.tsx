@@ -111,7 +111,7 @@ export function QiblaCard({ index = 0 }: QiblaCardProps) {
                   style={{
                     borderLeftColor: "transparent",
                     borderRightColor: "transparent",
-                    borderBottomColor: "#2DD4BF",
+                    borderBottomColor: "#34D399",
                   }}
                 />
                 <KaabaIcon />
@@ -124,12 +124,12 @@ export function QiblaCard({ index = 0 }: QiblaCardProps) {
 
           <div className="min-w-0 flex-1">
             <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-              <Compass size={18} className="text-[#2DD4BF]" aria-hidden />
+              <Compass size={18} className="text-[#34D399]" aria-hidden />
               اتجاه القبلة
             </h2>
             <p className="mt-1 text-sm text-[#9AA0C0]">
               من موقعك المحفوظ، القبلة تقع بزاوية{" "}
-              <span className="font-mono font-bold text-[#2DD4BF]">
+              <span className="font-mono font-bold text-[#34D399]">
                 {Math.round(bearing)}°
               </span>{" "}
               من الشمال
