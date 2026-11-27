@@ -9,6 +9,7 @@ import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
 import { ProviderRow } from "@/components/AuthProviders";
 import { openSupport } from "@/lib/support/open-support";
+import { readLastAccount, saveLastAccount } from "@/lib/auth/last-account";
 
 type PasswordFlow = "signin" | "signup" | "forgot" | "reset";
 
@@ -76,7 +77,23 @@ function LoginForm() {
     () => new URLSearchParams(window.location.search).get("reset") === "1",
     () => false,
   );
+  /* آخر حساب اتحفظ على الجهاز — أساس «الدخول السريع» في شاشة اللوجين. */
+  const remembered = useSyncExternalStore(
+    () => () => {},
+    readLastAccount,
+    () => null,
+  );
   const activeFlow = arrivedFromResetLink && !ignoreResetLink ? "reset" : flow;
+
+  /* فشل رابط تأكيد التسجيل في /auth/callback بيرجّع المستخدم هنا — نشرحه بدل ما يدخل في حلقة صامتة. */
+  const arrivedFromAuthError = useSyncExternalStore(
+    () => () => {},
+    () => new URLSearchParams(window.location.search).get("error") === "auth_failed",
+    () => false,
+  );
+  const displayMessage = arrivedFromAuthError
+    ? { type: "error" as const, text: t.login_err_auth_failed }
+    : message;
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,6 +127,7 @@ function LoginForm() {
       if (error) {
         setMessage({ type: "error", text: t.login_err_credentials });
       } else {
+        saveLastAccount({ email });
         router.push(resolveNext());
         router.refresh();
       }
@@ -205,6 +223,7 @@ function LoginForm() {
       setOtpCode("");
       setFlow("reset");
     } else {
+      saveLastAccount({ email });
       router.push(resolveNext());
       router.refresh();
     }
@@ -267,16 +286,16 @@ function LoginForm() {
           الدخول باستخدام MAG ID
         </Link>
 
-        {message && (
+        {displayMessage && (
           <div
-            className={`notice ${message.type === "error" ? "notice-error" : "notice-ok"}`}
-            role={message.type === "error" ? "alert" : "status"}
+            className={`notice ${displayMessage.type === "error" ? "notice-error" : "notice-ok"}`}
+            role={displayMessage.type === "error" ? "alert" : "status"}
           >
-            {message.text}
-            {message.type === "error" && (
+            {displayMessage.text}
+            {displayMessage.type === "error" && (
               <button
                 type="button"
-                onClick={() => openSupport(message.text)}
+                onClick={() => openSupport(displayMessage.text)}
                 style={{
                   display: "block",
                   marginTop: "8px",
@@ -397,6 +416,16 @@ function LoginForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t.login_email_placeholder}
             />
+            {activeFlow === "signin" && !email && remembered && (
+              <button
+                type="button"
+                onClick={() => setEmail(remembered.email)}
+                className="small muted"
+                style={{ background: "none", border: 0, padding: "8px 0 0", font: "inherit", textDecoration: "underline", cursor: "pointer", textAlign: "start" }}
+              >
+                ⚡ {t.login_quick_use} {remembered.name || remembered.email}
+              </button>
+            )}
           </div>}
 
           {showPassword && <div>

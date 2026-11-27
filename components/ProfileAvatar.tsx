@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect -- Syncing with localStorage (external system) is intentional */
+
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -12,9 +14,11 @@ interface ProfileAvatarProps {
   initial: string;
   name: string;
   size?: number;
+  /** صورة الحساب من مزوّد تسجيل الدخول — احتياط لو مفيش تخصيص محلي. */
+  accountUrl?: string | null;
 }
 
-export function ProfileAvatar({ initial, name, size = 48 }: ProfileAvatarProps) {
+export function ProfileAvatar({ initial, name, size = 48, accountUrl }: ProfileAvatarProps) {
   const [avatar, setAvatar] = useState<string | null>(null); // emoji or data URL
   const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -31,6 +35,7 @@ export function ProfileAvatar({ initial, name, size = 48 }: ProfileAvatarProps) 
     try {
       if (val) window.localStorage.setItem(STORAGE_KEY, val);
       else window.localStorage.removeItem(STORAGE_KEY);
+      window.dispatchEvent(new Event("magicly:avatar-changed"));
     } catch {}
   };
 
@@ -69,6 +74,9 @@ export function ProfileAvatar({ initial, name, size = 48 }: ProfileAvatarProps) 
           <img src={avatar!} alt={name} className="h-full w-full object-cover" />
         ) : avatar ? (
           <span className="text-2xl leading-none">{avatar}</span>
+        ) : accountUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- صورة الحساب من مزوّد تسجيل الدخول
+          <img src={accountUrl} alt={name} className="h-full w-full object-cover" />
         ) : (
           <span className="text-lg font-bold text-[var(--color-text-primary)]">
             {initial}

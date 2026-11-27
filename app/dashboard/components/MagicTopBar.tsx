@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/set-state-in-effect -- Syncing with localStorage (external system) is intentional */
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -19,9 +18,18 @@ function AccountMenu({ account }: { account: RailAccount | null }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    try {
-      setAvatar(window.localStorage.getItem(AVATAR_STORAGE_KEY));
-    } catch {}
+    const readAvatar = () => {
+      try {
+        setAvatar(window.localStorage.getItem(AVATAR_STORAGE_KEY));
+      } catch {}
+    };
+    readAvatar();
+    window.addEventListener("magicly:avatar-changed", readAvatar);
+    window.addEventListener("storage", readAvatar);
+    return () => {
+      window.removeEventListener("magicly:avatar-changed", readAvatar);
+      window.removeEventListener("storage", readAvatar);
+    };
   }, []);
 
   useEffect(() => {
@@ -73,6 +81,9 @@ function AccountMenu({ account }: { account: RailAccount | null }) {
           <img src={avatar} alt="" className="h-full w-full object-cover" />
         ) : avatar ? (
           <span aria-hidden className="text-lg leading-none">{avatar}</span>
+        ) : account.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- صورة الحساب من مزوّد تسجيل الدخول
+          <img src={account.avatarUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           <span aria-hidden className="font-display text-sm font-extrabold text-ink">
             {account.avatarInitial}

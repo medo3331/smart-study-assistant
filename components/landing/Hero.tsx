@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MIcon from './MIcon';
 import PreviewCard from './PreviewCard';
 import { TopControls } from '@/components/TopControls';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
+import { createClient } from '@/lib/supabase/client';
 import styles from './Hero.module.css';
 
 export default function Hero() {
@@ -14,6 +15,26 @@ export default function Hero() {
   /* نقطة الدخول الحقيقية: الزائر يسجّل الأول، وبعد التسجيل يروح للـwizard
      في /assessment اللي بيجمّع بياناته وهدفه ومذكرته ويبنيله الخطة. */
   const startHref = '/welcome?next=/assessment';
+
+  /* الدخول السريع: حساب حقيقي عنده جلسة شغّالة → زر «متابعة كـ …» يدخّله
+     على طول /onboarding (وبيحوّله للداشبورد لو خلّص الأونبوردنج). */
+  const [quickName, setQuickName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await createClient().auth.getUser();
+        const user = data.user;
+        if (cancelled || !user || user.is_anonymous) return;
+        const metaName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
+        setQuickName(metaName || user.email || null);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* روابط النافبار: مراسي جوّه اللاندينج نفسها (تنقّل في صفحة واحدة).
      بنفس ترتيب الموكاب: الرئيسية/المميزات/كيف تعمل؟/مساعدة. */
@@ -47,9 +68,15 @@ export default function Hero() {
           <Link href={startHref} className={`${styles.btnPrimary} ${styles.navStart}`}>
             {t.nav_start}
           </Link>
-          <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
-            {t.nav_login}
-          </Link>
+          {quickName ? (
+            <Link href="/onboarding" className={`${styles.btnGhost} ${styles.navSignin}`}>
+              {t.landing_continue_as} {quickName}
+            </Link>
+          ) : (
+            <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
+              {t.nav_login}
+            </Link>
+          )}
           <TopControls />
           {/* زر الهامبرجر — يظهر على الموبايل بس (CSS). */}
           <button

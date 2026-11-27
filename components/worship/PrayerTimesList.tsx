@@ -45,10 +45,10 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
   const prayerColors: Record<string, { color: string; bg: string }> = {
     Fajr: { color: "text-[#FB923C]", bg: "bg-[#FB923C]/15" },
     Sunrise: { color: "text-[#F97316]", bg: "bg-[#F97316]/15" },
-    Dhuhr: { color: "text-[#2DD4BF]", bg: "bg-[#2DD4BF]/15" },
+    Dhuhr: { color: "text-[#34D399]", bg: "bg-[#34D399]/15" },
     Asr: { color: "text-[#06B6D4]", bg: "bg-[#06B6D4]/15" },
     Maghrib: { color: "text-[#F97316]", bg: "bg-[#F97316]/15" },
-    Isha: { color: "text-[#7C5CFF]", bg: "bg-[#7C5CFF]/15" },
+    Isha: { color: "text-[#10B981]", bg: "bg-[#10B981]/15" },
   };
 
   return (
@@ -73,12 +73,12 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
         <GlassCard className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="p-3 rounded-xl bg-white/[0.02]">
-              <IconBadge icon={Calendar} color="text-[#B69CFF]" bg="bg-[#7C5CFF]/15" size={36} />
+              <IconBadge icon={Calendar} color="text-[#6EE7B7]" bg="bg-[#10B981]/15" size={36} />
               <p className="text-xs text-[#9AA0C0] mt-1">التاريخ الميلادي</p>
               <p className="font-mono font-medium text-white">{new Date(data.date).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.02]">
-              <IconBadge icon={Calendar} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={36} />
+              <IconBadge icon={Calendar} color="text-[#34D399]" bg="bg-[#34D399]/15" size={36} />
               <p className="text-xs text-[#9AA0C0] mt-1">التاريخ الهجري</p>
               <p className="font-mono font-medium text-white" dir="ltr">{data.hijriDate}</p>
             </div>
@@ -88,7 +88,7 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
               <p className="text-sm font-medium text-white truncate">{data.location}</p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.02]">
-              <IconBadge icon={Settings} color="text-[#7C5CFF]" bg="bg-[#7C5CFF]/15" size={36} />
+              <IconBadge icon={Settings} color="text-[#10B981]" bg="bg-[#10B981]/15" size={36} />
               <p className="text-xs text-[#9AA0C0] mt-1">طريقة الحساب</p>
               <p className="text-xs font-medium text-white truncate">{data.calculationMethod}</p>
             </div>
@@ -164,19 +164,19 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
       {/* Next Prayer Highlight */}
       {data.nextPrayer && (
         <Reveal index={3}>
-          <GlassCard className="p-4 border-[#7C5CFF]/30 bg-[#7C5CFF]/5">
+          <GlassCard className="p-4 border-[#10B981]/30 bg-[#10B981]/5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#7C5CFF]/20 text-[#7C5CFF]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#10B981]/20 text-[#10B981]">
                   <Bell size={24} aria-hidden />
                 </div>
                 <div>
-                  <p className="text-sm text-[#B69CFF] font-medium">الصلاة القادمة</p>
+                  <p className="text-sm text-[#6EE7B7] font-medium">الصلاة القادمة</p>
                   <p className="text-xl font-bold text-white">{data.nextPrayer.arabicName}</p>
                 </div>
               </div>
               <div className="text-left">
-                <p className="text-2xl font-mono font-bold text-[#B69CFF]">{data.nextPrayer.time}</p>
+                <p className="text-2xl font-mono font-bold text-[#6EE7B7]">{data.nextPrayer.time}</p>
                 <p className="text-xs text-[#9AA0C0]">متبقي: {formatTimeRemaining(data.nextPrayer.timestamp)}</p>
               </div>
             </div>
@@ -208,9 +208,9 @@ function PrayerTimeRow({ prayer, icons, colors, index }: PrayerTimeRowProps) {
       className={cn(
         "relative flex items-center gap-4 p-4 rounded-2xl transition-all",
         isNext
-          ? "bg-[#7C5CFF]/5 border border-[#7C5CFF]/30 shadow-[0_0_20px_rgba(124,92,255,0.15)]"
+          ? "bg-[#10B981]/5 border border-[#10B981]/30 shadow-[0_0_20px_rgba(124,92,255,0.15)]"
           : isCurrent
-            ? "bg-[#2DD4BF]/5 border border-[#2DD4BF]/30"
+            ? "bg-[#34D399]/5 border border-[#34D399]/30"
             : "bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04]"
       )}
       role="listitem"
@@ -218,14 +218,14 @@ function PrayerTimeRow({ prayer, icons, colors, index }: PrayerTimeRowProps) {
       {/* Next/Current indicator */}
       {isNext && (
         <div className="absolute -right-3 top-1/2 -translate-y-1/2">
-          <span className="px-2 py-1 rounded-full bg-[#7C5CFF] text-white text-xs font-bold">
+          <span className="px-2 py-1 rounded-full bg-[#10B981] text-white text-xs font-bold">
             القادمة
           </span>
         </div>
       )}
       {isCurrent && !isNext && (
         <div className="absolute -right-3 top-1/2 -translate-y-1/2">
-          <span className="px-2 py-1 rounded-full bg-[#2DD4BF] text-[#06231F] text-xs font-bold">
+          <span className="px-2 py-1 rounded-full bg-[#34D399] text-[#06231F] text-xs font-bold">
             الآن
           </span>
         </div>
@@ -239,14 +239,14 @@ function PrayerTimeRow({ prayer, icons, colors, index }: PrayerTimeRowProps) {
         <div className="flex items-center gap-2">
           <p className={cn(
             "text-lg font-bold",
-            isNext ? "text-[#B69CFF]" : isCurrent ? "text-[#2DD4BF]" : "text-white"
+            isNext ? "text-[#6EE7B7]" : isCurrent ? "text-[#34D399]" : "text-white"
           )}>
             {prayer.arabicName}
           </p>
           <p className="text-xs text-[#9AA0C0] font-mono">{prayer.name}</p>
         </div>
         {isNext && (
-          <p className="text-xs text-[#7C5CFF] mt-1">متبقي {formatTimeRemaining(prayer.timestamp)}</p>
+          <p className="text-xs text-[#10B981] mt-1">متبقي {formatTimeRemaining(prayer.timestamp)}</p>
         )}
       </div>
 
@@ -254,7 +254,7 @@ function PrayerTimeRow({ prayer, icons, colors, index }: PrayerTimeRowProps) {
       <div className="text-left">
         <p className={cn(
           "text-xl font-mono font-bold",
-          isNext ? "text-[#B69CFF]" : isCurrent ? "text-[#2DD4BF]" : "text-white"
+          isNext ? "text-[#6EE7B7]" : isCurrent ? "text-[#34D399]" : "text-white"
         )}>
           {prayer.time}
         </p>
