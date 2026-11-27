@@ -7156,6 +7156,11 @@ html {
 .mw-glyph-star { animation: mw-star-pulse 3s ease-in-out infinite; transform-origin: center; }
 
 @keyframes mw-rotate-dash { to { transform: rotate(360deg); } }
+/* دخول العجلة بدوران عند فتح القسم (motion-safe فقط). */
+@keyframes mw-spin-in {
+  from { transform: rotate(-40deg) scale(0.92); opacity: 0; }
+  to { transform: rotate(0deg) scale(1); opacity: 1; }
+}
 @keyframes mw-rotate-dot { to { transform: rotate(-360deg); } }
 @keyframes mw-pulse {
   0%, 100% { transform: scale(1); }

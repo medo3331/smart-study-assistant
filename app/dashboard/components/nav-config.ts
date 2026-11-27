@@ -465,6 +465,7 @@ export interface RailAccount {
   displayName: string;
   displayEmail: string;
   avatarInitial: string;
+  avatarUrl: string | null;
   isGuest: boolean;
 }
 
@@ -473,7 +474,15 @@ export interface RailAccount {
 interface AuthUserLike {
   email?: string | null;
   is_anonymous?: boolean;
-  user_metadata?: { full_name?: unknown } | null;
+  user_metadata?: { full_name?: unknown; avatar_url?: unknown; picture?: unknown } | null;
+}
+
+function accountAvatarUrl(user: AuthUserLike): string | null {
+  const candidates = [user.user_metadata?.avatar_url, user.user_metadata?.picture];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().startsWith("http")) return c.trim();
+  }
+  return null;
 }
 
 export function railAccountFromUser(user: AuthUserLike | null | undefined): RailAccount | null {
@@ -485,6 +494,7 @@ export function railAccountFromUser(user: AuthUserLike | null | undefined): Rail
     displayName,
     displayEmail: user.email || (isGuest ? "حساب زائر (غير مسجل)" : ""),
     avatarInitial: displayName.trim().charAt(0).toUpperCase() || "؟",
+    avatarUrl: accountAvatarUrl(user),
     isGuest,
   };
 }
