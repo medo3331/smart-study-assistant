@@ -8,11 +8,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import MagicWheelDashboard from "@/components/MagicWheelDashboard";
 import { WelcomeCard } from "./components/WelcomeCard";
-import { TodayPlanCard, DailyMissionsCard, WeeklyProgressCard, CompanionStatusCard } from "@/components/DashboardExtraCards";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
-import type { CoachTask } from "@/components/AIStudyCoach";
 import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
 import { MagicAvatar } from "@/components/MagicAvatar";
@@ -31,7 +29,6 @@ import type {
 } from "./components/types";
 
 import { useProfileState, ProfilePersona, defaultProfileForUser } from "@/lib/user-profiles";
-import { HeroSection } from "./components/HeroSection";
 import MagIdCard from "@/components/MagIdCard";
 import SubscriptionQuotaCard from "./components/SubscriptionQuotaCard";
 import { StudySections } from "./components/StudySections";
@@ -47,27 +44,22 @@ import { fetchUnlockedDayIds } from "@/lib/pages-data";
 import { unlockStudyDay } from "./actions/unlock-day";
 // ًںژ´ إعادة تصميم الداشبورد (نظام موحّد): هيرو + كروت أرقام + الخطوة الحالية.
 // نفس حالة الصفحة الحقيقية (profiles / study_days / activity_log) بدون أي مصدر بيانات جديد.
-import { HeroCard } from "./components/HeroCard";
-import { StatCards } from "./components/StatCards";
 import { UserQrCard } from "./components/UserQrCard";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
 import { NextBestAction, type NextBestActionItem } from "./components/NextBestAction";
+import { DashboardSection } from "./components/DashboardSection";
 import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
 import { TodayMissionsCard } from "./components/TodayMissionsCard";
 import { MotivationNudge } from "@/components/MotivationNudge";
-import { LightSocialComparison } from "@/components/LightSocialComparison";
 // ًں§© سياق المساعد الشخصي (Phase 2A) — بيفرّغ حالة الداشبورد الحقيقية في سياق واحد.
 import { buildPersonalContext, type PendingGoalRow } from "@/lib/personal-assistant/context";
 // Preview branch: conservative control center extension (stats + navigation + focus)
 import { DashboardStats } from "./components/DashboardStats";
-import { QuickNavigation, buildQuickNavItems } from "./components/QuickNavigation";
-import { TodayFocus } from "./components/TodayFocus";
 // ًںژ¯ First Session — "ماذا تريد أن تفعل اليوم؟" (Control Center entry point)
-import { FirstSession } from "./components/FirstSession";
 // ًں“‌ قاموس نصوص الواجهة بقى في مكان واحد: lib/user-persona.ts
 // الإيموجي متشال من النصوص دي: sectionTitle بقى لافتة مونوسبيس فوق
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
@@ -1129,18 +1121,6 @@ export default function DashboardPage() {
   const currentTaskForCoach = days.find((d) => d.day === currentDayNumber);
   const reviewFlashcardsCount = flashcards.filter((c) => c.status === "review").length;
 
-  const coachTasks: CoachTask[] = [];
-  if (currentTaskForCoach && !currentTaskForCoach.isCompleted) {
-    coachTasks.push({
-      id: `lesson-${currentTaskForCoach.day}`,
-      label: `${uiText.stepPrefix} ${currentTaskForCoach.day}: ${currentTaskForCoach.topic}`,
-      icon: "ًں“ک",
-    });
-  }
-  if (reviewFlashcardsCount > 0) {
-    coachTasks.push({ id: "flashcards-review", label: `مراجعة ${reviewFlashcardsCount} بطاقة محتاجة تركيز`, icon: "ًں”پ" });
-  }
-
   const nextLockedDay = currentDayNumber + 1;
   const canUnlockNextDayEarly = nextLockedDay <= days.length && !earlyUnlockedDays.includes(nextLockedDay);
 
@@ -1480,33 +1460,7 @@ export default function DashboardPage() {
         audioOn={isPlayingAudio}
       />
 
-      {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-          بوابة التنقل الدائرية — عجلة ماجيك (NEW)
-          تُضاف فوق كل المجموعات الحالية بدون تغيير أي قسم موجود.
-          �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-      <div className="relative -mt-4 mb-6 md:mb-8 dashboard-entrance" style={{ animationDelay: "0ms" }}>
-        <div className="motion-safe:animate-[wheelPulse_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
-        <MagicWheelDashboard
-          currentDay={currentDayNumber}
-          currentDayId={currentTaskForCoach?.id}
-          totalDays={days.length}
-          subject={config?.subject ?? ""}
-          completedSteps={completedCount}
-          progressPct={overallProgress}
-          currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
-          streak={streak}
-          coursesCount={coursesCount}
-          subjectBreakdown={subjectBreakdown}
-          activeChartData={activeChartData}
-          analyticsRange={analyticsRange}
-          onChangeRange={setAnalyticsRange}
-          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-          notificationsEnabled={notificationsEnabled}
-          onOpenSettings={() => router.push("/dashboard/settings")}
-        />
-        </div>
-      </div>
-
+      
         <WelcomeCard
           initial={railAccountFromUser(authUser)?.avatarInitial ?? "؟"}
           name={displayName}
@@ -1594,101 +1548,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            ًںژ¯ First Session — "ماذا تريد أن تفعل اليوم؟"
-            Control Center entry point: يظهر أولاً، يوجّه النية،
-            ثم Stats + Quick Nav + Focus + باقي الأقسام كما هي.
-            البيانات كلها حقيقية من حالة الصفحة (days/completedCount).
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-        <div className="dashboard-entrance" style={{ animationDelay: "0ms" }}>
-          <FirstSession
-            completedSteps={completedCount}
-            totalSteps={days.length}
-            progressPct={overallProgress}
-            subject={config?.subject ?? ""}
-            currentDayId={(currentTaskForCoach as unknown as { id?: string })?.id ?? null}
-            onContinue={() => {
-              const el = document.getElementById(`day-${currentDayNumber}`);
-              if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-                return;
-              }
-              // fallback: لو القسم مطوي أو غير موجود، افتحه
-              const details = document.querySelector("details") as HTMLDetailsElement | null;
-              if (details && !details.open) details.open = true;
-            }}
-            onOpenAi={handleOpenAiAssistant}
-          />
-        </div>
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "40ms" }}>
-          <DashboardStats
-            streak={streak}
-            progressPct={days.length > 0 ? overallProgress : null}
-            notificationsCount={null}
-            coursesCount={coursesCount}
-          />
-        </div>
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "40ms" }}>
-          <QuickNavigation
-            items={buildQuickNavItems({
-              onOpenAi: handleOpenAiAssistant,
-              onOpenSettings: () => router.push("/dashboard/settings"),
-            })}
-          />
-        </div>
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "80ms" }}>
-          <TodayFocus
-            currentDay={currentTaskForCoach ?? null}
-            progressPct={days.length > 0 ? overallProgress : null}
-            totalSteps={days.length}
-            completedSteps={completedCount}
-            subject={config?.subject ?? ""}
-            onContinue={() => {
-              const el = document.getElementById(`day-${currentDayNumber}`);
-              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
-          />
-        </div>
-
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            GROUP A — الهوية والفعل
-            HeroCard → CurrentStepCard → ExamPlanCard (conditional)
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
         <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "0ms" }}>
-          {/* �گ�گ�گ الهيرو الجديد: ترحيب بالاسم الحقيقي + سلسلة/مستوى/تقدّم +
-                  إجراءات سريعة (أكمل التعلّم آ· المساعد الذكي آ· العبادات آ· المتجر).
-                  كل الأرقام من نفس حالة الصفحة اللي بتغذّي باقي الأقسام. �گ�گ�گ */}
-          <HeroCard
-            displayName={displayName}
-            subtitle={headerSubtitle}
-            level={level}
-            streak={streak}
-            planProgressPct={overallProgress}
-            completedSteps={completedCount}
-            totalSteps={days.length}
-            onContinue={() => {
-              const el = document.getElementById(`day-${currentDayNumber}`);
-              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
-            onOpenAiAssistant={handleOpenAiAssistant}
-          />
-          {/* Phase 4 — رسالة تحفيز واحدة مبنية على حالة الطالب الحقيقية
-              (الترتيب/الكونز/السلسلة/المهام) — المنطق في lib/retention/nudges.ts */}
-          <MotivationNudge streak={streak} />
-
-          {/* Phase 2 — مهام النهاردة: سطح المهام اليومية (gamification) في وش
-              الطالب بدل ما تكون مدفونة في القائمة الجانبية. الأرقام من
-              daily_missions على السيرفر، والاستلام من claim_daily_mission.
-              ⚠️ مش نفس DailyMissionsCard القديمة (دي كارت أهداف المخطط). */}
-          <TodayMissionsCard streak={streak} />
-
-          {/* Phase 4.1A — Coins + AI Usage (real data, no new backend) */}
-          <EconomyStrip />
-          <PlanQuotaCard />
-          {/* ═══ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
-                  (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة ═══ */}
-          {/* �گ�گ�گ الخطوة الحالية: حلقة بنسبة الخطة الحقيقية + زر ديناميكي
-                  (ابدأ / تابع / راجع) حسب حالة اليوم الفعلية — أهم CTA في الصفحة �گ�گ�گ */}
           <CurrentStepCard
             currentDay={currentTaskForCoach ?? null}
             completedSteps={completedCount}
@@ -1703,23 +1563,7 @@ export default function DashboardPage() {
             }}
           />
 
-          {/* Phase 0.1 — Daily Micro-Challenge */}
-          <DailyMicroChallenge />
-
-          {/* Phase 0.2 — Smart Contextual Notification (in-app only; zero DB; no push/cron) */}
-          <ContextualNotification />
-
-          {/* Phase 0.4 — Light Social Comparison (reuses weekly_quiz_leaderboard; no new DB) */}
-          <LightSocialComparison />
-
-          {/* ًںڑ¨ خطة الامتحان القريب — أهم deadline إذا وُجد.
-              مكانها بعد CTA مباشرة عن قصد: اللي عنده امتحان بعد ٣ أيام لازم يشوف
-              المطلوب منه النهاردة قبل أي إحصائية. الكارت بيخفي نفسه
-              لوحده لو مفيش خطة شغالة. */}
           {authUser && (
-            // âڑ ï¸ڈ الـ key فيه examPlanKey: الكارت بيجيب الخطة مرة واحدة عند
-            // التركيب، فلو المستخدم عمل خطة من الشات الكارت كان هيفضل فاضي
-            // لحد ريفريش. تغيير الـ key بيعيد تركيبه فبيجيب الخطة الجديدة.
             <ExamPlanCard
               key={examPlanKey}
               userId={authUser.id}
@@ -1727,11 +1571,6 @@ export default function DashboardPage() {
             />
           )}
 
-          {/* ── التشخيص: نقطة دخول واحدة بس في Phase 3 ──
-              عايزين الطالب يلاقي التشخيص من الداشبورد، بس من غير كارت
-              نتيجة هنا — النتيجة في /diagnostic نفسها (القرار: تأجيل
-              كارت الداشبورد لـ Wave تانية). الرابط بيخفي نفسه لو مفيش
-              أسئلة منشورة، عشان مايشدش حد لصفحة فاضية. */}
           {authUser && (
             <Link
               href="/diagnostic"
@@ -1748,31 +1587,16 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            GROUP B — السياق اليومي
-            PersonalAssistant → HeroSection / AIStudyCoach
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "60ms" }}>
-          {/* �گ�گ�گ المساعد الشخصي ─ بين الهيرو وكروت الأرقام �گ�گ�گ */}
-          <PersonalAssistant context={personalAssistantContext} />
+        <div className="space-y-10 dashboard-entrance" style={{ animationDelay: "40ms" }}>
+          <DashboardSection id="missions" title="مهام اليوم" defaultOpen>
+            <TodayMissionsCard streak={streak} />
+            <DailyMicroChallenge />
+            <ContextualNotification />
+            <MotivationNudge streak={streak} />
+          </DashboardSection>
 
-          <HeroSection displayName={displayName} coachTasks={coachTasks} />
-          <MagIdCard />
-          <SubscriptionQuotaCard />
-        </div>
-
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            GROUP C — العمل الحقيقي (محفوظ لكن بدون احتلال مساحة ضخمة في Preview)
-            StudySections wrapped in collapsible <details> per task آ§5.
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-        <details className="group rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)]" open>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--text)" }}>
-            <span className="flex items-center gap-2"><span aria-hidden>ًں“ڑ</span> المواد الدراسية</span>
-            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--rule)] bg-[var(--card-secondary)] text-[var(--muted)] transition group-open:rotate-180" aria-hidden>â–¾</span>
-          </summary>
-          <div className="border-t border-[var(--rule)] p-4">
-            <p className="mb-3 text-xs leading-5" style={{ color: "var(--muted)" }}>هذا القسم كان يحتل مساحة كبيرة في الـDashboard. في Preview تم تصغيره داخل عنصر قابل للطي — المحتوى والبيانات نفسها محفوظة، والوصول الكامل عبر <span style={{ color: "var(--text)" }}>/dashboard/courses</span>.</p>
-          <StudySections
+          <DashboardSection id="materials" title="المواد الدراسية" hint={headerSubtitle} defaultOpen>
+            <StudySections
           config={config}
           uiText={uiText}
           themeStyles={themeStyles}
@@ -1811,63 +1635,16 @@ export default function DashboardPage() {
           flashcards={flashcards}
           onUpdateCardStatus={updateCardStatus}
         />
-          </div>
-        </details>
+          </DashboardSection>
 
-      {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-          GROUP C-EXTRA — كاردات إضافية (ربط ببيانات DB حقيقية)
-          �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-      <div className="dashboard-entrance grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TodayPlanCard
-          currentDayNumber={currentDayNumber}
-          daysLength={days.length}
-          subject={config?.subject ?? ""}
-          completedCount={completedCount}
-          chapters={chapters}
-          currentChapter={chapters.find((c) => !c.isComplete)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
-        />
-        <DailyMissionsCard
-          pendingGoals={pendingGoals as any}
-          completedToday={days.filter((d) => d.isCompleted).length}
-        />
-        <WeeklyProgressCard
-          weeklyChartData={weeklyChartData}
-          monthlyChartData={monthlyChartData}
-          analyticsRange={analyticsRange}
-          weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-        />
-        <CompanionStatusCard
-          level={level}
-          xp={xp}
-          streak={streak}
-          levelProgressPct={currentLevelProgress}
-          companionName={companion?.name ?? "رفيقك"}
-          hidden={companion?.hidden ?? true}
-        />
-      </div>
-
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            GROUP D — الأرقام والتقدّم
-            كل progress/metrics في منطقة واحدة بعد العمل الحقيقي
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "180ms" }}>
-          {/* �گ�گ�گ AI Tools Hub تم نقلها لصفحة /dashboard/agents — لا تعرض هنا �گ�گ�گ */}
-
-          {/* �گ�گ�گ كروت الأرقام: XP آ· السلسلة آ· خطوات مكتملة آ· تركيز الأسبوع
-                  — عدّ من صفر مرة واحدة بخط المونو �گ�گ�گ */}
-          <StatCards
-            xp={xp}
-            streak={streak}
-            completedSteps={completedCount}
-            weeklyFocusMinutes={weeklyFocusMinutesTotal}
-          />
-
-          {/* 📊 طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
-
-          {/* كارت الكود الشخصي (QR) — يظهر في مكان واضح فور دخول الداشبورد */}
-          <UserQrCard />
-          {/* ًں“ٹ طبقة المراجعة: "إنت عملت إيه الأسبوع ده" و "إيه الجاي" */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <DashboardSection id="progress" title="تقدمي وإنجازاتي" defaultOpen>
+            <DashboardStats
+              streak={streak}
+              progressPct={days.length > 0 ? overallProgress : null}
+              notificationsCount={null}
+              coursesCount={coursesCount}
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WeeklyProgress data={weeklyChartData} themeStyles={themeStyles} />
             {/* ًںگ£ الرفيق تحت الإنجازات في نفس العمود مش خانة تالتة في
                 الشبكة: الشبكة عمودين، والتالت كان هيسيب فراغ جنبه على
@@ -1904,38 +1681,66 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+          </DashboardSection>
 
-          {/* Phase 4: Progressive disclosure — collapsed by default, preserves id="analytics" for nav scroll. */}
-          <details id="analytics" className="scroll-mt-6 group">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-sm)] border border-rule bg-paper px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden marker:content-none">
-              <span>مزيد من التحليلات</span>
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>
-                â–¾
-              </span>
-            </summary>
-            <div className="mt-4">
-              <AnalyticsSection
-                analyticsRange={analyticsRange}
-                onChangeRange={setAnalyticsRange}
-                weeklyFocusHoursLabel={weeklyFocusHoursLabel}
-                overallProgress={overallProgress}
-                streak={streak}
-                activeChartData={activeChartData}
-                theme={theme}
-                heatmapCells={heatmapCells}
-                heatmapColors={heatmapColors}
-              />
-            </div>
-          </details>
-        </div>
+          <DashboardSection id="assistant" title="المساعد الشخصي" defaultOpen>
+            <PersonalAssistant context={personalAssistantContext} />
+          </DashboardSection>
 
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            GROUP E — العبادات
-            Worship CTA → QuranSection
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-        <div className="space-y-6 dashboard-entrance" style={{ animationDelay: "240ms" }}>
-          {/* ًں“– بوابة العبادات — تبقى قبل القرآن مباشرة */}
-          <Link href="/worship" className="block">
+          <DashboardSection
+            id="analytics"
+            title="التحليلات"
+            hint="ملخص التقدم والرسوم البيانية"
+            defaultOpen={false}
+            domId="analytics"
+          >
+            <AnalyticsSection
+              analyticsRange={analyticsRange}
+              onChangeRange={setAnalyticsRange}
+              weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+              overallProgress={overallProgress}
+              streak={streak}
+              activeChartData={activeChartData}
+              theme={theme}
+              heatmapCells={heatmapCells}
+              heatmapColors={heatmapColors}
+            />
+          </DashboardSection>
+
+          <DashboardSection
+            id="economy"
+            title="الخط والرصيد"
+            hint="Magic Coins وMagic Credits والاشتراك"
+            defaultOpen={false}
+          >
+            <EconomyStrip />
+            <PlanQuotaCard />
+            <SubscriptionQuotaCard />
+          </DashboardSection>
+
+          <DashboardSection id="wheel" title="عجلة ماجيك" hint="نظرة الخطة الكاملة" defaultOpen={false}>
+              <MagicWheelDashboard
+            currentDay={currentDayNumber}
+            currentDayId={currentTaskForCoach?.id}
+            totalDays={days.length}
+            subject={config?.subject ?? ""}
+            completedSteps={completedCount}
+            progressPct={overallProgress}
+            currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+            streak={streak}
+            coursesCount={coursesCount}
+            subjectBreakdown={subjectBreakdown}
+            activeChartData={activeChartData}
+            analyticsRange={analyticsRange}
+            onChangeRange={setAnalyticsRange}
+            weeklyFocusHoursLabel={weeklyFocusHoursLabel}
+            notificationsEnabled={notificationsEnabled}
+            onOpenSettings={() => router.push("/dashboard/settings")}
+          />
+          </DashboardSection>
+
+          <DashboardSection id="worship" title="عباداتي" defaultOpen={false}>
+            <Link href="/worship" className="block">
             <button
               type="button"
               aria-label="عباداتي — Worship Center"
@@ -1950,23 +1755,17 @@ export default function DashboardPage() {
             </button>
           </Link>
 
-          {/* ًں“– القرآن: الكارت مختصر — آخر سورة + ٦ سور + رابط مكتبة
-              التلاوة. المكتبة بقى في صفحة العبادات (/worship/quran)
-              بعد ما طلعت من درج الإعدادات. الصوت عايش في AudioProvider
-              فالسورة بتكمّل في أي صفحة. */}
-          <QuranSection
-            themeStyles={themeStyles}
-            onOpenLibrary={() => router.push("/worship/quran")}
-          />
-        </div>
+            <QuranSection
+              themeStyles={themeStyles}
+              onOpenLibrary={() => router.push("/worship/quran")}
+            />
+          </DashboardSection>
 
-        {/* �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ
-            GROUP F — الثانوي
-            �گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ�گ */}
-        {/* ًں‘¥ دعوة الجروب في آخر الصفحة: اللي وصل لحد هنا شاف الموقع
-            كله وبقى مؤهّل يدخل. البانر بيخفي نفسه لو مفيش لينك مظبوط. */}
-        <div className="dashboard-entrance" style={{ animationDelay: "300ms" }}>
-          <CommunityInvite variant="banner" />
+          <DashboardSection id="identity" title="هويتي ومجتمعي" defaultOpen={false}>
+            <UserQrCard />
+            <MagIdCard />
+            <CommunityInvite variant="banner" />
+          </DashboardSection>
         </div>
           </>
         )}
