@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { PAGE_HEIGHT, PAGE_WIDTH, renderPageContent } from "@/lib/notes/canvas";
+import { pageDimensions, renderPageContent } from "@/lib/notes/canvas";
 import type { NotesTemplate, PageContent } from "@/lib/notes/types";
 
 /**
@@ -17,7 +17,6 @@ import type { NotesTemplate, PageContent } from "@/lib/notes/types";
  */
 
 const THUMB_WIDTH = 96;
-const THUMB_HEIGHT = Math.round((THUMB_WIDTH * PAGE_HEIGHT) / PAGE_WIDTH);
 
 export type ThumbPage = {
   id: string;
@@ -28,9 +27,11 @@ export type ThumbPage = {
 function PageThumb({
   page,
   lookup,
+  pageSize,
 }: {
   page: ThumbPage;
   lookup: (src: string) => CanvasImageSource | null;
+  pageSize: { width: number; height: number };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -39,18 +40,19 @@ function PageThumb({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const scale = THUMB_WIDTH / PAGE_WIDTH;
+    const thumbHeight = Math.round((THUMB_WIDTH * pageSize.height) / pageSize.width);
+    const scale = THUMB_WIDTH / pageSize.width;
     canvas.width = THUMB_WIDTH * 2;
-    canvas.height = THUMB_HEIGHT * 2;
+    canvas.height = thumbHeight * 2;
     ctx.setTransform(2 * scale, 0, 0, 2 * scale, 0, 0);
-    renderPageContent(ctx, page.template, page.content, PAGE_WIDTH, PAGE_HEIGHT, lookup);
-  }, [page.template, page.content, lookup]);
+    renderPageContent(ctx, page.template, page.content, pageSize.width, pageSize.height, lookup);
+  }, [page.template, page.content, lookup, pageSize]);
 
   return (
     <canvas
       ref={ref}
       aria-hidden="true"
-      style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
+      style={{ width: THUMB_WIDTH, height: Math.round((THUMB_WIDTH * pageSize.height) / pageSize.width) }}
     />
   );
 }
@@ -62,11 +64,14 @@ export default function PageThumbs({
   onSelect,
   pageNames = {},
   onRename,
+  pageSize,
 }: {
   pages: ThumbPage[];
   activePageId: string | null;
   lookup: (src: string) => CanvasImageSource | null;
   onSelect: (pageId: string) => void;
+  /** 📐 أبعاد الصفحة حسب مقاس الدفتر — الافتراضي A4 طولي للدفاتر القديمة. */
+  pageSize?: { width: number; height: number };
   /** 🏷️ أسماء الصفحات (pageId → اسم). */
   pageNames?: Record<string, string>;
   /** فتح إعادة التسمية لصفحة. */
@@ -94,7 +99,7 @@ export default function PageThumbs({
           data-active={page.id === activePageId}
           onClick={() => onSelect(page.id)}
         >
-          <PageThumb page={page} lookup={lookup} />
+          <PageThumb page={page} lookup={lookup} pageSize={pageSize ?? pageDimensions("a4")} />
           <span className="notes-thumb-num">
             {index + 1}
             {pageNames[page.id] ? <em className="notes-thumb-name">{pageNames[page.id]}</em> : null}

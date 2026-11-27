@@ -5,10 +5,10 @@ import Link from "next/link";
 import { emptyPageContent, pageContentStrokes } from "@/lib/notes/content";
 import { classifyNotesError } from "@/lib/notes/errors";
 import {
-  PAGE_HEIGHT,
-  PAGE_WIDTH,
+  PAGE_FORMAT_OPTIONS,
   TEMPLATE_OPTIONS,
   imageAt,
+  pageDimensions,
   paintPageBackground,
   paintSelectionOutline,
   paintShapeStroke,
@@ -66,6 +66,7 @@ import type {
   NoteText,
   NotesTemplate,
   PageContent,
+  PageFormat,
   StoragePage,
   Stroke,
 } from "@/lib/notes/types";
@@ -74,6 +75,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
 import PageThumbs from "@/components/notes/PageThumbs";
+import PresentMode from "@/components/notes/PresentMode";
 import NotesAssistant from "@/components/notes/NotesAssistant";
 import MagicWriteDialog from "@/components/notes/MagicWriteDialog";
 import { wrapAiText, type AiLayoutResult } from "@/lib/notes/ai-layout";
@@ -158,6 +160,8 @@ export default function NotebookEditor({
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   /** Mirrors templateRef for rendering; the ref stays the paint-side truth. */
   const [template, setTemplateState] = useState<NotesTemplate>("lined");
+  /** مقاس الصفحة (دفتر كامل) — mirrors pageFormatRef; "a4" للدفاتر القديمة. */
+  const [pageFormat, setPageFormatState] = useState<PageFormat>("a4");
 
   // ---- View state ----
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
@@ -166,6 +170,10 @@ export default function NotebookEditor({
   const [pdfOpen, setPdfOpen] = useState(false);
   const [pdfSelected, setPdfSelected] = useState<Set<string>>(new Set());
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // ---- عرض تقديمي / PPTX ----
+  const [presenting, setPresenting] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
 
   // ---- Share (read-only link) state ----
   const [shareOpen, setShareOpen] = useState(false);
@@ -254,6 +262,7 @@ export default function NotebookEditor({
   const dprRef = useRef(1);
   const contentRef = useRef<PageContent>(emptyPageContent());
   const templateRef = useRef<NotesTemplate>("lined");
+  const pageFormatRef = useRef<PageFormat>("a4");
   const currentStrokeRef = useRef<Stroke | null>(null);
   const shapeStartRef = useRef<[number, number] | null>(null);
   const isDrawingRef = useRef(false);
@@ -411,6 +420,7 @@ export default function NotebookEditor({
     const viewHeight = canvas.height / dpr;
     const viewZoom = zoomRef.current;
     const pan = panRef.current;
+    const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, viewWidth, viewHeight);
@@ -425,14 +435,14 @@ export default function NotebookEditor({
     ctx.shadowBlur = 22;
     ctx.shadowOffsetY = 8;
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+    ctx.fillRect(0, 0, pageW, pageH);
     ctx.restore();
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+    ctx.rect(0, 0, pageW, pageH);
     ctx.clip();
-    paintPageBackground(ctx, templateRef.current, PAGE_WIDTH, PAGE_HEIGHT);
+    paintPageBackground(ctx, templateRef.current, pageW, pageH);
     const content = contentRef.current;
     for (const image of content.images) {
       const decoded = lookupImage(image.src);
@@ -578,13 +588,14 @@ export default function NotebookEditor({
     if (!fittedRef.current && rect.width > 0) {
       fittedRef.current = true;
       const remembered = savedViewRef.current?.zoom;
+      const { width: pageW } = pageDimensions(pageFormatRef.current);
       const fit = clamp(
-        remembered ?? (rect.width - 64) / PAGE_WIDTH,
+        remembered ?? (rect.width - 64) / pageW,
         MIN_ZOOM,
         MAX_ZOOM,
       );
       zoomRef.current = fit;
-      panRef.current = { x: (rect.width - PAGE_WIDTH * fit) / 2, y: 24 };
+      panRef.current = { x: (rect.width - pageW * fit) / 2, y: 24 };
       setView({ zoom: fit, panX: panRef.current.x, panY: 24 });
     }
     paint();
@@ -755,6 +766,7 @@ export default function NotebookEditor({
         existing,
         now: nowIso(),
         pageNames: pageNamesRef.current,
+        pageFormat: pageFormatRef.current,
       });
       await repo.saveNotebook(record);
       return record;
@@ -901,6 +913,9 @@ export default function NotebookEditor({
         const names = boot.notebook.pageNames ?? {};
         pageNamesRef.current = names;
         setPageNames(names);
+        // 📐 مقاس الصفحات المخزّن على مستوى الدفتر — الدفاتر القديمة من غير مقاس تقرأ A4 طولي.
+        pageFormatRef.current = boot.notebook.pageFormat ?? "a4";
+        setPageFormatState(pageFormatRef.current);
         // 🎯 وصلنا من نتيجة بحث عالمي؟ (?page=<pageId>) — افتحها بدل اللي اتحفظ.
         const targetPageId = new URLSearchParams(window.location.search).get("page");
         const target = targetPageId ? uiPages.find((page) => page.id === targetPageId) : null;
@@ -1383,18 +1398,19 @@ export default function NotebookEditor({
     const cols = Math.max(1, Math.min(12, Number(match[2])));
 
     const canvas = canvasRef.current;
-    const viewWidth = canvas ? canvas.width / dprRef.current : PAGE_WIDTH;
-    const viewHeight = canvas ? canvas.height / dprRef.current : PAGE_HEIGHT;
+    const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+    const viewWidth = canvas ? canvas.width / dprRef.current : pageW;
+    const viewHeight = canvas ? canvas.height / dprRef.current : pageH;
     const pan = panRef.current;
     const zoomLevel = zoomRef.current;
     // مركز الشاشة الحالي في إحداثيات الصفحة.
     const centerX = (viewWidth / 2 - pan.x) / zoomLevel;
     const centerY = (viewHeight / 2 - pan.y) / zoomLevel;
 
-    const width = Math.min(cols * 110, PAGE_WIDTH - 96);
-    const height = Math.min(rows * 56, PAGE_HEIGHT - 96);
-    const left = Math.max(48, Math.min(centerX - width / 2, PAGE_WIDTH - width - 48));
-    const top = Math.max(48, Math.min(centerY - height / 2, PAGE_HEIGHT - height - 48));
+    const width = Math.min(cols * 110, pageW - 96);
+    const height = Math.min(rows * 56, pageH - 96);
+    const left = Math.max(48, Math.min(centerX - width / 2, pageW - width - 48));
+    const top = Math.max(48, Math.min(centerY - height / 2, pageH - height - 48));
 
     const line = (points: Array<[number, number]>): Stroke => ({
       id: newId(),
@@ -1534,8 +1550,9 @@ export default function NotebookEditor({
         }
 
         const canvas = canvasRef.current;
-        const viewWidth = canvas ? canvas.width / dprRef.current : PAGE_WIDTH;
-        const viewHeight = canvas ? canvas.height / dprRef.current : PAGE_HEIGHT;
+        const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+        const viewWidth = canvas ? canvas.width / dprRef.current : pageW;
+        const viewHeight = canvas ? canvas.height / dprRef.current : pageH;
         const pan = panRef.current;
         const zoomLevel = zoomRef.current;
         const centerX = (viewWidth / 2 - pan.x) / zoomLevel;
@@ -1547,8 +1564,8 @@ export default function NotebookEditor({
           id: newId(),
           kind: "image",
           src: finalUrl,
-          x: clamp(centerX - width / 2, 8, PAGE_WIDTH - width - 8),
-          y: clamp(centerY - height / 2, 8, PAGE_HEIGHT - height - 8),
+          x: clamp(centerX - width / 2, 8, pageW - width - 8),
+          y: clamp(centerY - height / 2, 8, pageH - height - 8),
           width,
           height,
         };
@@ -2133,9 +2150,35 @@ export default function NotebookEditor({
     const container = containerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    const fit = clamp((rect.width - 64) / PAGE_WIDTH, MIN_ZOOM, MAX_ZOOM);
-    applyView(fit, { x: (rect.width - PAGE_WIDTH * fit) / 2, y: 24 });
+    const { width: pageW } = pageDimensions(pageFormatRef.current);
+    const fit = clamp((rect.width - 64) / pageW, MIN_ZOOM, MAX_ZOOM);
+    applyView(fit, { x: (rect.width - pageW * fit) / 2, y: 24 });
   }, [applyView]);
+
+  /** 📐 تغيير مقاس الصفحة للدفتر كله — المحتوى يحتفظ بإحداثياته والورقة تكبر حواليه. */
+  const changePageFormat = useCallback(
+    (format: PageFormat) => {
+      if (!repo.canWrite) return;
+      pageFormatRef.current = format;
+      setPageFormatState(format);
+      paint();
+      fitToWidth();
+      const nbId = notebookIdRef.current;
+      if (!nbId) return;
+      void saveNotebookRecord(
+        nbId,
+        pages.map((page) => page.id),
+        currentPageIdRef.current,
+        notebookTitle,
+      )
+        .then(() => setSaveStatus("saved"))
+        .catch((error) => {
+          console.error("[notes] page format save failed", classifyNotesError(error), error);
+          setSaveStatus("error");
+        });
+    },
+    [fitToWidth, notebookTitle, paint, pages, repo, saveNotebookRecord, setSaveStatus],
+  );
 
   const handleWheelRef = useRef<(event: WheelEvent) => void>(() => undefined);
 
@@ -2262,9 +2305,10 @@ export default function NotebookEditor({
 
   const renderPageToCanvas = useCallback(
     (page: UiPage, scale = 2): HTMLCanvasElement | null => {
+      const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
       const offscreen = document.createElement("canvas");
-      offscreen.width = PAGE_WIDTH * scale;
-      offscreen.height = PAGE_HEIGHT * scale;
+      offscreen.width = pageW * scale;
+      offscreen.height = pageH * scale;
       const ctx = offscreen.getContext("2d");
       if (!ctx) return null;
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -2272,8 +2316,8 @@ export default function NotebookEditor({
         ctx,
         page.template,
         page.content,
-        PAGE_WIDTH,
-        PAGE_HEIGHT,
+        pageW,
+        pageH,
         lookupImage,
       );
       return offscreen;
@@ -2318,7 +2362,13 @@ export default function NotebookEditor({
         chosen.flatMap((page) => page.content.images.map((image) => image.src)),
       );
       const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+      // 📐 مقاس ورقة الـ PDF يتبع مقاس الدفتر (طولي/عرضي/شاشة).
+      const { width: fmtW, height: fmtH } = pageDimensions(pageFormatRef.current);
+      const pdf = new jsPDF({
+        unit: "px",
+        format: fmtW > fmtH ? [fmtH, fmtW] : [fmtW, fmtH],
+        orientation: fmtW > fmtH ? "landscape" : "portrait",
+      });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
@@ -2345,6 +2395,64 @@ export default function NotebookEditor({
       setExportingPdf(false);
     }
   }, [ensureImagesLoaded, notebookTitle, pages, pdfSelected, renderPageToCanvas]);
+
+  /** 📊 تصدير الدفتر كملف PowerPoint — كل صفحة سلايد بمقاس الورقة نفسها. */
+  const exportPptx = useCallback(async () => {
+    if (exportingPptx || pages.length === 0) return;
+    setExportingPptx(true);
+    try {
+      await ensureImagesLoaded(
+        pages.flatMap((page) => page.content.images.map((image) => image.src)),
+      );
+      const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+      const widthIn = pageW / 96;
+      const heightIn = pageH / 96;
+      const { default: PptxGenJS } = await import("pptxgenjs");
+      const pptx = new PptxGenJS();
+      pptx.defineLayout({ name: "MAGICLY_PAGE", width: widthIn, height: heightIn });
+      pptx.layout = "MAGICLY_PAGE";
+      pptx.title = notebookTitle || "notebook";
+      let added = 0;
+      for (const page of pages) {
+        const canvas = renderPageToCanvas(page, 2);
+        if (!canvas) continue;
+        const slide = pptx.addSlide();
+        slide.addImage({
+          data: canvas.toDataURL("image/jpeg", 0.92),
+          x: 0,
+          y: 0,
+          w: widthIn,
+          h: heightIn,
+        });
+        added += 1;
+      }
+      if (added === 0) {
+        setMessage("مقدرناش نصدّر الصفحات.");
+        return;
+      }
+      await pptx.writeFile({ fileName: `${notebookTitle || "notebook"}.pptx` });
+      setMessage(`اتصدّر ملف باور بوينت بـ ${added} سلايد ✅`);
+    } catch (error) {
+      console.error("[notes] pptx export failed", error);
+      setMessage("فشل تصدير الـ PowerPoint.");
+    } finally {
+      setExportingPptx(false);
+    }
+  }, [ensureImagesLoaded, exportingPptx, notebookTitle, pages, renderPageToCanvas]);
+
+  /** 🎬 صفحة بدء العرض التقديمي التفاعلي. */
+  const startPresentation = useCallback(() => {
+    if (pages.length === 0) return;
+    setPresenting(true);
+  }, [pages.length]);
+
+  /** 🖌️ رسم محتوى صفحة داخل أي canvas — يستخدمه وضع العرض. */
+  const renderPageInto = useCallback(
+    (page: UiPage, ctx: CanvasRenderingContext2D, width: number, height: number) => {
+      renderPageContent(ctx, page.template, page.content, width, height, lookupImage);
+    },
+    [lookupImage],
+  );
 
   // ---- PDF import ----
 
@@ -2511,7 +2619,8 @@ export default function NotebookEditor({
           });
           const largest = Math.max(element.naturalWidth, element.naturalHeight);
           const scale = largest > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / largest : 1;
-          const fit = Math.min(PAGE_WIDTH / element.naturalWidth, PAGE_HEIGHT / element.naturalHeight);
+          const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+          const fit = Math.min(pageW / element.naturalWidth, pageH / element.naturalHeight);
           let src = dataUrl;
           if (scale < 1) {
             const offscreen = document.createElement("canvas");
@@ -2786,10 +2895,11 @@ export default function NotebookEditor({
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      const scale = canvas.width / PAGE_WIDTH;
+      const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+      const scale = canvas.width / pageW;
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+      ctx.fillRect(0, 0, pageW, pageH);
       for (const stroke of strokes) {
         if (stroke.shape) paintShapeStroke(ctx, stroke);
         else paintStroke(ctx, stroke);
@@ -3065,7 +3175,7 @@ export default function NotebookEditor({
       const clean = text.trim();
       if (!clean) return;
       const size = 20;
-      const maxWidth = PAGE_WIDTH - 128;
+      const maxWidth = pageDimensions(pageFormatRef.current).width - 128;
       const lines = wrapAiText(clean, size, maxWidth)
         .slice(0, 60)
         .map((line) => line.trim());
@@ -3073,7 +3183,7 @@ export default function NotebookEditor({
         id: newId(),
         kind: "text",
         text: line,
-        x: PAGE_WIDTH - 64,
+        x: pageDimensions(pageFormatRef.current).width - 64,
         y: 72 + index * size * 1.55,
         size,
         color: "#111827",
@@ -3114,14 +3224,15 @@ export default function NotebookEditor({
       element.onload = () => {
         // نلزّق الرسمة في نص الصفحة بمقاس معقول (fit داخل A4).
         const natural = Math.max(element.naturalWidth, element.naturalHeight) || 1;
-        const scale = Math.min(1, Math.min(PAGE_WIDTH - 80, PAGE_HEIGHT - 260) / natural);
+        const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+        const scale = Math.min(1, Math.min(pageW - 80, pageH - 260) / natural);
         const width = Math.round(element.naturalWidth * scale);
         const height = Math.round(element.naturalHeight * scale);
         const noteImage: NoteImage = {
           id: newId(),
           kind: "image",
           src: dataUrl,
-          x: Math.round((PAGE_WIDTH - width) / 2),
+          x: Math.round((pageW - width) / 2),
           y: 120,
           width,
           height,
@@ -3282,7 +3393,7 @@ export default function NotebookEditor({
           id: newId(),
           kind: "text",
           text,
-          x: PAGE_WIDTH - 64,
+          x: pageDimensions(pageFormatRef.current).width - 64,
           y: 72,
           size: 18,
           color: "#2563eb",
@@ -3290,7 +3401,7 @@ export default function NotebookEditor({
       } else {
         // سطر بسطر — كل سطر بلوك مستقل من ناحية اليمين (RTL).
         const lines = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 60);
-        const startX = PAGE_WIDTH - 64;
+        const startX = pageDimensions(pageFormatRef.current).width - 64;
         const startY = 72;
         const lineHeight = 34;
         newBlocks = lines.map((line, index) => ({
@@ -3803,6 +3914,24 @@ export default function NotebookEditor({
 
         <span className="notes-sep" aria-hidden="true" />
 
+        <div className="notes-group" role="group" aria-label="مقاس الصفحة">
+          <span className="notes-group-label">المقاس</span>
+          {PAGE_FORMAT_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => changePageFormat(option.id)}
+              disabled={!canWrite}
+              data-active={pageFormat === option.id}
+              aria-pressed={pageFormat === option.id}
+              title={`مقاس الصفحة: ${option.label}`}
+              className="notes-btn notes-btn-sm"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
         <div className="notes-group" role="group" aria-label="قالب الصفحة">
           {TEMPLATE_OPTIONS.map((option) => (
             <button
@@ -3851,6 +3980,25 @@ export default function NotebookEditor({
             className="notes-btn"
           >
             تصدير PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportPptx()}
+            disabled={pages.length === 0 || exportingPptx}
+            className="notes-btn"
+            title="صدّر الدفتر كملف PowerPoint — كل صفحة سلايد بنفس مقاس الورقة"
+          >
+            {exportingPptx ? "جاري التصدير…" : "تصدير PowerPoint"}
+          </button>
+          <button
+            type="button"
+            onClick={startPresentation}
+            disabled={pages.length === 0}
+            data-tone="primary"
+            className="notes-btn"
+            title="عرض تقديمي تفاعلي بملء الشاشة — تنقّل بالأسهم، اشرح بقلم الليزر، وارسم على السلايد"
+          >
+            ▶️ عرض تقديمي
           </button>
           <button
             type="button"
@@ -4088,6 +4236,7 @@ export default function NotebookEditor({
           content: page.content,
         }))}
         activePageId={currentPageId}
+        pageSize={pageDimensions(pageFormat)}
         lookup={lookupImage}
         onSelect={(pageId) => void selectPage(pageId)}
         pageNames={pageNames}
@@ -4413,6 +4562,20 @@ export default function NotebookEditor({
         getSavedDeck={loadStudyDeck}
         saveDeck={saveStudyDeck}
       />
+
+      {/* 🎬 العرض التقديمي التفاعلي — كل صفحة سلايد بملء الشاشة */}
+      {presenting ? (
+        <PresentMode
+          pages={pages}
+          initialIndex={Math.max(
+            0,
+            pages.findIndex((page) => page.id === currentPageId),
+          )}
+          pageSize={pageDimensions(pageFormat)}
+          renderPage={renderPageInto}
+          onClose={() => setPresenting(false)}
+        />
+      ) : null}
     </div>
   );
 }

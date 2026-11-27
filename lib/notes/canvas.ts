@@ -11,11 +11,32 @@
 // The module is DOM-free at import time (functions take a 2D context), so the
 // geometry helpers are unit-testable in Node.
 
-import type { NoteImage, NoteText, NotesTemplate, Stroke } from "./types";
+import type { NoteImage, NoteText, NotesTemplate, PageFormat, Stroke } from "./types";
 
 /** A4 at 96dpi. Page coordinates are stored in this space. */
 export const PAGE_WIDTH = 794;
 export const PAGE_HEIGHT = 1123;
+
+/** مقاس الدفتر الجديد — A4 عرضي: صفحة أكبر وأعرض من الافتراضي القديم. */
+export const DEFAULT_PAGE_FORMAT: PageFormat = "wide";
+
+/** أبعاد كل مقاس صفحة مدعوم، بإحداثيات الصفحة (96dpi). */
+export const PAGE_FORMAT_DIMENSIONS: Record<PageFormat, { width: number; height: number }> = {
+  a4: { width: PAGE_WIDTH, height: PAGE_HEIGHT },
+  wide: { width: 1123, height: 794 },
+  slide: { width: 1280, height: 720 },
+};
+
+/** أبعاد الصفحة حسب مقاس الدفتر — الدفاتر القديمة من غير مقاس تُقرأ A4 طولي. */
+export function pageDimensions(format: PageFormat | undefined): { width: number; height: number } {
+  return PAGE_FORMAT_DIMENSIONS[format ?? "a4"];
+}
+
+export const PAGE_FORMAT_OPTIONS: readonly { id: PageFormat; label: string }[] = [
+  { id: "a4", label: "A4 طولي" },
+  { id: "wide", label: "A4 عرضي (أوسع)" },
+  { id: "slide", label: "شاشة عرض 16:9" },
+];
 
 export const TEMPLATE_OPTIONS: readonly { id: NotesTemplate; label: string }[] = [
   { id: "lined", label: "مسطّر" },
