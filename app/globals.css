@@ -7181,16 +7181,123 @@ html {
   50% { transform: scale(1.15); opacity: 0.85; }
 }
 
+/* — عجلة ماجيك: حركة حيّة — دوران طاحونة، تلألؤ ظهور/اختفاء، دوران ألوان، هالة، ولمعة ضوئية —
+   كلها transform/opacity/filter فقط (GPU-friendly) ويتم تعطيلها كاملة مع Reduce Motion. */
+.mw-orbit {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  animation: mw-orbit 90s linear infinite;
+  will-change: transform;
+}
+.mw-orbit > div {
+  animation:
+    mw-orbit-rev 90s linear infinite,
+    mw-twinkle 7s ease-in-out calc(var(--mw-delay, 0ms) + 2.2s) infinite;
+}
+.mw-wheel-square:hover .mw-orbit,
+.mw-wheel-square:hover .mw-orbit > div {
+  animation-play-state: paused;
+}
+
+.mw-cycle { animation: mw-hue 26s linear infinite; }
+.mw-cycle .mw-center {
+  animation:
+    mw-pulse 5s ease-in-out infinite,
+    mw-hue-rev 26s linear infinite;
+}
+
+.mw-center::before {
+  content: "";
+  position: absolute;
+  inset: -16%;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    transparent 66%,
+    color-mix(in srgb, var(--accent-highlight) 30%, transparent) 79%,
+    transparent 94%
+  );
+  opacity: 0.5;
+  pointer-events: none;
+  animation: mw-halo 4.5s ease-in-out infinite;
+}
+
+.mw-shimmer {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.mw-shimmer-band {
+  position: absolute;
+  top: -12%;
+  bottom: -12%;
+  left: 0;
+  width: 30%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 32%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.05) 68%,
+    transparent 100%
+  );
+  transform: translateX(-130%) skewX(-14deg);
+  opacity: 0;
+  animation: mw-shimmer 8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes mw-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes mw-orbit-rev {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+@keyframes mw-twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes mw-hue {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
+@keyframes mw-hue-rev {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(-360deg); }
+}
+@keyframes mw-halo {
+  0%, 100% { opacity: 0.3; transform: scale(0.92); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+@keyframes mw-shimmer {
+  0% { transform: translateX(-130%) skewX(-14deg); opacity: 0; }
+  10% { opacity: 1; }
+  45% { opacity: 1; }
+  60%, 100% { transform: translateX(430%) skewX(-14deg); opacity: 0; }
+}
+
 /* احترام تقليل الحركة: لا دوران، لا طَفْو، لا رسم تدريجي — كل حاجة تثبت */
 @media (prefers-reduced-motion: reduce) {
   .mw-root .mw-ring-dash,
   .mw-root .mw-ring-dot,
   .mw-root .mw-center,
   .mw-root .mw-node-card,
+  .mw-root .mw-cycle,
+  .mw-root .mw-orbit,
+  .mw-root .mw-orbit > div,
+  .mw-root .mw-shimmer-band,
+  .mw-root .mw-center::before,
   .mw-glyph-m,
   .mw-glyph-star {
     animation: none !important;
   }
+  .mw-root .mw-shimmer-band { opacity: 0 !important; }
   .mw-line { animation: none !important; stroke-dashoffset: 0 !important; }
   .mw-node,
   .mw-node-card,
