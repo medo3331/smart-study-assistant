@@ -78,6 +78,16 @@ function LoginForm() {
   );
   const activeFlow = arrivedFromResetLink && !ignoreResetLink ? "reset" : flow;
 
+  /* فشل رابط تأكيد التسجيل في /auth/callback بيرجّع المستخدم هنا — نشرحه بدل ما يدخل في حلقة صامتة. */
+  const arrivedFromAuthError = useSyncExternalStore(
+    () => () => {},
+    () => new URLSearchParams(window.location.search).get("error") === "auth_failed",
+    () => false,
+  );
+  const displayMessage = arrivedFromAuthError
+    ? { type: "error" as const, text: t.login_err_auth_failed }
+    : message;
+
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -267,16 +277,16 @@ function LoginForm() {
           الدخول باستخدام MAG ID
         </Link>
 
-        {message && (
+        {displayMessage && (
           <div
-            className={`notice ${message.type === "error" ? "notice-error" : "notice-ok"}`}
-            role={message.type === "error" ? "alert" : "status"}
+            className={`notice ${displayMessage.type === "error" ? "notice-error" : "notice-ok"}`}
+            role={displayMessage.type === "error" ? "alert" : "status"}
           >
-            {message.text}
-            {message.type === "error" && (
+            {displayMessage.text}
+            {displayMessage.type === "error" && (
               <button
                 type="button"
-                onClick={() => openSupport(message.text)}
+                onClick={() => openSupport(displayMessage.text)}
                 style={{
                   display: "block",
                   marginTop: "8px",
