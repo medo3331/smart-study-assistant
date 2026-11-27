@@ -77,6 +77,7 @@ import {
   type ChatTurn,
 } from "@/lib/exam-request";
 import { userHasExamSources } from "@/lib/ai/exam-sources";
+import { todayISO } from "@/lib/exam-plans";
 import {
   formatStudentSnippets,
   getRecentQuestions,
@@ -825,6 +826,11 @@ export async function POST(req: Request) {
         // 📝 قواعد طلب الامتحان — الطلب الناقص (ناقصه العدد مثلاً) بيعدّي
         //    للموديل، والقواعد بتقولله اسأل سؤالًا واحدًا محددًا مش سلسلة.
         input.system = `${input.system}\n\n--- قواعد طلب الامتحان ---\n${EXAM_REQUEST_PROMPT_RULES}`;
+        // 🎯 Academic Agent (Phase 3): Coach بيبني خطة قابلة للاعتماد — المسودة في كتلة ```plan
+        //    والطالب هو الوحيد اللي بينشئها فعليًا بزر «اعتمد الخطة» (حماية من الإنشاء التلقائي).
+        if (personaSelection.persona === "coach") {
+          input.system = `${input.system}\n\n--- أداة اعتماد الخطة ---\nتاريخ اليوم: ${todayISO()}\nلما تكون الخطة كاملة (عرفت المادة وتاريخ الامتحان ووزّعت الأيام) أضف في آخر ردك كتلة واحدة بالشكل ده:\n\`\`\`plan\n{"subject":"اسم المادة","examDate":"YYYY-MM-DD","days":[{"dayNumber":1,"kind":"content","title":"عنوان اليوم","description":"تفاصيل قصيرة"}]}\n\`\`\`\nقواعد صارمة:\n- examDate تاريخ حقيقي بصيغة YYYY-MM-DD وليس أقل من تاريخ اليوم — احسب التواريخ النسبية («بعد يومين») من تاريخ اليوم المذكور فوق.\n- kind محدود: content (محتوى جديد) أو review (مراجعة) أو quiz (اختبار) — اجعل آخر يوم quiz.\n- days من يوم واحد حتى ١٤ يوم كحد أقصى، وكل يوم عنوان واضح ووصف قصير.\n- لا تضيف الكتلة إلا إذا كانت الخطة كاملة — لو ناقصة معلومات اسأل الأول من غير كتلة.\n- الطالب هو اللي هيعتمدها بزر، فلا تدّعي أنها اتعملت في حسابه.`;
+        }
         // 📚 مقتطفات دائمة من ملفات الطالب — نفس نمط /api/chat: لما النية
         //    «بحث في ملفات» سيبها لمصدر الـ workspace الكامل (تحت) عشان ما
         //    يتزاحموش مرجعان على نفس الرمز.

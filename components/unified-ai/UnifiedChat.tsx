@@ -21,6 +21,8 @@ import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
 import { PERSONAS, isValidPersona, type AiPersonaId } from "@/lib/magic/personas";
+import { extractPlanDraft, stripPlanFence } from "@/lib/agent/plan-draft";
+import { PlanApproveCard } from "./PlanApproveCard";
 // 🎨 chips أساليب الشرح — قيم معروفة مسبقًا تطابق EXPLANATION_STYLES في السيرفر.
 const STYLE_CHIPS = [
   { id: "simpler", label: "🪄 أبسط" },
@@ -709,13 +711,18 @@ export function UnifiedChat({
 
       {/* Chat messages */}
       <div className="space-y-3 mb-4 min-h-[240px]">
-        {messages.map((msg, i) => (
+        {messages.map((msg, i) => {
+        const planDraft = msg.role === "assistant" ? extractPlanDraft(msg.content) : null;
+        return (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
             <div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--card-primary)] border border-[var(--rule)] text-ink shadow-sm"}`}>
               {msg.role === "user" ? (
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
-                <ExplanationView content={msg.content} />
+                <>
+                  <ExplanationView content={planDraft ? stripPlanFence(msg.content) : msg.content} />
+                  {planDraft && <PlanApproveCard draft={planDraft.draft} />}
+                </>
               )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
@@ -793,7 +800,8 @@ export function UnifiedChat({
               )}
             </div>
           </div>
-        ))}
+        );
+        })}
         {loading && (
           <div className="flex justify-end">
             <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
