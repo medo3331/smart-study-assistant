@@ -212,7 +212,8 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         const base64 = Buffer.from(buffer).toString('base64');
         const candidates = [
           { modelId: "gemini-3.6-flash", available: !!process.env.GEMINI_API_KEY?.trim(), create: () => new GeminiProvider() },
-          { modelId: "llama-3.2-11b-vision-preview", available: !!process.env.GROQ_API_KEY?.trim(), create: () => new GroqProvider() },
+          // llama-3.2-11b-vision-preview اتشالت من Groq (تأكيد 2026-11-06) — كانت بتضيّع
+          // محاولة 404 مضمونة قبل البديل؛ super-vl:free متحقّق حيًّا (VALID ✓).
           { modelId: "nvidia/nemotron-3.5-super-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
         ].filter((c) => c.available);
         // Prefer the selected model first, then the rest as fallback chain.
@@ -254,7 +255,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
             const text = await extractTextFromFile(fileForVision as File, {
               maxFileBytes: 10 * 1024 * 1024,
               maxImageBytes: 2 * 1024 * 1024,
-              maxTextChars: 8000,
+              maxTextChars: 24_000,
             });
             extractedText = (text || '').trim();
             ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? 'high' : 'medium' };
@@ -293,7 +294,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         const text = await extractTextFromFile(file, {
           maxFileBytes: 10 * 1024 * 1024,
           maxImageBytes: 2 * 1024 * 1024,
-          maxTextChars: 8000,
+          maxTextChars: 24_000,
         });
         extractedText = text.trim();
         ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? "high" : "medium" };
