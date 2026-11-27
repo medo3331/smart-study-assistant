@@ -16,6 +16,8 @@ export interface PersonaRouterInput {
   message: string;
   mode?: string | null;
   hasLessonContext?: boolean;
+  /** شخصية المحادثة النشطة (آخر رد) — سياق متابعة نفس الموضوع، أولويته بعد المحتوى. */
+  lastPersona?: string | null;
 }
 
 export interface PersonaSelection {
@@ -136,6 +138,11 @@ export function selectPersona(input: PersonaRouterInput): PersonaSelection {
 
   if (matchesAny(message, TUTOR_KEYWORDS)) {
     return { persona: "tutor", reason: "message_academic" };
+  }
+
+  // سياق المحادثة: لو نفس الموضوع شغّال مع Tutor/Play/Coach والرسالة محايدة، نفس الشخصية تكمّل.
+  if (isValidPersona(input.lastPersona) && input.lastPersona !== "magic") {
+    return { persona: input.lastPersona, reason: "conversation_context" };
   }
 
   if (input.mode && TEACHING_MODES.has(input.mode) && input.hasLessonContext) {

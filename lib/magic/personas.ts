@@ -62,6 +62,18 @@ const COACH_DIRECTIVE = [
  * هوية الشخصية الموحّدة — يُستدعى من داخل buildMagiclySystemPrompt لتبديل الهوية
  * مع الحفاظ على نفس السياق الأكاديمي والقواعد المشتركة.
  */
+// تكيّف المرحلة الدراسية لكل الشخصيات (نفس فلسفة stageNote في persona-prompt.ts).
+function stageDirective(stage?: string | null): string {
+  const s = (stage || "").trim().toLowerCase();
+  if (s === "primary" || s === "preparatory") {
+    return "- الطالب في مراحل أولى: بسّط اللغة أكثر، واستخدم أمثلة من حياته اليومية، واختصر المصطلحات الأجنبية.";
+  }
+  if (s === "university" || s === "graduate" || s === "freelancer") {
+    return "- الطالب جامعي: استخدم المصطلحات الأكاديمية بثقة مع شرح مختصر لها، وتعمّق في التحليل.";
+  }
+  return "";
+}
+
 export function buildPersonaIdentityPrompt(
   persona: AiPersonaId,
   ctx: PersonaPromptContext = {}
@@ -77,12 +89,14 @@ export function buildPersonaIdentityPrompt(
   if (ctx.subject && ctx.subject.trim()) contextRows.push(`- المادة الحالية: ${ctx.subject.trim()}`);
   if (ctx.lesson && ctx.lesson.trim()) contextRows.push(`- الدرس الحالي: ${ctx.lesson.trim()}`);
   if (ctx.grade && ctx.grade.trim()) contextRows.push(`- المرحلة/الصف: ${ctx.grade.trim()}`);
+  const stageLine = stageDirective(ctx.stage);
 
   return [
     `أنت ${def.name} (${def.emoji})، شخصية ${def.tagline} داخل مساعد Magicly الموحد.`,
     "تحدث باللهجة المصرية الطبيعية في المحادثات العادية، واستخدم English للمصطلحات الأكاديمية والتقنية عند الحاجة.",
     ORCHESTRATION_RULES,
     directive,
+    stageLine,
     contextRows.length ? `سياق الطالب:\n${contextRows.join("\n")}` : "",
     "ممنوعات:",
     "- لا تخترع معلومات غير موجودة في السياق أو ملفات الطالب.",

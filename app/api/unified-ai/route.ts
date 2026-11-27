@@ -92,6 +92,7 @@ import {
 } from "@/lib/magicly-ai";
 import { selectPersona } from "@/lib/magic/persona-router";
 import { buildPersonaIdentityPrompt } from "@/lib/magic/personas";
+import { loadPersonaSession, savePersonaSession } from "@/lib/magic/persona-session";
 
 // 🎨 أساليب الشرح — chips الواجهة تحقن تعليمات تعليمية في الـ system
 // (المفتاح هنا تعليم تعليمي مش نص حر — منع الحقن بأي شيء حر من الكلاينت).
@@ -756,17 +757,32 @@ export async function POST(req: Request) {
     }
     const intentResult = classifyChatIntent(prompt, ctxInput as any);
     console.log("[UNIFIED-AI DEBUG]", { intent: intentResult.intent, prompt: prompt.slice(0, 80) });
-    // 🧠 Persona Orchestrator — اختيار الشخصية في الخلفية (اختيار المستخدم > محتوى الرسالة > الصفحة).
+    // 🧠 Persona Orchestrator — اختيار الشخصية في الخلفية (اختيار المستخدم > محتوى الرسالة > سياق المحادثة > الصفحة).
     const rawPersona = (context as Record<string, unknown>)?.persona;
     const rawPage = (context as Record<string, unknown>)?.page;
+    // سياق المحادثة (Phase 2): آخر شخصية اشتغلت على نفس الموضوع — best-effort وغير حاجب.
+    let lastPersona: string | null = null;
+    if (userId && supabase && !isAnonymous && incomingConversationId) {
+      try {
+        lastPersona = (await loadPersonaSession(supabase, userId, incomingConversationId))?.persona ?? null;
+      } catch (e) {
+        console.warn("[unified-ai] persona session load failed (non-blocking):", e);
+      }
+    }
     const personaSelection = selectPersona({
       explicitPersona: typeof rawPersona === "string" ? rawPersona : null,
       page: typeof rawPage === "string" ? rawPage : null,
       message: prompt,
       mode: typeof rawMode === "string" ? rawMode : null,
       hasLessonContext: Boolean(ctxInput?.lesson || ctxInput?.subject),
+      lastPersona,
     });
     console.log("[UNIFIED-AI DEBUG]", { persona: personaSelection.persona, personaReason: personaSelection.reason });
+    if (userId && supabase && !isAnonymous && incomingConversationId) {
+      void savePersonaSession(supabase, userId, incomingConversationId, personaSelection.persona, personaSelection.reason).catch((e) => {
+        console.warn("[unified-ai] persona session save failed (non-blocking):", e);
+      });
+    }
     if (input.usage) {
       input.usage.diagnostics = {
         ...(input.usage.diagnostics ?? {}),

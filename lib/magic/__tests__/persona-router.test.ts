@@ -75,6 +75,35 @@ describe("selectPersona — سيناريوهات التوجيه المعتمدة
     const r = selectPersona({ page: "play", message: "" });
     expect(r.persona).toBe("play");
   });
+
+  it("سياق المحادثة: رسالة محايدة بعد Tutor تبقى مع Tutor", () => {
+    const r = selectPersona({ page: "dashboard", message: "تمام كمّل", lastPersona: "tutor" });
+    expect(r.persona).toBe("tutor");
+    expect(r.reason).toBe("conversation_context");
+  });
+
+  it("سياق المحادثة لا يمنع إشارة تخطيط واضحة ← Coach", () => {
+    const r = selectPersona({ page: "dashboard", message: "اعمل لي جدول مذاكرة", lastPersona: "tutor" });
+    expect(r.persona).toBe("coach");
+    expect(r.reason).toBe("message_planning");
+  });
+
+  it("سياق المحادثة لا يمنع إشارة ترفيه ← Play", () => {
+    const r = selectPersona({ page: "dashboard", message: "يا ريت ألعب حاجة", lastPersona: "coach" });
+    expect(r.persona).toBe("play");
+  });
+
+  it("آخر شخصية Magic لا تُثبّت (توجيه طبيعي)", () => {
+    const r = selectPersona({ page: "dashboard", message: "أهلاً", lastPersona: "magic" });
+    expect(r.persona).toBe("magic");
+    expect(r.reason).toBe("default");
+  });
+
+  it("اختيار صريح يتفوق على سياق المحادثة", () => {
+    const r = selectPersona({ explicitPersona: "play", message: "تمام كمّل", lastPersona: "tutor" });
+    expect(r.persona).toBe("play");
+    expect(r.reason).toBe("user_selected");
+  });
 });
 
 describe("buildPersonaIdentityPrompt", () => {
@@ -102,6 +131,13 @@ describe("buildPersonaIdentityPrompt", () => {
     const p = buildPersonaIdentityPrompt("coach", {});
     expect(p).toContain("Coach");
     expect(p).toContain("لا تدّعي");
+  });
+
+  it("الهويات تتكيّف مع المرحلة الدراسية", () => {
+    const primary = buildPersonaIdentityPrompt("tutor", { stage: "primary" });
+    expect(primary).toContain("مراحل أولى");
+    const university = buildPersonaIdentityPrompt("coach", { stage: "university" });
+    expect(university).toContain("جامعي");
   });
 
   it("كل هوية تحتوي الممنوعات الأساسية", () => {
