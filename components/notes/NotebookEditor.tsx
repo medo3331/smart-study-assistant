@@ -76,7 +76,8 @@ import NotesGuide from "@/components/notes/NotesGuide";
 import PageThumbs from "@/components/notes/PageThumbs";
 import NotesAssistant from "@/components/notes/NotesAssistant";
 import MagicWriteDialog from "@/components/notes/MagicWriteDialog";
-import type { AiLayoutResult } from "@/lib/notes/ai-layout";
+import { wrapAiText, type AiLayoutResult } from "@/lib/notes/ai-layout";
+import { buildInkRevealStages, inkDelayMs, type InkRevealStage } from "@/lib/notes/ink-reveal";
 import StudyCards from "@/components/notes/StudyCards";
 
 /**
@@ -1652,6 +1653,9 @@ export default function NotebookEditor({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      // ✍️ أي دوس على الورقة أثناء كتابة Magic = إكمال فوري.
+      if (inkAnimRef.current) inkAnimRef.current.cancelled = true;
+
       // Pan: space held, or middle button. Always available, even read-only.
       if (spaceRef.current || event.button === 1) {
         event.preventDefault();
@@ -1739,6 +1743,10 @@ export default function NotebookEditor({
             // (زي PowerPoint) — بدل ما الضغطة تحرك النص وما تقدرش تعدله.
             if (selectionRef.current?.kind === "text" && selectionRef.current.id === text.id) {
               openTextEditor({ id: text.id, x: text.x, y: text.y, value: text.text });
+              // 🎨 المحرر بيورث خصايص النص الموجود — مش قيم الأدوات العامة.
+              setTextSize(text.size);
+              setTextFont(text.font ?? FONT_OPTIONS[0].id);
+              setColor(text.color);
               return;
             }
             startSingleDrag("text", text.id, { ...text });
@@ -2092,6 +2100,9 @@ export default function NotebookEditor({
       });
       if (text) {
         openTextEditor({ id: text.id, x: text.x, y: text.y, value: text.text });
+        setTextSize(text.size);
+        setTextFont(text.font ?? FONT_OPTIONS[0].id);
+        setColor(text.color);
       }
     },
     [canWrite, openTextEditor, toPagePoint, tool],
@@ -2968,47 +2979,133 @@ export default function NotebookEditor({
 
   /** إدراج النص المقروء على الصفحة — الأصل (خط الطالب) مش بيتمس أبداً. */
   /** 🤖 إدراج نص من الـ AI على الصفحة — بلوكات قابلة للتحريك والتعديل. */
-  const insertAiText = useCallback(
-    (text: string) => {
-      if (!canWrite) return;
-      const clean = text.trim();
-      if (!clean) return;
+  /** ✍️ محرك الكتابة التدريجية — النص بيكتب كلمة كلمة وسطر سطر ترتيبًا، والمخططات/الجداول تظهر في مكانها في التسلسل. */
+  const inkAnimRef = useRef<{ cancelled: boolean; aborted: boolean } | null>(null);
+
+  const animateInkInsert = useCallback(
+    async (newTexts: NoteText[], newImages: NoteImage[], newStrokes: Stroke[], doneMessage: string) => {
+      if (!canWrite || newTexts.length + newImages.length === 0) return;
+      if (inkAnimRef.current) inkAnimRef.current.cancelled = true;
+      const token = { cancelled: false, aborted: false };
+      inkAnimRef.current = token;
+
+      const startPageId = currentPageIdRef.current;
       const content = contentRef.current;
-      const lines = clean
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .slice(0, 60);
-      const startX = PAGE_WIDTH - 64;
-      const startY = 72;
-      const lineHeight = 34;
-      const blocks: NoteText[] = lines.map((line, index) => ({
-        id: newId(),
-        kind: "text",
-        text: line,
-        x: Math.max(24, startX - line.length * 9),
-        y: startY + index * lineHeight,
-        size: 20,
-        color: "#111827",
-      }));
-      setContent({
+      const imageById = new Map(newImages.map((image) => [image.id, image]));
+      const strokeById = new Map(newStrokes.map((stroke) => [stroke.id, stroke]));
+      // السطور بتتضاف فاضية وبتتملى كلمة كلمة أمام الطالب.
+      let working: PageContent = {
         strokes: content.strokes,
-        texts: [...content.texts, ...blocks],
+        texts: [...content.texts, ...newTexts.map((text) => ({ ...text, text: "" }))],
         images: content.images,
-      });
-      multiSelRef.current = new Set(blocks.map((block) => block.id));
-      setMultiCount(blocks.length);
+      };
+      setContent(working);
+
+      const stages: InkRevealStage[] = buildInkRevealStages(newTexts, newImages, newStrokes);
+      const wordTick = inkDelayMs(stages.filter((stage) => stage.kind === "text").length);
+      const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      for (const stage of stages) {
+        if (token.cancelled || token.aborted) break;
+        if (currentPageIdRef.current !== startPageId) {
+          token.aborted = true;
+          break;
+        }
+        await tick(stage.kind === "text" ? wordTick : 140);
+        if (token.cancelled || token.aborted) break;
+        if (stage.kind === "text") {
+          working = {
+            ...working,
+            texts: working.texts.map((text) =>
+              text.id === stage.id ? { ...text, text: stage.value } : text,
+            ),
+          };
+        } else if (stage.kind === "image") {
+          const image = imageById.get(stage.id);
+          if (image) working = { ...working, images: [...working.images, image] };
+        } else {
+          const stroke = strokeById.get(stage.id);
+          if (stroke) working = { ...working, strokes: [...working.strokes, stroke] };
+        }
+        setContent(working);
+      }
+
+      if (token.aborted) {
+        inkAnimRef.current = null;
+        return;
+      }
+
+      // المحتوى النهائي — بيغطّي حالة الإسقاط (الطالب دوس أثناء الكتابة).
+      const finalContent: PageContent = {
+        strokes: [...content.strokes, ...newStrokes],
+        texts: [...content.texts, ...newTexts],
+        images: [...content.images, ...newImages],
+      };
+      contentRef.current = finalContent;
+      multiSelRef.current = new Set([
+        ...newTexts.map((text) => text.id),
+        ...newImages.map((image) => image.id),
+      ]);
+      setMultiCount(newTexts.length + newImages.length);
       selectionRef.current = null;
       setSelection(null);
       paint();
       commitHistory();
       scheduleSave();
-      setMessage(`اتدرج ${blocks.length} سطر من الـ AI على الصفحة — عدّلهم براحتك.`);
+      setMessage(doneMessage);
+      inkAnimRef.current = null;
     },
     [canWrite, commitHistory, paint, scheduleSave, setContent],
   );
 
-  /** 🎨 إدراج رسمة/مخطط AI في وسط الصفحة — الصورة بتتحفظ dataURL جوه الصفحة. */
+  /** 🧠 إدراج نص من الـ AI على الصفحة — معلّف مرتّب بحافة يمينى واحدة وبيكتب كلمة كلمة. */
+  const insertAiText = useCallback(
+    (text: string) => {
+      if (!canWrite) return;
+      const clean = text.trim();
+      if (!clean) return;
+      const size = 20;
+      const maxWidth = PAGE_WIDTH - 128;
+      const lines = wrapAiText(clean, size, maxWidth)
+        .slice(0, 60)
+        .map((line) => line.trim());
+      const blocks: NoteText[] = lines.map((line, index) => ({
+        id: newId(),
+        kind: "text",
+        text: line,
+        x: PAGE_WIDTH - 64,
+        y: 72 + index * size * 1.55,
+        size,
+        color: "#111827",
+      }));
+      void animateInkInsert(
+        blocks,
+        [],
+        [],
+        `Magic كتب ${blocks.length} سطر على الصفحة — عدّلهم براحتك.`,
+      );
+    },
+    [animateInkInsert, canWrite],
+  );
+
+  /** ✅ Magic Write — إدراج بلوكات منظّمة (نصوص + صور مخططات + خطوط جداول) كعناصر حقيقية بكتابة تدريجية. */
+  const insertAiBlocks = useCallback(
+    (applied: AiLayoutResult) => {
+      if (!canWrite) return;
+      const added = applied.texts.length + applied.images.length;
+      if (added === 0) return;
+      void animateInkInsert(
+        applied.texts,
+        applied.images,
+        applied.strokes,
+        applied.clipped
+          ? "Magic كتب المحتوى على الصفحة — في بلوكات زائدة ما اتّسعت، قلّل المحدد وجرّب تاني."
+          : `Magic كتب ${added} عنصر على الصفحة — عدّلهم براحتك.`,
+      );
+    },
+    [animateInkInsert, canWrite],
+  );
+
   const insertAiImage = useCallback(
     (dataUrl: string) => {
       if (!canWrite || !dataUrl.startsWith("data:image/")) return;
@@ -3049,37 +3146,6 @@ export default function NotebookEditor({
     [canWrite, commitHistory, paint, scheduleSave, setContent],
   );
 
-  /** ✅ Magic Write — إدراج بلوكات منظّمة (نصوص + صور مخططات + خطوط جداول) كعناصر حقيقية. */
-  const insertAiBlocks = useCallback(
-    (applied: AiLayoutResult) => {
-      if (!canWrite) return;
-      const content = contentRef.current;
-      const added = applied.texts.length + applied.images.length;
-      if (added === 0) return;
-      setContent({
-        strokes: [...content.strokes, ...applied.strokes],
-        texts: [...content.texts, ...applied.texts],
-        images: [...content.images, ...applied.images],
-      });
-      multiSelRef.current = new Set([
-        ...applied.texts.map((text) => text.id),
-        ...applied.images.map((image) => image.id),
-      ]);
-      setMultiCount(added);
-      selectionRef.current = null;
-      setSelection(null);
-      paint();
-      commitHistory();
-      scheduleSave();
-      setMessage(
-        applied.clipped
-          ? "Magic كتب المحتوى على الصفحة — في بلوكات زائدة ما اتّسعت، قلّل المحدد وجرّب تاني."
-          : `Magic كتب ${added} عنصر على الصفحة — عدّلهم براحتك.`,
-      );
-    },
-    [canWrite, commitHistory, paint, scheduleSave, setContent],
-  );
-
   /** ✅ Magic Write dialog — الموضوع المبدئي من النص المحدد. */
   const [magicWriteOpen, setMagicWriteOpen] = useState(false);
   const [magicWriteTopic, setMagicWriteTopic] = useState("");
@@ -3089,6 +3155,65 @@ export default function NotebookEditor({
     setMagicWriteTopic(selected?.trim().slice(0, 4000) ?? "");
     setMagicWriteOpen(true);
   }, [canWrite, getSelectedText]);
+
+  /** 🎨 تنسيق مباشر للعناصر المحددة — لون/حجم/نوع خط بيتطبق فورًا على النص (واللون على الأشكال) المحدد. */
+  const applySelectionStyle = useCallback(
+    (style: { color?: string; size?: number; font?: string }) => {
+      if (!canWrite) return;
+      const targets = new Set<string>();
+      const sel = selectionRef.current;
+      if (sel) targets.add(sel.id);
+      multiSelRef.current.forEach((id) => targets.add(id));
+      if (targets.size === 0) return;
+      const content = contentRef.current;
+      const patchText = (text: NoteText): NoteText => ({
+        ...text,
+        ...(style.color ? { color: style.color } : {}),
+        ...(style.size ? { size: style.size } : {}),
+        ...(style.font ? { font: style.font } : {}),
+      });
+      const texts = content.texts.map((text) => (targets.has(text.id) ? patchText(text) : text));
+      const strokes = style.color
+        ? content.strokes.map((stroke) => (targets.has(stroke.id) ? { ...stroke, color: style.color! } : stroke))
+        : content.strokes;
+      setContent({ ...content, texts, strokes });
+      commitHistory();
+    },
+    [canWrite, commitHistory, setContent],
+  );
+
+  const applyColor = useCallback(
+    (value: string) => {
+      setColor(value);
+      applySelectionStyle({ color: value });
+    },
+    [applySelectionStyle],
+  );
+  const applyTextFont = useCallback(
+    (value: string) => {
+      setTextFont(value);
+      applySelectionStyle({ font: value });
+    },
+    [applySelectionStyle],
+  );
+  const applyTextSize = useCallback(
+    (value: number) => {
+      const clamped = clamp(Math.round(value), 12, 96);
+      setTextSize(clamped);
+      applySelectionStyle({ size: clamped });
+    },
+    [applySelectionStyle],
+  );
+
+  // 🎨 لما الطالب يحدد نص — الأدوات بتعكس خصايصه (لونه، حجمه، نوع خطه) بدل القيم العامة.
+  useEffect(() => {
+    if (selection?.kind !== "text" || multiCount > 0) return;
+    const element = contentRef.current.texts.find((text) => text.id === selection.id);
+    if (!element) return;
+    setTextSize(element.size);
+    setTextFont(element.font ?? FONT_OPTIONS[0].id);
+    setColor(element.color);
+  }, [selection]);
 
   /** 📁 رفع ملف على النوته مباشرة — يوزع حسب النوع:
    *  صورة → عنصر صورة على الصفحة · PDF → منتقي صفحات الخلفية ·
@@ -3233,6 +3358,8 @@ export default function NotebookEditor({
     ? {
         left: textDraft.x * view.zoom + view.panX,
         top: textDraft.y * view.zoom + view.panY,
+        // النص بيترسم مركز محاذاة يمين — المحرر بيتحاذا على الحفة اليمنى مثله.
+        transform: "translateX(-100%)",
         fontSize: textSize * view.zoom,
         color,
         fontFamily: textFont,
@@ -3480,7 +3607,7 @@ export default function NotebookEditor({
               type="button"
               aria-label={`لون ${swatch}`}
               aria-pressed={color === swatch}
-              onClick={() => setColor(swatch)}
+              onClick={() => applyColor(swatch)}
               disabled={!canWrite}
               data-active={color === swatch}
               style={{ backgroundColor: swatch }}
@@ -3492,7 +3619,7 @@ export default function NotebookEditor({
             aria-label="لون مخصص"
             value={color}
             disabled={!canWrite}
-            onChange={(event) => setColor(event.target.value)}
+            onChange={(event) => applyColor(event.target.value)}
             className="notes-swatch"
           />
         </div>
@@ -3532,7 +3659,7 @@ export default function NotebookEditor({
               الخط
               <select
                 value={textFont}
-                onChange={(event) => setTextFont(event.target.value)}
+                onChange={(event) => applyTextFont(event.target.value)}
                 disabled={!canWrite}
                 className="notes-input notes-btn-sm"
               >
@@ -3551,10 +3678,30 @@ export default function NotebookEditor({
                 max={96}
                 value={textSize}
                 disabled={!canWrite}
-                onChange={(event) => setTextSize(Number(event.target.value))}
+                onChange={(event) => applyTextSize(Number(event.target.value))}
                 className="notes-range"
               />
+              <button
+                type="button"
+                onClick={() => applyTextSize(textSize - 2)}
+                disabled={!canWrite}
+                title="تصغير خط النص المحدد"
+                aria-label="تصغير الخط"
+                className="notes-btn notes-icon-btn"
+              >
+                A-
+              </button>
               <span className="notes-count">{textSize}</span>
+              <button
+                type="button"
+                onClick={() => applyTextSize(textSize + 2)}
+                disabled={!canWrite}
+                title="تكبير خط النص المحدد"
+                aria-label="تكبير الخط"
+                className="notes-btn notes-icon-btn"
+              >
+                A+
+              </button>
             </label>
           </>
         ) : null}

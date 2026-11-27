@@ -50,7 +50,7 @@ function charWidth(size: number): number {
   return size * CHAR_WIDTH_RATIO;
 }
 
-function wrapText(text: string, size: number, maxWidth: number): string[] {
+export function wrapAiText(text: string, size: number, maxWidth: number): string[] {
   const maxChars = Math.max(8, Math.floor(maxWidth / charWidth(size)));
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
@@ -91,13 +91,15 @@ function pushWrapped(
   const prefix = opts.prefix ?? "";
   const indent = opts.indent ?? 0;
   const maxWidth = PAGE_WIDTH - AI_LAYOUT_MARGIN * 2 - indent;
-  const lines = wrapText(prefix + text, opts.size, maxWidth);
+  const lines = wrapAiText(prefix + text, opts.size, maxWidth);
+  // paintText renders with textAlign "right", so x is the RIGHT edge — every
+  // line of a block shares the same right margin for a straight, tidy edge.
   for (const line of lines) {
     texts.push({
       id: crypto.randomUUID(),
       kind: "text",
       text: line,
-      x: Math.max(AI_LAYOUT_MARGIN, PAGE_WIDTH - AI_LAYOUT_MARGIN - line.length * charWidth(opts.size) - indent),
+      x: PAGE_WIDTH - AI_LAYOUT_MARGIN,
       y: opts.y,
       size: opts.size,
       color: opts.color,
@@ -166,7 +168,7 @@ function pushTable(
         id: crypto.randomUUID(),
         kind: "text",
         text: line,
-        x: gridLeft,
+        x: PAGE_WIDTH - AI_LAYOUT_MARGIN,
         y: lineY + (lineHeight - size) / 2,
         size,
         color: TABLE_COLOR,

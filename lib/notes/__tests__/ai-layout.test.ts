@@ -15,14 +15,13 @@ const sampleBlocks: NotebookBlock[] = [
 ];
 
 describe("layoutNotebookBlocks", () => {
-  it("turns blocks into right-aligned page texts", () => {
+  it("aligns every line to one shared right margin (paintText anchors x at the right edge)", () => {
     const result = layoutNotebookBlocks({ blocks: sampleBlocks });
 
     expect(result.texts.length).toBeGreaterThan(0);
     expect(result.images).toHaveLength(0);
     for (const text of result.texts) {
-      expect(text.x).toBeGreaterThanOrEqual(AI_LAYOUT_MARGIN);
-      expect(text.x + text.text.length * 9).toBeLessThanOrEqual(PAGE_WIDTH);
+      expect(text.x).toBe(PAGE_WIDTH - AI_LAYOUT_MARGIN);
       expect(text.y).toBeGreaterThanOrEqual(72);
     }
     // أول نص = العنوان بلون العناوين وحجمه الأكبر.
@@ -31,7 +30,20 @@ describe("layoutNotebookBlocks", () => {
     expect(result.texts[0].size).toBe(30);
   });
 
-  it("wraps long paragraphs into multiple lines", () => {
+  it("stacks lines downward in reading order without gaps", () => {
+    const result = layoutNotebookBlocks({
+      blocks: [
+        { type: "text", text: "السطر الأول" },
+        { type: "text", text: "السطر التاني" },
+      ],
+    });
+
+    expect(result.texts).toHaveLength(2);
+    expect(result.texts[1].y).toBeGreaterThan(result.texts[0].y);
+    expect(result.texts[1].x).toBe(result.texts[0].x);
+  });
+
+  it("wraps long paragraphs into multiple aligned lines", () => {
     const longText = "word ".repeat(120).trim();
     const result = layoutNotebookBlocks({
       blocks: [{ type: "text", text: longText }],
@@ -40,6 +52,7 @@ describe("layoutNotebookBlocks", () => {
     expect(result.texts.length).toBeGreaterThan(1);
     for (const text of result.texts) {
       expect(text.text.length).toBeLessThanOrEqual(80);
+      expect(text.x).toBe(PAGE_WIDTH - AI_LAYOUT_MARGIN);
     }
   });
 
@@ -48,7 +61,7 @@ describe("layoutNotebookBlocks", () => {
 
     const tableLines = result.texts.filter((text) => text.text.includes("│"));
     expect(tableLines).toHaveLength(3);
-    // خط أفقي لكل حد صف: 3 صفوف + حد سفلي/علوي = 4 خطوط.
+    // خط أفقي لكل حد صف: 3 صفوف + الحد العلوي = 4 خطوط.
     const lines = result.strokes.filter((stroke) => stroke.shape === "line");
     expect(lines).toHaveLength(4);
     // الجدول بمحاذاة يمين الصفحة.
