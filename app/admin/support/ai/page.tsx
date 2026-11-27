@@ -11,10 +11,8 @@
 // بالـ DB. يتم تجميع البيانات من أحدث st auditing.
 // ============================================================================
 
-import { Suspense, useState } from "react";
-import { RefreshCw, BookOpen, Tags, AlertTriangle, Clock, Users, MessageSquare } from "lucide-react";
-import { requireAdminPermission } from "@/lib/admin/auth-check";
-import { hasPermission } from "@/lib/auth-roles";
+import { Suspense } from "react";
+import { RefreshCw } from "lucide-react";
 import type { AdminPermissionKey } from "@/lib/auth-roles";
 import {
   AdminPageHeader,
