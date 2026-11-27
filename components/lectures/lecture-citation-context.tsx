@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
 /* ==========================================================================
    🔗 سياق الاستشهاد — Phase 5
@@ -41,6 +41,16 @@ type CitationContextValue = {
   hoverSeg: number | null;
   /** يحدّد المقطع اللي تحت المؤشر (أو `null` لما المؤشر يخرج). */
   setHoverSeg: (seg: number | null) => void;
+  /**
+   * 🎧 مشغّل الصوت (استوديو المحاضرة) يسجّل عنصر `<audio>` هنا — فأي
+   *    مكوّن جوّه الكارت (chips التوقيت، التفريغ) يقدر يقفز في الصوت.
+   */
+  registerAudio: (el: HTMLAudioElement | null) => void;
+  /**
+   * ⏱ قفزة زمنية في التسجيل — تشغيل من هذه اللحظة. لو مفيش مشغّل مسجّل
+   *    (محاضرة قديمة مالهاش صوت) تبقى no-op آمنة.
+   */
+  seekTo: (seconds: number) => void;
 };
 
 const CitationContext = createContext<CitationContextValue | null>(null);
@@ -48,6 +58,7 @@ const CitationContext = createContext<CitationContextValue | null>(null);
 export function LectureCitationProvider({ children }: { children: ReactNode }) {
   const [activeSeg, setActiveSeg] = useState<number | null>(null);
   const [hoverSeg, setHoverSeg] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // ⚠️ `useCallback` بـ setter مباشر — `focusSegment` بتبقى نفس
   //    المرجع عبر الرندر، فالمكوّنات اللي بتستهلكها ما بتعملش
@@ -56,9 +67,22 @@ export function LectureCitationProvider({ children }: { children: ReactNode }) {
     setActiveSeg(seg);
   }, []);
 
+  const registerAudio = useCallback((el: HTMLAudioElement | null) => {
+    audioRef.current = el;
+  }, []);
+
+  const seekTo = useCallback((seconds: number) => {
+    const el = audioRef.current;
+    if (!el) return;
+    try {
+      el.currentTime = Math.max(0, seconds);
+      void el.play().catch(() => {});
+    } catch {}
+  }, []);
+
   const value = useMemo(
-    () => ({ activeSeg, focusSegment, hoverSeg, setHoverSeg }),
-    [activeSeg, focusSegment, hoverSeg],
+    () => ({ activeSeg, focusSegment, hoverSeg, setHoverSeg, registerAudio, seekTo }),
+    [activeSeg, focusSegment, hoverSeg, registerAudio, seekTo],
   );
 
   return (

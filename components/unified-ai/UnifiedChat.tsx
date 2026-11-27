@@ -107,6 +107,8 @@ export function UnifiedChat({
   const [libraryFiles, setLibraryFiles] = useState<Array<{ id: string; original_name?: string | null; file_name?: string | null; file_size?: number | null }>>([]);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [libraryError, setLibraryError] = useState(false);
+  // 🎧 التسجيلات الصوتية المحفوظة — نفس المكتبة، مصدر `lectures`.
+  const [libraryRecordings, setLibraryRecordings] = useState<Array<{ id: string; title: string; duration_seconds: number | null }>>([]);
   useEffect(() => {
     (async () => {
       try {
@@ -115,6 +117,13 @@ export function UnifiedChat({
         const d = await res.json().catch(() => ({}));
         if (Array.isArray(d?.files)) setLibraryFiles(d.files);
       } catch { setLibraryError(true); }
+      try {
+        const res = await fetch("/api/recordings");
+        if (res.ok) {
+          const d = await res.json().catch(() => null);
+          if (Array.isArray(d?.recordings)) setLibraryRecordings(d.recordings);
+        }
+      } catch {}
     })();
   }, []);
   // ⚡ شفافية الـ credits — الرصيد من السيرفر (مصدر التكلفة الوحيد)، والكلاينت عارض بس.
@@ -598,6 +607,20 @@ export function UnifiedChat({
                   </button>
                 );
               })}
+              {libraryRecordings.map((rec) => (
+                <button
+                  key={rec.id}
+                  onClick={() => { setInput(`اشرح لي المحاضرة الصوتية «${rec.title}» — وقفز على أهم اللحظات فيها`); setSidebarOpen(false); }}
+                  className="w-full text-right rounded-lg px-2 py-1.5 text-xs hover:bg-black/5 transition flex items-center gap-1.5"
+                  title={`اسأل عن: ${rec.title}`}
+                >
+                  <span className="shrink-0" aria-hidden>🎧</span>
+                  <span className="truncate flex-1">{rec.title}</span>
+                  {typeof rec.duration_seconds === "number" && (
+                    <span className="text-[9px] text-ink-soft shrink-0 ltr-num">{Math.max(1, Math.round(rec.duration_seconds / 60))} د</span>
+                  )}
+                </button>
+              ))}
               <Link href="/dashboard/workspace" className="block text-[11px] text-[var(--accent)] hover:underline px-2 pt-1">＋ ارفع ملف جديد في مساحة العمل →</Link>
             </div>
           )}
