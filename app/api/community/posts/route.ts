@@ -26,6 +26,8 @@ export async function POST(req: Request) {
       p_body: typeof body.body === "string" ? body.body : null,
       p_visibility: typeof body.visibility === "string" ? body.visibility : "public",
       p_image_url: typeof body.imageUrl === "string" && body.imageUrl ? body.imageUrl : null,
+      p_options: Array.isArray(body.options) ? body.options.map((o: unknown) => String(o)) : null,
+      p_quote_post_id: typeof body.quotePostId === "string" && body.quotePostId ? body.quotePostId : null,
     });
     if (error) {
       console.error("[community/posts] RPC error:", error);

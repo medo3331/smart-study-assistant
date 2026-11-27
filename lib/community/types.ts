@@ -53,13 +53,15 @@ export function relationErrorAr(code: string | undefined, fallback: string): str
 }
 
 /** أنواع المنشورات التعليمية في مجتمع Magicly. */
-export type PostKind = "text" | "achievement" | "question" | "tip" | "summary" | "challenge";
+export type PostKind = "text" | "achievement" | "question" | "tip" | "summary" | "challenge" | "poll" | "repost";
 
 /** خصوصية المنشور الواحد. */
 export type PostVisibility = "public" | "friends" | "private";
 
 /** صف منشور راجع من RPCs القراءة (الفيد/البروفايل/المحفوظات/الهاشتاج). */
 export type CommunityPostRow = {
+  repost_of_post_id: string | null;
+  quote_post_id: string | null;
   post_id: string;
   kind: PostKind;
   body: string;
@@ -100,6 +102,9 @@ export const POST_ERROR_AR: Record<string, string> = {
   rate_limited: "نشرت منشورات كتير في الآخر — استنى شوية.",
   not_found: "المنشور أو التعليق مش موجود.",
   not_allowed: "مش مسموح لك بالإجراء ده.",
+  invalid_poll: "الاستطلاع لازم يكون من خيارين لأربعة.",
+  invalid_option: "اختيار غير موجود في الاستطلاع.",
+  already_reposted: "أعدت نشر المنشور ده بالفعل.",
 };
 
 export function postErrorAr(code: string | undefined, fallback: string): string {
@@ -115,4 +120,6 @@ export const POST_KIND_AR: Record<PostKind, string> = {
   tip: "معلومة مفيدة",
   summary: "ملخص أو مصدر",
   challenge: "تحدي",
+  poll: "استطلاع رأي",
+  repost: "إعادة نشر",
 };

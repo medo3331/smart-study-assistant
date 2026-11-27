@@ -9,10 +9,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle, Rss, Bookmark, ImagePlus, Loader2 } from "lucide-react";
+import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle, Rss, Bookmark, ImagePlus, Loader2, Hash, BarChart3, Crown, Flame } from "lucide-react";
 import type { SocialProfileSummary, CommunityPostRow } from "@/lib/community/types";
 import { relationErrorAr, postErrorAr, POST_KIND_AR } from "@/lib/community/types";
 import PostCard from "@/components/community/PostCard";
+
+type LeaderRow = {
+  rank: number;
+  user_id: string;
+  display_name: string | null;
+  public_user_code: string | null;
+  avatar_url: string | null;
+  xp: number;
+  streak: number | null;
+};
 
 type FriendRow = {
   friend_id: string;
@@ -79,9 +89,15 @@ export default function CommunityHubPage() {
   const [postVisibility, setPostVisibility] = useState("public");
   const [postBody, setPostBody] = useState("");
   const [postImage, setPostImage] = useState<string | null>(null);
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [uploading, setUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+
+  // leaderboard + trending
+  const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [trending, setTrending] = useState<{ tag: string; post_count: number }[]>([]);
 
   // saved
   const [savedPosts, setSavedPosts] = useState<CommunityPostRow[]>([]);
@@ -187,11 +203,41 @@ export default function CommunityHubPage() {
     }
   }, []);
 
+  const loadLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/community/leaderboard");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) {
+        setLeaderboard(data.leaderboard || []);
+        setMyRank(data.myRank ?? null);
+      }
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  const loadTrending = useCallback(async () => {
+    try {
+      const res = await fetch("/api/community/trending");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) setTrending(data.trending || []);
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
   useEffect(() => {
     if (tab === "feed" && feed.length === 0 && !feedDone) void loadFeed(null, false);
     if (tab === "saved" && savedPosts.length === 0) void loadSaved();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  useEffect(() => {
+    void loadLeaderboard();
+    void loadTrending();
+  }, [loadLeaderboard, loadTrending]);
 
   const uploadImage = async (file: File) => {
     setUploading(true);
@@ -216,18 +262,21 @@ export default function CommunityHubPage() {
     setPublishing(true);
     setPublishError(null);
     try {
+      const options = postKind === "poll" ? pollOptions.map((o) => o.trim()).filter(Boolean) : undefined;
       const res = await fetch("/api/community/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: postKind, body, visibility: postVisibility, imageUrl: postImage }),
+        body: JSON.stringify({ kind: postKind, body, visibility: postVisibility, imageUrl: postImage, options }),
       });
       const data = await res.json();
       if (data.success) {
         setPostBody("");
         setPostImage(null);
         setPostKind("text");
+        setPollOptions(["", ""]);
         setFeedDone(false);
         await loadFeed(null, false);
+        void loadTrending();
       } else {
         setPublishError(postErrorAr(data.code, data.error || "تعذّر النشر."));
       }
@@ -421,6 +470,69 @@ export default function CommunityHubPage() {
       {/* -------------------------------------------------------- الفيد --- */}
       {tab === "feed" && (
         <section className="space-y-4">
+          {/* الصدارة — ترتيب الطلاب حسب XP */}
+          {leaderboard.length > 0 && (
+            <div className="rounded-2xl border border-rule bg-paper-2 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  صدارة الطلاب (XP)
+                </h2>
+                {myRank !== null && (
+                  <span className="rounded-full bg-marker/10 px-3 py-1 text-xs font-bold text-marker">
+                    ترتيبك: #{myRank}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {leaderboard.map((l) => (
+                  <Link
+                    key={l.user_id}
+                    href={`/u/${l.public_user_code ?? l.user_id}`}
+                    className="flex w-24 shrink-0 flex-col items-center gap-1 rounded-xl border border-rule bg-paper p-2 text-center transition hover:border-marker/50"
+                  >
+                    {l.rank <= 3 && <span aria-hidden>{l.rank === 1 ? "🥇" : l.rank === 2 ? "🥈" : "🥉"}</span>}
+                    {l.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={l.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-marker/10 font-bold text-marker">
+                        {(l.display_name || "؟").trim().charAt(0)}
+                      </div>
+                    )}
+                    <span className="w-full truncate text-xs font-bold text-ink">{l.display_name || "طالب"}</span>
+                    <span className="text-[11px] text-ink-soft">{l.xp} XP</span>
+                    {l.streak !== null && l.streak > 0 && (
+                      <span className="flex items-center gap-0.5 text-[11px] text-amber-600">
+                        <Flame className="h-3 w-3" />{l.streak}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ترندات الهاشتاجات */}
+          {trending.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1 text-xs font-bold text-ink-soft">
+                <Flame className="h-3.5 w-3.5 text-amber-500" /> ترند:
+              </span>
+              {trending.map((t) => (
+                <Link
+                  key={t.tag}
+                  href={`/community/tag/${encodeURIComponent(t.tag)}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-rule bg-paper-2 px-3 py-1 text-xs font-semibold text-marker transition hover:bg-paper"
+                >
+                  <Hash className="h-3 w-3" />
+                  {t.tag}
+                  <span className="text-ink-soft">({t.post_count})</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
           {/* الكومبوزر */}
           <div className="rounded-2xl border border-rule bg-paper-2 p-4">
             <textarea
@@ -444,11 +556,47 @@ export default function CommunityHubPage() {
                 </button>
               </div>
             )}
+            {postKind === "poll" && (
+              <div className="mt-3 space-y-2 rounded-xl bg-paper p-3" role="group" aria-label="خيارات الاستطلاع">
+                {pollOptions.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-5 text-xs font-bold text-ink-soft">{i + 1}.</span>
+                    <input
+                      value={opt}
+                      onChange={(e) => setPollOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))}
+                      placeholder={`الخيار ${i + 1}`}
+                      className={inputCls}
+                      maxLength={100}
+                      aria-label={`الخيار ${i + 1}`}
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        onClick={() => setPollOptions((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label="حذف الخيار"
+                        className="text-ink-soft hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {pollOptions.length < 4 && (
+                  <button
+                    onClick={() => setPollOptions((prev) => [...prev, ""])}
+                    className="text-xs font-semibold text-marker hover:underline"
+                  >
+                    + خيار تاني
+                  </button>
+                )}
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select value={postKind} onChange={(e) => setPostKind(e.target.value)} className={`${inputCls} w-auto`} aria-label="نوع المنشور">
-                {Object.entries(POST_KIND_AR).map(([k, label]) => (
-                  <option key={k} value={k}>{label}</option>
-                ))}
+                {Object.entries(POST_KIND_AR)
+                  .filter(([k]) => k !== "repost")
+                  .map(([k, label]) => (
+                    <option key={k} value={k}>{k === "poll" ? "📊 استطلاع رأي" : label}</option>
+                  ))}
               </select>
               <select value={postVisibility} onChange={(e) => setPostVisibility(e.target.value)} className={`${inputCls} w-auto`} aria-label="من يشوف المنشور">
                 <option value="public">🌍 عام</option>
@@ -493,6 +641,7 @@ export default function CommunityHubPage() {
                   post={p}
                   currentUserId={currentUserId}
                   onDeleted={(id) => setFeed((prev) => prev.filter((x) => x.post_id !== id))}
+                  onQuoted={() => void loadFeed(null, false)}
                 />
               ))}
               {!feedDone && feedBefore && (
