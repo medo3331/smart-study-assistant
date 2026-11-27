@@ -250,3 +250,252 @@ export interface AiVideoGenerationCapable {
     input: AiVideoRequest
   ): Promise<AiVideoResult> | AsyncGenerator<AiVideoResult, void, undefined>;
 }
+
+// ============================================================================
+// AI SUPPORT (Phase 1) — أنواع نظام الدعم الذكي
+// ============================================================================
+
+/** الفئات الرئيسية لتصنيف مشكلات الدعم (مطابقة لمفاتيح SUPPORT_CATEGORIES). */
+export type SupportCategory =
+  | "account"
+  | "subscriptions"
+  | "credits"
+  | "coins"
+  | "lessons"
+  | "aiTools"
+  | "files"
+  | "community"
+  | "technical"
+  | "complaints";
+
+/** الفئات الفرعية المسطحة لكل فئات الدعم. */
+export type SupportSubCategory =
+  // account
+  | "login"
+  | "password"
+  | "verification"
+  | "profile"
+  // subscriptions
+  | "activation"
+  | "expiration"
+  | "statusMismatch"
+  // credits
+  | "missingPurchased"
+  | "incorrectDeduction"
+  | "aiOperationFailed"
+  // coins
+  | "lessonRewards"
+  | "adRewards"
+  | "storeTransactions"
+  // lessons
+  | "lessonAccess"
+  | "videoProblems"
+  | "quizProblems"
+  | "contentLoading"
+  // aiTools
+  | "generationFailure"
+  | "unexpectedErrors"
+  | "usageIssues"
+  // files
+  | "uploadFailure"
+  | "pdfProcessing"
+  | "fileAccess"
+  // community
+  | "messageDelivery"
+  | "messageRequests"
+  | "blocking"
+  | "conversationAccess"
+  // technical
+  | "performance"
+  | "brokenPages"
+  | "general"
+  // complaints
+  | "ux"
+  | "featureRequests"
+  | "generalComplaints";
+
+/** نتيجة تصنيف مشكلة الدعم. */
+export type SupportClassification = {
+  category: SupportCategory;
+  subcategory: SupportSubCategory;
+  shortProblemSummary: string;
+  /** ثقة التصنيف بين 0 و 1. */
+  confidenceScore: number;
+  severity: "low" | "medium" | "high";
+  missingInformation: string[];
+  recommendedNextStep: string;
+  suggestedKnowledgeArticleIds: string[];
+  requiresHuman: boolean;
+  escalationReason: string;
+};
+
+/** سؤال تشخيصي منظّم يُعرض على الطالب. */
+export type SupportDiagnosticQuestion = {
+  key: string;
+  label: string;
+  question: string;
+  options: string[];
+  required: boolean;
+};
+
+/** ملخّص تصعيد الحالة لموظف دعم بشري. */
+export type SupportEscalationSummary = {
+  reason: string;
+  summary: string;
+  escalatedBy: string;
+  escalatedAt: string;
+};
+
+/** نص قالب رد التأكيد الفوري. */
+export type AcknowledgementTemplate = string;
+
+/** حالة إرسال رد التأكيد (لمنع التكرار). */
+export type AcknowledgementState = {
+  eventId: string;
+  lastSentAt: string;
+  template?: string;
+};
+
+/** حالة تذكرة الدعم الذكية عبر خطوات المعالجة. */
+export type SupportAiCaseStatus =
+  | "received"
+  | "acknowledged"
+  | "classifying"
+  | "diagnosing"
+  | "awaiting_student"
+  | "attempting_resolution"
+  | "resolved_pending_confirmation"
+  | "escalated"
+  | "closed";
+
+/** سجل حالة دعم ذكية. */
+export type SupportAiCase = {
+  id: string;
+  eventSource: string;
+  externalEventId: string;
+  status: SupportAiCaseStatus;
+  currentStep: string;
+  aiRunId: string | null;
+  humanEscalationSummary: string | null;
+  aiVerificationResult: string | null;
+  created_at: string;
+  updated_at: string;
+  createdBy: string;
+  ai_suggested_at: string | null;
+  human_answered_at: string | null;
+  _relatedUserIds: string[];
+  _eventPayload: Record<string, unknown>;
+  _escalatedBy: string | null;
+};
+
+/** نوع استدعاء نموذج الذكاء الاصطناعي في مسار الدعم. */
+export type SupportAiRunType =
+  | "acknowledgement"
+  | "classification"
+  | "diagnosis"
+  | "action_attempt"
+  | "escalation";
+
+/** حالة استدعاء النموذج. */
+export type SupportAiRunStatus = "processing" | "completed" | "failed";
+
+/** سجل استدعاء نموذج ذكاء اصطناعي ونتيجته. */
+export type SupportAiRun = {
+  id: string;
+  caseId: string;
+  runType: SupportAiRunType;
+  modelName: string;
+  provider: string | null;
+  promptLengthTokens: number | null;
+  responseLengthTokens: number | null;
+  inputSnippet: string | null;
+  outputSnippet: string | null;
+  classificationJsonb: Record<string, unknown> | null;
+  responseText: string | null;
+  confidenceScore: number | null;
+  isLowConfidence: boolean;
+  status: SupportAiRunStatus;
+  errorMessage: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
+/** سجل منع معالجة حدث الدعم مرتين — المفتاح (eventSource, externalEventId). */
+export type SupportEventDeduplicationEntry = {
+  id: string;
+  eventSource: string;
+  externalEventId: string;
+  eventKind: string;
+  eventPayload: Record<string, unknown>;
+  processed_at: string;
+  processed_by: string;
+  duplicate_count: number;
+};
+
+/** مقالة قاعدة معرفة الدعم. */
+export type KnowledgeArticle = {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  category: SupportCategory;
+  subcategory: SupportSubCategory;
+  problemDescription: string;
+  symptoms: string[];
+  searchKeywords: string[];
+  diagnosticQuestions: SupportDiagnosticQuestion[];
+  approvedSolution: string;
+  resolutionSteps: string[];
+  allowedActionKey: string | null;
+  verificationSteps: string;
+  escalationConditions: string;
+  sourceType: "admin_provided" | "ai_suggestion";
+  requiredStaffRole: string;
+  status: "draft" | "published" | "archived";
+  version: number;
+  createdBy: string;
+  reviewedBy: string | null;
+  publishedAt: string | null;
+  archivedAt: string | null;
+  sourceNote: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** استعلام بحث قاعدة المعرفة. */
+export type KnowledgeSearchQuery = {
+  terms: string | string[];
+  category?: SupportCategory;
+  limit?: number;
+};
+
+/** نتيجة بحث قاعدة المعرفة. */
+export type KnowledgeSearchResult = {
+  results: KnowledgeArticle[];
+  query: KnowledgeSearchQuery;
+};
+
+/** سكيما إدخال إجراء آمن (JSON Schema مبسّطة). */
+export type SafeActionInputSchema = {
+  type: "object";
+  properties: Record<string, { type: string; description?: string }>;
+  required?: string[];
+};
+
+/** طريقة التحقق من نجاح إجراء آمن. */
+export type SafeActionResultVerification = {
+  name: string;
+  successCondition: string;
+  onFailure: string;
+};
+
+/** إجراء آمن مسموح لمحرك الدعم (allowlist). */
+export type SafeActionDefinition = {
+  key: string;
+  labelAr: string;
+  descriptionAr: string;
+  risk: "low" | "medium" | "high";
+  requiresPermissions: string[];
+  inputSchema: SafeActionInputSchema;
+  verification: SafeActionResultVerification;
+};
