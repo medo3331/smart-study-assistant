@@ -73,9 +73,21 @@ describe("G0-E migration contract (db/64)", () => {
     expect(hits.length).toBe(1);
   });
 
-  it("inbox page updates only is_read/read_at (legitimate owner action preserved)", () => {
+  it("mark-as-read is server-side and owner-scoped (PATCH /api/notifications updates only read_at/is_read)", () => {
+    // في مركز التواصل الموحد، تحديد المقروء انتقل من صفحة inbox إلى السيرفر:
+    // PATCH /api/notifications يفرض ملكية المستلم ولا يكتب إلا أعمدة القراءة
+    // (read_at، مع fallback للسكيما القديمة is_read) — نفس الضمانة الأمنية.
+    const notifications = readFileSync(
+      join(root, "app", "api", "notifications", "route.ts"),
+      "utf8",
+    );
+    expect(notifications).toMatch(/update\(\{read_at:new Date\(\)\.toISOString\(\)\}\)/);
+    // كل تحديث مقيد بالمالك — مباشرة (recipient_id) أو عبر fallback السكيما القديمة (user_id)
+    expect(notifications).toMatch(/\.eq\("recipient_id",user\.id\)/);
+    expect(notifications).toMatch(/update\(\{is_read:true\}\)\.eq\("id",id\)\.eq\("user_id",user\.id\)/);
+    // صفحة inbox لم تعد تكتب في قاعدة البيانات مباشرة
     const inbox = readFileSync(join(root, "app", "inbox", "page.tsx"), "utf8");
-    expect(inbox).toMatch(/update\(\{\s*is_read:\s*true,\s*read_at:/);
+    expect(inbox).not.toMatch(/\.update\(/);
   });
 });
 
