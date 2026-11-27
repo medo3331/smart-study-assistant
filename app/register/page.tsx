@@ -9,6 +9,7 @@ import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
 import { ProviderRow } from "@/components/AuthProviders";
 import { readStoredReferralCode, clearStoredReferralCode } from "@/lib/referral/client";
+import { saveLastAccount } from "@/lib/auth/last-account";
 
 /**
  * 📝 Create Account — المحطة التانية في التدفّق:
@@ -131,6 +132,7 @@ export default function RegisterPage() {
       // أحيانًا مزامنة كوكي الجلسة بتاعة Supabase SSR فيحصل خطأ غير متوقع في الصفحة
       // اللي بعده. بنستخدم تحميل كامل (full reload) هنا عشان نضمن إن الكوكي اتكتبت
       // فعلًا قبل ما أي صفحة تحاول تقرا الجلسة.
+      saveLastAccount({ email, name: fullName });
       window.location.href = currentNext();
       return;
     }
@@ -173,6 +175,7 @@ export default function RegisterPage() {
       await fetch("/api/referrals/entry", { method: "POST" });
     } catch {}
     clearStoredReferralCode();
+    saveLastAccount({ email, name: fullName });
     window.location.href = currentNext();
   };
 
