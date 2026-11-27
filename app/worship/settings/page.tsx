@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Reveal } from "@/components/ui/Reveal";
@@ -15,11 +16,17 @@ import {
   ArrowLeft,
   MapPin,
   Bell,
+  BellRing,
   BookOpen,
   Headphones,
   Layers as LayersIcon,
   RotateCcw,
 } from "lucide-react";
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  type NotificationPermissionState,
+} from "@/lib/islamic/notifications";
 
 /**
  * Worship Settings Page — /worship/settings
@@ -43,7 +50,7 @@ function SettingsHome() {
   if (!shared || !settings || !update) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#7C5CFF]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#10B981]" />
         <span className="ml-3 text-[#9AA0C0]">جاري تحميل الإعدادات…</span>
       </div>
     );
@@ -70,7 +77,7 @@ function SettingsHome() {
           </div>
           <Link
             href="/worship"
-            className="flex items-center gap-1 text-sm text-[#B69CFF] transition-colors hover:text-[#7C5CFF]"
+            className="flex items-center gap-1 text-sm text-[#6EE7B7] transition-colors hover:text-[#10B981]"
           >
             <ArrowLeft size={18} aria-hidden />
             <span>عباداتي</span>
@@ -152,8 +159,8 @@ function SettingsHome() {
           <GlassCard className="space-y-6 p-6">
             <SectionHeader
               icon={LayersIcon}
-              color="text-[#7C5CFF]"
-              bg="bg-[#7C5CFF]/15"
+              color="text-[#10B981]"
+              bg="bg-[#10B981]/15"
               title="طريقة الحساب والمذهب"
               description="اختيار طريقة حساب مواقيت الصلاة والمذهب الفقهي"
             />
@@ -198,8 +205,8 @@ function SettingsHome() {
           <GlassCard className="space-y-6 p-6">
             <SectionHeader
               icon={Bell}
-              color="text-[#2DD4BF]"
-              bg="bg-[#2DD4BF]/15"
+              color="text-[#34D399]"
+              bg="bg-[#34D399]/15"
               title="الإشعارات والتنبيهات"
               description="إدارة تنبيهات الصلاة والأذان"
             />
@@ -236,6 +243,7 @@ function SettingsHome() {
                   handleChange("sleepAdhkarReminder", checked)
                 }
               />
+              <NotificationPermissionRow />
             </div>
           </GlassCard>
         </Reveal>
@@ -246,8 +254,8 @@ function SettingsHome() {
         <GlassCard className="space-y-6 p-6">
           <SectionHeader
             icon={BookOpen}
-            color="text-[#2DD4BF]"
-            bg="bg-[#2DD4BF]/15"
+            color="text-[#34D399]"
+            bg="bg-[#34D399]/15"
             title="إعدادات القراءة"
             description="تخصيص الورد اليومي وتتبع التقدم"
           />
@@ -262,7 +270,7 @@ function SettingsHome() {
                 onChange={(e) =>
                   handleChange("quranDailyTarget", parseInt(e.target.value))
                 }
-                className="h-2 w-full appearance-none rounded-full bg-white/[0.06] accent-[#2DD4BF]"
+                className="h-2 w-full appearance-none rounded-full bg-white/[0.06] accent-[#34D399]"
               />
             </Field>
           </div>
@@ -274,8 +282,8 @@ function SettingsHome() {
         <GlassCard className="space-y-6 p-6">
           <SectionHeader
             icon={Headphones}
-            color="text-[#7C5CFF]"
-            bg="bg-[#7C5CFF]/15"
+            color="text-[#10B981]"
+            bg="bg-[#10B981]/15"
             title="إعدادات الصوت"
             description="اختيار القارئ المفضل لتلاوة القرآن"
           />
@@ -303,7 +311,7 @@ function SettingsHome() {
           </button>
           <Link
             href="/worship"
-            className="flex flex-1 items-center justify-center rounded-2xl bg-[#7C5CFF] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#6A4CE8]"
+            className="flex flex-1 items-center justify-center rounded-2xl bg-[#10B981] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#059669]"
           >
             العودة لعباداتي
           </Link>
@@ -318,9 +326,9 @@ function SettingsHome() {
 /* -------------------------------------------------------------------------- */
 
 const inputClass =
-  "w-full h-11 px-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-[#9AA0C0] focus:outline-none focus:border-[#7C5CFF]/50 focus:bg-white/[0.06]";
+  "w-full h-11 px-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-[#9AA0C0] focus:outline-none focus:border-[#10B981]/50 focus:bg-white/[0.06]";
 const selectClass =
-  "w-full h-11 px-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white focus:outline-none focus:border-[#7C5CFF]/50 focus:bg-white/[0.06] appearance-none";
+  "w-full h-11 px-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white focus:outline-none focus:border-[#10B981]/50 focus:bg-white/[0.06] appearance-none";
 
 function Field({
   label,
@@ -363,6 +371,73 @@ function SectionHeader({
   );
 }
 
+const PERMISSION_LABELS: Record<
+  NotificationPermissionState,
+  { label: string; description: string; action: string | null }
+> = {
+  granted: {
+    label: "إشعارات المتصفح مفعّلة ✅",
+    description: "هتوصلك تنبيهات الصلاة والأذان والأذكار وورد القرآن.",
+    action: null,
+  },
+  default: {
+    label: "إشعارات المتصفح",
+    description: "اسمح بالإشعارات عشان توصلك تنبيهات مواقيت الصلاة والأذان والأذكار.",
+    action: "تفعيل الإشعارات",
+  },
+  denied: {
+    label: "الإشعارات متوقفة من المتصفح ❌",
+    description: "اسمح بالإشعارات لهذا الموقع من إعدادات المتصفح عشان التذكيرات تشتغل.",
+    action: null,
+  },
+  unsupported: {
+    label: "المتصفح مش بيدعم الإشعارات",
+    description: "جرّب متصفح تاني (زي Chrome) عشان تفعّل تنبيهات العبادات.",
+    action: null,
+  },
+};
+
+function NotificationPermissionRow() {
+  const [permission, setPermission] = useState<NotificationPermissionState>("default");
+  const [requesting, setRequesting] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(
+      () => setPermission(getNotificationPermission()),
+      0,
+    );
+    return () => window.clearTimeout(id);
+  }, []);
+
+  const state = PERMISSION_LABELS[permission];
+
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4">
+      <div className="flex flex-1 items-center gap-3">
+        <BellRing size={20} className="flex-shrink-0 text-[#10B981]" aria-hidden />
+        <div className="flex-1">
+          <p className="font-medium text-white">{state.label}</p>
+          <p className="mt-0.5 text-sm text-[#9AA0C0]">{state.description}</p>
+        </div>
+      </div>
+      {state.action && (
+        <button
+          type="button"
+          disabled={requesting}
+          onClick={async () => {
+            setRequesting(true);
+            setPermission(await requestNotificationPermission());
+            setRequesting(false);
+          }}
+          className="flex-shrink-0 rounded-xl bg-[#10B981] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#059669] disabled:opacity-60"
+        >
+          {requesting ? "جاري التفعيل…" : state.action}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SettingToggle({
   label,
   description,
@@ -388,7 +463,7 @@ function SettingToggle({
         aria-label={label}
         className={
           "relative h-6 w-11 flex-shrink-0 rounded-full transition-colors " +
-          (checked ? "bg-[#7C5CFF]" : "bg-white/[0.1]")
+          (checked ? "bg-[#10B981]" : "bg-white/[0.1]")
         }
       >
         <span

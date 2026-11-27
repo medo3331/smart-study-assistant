@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { IconBadge } from "@/components/ui/IconBadge";
@@ -20,8 +20,6 @@ import {
   Menu,
   Play,
   Pause,
-  Bookmark,
-  Share2,
   Loader2,
 } from "lucide-react";
 
@@ -33,19 +31,19 @@ interface QuranReaderProps {
 /**
  * Quran Reader Component
  * - Surah list with search
- * - Ayah navigation
- * - Reading progress tracking
+ * - FULL mushaf-style reading: all ayahs grouped into pages (Quran page numbers
+ *   from the API) with page navigation
+ * - Reading progress + daily ayah counter update as the user pages forward
  * - Real audio playback via QuranAudioContext + reciter selector
  */
 export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReaderProps) {
   const [surahs, setSurahs] = useState<Surah[]>([]);
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
-  // FULL SURAH VIEW (was single-ayah): display all ayahs + audio list
-  const [showAllAyahs, setShowAllAyahs] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSurahList, setShowSurahList] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [pageIndex, setPageIndex] = useState(0);
 
   // Real audio integration
   const { state: audioState, currentSurahId, play, pause } = useQuranAudio();
@@ -55,17 +53,47 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const isPlaying = audioState === "playing";
   const isLoadingAudio = audioState === "loading";
 
-  // Load surahs on mount only (resume position is read once at mount)
+  // Resume position is read once at mount
   const resumeRef = useRef({ surahId: readProgress.surahId, ayahId: readProgress.ayahId });
 
-  const loadAyahs = async (surahId: number) => {
+  // Pages = ayahs grouped by mushaf page number (from the API).
+  const pages = useMemo(() => {
+    const groups: { pageNumber: number; ayahs: Ayah[] }[] = [];
+    for (const ayah of ayahs) {
+      const last = groups[groups.length - 1];
+      if (last && last.pageNumber === ayah.pageNumber) {
+        last.ayahs.push(ayah);
+      } else {
+        groups.push({ pageNumber: ayah.pageNumber, ayahs: [ayah] });
+      }
+    }
+    return groups;
+  }, [ayahs]);
+
+  const currentPage = pages[pageIndex] ?? null;
+
+  // Ayahs read so far within this surah (cumulative through the current page).
+  const ayahsThroughPage = useMemo(
+    () => pages.slice(0, pageIndex + 1).reduce((sum, p) => sum + p.ayahs.length, 0),
+    [pages, pageIndex],
+  );
+
+  const loadAyahs = async (surahId: number, resumeAyahId?: number) => {
     try {
       const data = await getAyahs(surahId);
       setAyahs(data);
-      setShowAllAyahs(true);
+      const startIdx = resumeAyahId
+        ? data.findIndex((a) => a.number >= resumeAyahId)
+        : 0;
+      let idx = 0;
+      for (let i = 0; i < Math.max(0, startIdx); i++) {
+        if (i === 0 || data[i].pageNumber !== data[i - 1].pageNumber) idx++;
+      }
+      setPageIndex(startIdx < 0 ? 0 : idx);
     } catch (error) {
       console.error("Failed to load ayahs:", error);
       setAyahs([]);
+      setPageIndex(0);
     }
   };
 
@@ -76,7 +104,6 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         const data = await getAllSurahs();
         setSurahs(data);
 
-        // Find initial surah — check resume position first, then param, then default
         const resumeSurah = resumeRef.current.surahId;
         const initial =
           data.find((s) => s.id === resumeSurah) ||
@@ -85,8 +112,8 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
 
         if (initial) {
           setSelectedSurah(initial);
-          setShowAllAyahs(true);
-          await loadAyahs(initial.id);
+          setShowSurahList(false);
+          await loadAyahs(initial.id, resumeRef.current.ayahId);
         }
       } catch (error) {
         console.error("Failed to load surahs:", error);
@@ -95,7 +122,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       }
     }
     loadSurahs();
-    }, [initialSurahId]);
+  }, [initialSurahId]);
 
   const handleSurahSelect = async (surah: Surah) => {
     setSelectedSurah(surah);
@@ -105,36 +132,49 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     updatePosition(surah.id, 1, readProgress.dailyCount);
   };
 
-  const handleAyahChange = useCallback(
-    (index: number) => {
-      setShowAllAyahs(true);// index display only
-      if (selectedSurah) {
-        onProgressUpdate?.(selectedSurah.id, index + 1);
-        updatePosition(selectedSurah.id, index + 1, readProgress.dailyCount);
+  /** Navigate between mushaf pages; counts newly-read ayahs (forward only). */
+  const goToPage = useCallback(
+    (nextIndex: number) => {
+      if (nextIndex < 0 || nextIndex >= pages.length || !selectedSurah) return;
+      const movingForward = nextIndex > pageIndex;
+      setPageIndex(nextIndex);
+
+      const targetPage = pages[nextIndex];
+      const anchorAyah = movingForward
+        ? targetPage.ayahs[targetPage.ayahs.length - 1]
+        : targetPage.ayahs[0];
+      onProgressUpdate?.(selectedSurah.id, anchorAyah.number);
+
+      if (movingForward) {
+        const newPageAyahs = pages
+          .slice(pageIndex + 1, nextIndex + 1)
+          .reduce((sum, p) => sum + p.ayahs.length, 0);
+        updatePosition(
+          selectedSurah.id,
+          anchorAyah.number,
+          readProgress.dailyCount + newPageAyahs,
+        );
+      } else {
+        updatePosition(selectedSurah.id, anchorAyah.number, readProgress.dailyCount);
       }
     },
-    [selectedSurah, onProgressUpdate, updatePosition, readProgress.dailyCount]
+    [pages, pageIndex, selectedSurah, onProgressUpdate, updatePosition, readProgress.dailyCount],
   );
 
-  const goToNextAyah = () => {
-    if (showAllAyahs && ayahs.length > 0) {
-      handleAyahChange(0); // full surah view
-    } else if (selectedSurah && selectedSurah.id < 114) {
+  const goToNextSurah = () => {
+    if (selectedSurah && selectedSurah.id < 114) {
       const nextSurah = surahs.find((s) => s.id === selectedSurah.id + 1);
       if (nextSurah) {
-        handleSurahSelect(nextSurah);
+        void handleSurahSelect(nextSurah);
       }
     }
   };
 
-  const goToPrevAyah = () => {
-    if (showAllAyahs && ayahs.length > 0) {
-      handleAyahChange(0);
-    } else if (selectedSurah && selectedSurah.id > 1) {
+  const goToPrevSurah = () => {
+    if (selectedSurah && selectedSurah.id > 1) {
       const prevSurah = surahs.find((s) => s.id === selectedSurah.id - 1);
       if (prevSurah) {
-        handleSurahSelect(prevSurah);
-        // full surah view (no single-ayah index)
+        void handleSurahSelect(prevSurah);
       }
     }
   };
@@ -142,14 +182,11 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const handlePlayPause = useCallback(async () => {
     if (!selectedSurah || !selectedReciter) return;
 
-    // If currently playing this surah, just pause.
     if (isPlaying && currentSurahId === selectedSurah.id) {
       pause();
     } else if (audioState === "paused" && currentSurahId === selectedSurah.id) {
-      // Same track, paused — resume.
       await play(selectedReciter, selectedSurah.id);
     } else {
-      // Different surah or idle/error — start fresh.
       await play(selectedReciter, selectedSurah.id);
     }
   }, [selectedSurah, selectedReciter, isPlaying, currentSurahId, audioState, play, pause]);
@@ -161,9 +198,9 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       s.id.toString().includes(searchQuery)
   );
 
-  const currentAyah = ayahs.length > 0 ? ayahs[0] : null; // full surah view
-  const progress = selectedSurah
-    ? 100
+  const surahJuz = ayahs[0]?.juzNumber ?? selectedSurah?.juzNumber ?? 1;
+  const readPercent = selectedSurah && selectedSurah.ayahCount > 0
+    ? Math.min((ayahsThroughPage / selectedSurah.ayahCount) * 100, 100)
     : 0;
 
   const isThisSurahPlaying = isPlaying && currentSurahId === selectedSurah?.id;
@@ -185,7 +222,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
 
           {selectedSurah && (
             <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
-              <IconBadge icon={BookOpen} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={40} />
+              <IconBadge icon={BookOpen} color="text-[#10B981]" bg="bg-[#10B981]/15" size={40} />
               <div className="text-center min-w-0">
                 <p className="text-sm text-[#9AA0C0]">سورة</p>
                 <p className="text-lg font-bold text-white truncate">
@@ -195,14 +232,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
             </div>
           )}
 
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Button variant="ghost" icon={Bookmark} aria-label="حفظ الموضع">
-              <span className="sr-only">حفظ الموضع</span>
-            </Button>
-            <Button variant="ghost" icon={Share2} aria-label="مشاركة">
-              <span className="sr-only">مشاركة</span>
-            </Button>
-          </div>
+          <div className="w-[72px] flex-shrink-0" />
         </div>
       </Reveal>
 
@@ -218,7 +248,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                   placeholder="ابحث عن سورة بالاسم أو الرقم..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-11 pl-4 pr-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-[#9AA0C0] focus:outline-none focus:border-[#7C5CFF]/50 focus:bg-white/[0.06]"
+                  className="w-full h-11 pl-4 pr-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-[#9AA0C0] focus:outline-none focus:border-[#10B981]/50 focus:bg-white/[0.06]"
                   dir="rtl"
                 />
               </div>
@@ -244,17 +274,17 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                       onClick={() => handleSurahSelect(surah)}
                       className={cn(
                         "w-full flex items-center gap-4 p-4 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] transition-colors text-right",
-                        selectedSurah?.id === surah.id && "bg-[#7C5CFF]/5"
+                        selectedSurah?.id === surah.id && "bg-[#10B981]/5"
                       )}
                       style={{ animationDelay: `${index * 0.02}s` }}
                     >
-                      <div className="flex-shrink-0 flex h-12 w-12 items-center justify-center rounded-xl bg-[#7C5CFF]/10 text-[#B69CFF] font-mono font-bold">
+                      <div className="flex-shrink-0 flex h-12 w-12 items-center justify-center rounded-xl bg-[#10B981]/10 text-[#6EE7B7] font-mono font-bold">
                         {surah.id}
                       </div>
                       <div className="flex-1 min-w-0 text-right">
                         <p className="font-bold text-white">{surah.arabicName}</p>
                         <p className="text-xs text-[#9AA0C0]">
-                          {surah.name} • {surah.ayahCount} آية • جزء {surah.juzNumber}
+                          {surah.name} • {surah.ayahCount} آية
                         </p>
                       </div>
                       <div className="flex items-center gap-2 text-[#9AA0C0]">
@@ -279,7 +309,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         </div>
       )}
 
-      {/* Ayah Reading View */}
+      {/* Full-Surah Reading View */}
       {!showSurahList && selectedSurah && (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Surah Header */}
@@ -287,7 +317,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
             <GlassCard className="p-4 mb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 min-w-0">
-                  <IconBadge icon={BookOpen} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={44} />
+                  <IconBadge icon={BookOpen} color="text-[#10B981]" bg="bg-[#10B981]/15" size={44} />
                   <div className="min-w-0">
                     <p className="text-2xl font-bold text-white">{selectedSurah.arabicName}</p>
                     <p className="text-sm text-[#9AA0C0] flex items-center gap-2 flex-wrap">
@@ -295,7 +325,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                       <span>•</span>
                       <span>{selectedSurah.ayahCount} آيات</span>
                       <span>•</span>
-                      <span>جزء {selectedSurah.juzNumber}</span>
+                      <span>جزء {surahJuz}</span>
                       <span>•</span>
                       <span className="px-2 py-0.5 rounded-full text-xs bg-white/[0.04]">
                         {selectedSurah.revelationType === "Meccan" ? "مكية" : "مدنية"}
@@ -311,104 +341,113 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
               {/* Progress Bar */}
               <div className="mt-4">
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-[#9AA0C0]">كل آيات السورة ({selectedSurah?.ayahCount ?? 0})</span>
-                  <span className="font-mono font-bold text-white">{Math.round(progress)}%</span>
+                  <span className="text-[#9AA0C0]">
+                    قرأت <bdi>{ayahsThroughPage}</bdi> من <bdi>{selectedSurah.ayahCount}</bdi> آية
+                  </span>
+                  <span className="font-mono font-bold text-white">{Math.round(readPercent)}%</span>
                 </div>
                 <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-[#2DD4BF] to-[#7C5CFF] rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
+                    className="h-full bg-gradient-to-r from-[#34D399] to-[#10B981] rounded-full transition-all duration-300"
+                    style={{ width: `${readPercent}%` }}
                   />
                 </div>
               </div>
             </GlassCard>
           </Reveal>
 
-          {/* Ayah Display */}
+          {/* Ayah Pages Display */}
           <Reveal index={2}>
             <div className="flex-1 overflow-y-auto pr-2">
-              {currentAyah ? (
-                <GlassCard className="p-6 mb-4">
-                  <div className="text-center">
-                    {/* Ayah Number */}
-                    <div className="flex items-center justify-center gap-3 mb-4">
-                      <Button
-                        variant="ghost"
-                        icon={ChevronRight}
-                        onClick={goToPrevAyah}
-                        disabled={false}
-                        className="h-10 w-10 p-0"
-                        aria-label="الآية السابقة"
-                      >
-                        <span className="sr-only">الآية السابقة</span>
-                      </Button>
-                      <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#2DD4BF]/10 text-[#2DD4BF] font-mono text-2xl font-bold">
-                        {currentAyah.number}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        icon={ChevronLeft}
-                        onClick={goToNextAyah}
-                        disabled={false}
-                        className="h-10 w-10 p-0"
-                        aria-label="الآية التالية"
-                      >
-                        <span className="sr-only">الآية التالية</span>
-                      </Button>
-                    </div>
-
-                    {/* Arabic Text */}
-                    <div className="text-2xl leading-loose text-white font-medium whitespace-pre-wrap mb-6" dir="rtl" style={{ fontFamily: "var(--font-plex-arabic)" }}>
-                      {currentAyah.text}
-                    </div>
-
-                    {/* Audio Controls — REAL integration */}
-                    <div className="flex flex-col items-center gap-4 mt-6">
-                      {/* Reciter quick-select */}
-                      <div className="w-full max-w-xs">
-                        <ReciterSelector />
-                      </div>
-
-                      {/* Play / Pause */}
-                      <div className="flex items-center gap-4">
-                        {isLoadingAudio && (
-                          <Loader2 size={22} className="animate-spin text-[#7C5CFF]" aria-label="جاري التحميل" />
-                        )}
-
-                        {!recitersLoading && selectedReciter && (
-                          <Button
-                            variant={isThisSurahPlaying ? "success" : "primary"}
-                            icon={isThisSurahPlaying ? Pause : Play}
-                            iconPosition="start"
-                            onClick={handlePlayPause}
-                            disabled={!selectedSurah}
-                            className="px-6"
-                            aria-label={isThisSurahPlaying ? "إيقاف التشغيل" : "تشغيل التلاوة"}
-                          >
-                            {isThisSurahPlaying ? "إيقاف" : isPlaying ? "استمع الآن" : "استماع"}
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* Reciter info */}
-                      {selectedReciter && (
-                        <p className="text-xs text-[#9AA0C0]">
-                          {selectedReciter.arabicName} • {selectedReciter.rewaya}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Navigation Hint */}
-                    <p className="mt-4 text-xs text-[#9AA0C0]">
-                      استخدم الأسهم للتنقل بين الآيات
-                    </p>
-                  </div>
-                </GlassCard>
-              ) : (
+              {loading || (!currentPage && ayahs.length === 0) ? (
                 <GlassCard className="p-6 text-center text-[#9AA0C0]">
                   <Loader2 size={20} className="animate-spin mx-auto mb-2" />
                   جاري تحميل الآيات...
                 </GlassCard>
+              ) : currentPage ? (
+                <GlassCard className="p-6 mb-4">
+                  {/* Mushaf page indicator */}
+                  <div className="flex items-center justify-center mb-4">
+                    <span className="px-3 py-1 rounded-full text-xs bg-[#10B981]/10 text-[#6EE7B7] font-mono">
+                      صفحة {currentPage.pageNumber} • {pageIndex + 1} من {pages.length}
+                    </span>
+                  </div>
+
+                  {/* All ayahs of this mushaf page */}
+                  <div className="space-y-5" dir="rtl">
+                    {currentPage.ayahs.map((ayah) => (
+                      <div key={`${ayah.surahId}-${ayah.number}`} className="flex items-start gap-3">
+                        <span className="flex-shrink-0 mt-1 flex h-8 min-w-8 px-1 items-center justify-center rounded-lg bg-[#10B981]/10 text-[#34D399] font-mono text-sm font-bold">
+                          {ayah.number}
+                        </span>
+                        <p
+                          className="flex-1 text-right text-2xl leading-loose text-white font-medium whitespace-pre-wrap"
+                          style={{ fontFamily: "var(--font-plex-arabic)" }}
+                        >
+                          {ayah.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Audio Controls */}
+                  <div className="flex flex-col items-center gap-3 mt-6 pt-4 border-t border-white/[0.06]">
+                    <div className="w-full max-w-xs">
+                      <ReciterSelector />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {isLoadingAudio && (
+                        <Loader2 size={22} className="animate-spin text-[#10B981]" aria-label="جاري التحميل" />
+                      )}
+                      {!recitersLoading && selectedReciter && (
+                        <Button
+                          variant={isThisSurahPlaying ? "success" : "primary"}
+                          icon={isThisSurahPlaying ? Pause : Play}
+                          iconPosition="start"
+                          onClick={handlePlayPause}
+                          disabled={!selectedSurah}
+                          className="px-6"
+                          aria-label={isThisSurahPlaying ? "إيقاف التشغيل" : "تشغيل التلاوة"}
+                        >
+                          {isThisSurahPlaying ? "إيقاف" : "استماع للسورة"}
+                        </Button>
+                      )}
+                    </div>
+                    {selectedReciter && (
+                      <p className="text-xs text-[#9AA0C0]">
+                        {selectedReciter.arabicName} • {selectedReciter.rewaya}
+                      </p>
+                    )}
+                  </div>
+                </GlassCard>
+              ) : (
+                <GlassCard className="p-6 text-center text-[#9AA0C0]">
+                  لا توجد آيات متاحة لهذه السورة
+                </GlassCard>
+              )}
+
+              {/* Page Navigation */}
+              {pages.length > 0 && (
+                <div className="flex items-center justify-between gap-4 pb-2">
+                  <Button
+                    variant="ghost"
+                    icon={ChevronRight}
+                    iconPosition="start"
+                    onClick={() => goToPage(pageIndex - 1)}
+                    disabled={pageIndex === 0}
+                  >
+                    الصفحة السابقة
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    icon={ChevronLeft}
+                    iconPosition="end"
+                    onClick={() => goToPage(pageIndex + 1)}
+                    disabled={pageIndex >= pages.length - 1}
+                  >
+                    الصفحة التالية
+                  </Button>
+                </div>
               )}
 
               {/* Surah Navigation */}
@@ -417,8 +456,8 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                   variant="ghost"
                   icon={ChevronRight}
                   iconPosition="start"
-                  onClick={goToPrevAyah}
-                  disabled={false}
+                  onClick={goToPrevSurah}
+                  disabled={(selectedSurah?.id ?? 1) <= 1}
                 >
                   السورة السابقة
                 </Button>
@@ -426,8 +465,8 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                   variant="ghost"
                   icon={ChevronLeft}
                   iconPosition="end"
-                  onClick={goToNextAyah}
-                  disabled={false}
+                  onClick={goToNextSurah}
+                  disabled={(selectedSurah?.id ?? 114) >= 114}
                 >
                   السورة التالية
                 </Button>

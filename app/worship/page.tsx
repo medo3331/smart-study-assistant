@@ -97,6 +97,29 @@ function WorshipHome() {
     [shared, showReward],
   );
 
+  /** إكمال ورد القرآن من قائمة المهام — نفس مرجع اليوم عشان مفيش صرف مزدوج. */
+  const completeQuranWird = useCallback(
+    async () => {
+      if (!shared || !shared.user || shared.user.is_anonymous) return;
+      const day = todayUtc();
+      const target = settings?.quranDailyTarget ?? 10;
+      await shared.recordEvent(
+        (d) => ({
+          ...d,
+          quran: {
+            ...d.quran,
+            dailyCount: Math.max(d.quran.dailyCount, target),
+          },
+        }),
+        "worship_quran",
+        day,
+        { activity: "quran-wird", date: day, manual: true },
+        (reward) => showReward(reward.coins),
+      );
+    },
+    [shared, showReward, settings?.quranDailyTarget],
+  );
+
   /** معالج الأزرار في «إنجازاتك اليوم». */
   const handleCompleteItem = useCallback(
     (item: DailyProgressItem) => {
@@ -112,16 +135,18 @@ function WorshipHome() {
       } else if (item.id === "sleep_adhkar") {
         // أذكار النوم حدث تتبّع بدون مكافأة مستقلة — ضمن أذكار اليوم.
         void completeDhikrTarget("sleep", 10);
+      } else if (item.id === "quran_wird") {
+        void completeQuranWird();
       }
     },
-    [completePrayer, completeDhikrTarget],
+    [completePrayer, completeDhikrTarget, completeQuranWird],
   );
 
   /* ── الحالات ────────────────────────────────────────────────────────── */
   if (!settingsLoaded || isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#7C5CFF]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#10B981]" />
         <span className="ml-3 text-[#9AA0C0]">جاري تحميل مواقيت الصلاة…</span>
       </div>
     );
@@ -133,7 +158,7 @@ function WorshipHome() {
         <p className="text-[#FB923C]">⚠️ {error ?? "تعذر تحميل بيانات العبادة."}</p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 rounded-lg bg-[#7C5CFF] px-4 py-2 text-white transition-colors hover:bg-[#6A4CE8]"
+          className="mt-4 rounded-lg bg-[#10B981] px-4 py-2 text-white transition-colors hover:bg-[#059669]"
         >
           إعادة المحاولة
         </button>
@@ -201,7 +226,7 @@ function WorshipHome() {
               ⚙️
             </Link>
           </div>
-          <p className="text-[#B69CFF]">
+          <p className="text-[#6EE7B7]">
             نسأل الله لك يومًا مباركًا مليئًا بالطاعات والتوفيق
           </p>
           <div className="flex flex-wrap items-center gap-4 text-sm text-[#9AA0C0]">
@@ -230,7 +255,7 @@ function WorshipHome() {
                 </span>
               </>
             )}
-            <span className="font-mono font-bold text-[#2DD4BF]">
+            <span className="font-mono font-bold text-[#34D399]">
               {getDailyPercent(
                 prayersDoneCount,
                 morningCompleted,
@@ -328,16 +353,16 @@ function WorshipHome() {
           <h2 className="text-xl font-bold text-white">الوصول السريع</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Link href="/worship/quran">
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#2DD4BF]/20 hover:bg-white/[0.04]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-xl text-[#2DD4BF]">
+              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#34D399]/20 hover:bg-white/[0.04]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34D399]/15 text-xl text-[#34D399]">
                   📖
                 </span>
                 <span className="text-sm font-medium text-white">القرآن</span>
               </button>
             </Link>
             <Link href="/worship/adhkar">
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#7C5CFF]/20 hover:bg-white/[0.04]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#7C5CFF]/15 text-xl text-[#7C5CFF]">
+              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#10B981]/20 hover:bg-white/[0.04]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#10B981]/15 text-xl text-[#10B981]">
                   🤲
                 </span>
                 <span className="text-sm font-medium text-white">الأذكار</span>
@@ -352,8 +377,8 @@ function WorshipHome() {
               </button>
             </Link>
             <Link href="/worship#tasbih">
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#2DD4BF]/20 hover:bg-white/[0.04]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-xl text-[#2DD4BF]">
+              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#34D399]/20 hover:bg-white/[0.04]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34D399]/15 text-xl text-[#34D399]">
                   📿
                 </span>
                 <span className="text-sm font-medium text-white">التسبيح</span>
