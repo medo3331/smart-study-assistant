@@ -166,7 +166,7 @@ $$;
 
 create or replace function public.create_community_post(
   p_kind       text default 'text',
-  p_body       text,
+  p_body       text default null,
   p_visibility text default 'public',
   p_image_url  text default null
 )
