@@ -12,7 +12,8 @@ import Link from "next/link";
 import { Send, Paperclip, ImagePlus, X, LoaderCircle, Sparkles, Crown, ShoppingBag, Clock, MessageCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
+import { ExplanationView } from "@/components/unified-ai/ExplanationView";
+import { ChatSlides, type ChatSlide } from "@/components/unified-ai/ChatSlides";
 import { FeatureGuide } from "@/components/FeatureGuide";
 import { guides } from "@/lib/guides";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
@@ -77,6 +78,12 @@ export function UnifiedChat({
   const [renameValue, setRenameValue] = useState("");
   const [studyMode, setStudyMode] = useState<"explain" | "quiz" | "summarize" | "review">("explain");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // 📊 شرائح الشات — لوحة واحدة مفتوحة في المرة (index = رقم رسالة المساعد).
+  const [slidesPanel, setSlidesPanel] = useState<{ index: number; loading: boolean; topic?: string; slides?: ChatSlide[] } | null>(null);
+  // 🔊 الشرح الصوتي — مقاطع Orpheus بتتشغّل بالترتيب، والزر بيبوّظ الكل.
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
+  const audioRefs = useRef<HTMLAudioElement[]>([]);
+  const speakTokenRef = useRef(0);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -154,6 +161,83 @@ export function UnifiedChat({
     if (conversationId === id) newChat();
     loadConversations();
   }, [conversationId, newChat, loadConversations]);
+
+  const stopSpeech = useCallback(() => {
+    audioRefs.current.forEach((a) => a.pause());
+    audioRefs.current = [];
+    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    setSpeakingIdx(null);
+  }, []);
+
+  // 🔊 استماع للشرح — /api/voice/speak بيرجّع إما ملف صوتي (ElevenLabs) أو
+  //    JSON {segments} (Groq Orpheus — حد 200 حرف/طلب) وبنشغّل المقاطع بالترتيب.
+  const speakAnswer = useCallback(async (index: number, answer: string) => {
+    if (speakingIdx === index) { stopSpeech(); return; }
+    stopSpeech();
+    const token = ++speakTokenRef.current;
+    setSpeakingIdx(index);
+    try {
+      const res = await fetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: answer }),
+      });
+      if (!res.ok) throw new Error("tts-failed");
+      const ct = res.headers.get("content-type") || "";
+      const play = async (src: Blob | string) => {
+        if (speakTokenRef.current !== token) return;
+        const url = typeof src === "string"
+          ? src
+          : URL.createObjectURL(src);
+        const audio = new Audio(url);
+        audioRefs.current.push(audio);
+        await new Promise<void>((resolve) => {
+          audio.onended = () => resolve();
+          audio.onerror = () => resolve();
+          // ⏹ الإيقاف اليدوي (pause) لازم يفض الحلقة المعلّقة — من غيرها الـ await يفضل مستني للأبد.
+          audio.onpause = () => resolve();
+          void audio.play().catch(() => resolve());
+        });
+        if (typeof src !== "string") URL.revokeObjectURL(url);
+      };
+      if (ct.includes("application/json")) {
+        const data = (await res.json()) as { segments?: string[] };
+        for (const seg of data.segments ?? []) {
+          if (speakTokenRef.current !== token) return;
+          const bytes = Uint8Array.from(atob(seg), (c) => c.charCodeAt(0));
+          await play(new Blob([bytes], { type: "audio/wav" }));
+        }
+      } else {
+        await play(await res.blob());
+      }
+    } catch {} finally {
+      if (speakTokenRef.current === token) setSpeakingIdx(null);
+    }
+  }, [speakingIdx, stopSpeech]);
+
+  // 📊 شرائح من جواب المساعد — نفس خط /dashboard/slides بس جوه الشات.
+  const generateSlides = useCallback(async (index: number, answer: string) => {
+    if (slidesPanel?.index === index && !slidesPanel.loading) { setSlidesPanel(null); return; }
+    setSlidesPanel({ index, loading: true });
+    const topic = (
+      answer.match(/^#{1,6}\s*(.+)$/m)?.[1] ||
+      answer.split("\n").find((l) => l.trim()) ||
+      "شرح"
+    ).replace(/[*#>_]/g, "").trim().slice(0, 150);
+    try {
+      const res = await fetch("/api/generate-slides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, source: answer.slice(0, 6000) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const slides = (data?.data?.slides ?? []) as ChatSlide[];
+      setSlidesPanel(res.ok && Array.isArray(slides) && slides.length > 0 ? { index, loading: false, topic, slides } : { index, loading: false, slides: [] });
+    } catch {
+      setSlidesPanel({ index, loading: false, slides: [] });
+    }
+  }, [slidesPanel]);
+
   const send = async () => {
     const text = input.trim();
     if (!text && !attachment) return;
@@ -447,7 +531,7 @@ export function UnifiedChat({
               {msg.role === "user" ? (
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
-                <MarkdownRenderer>{msg.content}</MarkdownRenderer>
+                <ExplanationView content={msg.content} />
               )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">?? {msg.attachmentName}</span>
@@ -476,6 +560,28 @@ export function UnifiedChat({
                     )
                   )}
                 </div>
+              )}
+              {/* 📊/🔊 أدوات الشرح — بس للأجوبة الطويلة (مش رسالة الترحيب) */}
+              {msg.role === "assistant" && msg.content.length > 120 && (
+                <>
+                  <div className="mt-2 flex flex-wrap gap-2 border-t border-[var(--rule)] pt-2">
+                    <button type="button" onClick={() => generateSlides(i, msg.content)} className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-[var(--rule)] text-ink-soft hover:bg-paper-3 transition">
+                      {slidesPanel?.index === i && slidesPanel.loading ? "⏳ جاري التوليد…" : slidesPanel?.index === i ? "✕ إخفاء الشرائح" : "📊 شرائح"}
+                    </button>
+                    <button type="button" onClick={() => speakAnswer(i, msg.content)} className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-[var(--rule)] text-ink-soft hover:bg-paper-3 transition">
+                      {speakingIdx === i ? "⏹ إيقاف" : "🔊 استمع"}
+                    </button>
+                  </div>
+                  {slidesPanel?.index === i && slidesPanel.loading && (
+                    <p className="mt-1 text-[11px] text-ink-soft">جاري توليد الشرائح من الشرح…</p>
+                  )}
+                  {slidesPanel?.index === i && !slidesPanel.loading && (slidesPanel.slides?.length ?? 0) === 0 && (
+                    <p className="mt-1 text-[11px] text-rose-600">تعذر توليد الشرائح — جرب تاني.</p>
+                  )}
+                  {slidesPanel?.index === i && (slidesPanel.slides?.length ?? 0) > 0 && (
+                    <ChatSlides topic={slidesPanel.topic ?? ""} slides={slidesPanel.slides!} />
+                  )}
+                </>
               )}
             </div>
           </div>
