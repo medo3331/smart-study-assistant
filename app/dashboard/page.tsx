@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import MagicWheelDashboard from "@/components/MagicWheelDashboard";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { WelcomeCard } from "./components/WelcomeCard";
 import { TodayPlanCard, DailyMissionsCard, WeeklyProgressCard, CompanionStatusCard } from "@/components/DashboardExtraCards";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -52,6 +52,7 @@ import { StatCards } from "./components/StatCards";
 import { UserQrCard } from "./components/UserQrCard";
 import { CurrentStepCard } from "./components/CurrentStepCard";
 import { PersonalAssistant } from "./components/PersonalAssistant";
+import { NextBestAction, type NextBestActionItem } from "./components/NextBestAction";
 import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
@@ -1179,6 +1180,77 @@ export default function DashboardPage() {
     }
   };
 
+  const nextBestAction: NextBestActionItem | null = (() => {
+    if (isEmergencyMode && currentTaskForCoach && !currentTaskForCoach.isCompleted) {
+      return {
+        key: "emergency",
+        eyebrow: "وضع الطوارئ",
+        title: `كمّل ${uiText.stepPrefix} ${currentDayNumber.toLocaleString("ar-EG")}: ${currentTaskForCoach.topic}`,
+        description: "الخطة شغّالة — خطوة النهارده أهم من أي إحصائية.",
+        cta: "كمّل الخطوة",
+      };
+    }
+    if (currentTaskForCoach && !currentTaskForCoach.isCompleted) {
+      return {
+        key: "lesson",
+        eyebrow: "درس غير مكتمل",
+        title: `كمّل ${uiText.stepPrefix} ${currentDayNumber.toLocaleString("ar-EG")}: ${currentTaskForCoach.topic}`,
+        description: "خطوتك الجاية في خطة المذاكرة.",
+        cta: "كمّل الدرس",
+      };
+    }
+    if (reviewFlashcardsCount > 0) {
+      return {
+        key: "review",
+        eyebrow: "مراجعة",
+        title: `راجع ${reviewFlashcardsCount.toLocaleString("ar-EG")} بطاقة محتاجة تركيز`,
+        description: "المراجعة المتباعدة أهم من درس جديد دلوقتي.",
+        cta: "ابدأ المراجعة",
+      };
+    }
+    if (days.length === 0) {
+      return {
+        key: "new-student",
+        eyebrow: "خطوة أولى",
+        title: "أنشئ خطتك الأولى",
+        description: "اختار المادة والمستوى، وإحنا نرتبلك الأيام.",
+        cta: "ابدأ الإعداد",
+      };
+    }
+    if (authUser) {
+      return {
+        key: "diagnostic",
+        eyebrow: "اقتراح",
+        title: "اعمل تشخيص سريع",
+        description: "أسئلة قليلة — خطتك تتظبط على أساس النتيجة.",
+        cta: "افتح التشخيص",
+      };
+    }
+    return null;
+  })();
+
+  const handleNextBestAction = (key: string) => {
+    if (key === "new-student") {
+      router.push("/dashboard/create");
+      return;
+    }
+    if (key === "diagnostic") {
+      router.push("/diagnostic");
+      return;
+    }
+    if (key === "review") {
+      handleOpenAiAssistant();
+      return;
+    }
+    const el = document.getElementById(`day-${currentDayNumber}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const details = document.querySelector("details") as HTMLDetailsElement | null;
+    if (details && !details.open) details.open = true;
+  };
+
   const sortedActivityDates = Object.keys(activityLog).sort();
   const lastActiveDateKey = sortedActivityDates.length > 0 ? sortedActivityDates[sortedActivityDates.length - 1] : null;
   const daysSinceLastActivity = lastActiveDateKey
@@ -1435,23 +1507,25 @@ export default function DashboardPage() {
         </div>
       </div>
 
-        {/* ── V2: greeting + profile summary ── */}
-        <div className="flex items-center gap-3 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4">
-          <ProfileAvatar
-            initial={railAccountFromUser(authUser)?.avatarInitial ?? "؟"}
-            name={railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
-            size={48}
-          />
-          <div className="min-w-0">
-            <p className="text-sm text-[var(--color-text-muted)]">أهلاً بعودتك 👋</p>
-            <p className="text-base font-semibold text-[var(--color-text-primary)] truncate">
-              {railAccountFromUser(authUser)?.displayName ?? "مستخدم"}
-            </p>
-          </div>
-        </div>
+        <WelcomeCard
+          initial={railAccountFromUser(authUser)?.avatarInitial ?? "؟"}
+          name={displayName}
+          streak={streak}
+          completedCount={completedCount}
+          totalSteps={days.length}
+          isNew={days.length === 0}
+          isLagging={showLagWarning}
+        />
 
 
       <div className="max-w-6xl mx-auto space-y-10">
+        <div className="dashboard-entrance" style={{ animationDelay: "0ms" }}>
+          <NextBestAction
+            action={nextBestAction}
+            onAction={handleNextBestAction}
+            onOpenAi={handleOpenAiAssistant}
+          />
+        </div>
         {isPrimary && primaryDashboardSafe ? (
           <div className="space-y-6">
             {primaryDashboardSafe}
