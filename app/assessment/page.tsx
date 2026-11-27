@@ -29,6 +29,7 @@ import {
   isPersona,
   readPendingChoice,
 } from "@/lib/user-persona";
+import { personaToRole, roleHome, safeNext } from "@/lib/auth-roles";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import {
   CURRICULUM_MAX_FOCUS_TOPIC_CHARS,
@@ -39,6 +40,11 @@ import {
   type CurriculumLevel,
 } from "@/lib/curriculum/types";
 type LearningStyle = "practical" | "visual" | "academic";
+
+function currentNext(): string {
+  if (typeof window === "undefined") return "";
+  return safeNext(new URLSearchParams(window.location.search).get("next"), "");
+}
 type SkillLevel = "beginner" | "intermediate" | "advanced";
 type Pace = "relaxed" | "standard" | "intensive";
 
@@ -168,6 +174,9 @@ export default function AssessmentPage() {
   const [uniYear, setUniYear] = useState<number | null>(null);
   // Auto-resolved subjects (live from curricula→subjects; never hardcoded)
   const [subjectsAuto, setSubjectsAuto] = useState<string[]>([]);
+  // نظام الأسيسمنت السريع — كل مواد المستخدم بتتحفظ في البروفايل مرة واحدة
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [savingProfile, setSavingProfile] = useState(false);
   // EPIC 1 — Multi-profile integration (max 3/account; 1 Active profile)
   const profileState = useProfileState(defaultProfileForUser(persona));
 
@@ -182,13 +191,14 @@ export default function AssessmentPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, education_track_id, subject").eq("id", user.id).maybeSingle();
+        const { data: p } = await supabase.from("profiles").select("persona, student_level, education_stage_id, education_grade_id, education_track_id, subject, subjects").eq("id", user.id).maybeSingle();
         if (p) {
           if (p.persona && isPersona(p.persona)) setPersona(p.persona);
           if (p.student_level) setStudentLevel(p.student_level as StudentLevel);
           if (p.education_stage_id) { setEduStageId(p.education_stage_id); }
           if (p.education_grade_id) { setEduGradeId(p.education_grade_id); }
           if (p.education_track_id) { setEduTrackId(p.education_track_id); }
+          if (Array.isArray(p.subjects) && p.subjects.length) { setSelectedSubjects(p.subjects as string[]); }
           if (p.subject) { setSubject(p.subject); setStep("quiz"); } // sec 6: skip subject if already set
         }
         // University-branch context (separate guarded read: columns exist after step-2 SQL)
@@ -273,7 +283,9 @@ export default function AssessmentPage() {
         }
         if (ids.length === 0) { setSubjectsAuto([]); return; }
         const { data: subs } = await supabase.from("subjects").select("name").in("curriculum_id", ids);
-        setSubjectsAuto(((subs ?? []) as { name: string }[]).map((s) => s.name));
+        const names = ((subs ?? []) as { name: string }[]).map((s) => s.name);
+        setSubjectsAuto(names);
+        setSelectedSubjects((prev) => (prev.length > 0 ? prev : names));
       } catch { setSubjectsAuto([]); }
     })();
   }, [eduStageId, eduGradeId, eduTrackId, gradesDB, persona, stagesDB, supabase]);
@@ -375,7 +387,38 @@ export default function AssessmentPage() {
     return anonData.user;
   }
 
-  async function saveProfile(userId: string) {
+  function toggleSubject(name: string) {
+    setSelectedSubjects((prev) => (prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]));
+  }
+
+  function collectSubjects(): string[] {
+    const primary = subject.trim();
+    return Array.from(new Set([...selectedSubjects, ...(primary ? [primary] : [])]));
+  }
+
+  /* المسار السريع: حفظ البروفايل بمواده ومرحلته مرة واحدة — من غير توليد منهج */
+  async function finishProfileSetup() {
+    if (savingProfile) return;
+    setSavingProfile(true);
+    setSaveError(null);
+    try {
+      const currentUser = await resolveCurrentUser();
+      const onboardedAtIso = new Date().toISOString();
+      await saveProfile(currentUser.id, { onboarded_at: onboardedAtIso });
+      /* مزامنة الـ metadata (advisory، نفس نمط onboarding) عشان الـ proxy يوجّه صح */
+      void supabase.auth
+        .updateUser({ data: { role: persona === "grad" ? "graduate" : persona, onboarded_at: onboardedAtIso } })
+        .then(({ error }) => { if (error) console.error("metadata sync (non-blocking):", error.message); });
+      clearPendingChoice();
+      window.location.href = currentNext() || roleHome(personaToRole(persona) ?? "student");
+    } catch (error) {
+      console.error("Failed to save profile:", error);
+      setSaveError(locale === "ar" ? "حصل خطأ أثناء تجهيز البروفايل. جرّب تاني." : "Couldn't save your profile. Try again.");
+      setSavingProfile(false);
+    }
+  }
+
+  async function saveProfile(userId: string, extra: Record<string, unknown> = {}) {
     const { data: existingProfile } = await supabase
       .from("profiles")
       .select("id")
@@ -390,6 +433,7 @@ export default function AssessmentPage() {
       student_level: persona === "student" ? studentLevel : null,
       field,
       subject,
+      subjects: collectSubjects(),
       education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
       education_grade_id: persona === "student" && !isUni ? (eduGradeId ?? null) : null,
       education_track_id: persona === "student" && !isUni ? (eduTrackId ?? null) : null,
@@ -398,12 +442,12 @@ export default function AssessmentPage() {
     };
 
     if (existingProfile) {
-      const { error } = await supabase.from("profiles").update(personaFields).eq("id", userId);
+      const { error } = await supabase.from("profiles").update({ ...personaFields, ...extra }).eq("id", userId);
       if (error) throw error;
     } else {
       const { error } = await supabase
         .from("profiles")
-        .insert({ id: userId, xp: 0, streak: 1, theme: "amber", ...personaFields });
+        .insert({ id: userId, xp: 0, streak: 1, theme: "amber", ...personaFields, ...extra });
       if (error) throw error;
     }
   }
@@ -888,6 +932,27 @@ export default function AssessmentPage() {
                 {persona === "student" && subjectsAuto.length > 0 && <p className="text-[11px] text-ink-soft mt-1.5">من قاعدة البيانات — تُعدَّل عبر SQL بدون كود.</p>}
               </div>
 
+              {/* نظام الأسيسمنت السريع — كل موادك بتتحفظ في البروفايل مرة واحدة */}
+              {persona === "student" && subjectsAuto.length > 0 && (
+                <div>
+                  <p className="field-label">{locale === "ar" ? "كل موادك — بتتحفظ في بروفايلك مرة واحدة" : "All your subjects — saved to your profile at once"}</p>
+                  <div className="chip-row" role="list">
+                    {subjectsAuto.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => toggleSubject(name)}
+                        aria-pressed={selectedSubjects.includes(name)}
+                        className={`chip transition ${selectedSubjects.includes(name) ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                      >
+                        <span aria-hidden="true">{selectedSubjects.includes(name) ? "✓ " : "+ "}</span>{name}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-ink-soft mt-1.5">{locale === "ar" ? "تقدر تعدّل التفضيلات دي في أي وقت بعد كده." : "You can edit these preferences anytime later."}</p>
+                </div>
+              )}
+
               {/* نوع الخطة — محور قديم موروث، بيأثر على نصوص الواجهة
                   (خطة المذاكرة / مراحل التنفيذ...) مش على المحتوى. */}
               <div>
@@ -910,13 +975,24 @@ export default function AssessmentPage() {
                 </div>
               </div>
 
-              <button
-                onClick={() => subject.trim() && setStep("curriculum")}
-                disabled={!subject.trim()}
-                className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                كمّل لتحديد المنهج
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={() => subject.trim() && setStep("curriculum")}
+                  disabled={!subject.trim()}
+                  className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  كمّل لتحديد المنهج
+                </button>
+                <button
+                  type="button"
+                  onClick={finishProfileSetup}
+                  disabled={isNextDisabled || savingProfile}
+                  className="btn btn-quiet btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {savingProfile ? (locale === "ar" ? "جاري تجهيز بروفايلك…" : "Preparing your profile…") : locale === "ar" ? "⚡ جهّز بروفايلي وادخل" : "⚡ Save my profile & enter"}
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-soft m-0">{locale === "ar" ? "الزرار التاني بيجهّز بروفايلك بموادك ومرحلتك على طول — ونبني المنهج بعدين متى ما حبيت." : "The second button sets up your profile with your subjects and stage right away — build a curriculum later anytime."}</p>
             </motion.div>
           )}
 
