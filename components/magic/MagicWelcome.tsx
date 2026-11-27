@@ -63,10 +63,22 @@ export function MagicWelcome() {
 
   return (
     <div className="flex items-start gap-3 rounded-[var(--r-lg)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4">
-      <MagicAvatar size="md" />
+      <Link
+        href="/chat"
+        aria-label="افتح المساعد واسأل Magic"
+        className="shrink-0 rounded-full p-1 -m-1 transition hover:bg-[var(--color-surface-2)] active:scale-95"
+      >
+        <MagicAvatar size="lg" />
+      </Link>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-[var(--color-text-primary)]">{g.greeting}</p>
         <p className="mt-0.5 text-xs text-[var(--color-text-muted)] leading-relaxed">{g.sub}</p>
+        <Link
+          href="/chat"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90 active:scale-95"
+        >
+          اسأل Magic ⚡
+        </Link>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           {g.suggestions.map((s) => (
             <SuggestionChip key={s.id} s={s} />

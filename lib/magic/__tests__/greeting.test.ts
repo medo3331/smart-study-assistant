@@ -60,6 +60,12 @@ describe("buildMagicGreeting", () => {
     expect(g.suggestions.some((s) => s.id === "ask_magic")).toBe(true);
   });
 
+  it("اسأل Magic بيفتح صفحة المساعد الموحد", () => {
+    const g = buildMagicGreeting({ ...base, workspaceFiles: 0 });
+    const ask = g.suggestions.find((s) => s.id === "ask_magic");
+    expect(ask?.href).toBe("/chat");
+  });
+
   it("ساعة خارج النطاق متكسّرش الحاجة", () => {
     const g = buildMagicGreeting({ ...base, hour: 99 });
     expect(g.greeting).toBeTruthy();
