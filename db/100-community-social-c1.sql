@@ -22,6 +22,45 @@
 -- ===========================================================================
 
 -- ----------------------------------------------------------------------------
+-- 0) user_blocks — bootstrap مستقل (الجدول معرّف أصلًا في db/94-user-blocks.sql
+--    لكنه لم يُطبَّق على كل قواعد البيانات؛ نضمنه هنا عشان الملف يشتغل وحده)
+-- ----------------------------------------------------------------------------
+
+create table if not exists public.user_blocks (
+  id              uuid primary key default gen_random_uuid(),
+  blocker_id      uuid not null
+    references auth.users (id) on delete cascade,
+  blocked_id      uuid not null
+    references auth.users (id) on delete cascade,
+  created_at      timestamptz not null default now(),
+
+  unique (blocker_id, blocked_id)
+);
+
+create index if not exists idx_user_blocks_blocker
+  on public.user_blocks (blocker_id);
+
+create index if not exists idx_user_blocks_blocked
+  on public.user_blocks (blocked_id);
+
+alter table public.user_blocks enable row level security;
+
+drop policy if exists "user_blocks: insert own block" on public.user_blocks;
+create policy "user_blocks: insert own block"
+  on public.user_blocks for insert
+  with check (blocker_id = auth.uid());
+
+drop policy if exists "user_blocks: read own blocks" on public.user_blocks;
+create policy "user_blocks: read own blocks"
+  on public.user_blocks for select
+  using (blocker_id = auth.uid());
+
+drop policy if exists "user_blocks: delete own block" on public.user_blocks;
+create policy "user_blocks: delete own block"
+  on public.user_blocks for delete
+  using (blocker_id = auth.uid());
+
+-- ----------------------------------------------------------------------------
 -- 1) social_profiles — الهوية الاجتماعية لكل طالب (1:1 مع auth.users)
 -- ----------------------------------------------------------------------------
 

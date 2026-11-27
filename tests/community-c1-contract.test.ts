@@ -26,6 +26,12 @@ describe("Community C1 SQL schema contract", () => {
     }
   });
 
+  it("is self-contained: bootstraps user_blocks if db/94 was never applied", () => {
+    const bootstrap = sql.slice(0, sql.indexOf("1) social_profiles"));
+    expect(bootstrap).toContain("create table if not exists public.user_blocks");
+    expect(bootstrap).toContain("alter table public.user_blocks enable row level security");
+  });
+
   it("blocks direct writes to relation tables (no insert/update/delete policies)", () => {
     // الصداقة والمتابعة بيتكتبوا عبر RPCs security definer بس
     for (const table of ["friendships", "follows"]) {
