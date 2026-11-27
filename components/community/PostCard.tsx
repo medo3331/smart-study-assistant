@@ -104,7 +104,7 @@ export default function PostCard({
   }, [embeddedId, embeddedFailed]);
 
   // الاستطلاع
-  type PollOption = { option_id: string; option_text: string; position: number; vote_count: number; voted_by_me: boolean };
+  type PollOption = { option_id: string; option_text: string; option_position: number; vote_count: number; voted_by_me: boolean };
   const [poll, setPoll] = useState<PollOption[] | null>(null);
   useEffect(() => {
     if (post.kind !== "poll") return;

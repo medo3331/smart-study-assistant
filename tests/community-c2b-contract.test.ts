@@ -18,8 +18,8 @@ const types = read("lib/community/types.ts");
 describe("Community C2b SQL contract", () => {
   it("poll options are constrained to 2-4 positions with bounded text", () => {
     expect(sql).toContain("check (length(btrim(option_text)) between 1 and 100)");
-    expect(sql).toContain("check (position between 1 and 4)");
-    expect(sql).toContain("unique (post_id, position)");
+    expect(sql).toContain("check (option_position between 1 and 4)");
+    expect(sql).toContain("unique (post_id, option_position)");
   });
 
   it("one vote per user per poll, changeable", () => {

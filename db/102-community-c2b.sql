@@ -32,8 +32,8 @@ create table if not exists public.community_poll_options (
   id          uuid primary key default gen_random_uuid(),
   post_id     uuid not null references public.community_posts (id) on delete cascade,
   option_text text not null check (length(btrim(option_text)) between 1 and 100),
-  position    int not null check (position between 1 and 4),
-  unique (post_id, position)
+  option_position int not null check (option_position between 1 and 4),
+  unique (post_id, option_position)
 );
 
 create table if not exists public.community_poll_votes (
@@ -130,7 +130,7 @@ begin
       v_opt := btrim(coalesce(v_opt, ''));
       continue when v_opt = '' or length(v_opt) > 100;
       v_pos := v_pos + 1;
-      insert into public.community_poll_options (post_id, option_text, position)
+      insert into public.community_poll_options (post_id, option_text, option_position)
       values (v_post, v_opt, v_pos);
     end loop;
     -- لازم خيارين صالحين على الأقل بعد التنظيف
@@ -214,7 +214,7 @@ $$;
 
 create or replace function public.get_poll_results(p_post_id uuid)
 returns table (
-  option_id uuid, option_text text, position int,
+  option_id uuid, option_text text, option_position int,
   vote_count bigint, voted_by_me boolean
 )
 language sql
@@ -223,7 +223,7 @@ security definer
 set search_path = public
 as $$
   select
-    o.id, o.option_text, o.position,
+    o.id, o.option_text, o.option_position,
     (select count(*) from public.community_poll_votes v where v.option_id = o.id),
     exists (select 1 from public.community_poll_votes v
             where v.option_id = o.id and v.user_id = auth.uid())
@@ -233,7 +233,7 @@ as $$
     and p.deleted_at is null
     and p.kind = 'poll'
     and public.social_can_view_post(p.author_id, p.visibility, auth.uid())
-  order by o.position asc;
+  order by o.option_position asc;
 $$;
 
 -- ----------------------------------------------------------------------------
