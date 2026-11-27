@@ -312,6 +312,16 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                       </>
                     )}
                   </p>
+
+                  {/* 🏛️ مدخل مساحة الدرس الموحدة — كل أدوات المحاضرة في مكان واحد. */}
+                  <div className="mt-2">
+                    <Link
+                      href={`/workspace/lesson/${lecture.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--rule)] px-2.5 py-1 text-xs font-bold text-ink-soft transition hover:text-ink"
+                    >
+                      🚀 افتح مساحة الدرس
+                    </Link>
+                  </div>
                 </summary>
 
                 {/* 🎧 استوديو المحاضرة — صوت متزامن مع التفريغ والشرح. */}
