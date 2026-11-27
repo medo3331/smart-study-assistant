@@ -140,7 +140,6 @@ export const NAV_GROUPS: NavGroupDef[] = [
     icon: "aiMentor",
     items: [
       { id: "ai_chat", icon: "aiMentor", label: "المعلم الشخصي", latin: "AI Mentor", href: "/chat" },
-      { id: "agents", icon: "agents", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "ai", icon: "assistant", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "create", icon: "create", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
     ],
@@ -154,10 +153,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "planner", icon: "planner", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "calendar", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "missions", icon: "missions", label: "المهام اليومية", latin: "Daily Missions", href: "/missions" },
-      { id: "notes", icon: "notes", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 📓 دفتر الملاحظات — صفحة كاملة (/notes)، مش قسم في الداشبورد.
-      // الاتنين مقصودين: «الملاحظات» بتوديك لكارت الملاحظات المختصر جوه
-      // الداشبورد، و«دفتر الملاحظات» بتفتح المحرر نفسه بخط اليد.
+      // 📓 دفتر الملاحظات — الصفحة الكاملة (/notes) لتحرير الملاحظات بخط اليد.
       { id: "notebook", icon: "notes", label: "دفتر الملاحظات", latin: "Notebook", href: "/notes" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
       { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
