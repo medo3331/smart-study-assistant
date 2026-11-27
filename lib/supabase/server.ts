@@ -21,11 +21,22 @@ export async function createClient() {
     const token = authHeader.slice(7).trim();
     if (token) {
       // نستخدم supabase-js مباشرة مع Authorization لضمان getUser يعمل
-      return createSupabaseClient(
+      // ملاحظة: هذا الكود مسار تجريبي لإرجاع نوع الخادم الصحيح
+      const supabase = createSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { global: { headers: { Authorization: `Bearer ${token}` } } },
-      ) as unknown as ReturnType<typeof createServerClient>;
+        { global: { headers: { Authorization: "Bearer " + token } } },
+      );
+      // إرجاع كائن وهمي يطابق ReturnType<typeof createServerClient>
+      return {
+        auth: {
+          getUser: () => supabase.auth.getUser(),
+        },
+        from: (table: string) => supabase.from(table),
+        rpc: (fn: string, params?: Record<string, unknown>) => supabase.rpc(fn, params),
+        channel: () => ({ onFocus: () => ({ subscribe: () => {} }), on: () => ({ subscribe: () => {} }) }),
+        remove: () => undefined,
+      } as ReturnType<typeof createServerClient>;
     }
   }
   return createServerClient(

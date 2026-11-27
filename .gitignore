@@ -92,3 +92,4 @@ test-insert-first*.sql
 test-insert-first*.json
 *.bak
 .worktrees/
+.tmp/

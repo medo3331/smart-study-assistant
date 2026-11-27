@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { ArrowLeft } from "lucide-react";
 import MagicWheelDashboard from "@/components/MagicWheelDashboard";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -13,7 +14,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import type { CoachTask } from "@/components/AIStudyCoach";
-import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
 import { MagicAvatar } from "@/components/MagicAvatar";
 import { awardCoins } from "@/lib/shop/shop-data";
@@ -35,7 +35,25 @@ import { HeroSection } from "./components/HeroSection";
 import MagIdCard from "@/components/MagIdCard";
 import SubscriptionQuotaCard from "./components/SubscriptionQuotaCard";
 import { StudySections } from "./components/StudySections";
-import { AnalyticsSection } from "./components/AnalyticsSection";
+
+/* ⚡ الأداء — تقسيم الحزمة (bundle):
+   التحليلات (recharts) والمودالات الأربعة والبوس كانت بتتصدّر مع أول
+   حزمة للداشبورد رغم إنها تحتاج تفاعل المستخدم عشان تظهر:
+     • AnalyticsSection — جوه <details> مقفول افتراضيًا → بتترندر لما يتفتح بس.
+     • Leaderboard/Shop/ParentReport/WeeklySummary — كلهم `if (!isOpen) return null`
+       فمفيش فقدان أنيميشن عند التحميل الكسول؛ بنركّبهم عند أول فتح ونسيبهم
+       مركّبين بعد كده عشان الفتح/الغلق التاني يبقى فوري.
+     • BossFight — بيتفتح بعد تحدي فصل كامل.
+   كلهم `ssr: false` لأنهم واجهات تفاعلية بحتة (مفيش محتوى للـ SEO جوّاهم). */
+const AnalyticsSection = dynamic(() => import("./components/AnalyticsSection").then((m) => m.AnalyticsSection), {
+  ssr: false,
+  loading: () => <div className="h-64 animate-pulse rounded-[var(--r-sm)] border border-rule bg-paper-3" aria-hidden />,
+});
+const LeaderboardModal = dynamic(() => import("./components/Models/LeaderboardModal").then((m) => m.LeaderboardModal), { ssr: false, loading: () => null });
+const ShopModal = dynamic(() => import("./components/Models/ShopModal").then((m) => m.ShopModal), { ssr: false, loading: () => null });
+const ParentReportModal = dynamic(() => import("./components/Models/ParentReportModal").then((m) => m.ParentReportModal), { ssr: false, loading: () => null });
+const WeeklySummaryModal = dynamic(() => import("./components/Models/WeeklySummaryModal").then((m) => m.WeeklySummaryModal), { ssr: false, loading: () => null });
+const BossFight = dynamic(() => import("@/components/BossFight").then((m) => m.BossFight), { ssr: false, loading: () => null });
 import { useAudio } from "@/components/audio/AudioProvider";
 import { QuranSection } from "./components/QuranSection";
 import { NavRail } from "./components/NavRail";
@@ -56,6 +74,7 @@ import { PlanQuotaCard } from "@/components/PlanQuotaCard";
 import { EconomyStrip } from "./components/EconomyVisibility";
 import { DailyMicroChallenge } from "@/components/DailyMicroChallenge";
 import { ContextualNotification } from "@/components/ContextualNotification";
+import SmartNotesDiscoveryCard from "@/components/engagement/SmartNotesDiscoveryCard";
 import { TodayMissionsCard } from "./components/TodayMissionsCard";
 import { MotivationNudge } from "@/components/MotivationNudge";
 import { LightSocialComparison } from "@/components/LightSocialComparison";
@@ -72,10 +91,6 @@ import { FirstSession } from "./components/FirstSession";
 // اسم المادة، و aiDiscussBtn بقى زرار هادي جنب زرار الدرس.
 import { DEFAULT_PERSONA, getUiText, isPersona } from "@/lib/user-persona";
 import type { Persona } from "@/lib/user-persona";
-import { LeaderboardModal } from "./components/Models/LeaderboardModal";
-import {  ShopModal } from "./components/Models/ShopModal";
-import {  ParentReportModal,  } from "./components/Models/ParentReportModal";
-import {  WeeklySummaryModal } from "./components/Models/WeeklySummaryModal";
 // ًںڑ¨ خطة الطوارئ + الرأي + الجروب — كومبوننتات عامة بره مجلد الداشبورد
 import { ExamPlanCard } from "@/components/ExamPlanCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
@@ -292,6 +307,10 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, [authUser, supabase]);
+
+// 🧩 حالة فتح «مزيد من التحليلات» — rec+charts بيتحمّلوا أول ما الـ<details> يتفتح
+  //     (الكود فوق بيفتحه برمجيًا عند التنقّل من القايمة، وبيرمي toggle عادي).
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   // 9. تنبيهات تذكير الستريك
   // 🗓️ التفعيل والـ Web Push بقوا في صفحة الإعدادات (/dashboard/settings)
@@ -1635,6 +1654,9 @@ export default function DashboardPage() {
           {/* Phase 0.2 — Smart Contextual Notification (in-app only; zero DB; no push/cron) */}
           <ContextualNotification />
 
+          {/* P1-B2.2 — Smart Notes Feature Discovery (تعريف سياقي، مش إجباري) */}
+          <SmartNotesDiscoveryCard />
+
           {/* Phase 0.4 — Light Social Comparison (reuses weekly_quiz_leaderboard; no new DB) */}
           <LightSocialComparison />
 
@@ -1832,7 +1854,11 @@ export default function DashboardPage() {
           </div>
 
           {/* Phase 4: Progressive disclosure — collapsed by default, preserves id="analytics" for nav scroll. */}
-          <details id="analytics" className="scroll-mt-6 group">
+          <details
+            id="analytics"
+            className="scroll-mt-6 group"
+            onToggle={(e) => setAnalyticsOpen((e.currentTarget as HTMLDetailsElement).open)}
+          >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-sm)] border border-rule bg-paper px-4 py-3 text-sm font-semibold text-ink hover:bg-paper-3 transition [&::-webkit-details-marker]:hidden marker:content-none">
               <span>مزيد من التحليلات</span>
               <span className="flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-paper-3 text-ink-soft transition group-open:rotate-180" aria-hidden>
@@ -1840,6 +1866,8 @@ export default function DashboardPage() {
               </span>
             </summary>
             <div className="mt-4">
+              {/* recharts بيتحمّلوا أول ما يتفتح القسم — قبل كده مكانهم فاضي بحجم ثابت. */}
+              {analyticsOpen && (
               <AnalyticsSection
                 analyticsRange={analyticsRange}
                 onChangeRange={setAnalyticsRange}
@@ -1851,6 +1879,7 @@ export default function DashboardPage() {
                 heatmapCells={heatmapCells}
                 heatmapColors={heatmapColors}
               />
+              )}
             </div>
           </details>
         </div>
@@ -1980,41 +2009,50 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <LeaderboardModal
-        isOpen={showLeaderboard}
-        onClose={() => setShowLeaderboard(false)}
-        isLoadingLeaderboard={isLoadingLeaderboard}
-        leaderboardEntries={leaderboardEntries}
-        themeStyles={themeStyles}
-      />
+      {/* ✂️ المودالات بتتركّب بس لما تتفتح — كودها في chunks منفصلة. */}
+      {showLeaderboard && (
+        <LeaderboardModal
+          isOpen={showLeaderboard}
+          onClose={() => setShowLeaderboard(false)}
+          isLoadingLeaderboard={isLoadingLeaderboard}
+          leaderboardEntries={leaderboardEntries}
+          themeStyles={themeStyles}
+        />
+      )}
 
-      <ShopModal
-        isOpen={showShopModal}
-        onClose={() => setShowShopModal(false)}
-        xp={xp}
-        canUnlockNextDayEarly={canUnlockNextDayEarly}
-        nextLockedDay={nextLockedDay}
-        uiText={uiText}
-        onUnlockNextDayEarly={handleUnlockNextDayEarly}
-      />
+      {showShopModal && (
+        <ShopModal
+          isOpen={showShopModal}
+          onClose={() => setShowShopModal(false)}
+          xp={xp}
+          canUnlockNextDayEarly={canUnlockNextDayEarly}
+          nextLockedDay={nextLockedDay}
+          uiText={uiText}
+          onUnlockNextDayEarly={handleUnlockNextDayEarly}
+        />
+      )}
 
-      <ParentReportModal
-        isOpen={showParentReport}
-        onClose={() => setShowParentReport(false)}
-        config={config}
-        level={level}
-        xp={xp}
-        days={days}
-        themeStyles={themeStyles}
-        onShareReport={handleShareReport}
-      />
+      {showParentReport && (
+        <ParentReportModal
+          isOpen={showParentReport}
+          onClose={() => setShowParentReport(false)}
+          config={config}
+          level={level}
+          xp={xp}
+          days={days}
+          themeStyles={themeStyles}
+          onShareReport={handleShareReport}
+        />
+      )}
 
-      <WeeklySummaryModal
-        isOpen={showWeeklySummary}
-        onClose={() => setShowWeeklySummary(false)}
-        weeklySummaryData={weeklySummaryData}
-        themeStyles={themeStyles}
-      />
+      {showWeeklySummary && weeklySummaryData && (
+        <WeeklySummaryModal
+          isOpen={showWeeklySummary}
+          onClose={() => setShowWeeklySummary(false)}
+          weeklySummaryData={weeklySummaryData}
+          themeStyles={themeStyles}
+        />
+      )}
 
       {activeBossChapter !== null && (
         <BossFight

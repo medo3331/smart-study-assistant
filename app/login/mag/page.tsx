@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
-import { openSupport } from "@/components/SupportWidget";
+import { openSupport } from "@/lib/support/open-support";
 
 function safeNext(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/dashboard";

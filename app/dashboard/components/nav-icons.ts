@@ -38,6 +38,7 @@ import {
   User,
   Users,
   Wallet,
+  MessageCircle,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
@@ -96,5 +97,6 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   career: Briefcase,
   report: FileText,
   support: LifeBuoy,
+  messages: MessageCircle,
   admin: ShieldCheck,
 };

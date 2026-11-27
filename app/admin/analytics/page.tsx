@@ -3,7 +3,11 @@ import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { getPlatformOverview } from "@/lib/admin/overview";
 import { isPgConfigured, pgQuery } from "@/lib/admin/pg";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard, AdminTableWrap } from "@/components/admin/ui";
-import AnalyticsCharts from "./AnalyticsCharts";
+
+/* ⚡ الأداء: recharts + تبعياتها (~360KB غير مضغوط) بتتحمّل كـ chunk منفصلة
+   بعد ما جدول الأرقام يظهر، مش مع أول بايت للصفحة. الغلاف ده Client Component
+   لأن `ssr: false` مش مسموح في مكوّن سيرفر. */
+import AnalyticsCharts from "./AnalyticsChartsLazy";
 
 export default async function AdminAnalyticsPage() {
   await requireAdminPermission("users.read");

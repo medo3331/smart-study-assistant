@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
+import Link from 'next/link';
+import { MessageCircle } from 'lucide-react';
 import FoundationRewardsBootstrap from './components/FoundationRewardsBootstrap';
 import RewardToastHost from './components/RewardToastHost';
 import AnnouncementBanner from '@/components/AnnouncementBanner';
@@ -29,6 +31,12 @@ export default async function DashboardLayout({
             <span className="text-ink-soft">— مساحة الدراسة</span>
           </div>
           <NotificationBell />
+          <Link href="/inbox" className="text-sm text-ink-soft hover:text-ink transition">
+            <span className="flex items-center gap-1.5">
+              <MessageCircle className="w-4 h-4" />
+              <span>الرسائل</span>
+            </span>
+          </Link>
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-4 pt-6">

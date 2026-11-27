@@ -8,7 +8,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
 import { ProviderRow } from "@/components/AuthProviders";
-import { openSupport } from "@/components/SupportWidget";
+import { openSupport } from "@/lib/support/open-support";
 
 type PasswordFlow = "signin" | "signup" | "forgot" | "reset";
 
