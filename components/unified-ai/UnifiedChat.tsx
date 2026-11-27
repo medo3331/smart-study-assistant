@@ -22,6 +22,7 @@ import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/un
 import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
 import { PERSONAS, isValidPersona, type AiPersonaId } from "@/lib/magic/personas";
 import { extractPlanDraft, stripPlanFence } from "@/lib/agent/plan-draft";
+import { buildChatWelcomeGreeting } from "@/lib/magic/greeting";
 import { PlanApproveCard } from "./PlanApproveCard";
 // 🎨 chips أساليب الشرح — قيم معروفة مسبقًا تطابق EXPLANATION_STYLES في السيرفر.
 const STYLE_CHIPS = [
@@ -85,7 +86,7 @@ export function UnifiedChat({
   const { locale } = useLanguage();
   const isAr = locale === "ar";
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "أهلاً! أنا مساعد Magicly الذكي 🧠 — اسألني عن أي حاجة في مذاكرتك، أو ارفع ملف/صورة وهشرحها لك. تقدر تطلب: شرح، تلخيص، اختبار سريع، أو خطة مراجعة.", },
+    { role: "assistant", content: buildChatWelcomeGreeting(null, typeof window !== "undefined" ? new Date().getHours() : 12), },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -191,7 +192,7 @@ export function UnifiedChat({
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
   const newChat = useCallback(() => {
-    setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magicly الذكي 🧠 — اسألني عن أي حاجة في مذاكرتك، أو ارفع ملف/صورة وهشرحها لك." }]);
+    setMessages([{ role: "assistant", content: buildChatWelcomeGreeting(null, new Date().getHours()) }]);
     setConversationId(null);
     setInput("");
     removeAttachment();

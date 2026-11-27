@@ -16,6 +16,7 @@ import type { CoachTask } from "@/components/AIStudyCoach";
 import { BossFight } from "@/components/BossFight";
 import { PERSONA_NAME } from "@/lib/persona";
 import { MagicAvatar } from "@/components/MagicAvatar";
+import { MagicWelcome } from "@/components/magic/MagicWelcome";
 import { awardCoins } from "@/lib/shop/shop-data";
 import { levelFromXp, XP_PER_LEVEL, STUDY_DAY_XP_REWARD } from "@/lib/shop/economy";
 
@@ -1449,6 +1450,9 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {/* ⚡ Magic — ترحيب واقتراح اليوم (Next Best Action من بيانات حقيقية) */}
+        <MagicWelcome />
 
 
       <div className="max-w-6xl mx-auto space-y-10">
