@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { ArrowLeft } from "lucide-react";
-import MagicWheelDashboard from "@/components/MagicWheelDashboard";
+import MagicWheelDashboard, { type WheelBranchId } from "@/components/MagicWheelDashboard";
 import { WelcomeCard } from "./components/WelcomeCard";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -1251,6 +1251,13 @@ export default function DashboardPage() {
     if (details && !details.open) details.open = true;
   };
 
+  const wheelActiveBranch: WheelBranchId | undefined = (() => {
+    if (!nextBestAction) return undefined;
+    if (nextBestAction.key === "review") return "ai";
+    if (nextBestAction.key === "diagnostic") return "analytics";
+    return "lesson";
+  })();
+
   const sortedActivityDates = Object.keys(activityLog).sort();
   const lastActiveDateKey = sortedActivityDates.length > 0 ? sortedActivityDates[sortedActivityDates.length - 1] : null;
   const daysSinceLastActivity = lastActiveDateKey
@@ -1504,6 +1511,7 @@ export default function DashboardPage() {
             completedSteps={completedCount}
             progressPct={overallProgress}
             currentChapter={chapters.find((c) => c.isComplete === false)?.chapterNumber ?? chapters.at(-1)?.chapterNumber ?? 1}
+            activeBranch={wheelActiveBranch}
             streak={streak}
             coursesCount={coursesCount}
             subjectBreakdown={subjectBreakdown}
