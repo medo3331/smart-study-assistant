@@ -122,11 +122,16 @@ end $$;
 
 -- ----------------------------------------------------------------------------
 -- 5) الإشعارات الاجتماعية — توسعة نوع الإشعار المسموح في الجدول الموحد
+--    NOT VALID: القيد بيتطبق على الصفوف الجديدة/المعدّلة فقط، فمش بيكسر
+--    صفوف الإشعارات القديمة بأنواع legacy (info/warning/feature).
 -- ----------------------------------------------------------------------------
 
 alter table public.notifications drop constraint if exists notifications_type_check;
 alter table public.notifications add constraint notifications_type_check
-  check (type in ('support_reply','support_status','announcement','system','social'));
+  check (
+    type in ('support_reply','support_status','announcement','system','social',
+             'info','warning','feature')
+  ) not valid;
 
 -- ----------------------------------------------------------------------------
 -- 6) دوال داخلية
