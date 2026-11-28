@@ -30,6 +30,8 @@ export interface StudentContext {
   studyField: string;
   /**                       (   profiles.learning_goal) */
   learningGoal: string;
+  /** سطر جاهز يلخّص بروفايل الطالب (مرحلة/جامعة/كلية/قسم/مواد) — بيتحقن في السياق الموثوق للـ AI. */
+  profileSummary?: string;
 }
 
 type LearningStyle = StudentContext["learningStyle"];
@@ -106,6 +108,28 @@ export function parseMode(value: unknown, latestMessage: string, intent?: ChatIn
  *                                               fallback         igration
  *                      .                                                
  */
+/* تلخيص بروفايل الطالب من الأعمدة الإضافية — مصدر واحد (profiles). */
+const PROFILE_SELECT_FIELDS = "study_field, learning_goal, stage, grade, persona, subjects, university_name, faculty_name, department_name, edu_year, education_system";
+
+function buildProfileSummary(profile: Record<string, unknown> | null | undefined): string {
+  if (!profile) return "";
+  const rows: string[] = [];
+  if (profile.persona === "student") {
+    if (profile.education_system) rows.push(`المنهج: ${profile.education_system}`);
+    if (profile.university_name) rows.push(`الجامعة: ${profile.university_name}`);
+    if (profile.faculty_name) rows.push(`الكلية: ${profile.faculty_name}`);
+    if (profile.department_name) rows.push(`القسم: ${profile.department_name}`);
+    if (profile.edu_year) rows.push(`الفرقة: ${profile.edu_year}`);
+  }
+  const subjects = Array.isArray(profile.subjects)
+    ? profile.subjects.filter((x): x is string => typeof x === "string")
+    : [];
+  if (subjects.length) rows.push(`المواد: ${subjects.join("، ")}`);
+  if (profile.study_field) rows.push(`المجال: ${profile.study_field}`);
+  if (profile.learning_goal) rows.push(`الهدف: ${profile.learning_goal}`);
+  return rows.join(" • ");
+}
+
 export async function getStudentContext(
   supabase: SupabaseClient,
   userId: string,
@@ -128,7 +152,7 @@ export async function getStudentContext(
     // ⚠️ P0 (2026-11): النسخة القديمة كانت بترجّع memories: [] هنا — يعني
     // الذاكرة كانت بتضيع في كل محادثة من غير configId (المسار الأشهر).
     const [profileResult, memoryResult] = await Promise.all([
-      supabase.from("profiles").select("study_field, learning_goal, stage, grade").eq("id", userId).maybeSingle(),
+      supabase.from("profiles").select(PROFILE_SELECT_FIELDS).eq("id", userId).maybeSingle(),
       supabase
         .from("ai_memories")
         .select("kind, value")
@@ -147,6 +171,7 @@ export async function getStudentContext(
       learningGoal: profileResult.data?.learning_goal ?? fallback.learningGoal,
       stage: profileResult.data?.stage ?? "",
       grade: profileResult.data?.grade ?? "",
+      profileSummary: buildProfileSummary(profileResult.data as Record<string, unknown> | null),
     };
   }
 
@@ -154,7 +179,7 @@ export async function getStudentContext(
     supabase.from("study_configs").select("subject").eq("id", configId).eq("user_id", userId).maybeSingle(),
     supabase.from("study_days").select("day_number, topic, learning_style, is_completed").eq("config_id", configId).eq("user_id", userId),
     supabase.from("ai_memories").select("kind, value").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
-    supabase.from("profiles").select("study_field, learning_goal, stage, grade").eq("id", userId).maybeSingle(),
+    supabase.from("profiles").select(PROFILE_SELECT_FIELDS).eq("id", userId).maybeSingle(),
   ]);
 
   const days = (daysResult.data ?? []) as Array<{ day_number: number; topic: string | null; learning_style: string | null; is_completed: boolean | null }>;
@@ -174,6 +199,7 @@ export async function getStudentContext(
     learningGoal: profileResult.data?.learning_goal ?? fallback.learningGoal,
     stage: profileResult.data?.stage ?? "",
     grade: profileResult.data?.grade ?? "",
+    profileSummary: buildProfileSummary(profileResult.data as Record<string, unknown> | null),
   };
 }
 
@@ -337,6 +363,7 @@ export function buildMagiclySystemPrompt(
       "\n- أسلوب التعلّم: " + context.learningStyle +
       (context.stage ? "\n- المرحلة: " + context.stage : "") +
       (context.grade ? "\n- الصف: " + context.grade : "") +
+      (context.profileSummary ? "\n- بروفايل الطالب: " + context.profileSummary : "") +
       "\n\n" + memorySection +
       (toolFacts.length ? "\n- نتائج الأدوات: " + toolFacts.join(" ") : "") +
       "\n\n" + STYLE_GUIDE[context.learningStyle] +

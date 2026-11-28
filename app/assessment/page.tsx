@@ -178,6 +178,8 @@ export default function AssessmentPage() {
   const [customFacultyName, setCustomFacultyName] = useState("");
   const [customDepartmentName, setCustomDepartmentName] = useState("");
   const [uniSearch, setUniSearch] = useState("");
+  const [facSearch, setFacSearch] = useState("");
+  const [eduSystem, setEduSystem] = useState("المنهج المصري");
   const [levelsDB, setLevelsDB] = useState<{ id: string; name: string; order_index: number }[]>([]);
   const [semestersDB, setSemestersDB] = useState<{ id: string; name: string }[]>([]);
   const [universityId, setUniversityId] = useState<string | null>(null);
@@ -500,6 +502,7 @@ export default function AssessmentPage() {
       field,
       subject,
       subjects: collectSubjects(),
+      education_system: persona === "student" && !isUni ? (eduSystem || "المنهج المصري") : null,
       education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
       education_grade_id: persona === "student" && !isUni ? (eduGradeId ?? null) : null,
       education_track_id: persona === "student" && !isUni ? (eduTrackId ?? null) : null,
@@ -889,6 +892,34 @@ export default function AssessmentPage() {
                     </select>
                   </div>
                   )}
+                  {eduStageId && stagesDB.find((s) => s.id === eduStageId)?.code !== "UNIVERSITY" && (
+                    <div>
+                      <p className="field-label">{locale === "ar" ? "المنهج التعليمي اللي بتذاكر منه؟" : "Your curriculum?"}</p>
+                      <div className="chip-row" role="list">
+                        <button
+                          type="button"
+                          onClick={() => setEduSystem("المنهج المصري")}
+                          aria-pressed={eduSystem === "المنهج المصري"}
+                          className={`chip transition ${eduSystem === "المنهج المصري" ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                        >
+                          🇪🇬 {locale === "ar" ? "المنهج المصري" : "Egyptian curriculum"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEduSystem("منهج دولي")}
+                          aria-pressed={eduSystem === "منهج دولي"}
+                          className={`chip transition ${eduSystem === "منهج دولي" ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
+                        >
+                          🌍 {locale === "ar" ? "منهج دولي (IG/American…)" : "International (IG/American…)"}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-ink-soft mt-1.5">
+                        {locale === "ar"
+                          ? "اقتراحات المواد بتبني على المنهج المصري حاليًا — ولو بتذاكر منهج تاني، اكتب موادك في الخطوة الجاية."
+                          : "Suggestions are based on the Egyptian curriculum — for other systems, type your subjects in the next step."}
+                      </p>
+                    </div>
+                  )}
                   {eduStageId && stagesDB.find((s) => s.id === eduStageId)?.code === "UNIVERSITY" && (
                     <div className="space-y-4">
                       <div>
@@ -962,8 +993,14 @@ export default function AssessmentPage() {
                       {universityId && !uniManual && (
                       <div>
                         <p className="field-label">{locale === "ar" ? "الكلية" : "Faculty"}</p>
+                        <input
+                          value={facSearch}
+                          onChange={(e) => setFacSearch(e.target.value)}
+                          placeholder={locale === "ar" ? "اكتب اسم كليتك للبحث…" : "Search your faculty…"}
+                          className="field text-sm w-full h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition mb-2"
+                        />
                         <div className="chip-row" role="list">
-                          {facultiesDB.filter((f) => f.university_id === universityId).map((f) => (
+                          {facultiesDB.filter((f) => f.university_id === universityId && (!facSearch.trim() || f.name.includes(facSearch.trim()))).map((f) => (
                             <button
                               key={f.id}
                               type="button"
