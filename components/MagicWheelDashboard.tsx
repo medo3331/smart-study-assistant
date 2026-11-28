@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation";
 import {
   Home, BookOpen, FolderOpen, Landmark, Sparkles,
   ShoppingBag, BarChart3, Settings, GraduationCap, Bell, Flame,
-  Volume2, VolumeX,
+  Volume2, VolumeX, Sun, Moon,
 } from "lucide-react";
 import {
   useTheme,
@@ -65,6 +65,24 @@ const BRANCH_COLORS = [
 
 /* مواضع الأفرع التسعة على الدائرة (نفس هندسة البريف المعتمد). */
 const ANGLES_DEG = [270, 230, 190, 150, 110, 70, 30, -10, -50];
+
+/* Day/Night mode: paired light/dark themes - the button swaps between them and
+   remembers the last theme used in each mode (magicly_theme_mates). */
+const LIGHT_THEMES: ReadonlySet<ThemeId> = new Set<ThemeId>(["indigo-light", "mono"]);
+const THEME_MATES_KEY = "magicly_theme_mates";
+type ThemeMates = { light: ThemeId; dark: ThemeId };
+const DEFAULT_MATES: ThemeMates = { light: "indigo-light", dark: "colorful" };
+function readThemeMates(): ThemeMates {
+  if (typeof window === "undefined") return DEFAULT_MATES;
+  try {
+    const raw = window.localStorage.getItem(THEME_MATES_KEY);
+    if (!raw) return DEFAULT_MATES;
+    const parsed = JSON.parse(raw) as Partial<ThemeMates>;
+    return { light: parsed.light ?? DEFAULT_MATES.light, dark: parsed.dark ?? DEFAULT_MATES.dark };
+  } catch {
+    return DEFAULT_MATES;
+  }
+}
 
 const WHEEL_SOUND_KEY = "magicly_wheel_sound";
 const wheelSoundSubscribers = new Set<() => void>();
@@ -298,13 +316,13 @@ function BranchFace({
         {branch.icon}
       </span>
       <span
-        className="px-1 text-center text-[0.56rem] font-extrabold leading-tight tracking-wide md:text-[0.62rem]"
+        className="mw-node-label px-1 text-center text-[0.56rem] font-extrabold leading-tight tracking-wide md:text-[0.62rem]"
         style={{ color }}
       >
         {branch.label}
       </span>
       <span
-        className="font-mono text-[0.42rem] uppercase tracking-[0.15em] md:text-[0.45rem]"
+        className="mw-node-latin font-mono text-[0.42rem] uppercase tracking-[0.15em] md:text-[0.45rem]"
         style={{ color: `color-mix(in srgb, ${color} 70%, white 8%)` }}
       >
         {branch.latin}
@@ -386,6 +404,28 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
     }
   }, [progressPct, soundOn, startCelebration]);
 
+  const modeMateRef = useRef<ThemeMates>(DEFAULT_MATES);
+  useEffect(() => {
+    modeMateRef.current = readThemeMates();
+  }, []);
+  const isLightMode = LIGHT_THEMES.has(themeId);
+  const toggleDayNight = useCallback(() => {
+    const next: ThemeMates = { ...modeMateRef.current };
+    if (LIGHT_THEMES.has(themeId)) {
+      next.light = themeId;
+      setTheme(next.dark);
+    } else {
+      next.dark = themeId;
+      setTheme(next.light);
+    }
+    modeMateRef.current = next;
+    try {
+      window.localStorage.setItem(THEME_MATES_KEY, JSON.stringify(next));
+    } catch {
+      modeMateRef.current = next;
+    }
+  }, [themeId, setTheme]);
+
   /* 🎨 زرار الثيمات الأربعة — بيدور على MAGIC_THEME_CYCLE ويحفظ عبر
      ThemeProvider (localStorage.theme + data-theme) زي التصميم بالظبط. */
   const cycleIdx = MAGIC_THEME_CYCLE.indexOf(themeId);
@@ -463,6 +503,16 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
 
             <button
               type="button"
+              onClick={toggleDayNight}
+              className="mw-theme-btn"
+              aria-label={isLightMode ? "\u062a\u0641\u0639\u064a\u0644 \u0645\u0648\u062f \u0627\u0644\u0644\u064a\u0644" : "\u062a\u0641\u0639\u064a\u0644 \u0645\u0648\u062f \u0627\u0644\u0646\u0647\u0627\u0631"}
+            >
+              {isLightMode ? <Moon size={14} aria-hidden /> : <Sun size={14} aria-hidden />}
+              <span>{isLightMode ? "\u0644\u064a\u0644" : "\u0646\u0647\u0627\u0631"}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 const next = !soundOn;
                 setWheelSoundPref(next);
@@ -484,12 +534,12 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
           >
             <div
               className="mw-ring mw-ring-dash"
-              style={{ width: "min(65cqw, 470px)", height: "min(65cqw, 470px)" }}
+              style={{ width: "min(60cqw, 470px)", height: "min(60cqw, 470px)" }}
               aria-hidden
             />
             <div
               className="mw-ring mw-ring-dot"
-              style={{ width: "min(54cqw, 390px)", height: "min(54cqw, 390px)" }}
+              style={{ width: "min(50cqw, 390px)", height: "min(50cqw, 390px)" }}
               aria-hidden
             />
 
@@ -540,7 +590,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             <Link
               href="/"
               className="mw-center"
-              style={{ width: "min(30cqw, 160px)", height: "min(30cqw, 160px)" }}
+              style={{ width: "min(26cqw, 160px)", height: "min(26cqw, 160px)" }}
               aria-label="Magic — العودة للرئيسية"
             >
               <MagiclyGlyph className="h-10 w-12 text-[#FFB13B] drop-shadow-[0_0_12px_rgba(255,177,59,0.75)]" />
@@ -556,7 +606,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             >
               {branches.map((b, i) => {
                 const a = ANGLES_DEG[i];
-                const r = 36;
+                const r = 40;
                 const rad = ((a - 90) * Math.PI) / 180;
                 const cx = 50 + Math.sin(rad) * r;
                 const cy = 50 + Math.cos(rad) * r;
@@ -577,7 +627,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                       onOpenSettings={openSettings}
                       layout="circle"
                       delayMs={reduced ? 0 : i * 130}
-                      size="clamp(66px, 19cqw, 118px)"
+                      size="clamp(50px, 16.5cqw, 118px)"
                       highlight={b.id === activeBranch}
                     />
                   </div>
@@ -608,6 +658,21 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
               </div>
             )}
 
+            {/* ألعاب نارية مرة واحدة أول ما العجلة تتحمّل — بتشتغل مع إعادة المونت وبتقف مع Reduce Motion. */}
+            {!reduced && (
+              <div className="mw-burst mw-burst-load" aria-hidden>
+                {Array.from({ length: 10 }, (_, k) => (
+                  <span
+                    key={k}
+                    className="mw-burst-dot"
+                    style={{
+                      ["--burst-a" as string]: `${k * 36 + 18}deg`,
+                      ["--burst-d" as string]: `${950 + (k % 2) * 180}ms`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
             {celebrating && !reduced && (
               <div className="mw-burst" aria-hidden>
                 {Array.from({ length: 10 }, (_, k) => (

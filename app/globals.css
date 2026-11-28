@@ -7042,6 +7042,44 @@ html {
   container-type: inline-size;
 }
 
+/* على الحاويات الصغيرة (موبايل): نكبّت التوهج والحلقات الزايدة
+   عشان العناصر ما تتداخلش بصريًا ويقعد لكل عنصر حيّز واضح. */
+@container (max-width: 480px) {
+  .mw-node-card {
+    border-width: 2px;
+    box-shadow:
+      0 2px 10px var(--shade),
+      0 0 10px color-mix(in srgb, var(--node-c, var(--accent)) 14%, transparent);
+  }
+  .mw-node:hover .mw-node-card {
+    box-shadow:
+      0 4px 14px var(--shade-lift),
+      0 0 14px color-mix(in srgb, var(--node-c, var(--accent)) 26%, transparent);
+  }
+  .mw-center {
+    box-shadow: 0 0 36px color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+  .mw-center::before {
+    inset: -10%;
+    opacity: 0.35;
+  }
+  .mw-node-current::after {
+    inset: -4px;
+    border-width: 2px;
+  }
+}
+
+/* على الموبايل: النص هو الأولوية — نكبّر الاسم العربي ونخفي اللاتيني
+   عشان الكلام يفضل ظاهر وواضح جوه عقدة أصغر. */
+@container (max-width: 430px) {
+  .mw-node-latin {
+    display: none;
+  }
+  .mw-node-label {
+    font-size: 0.64rem;
+  }
+}
+
 .mw-ring {
   position: absolute;
   border-radius: 9999px;
@@ -7089,9 +7127,7 @@ html {
   gap: 0.25rem;
   box-shadow: 0 4px 24px var(--shade), 0 0 18px color-mix(in srgb, var(--node-c, var(--accent)) 22%, transparent);
   transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
-  animation:
-    mw-pop-in 0.65s ease-out var(--mw-delay, 0ms) both,
-    mw-float 5s ease-in-out infinite calc(var(--mw-delay, 0ms) + 1.1s);
+  animation: mw-pop-in 0.65s ease-out var(--mw-delay, 0ms) both;
 }
 .mw-node:hover .mw-node-card {
   box-shadow: 0 8px 30px var(--shade-lift), 0 0 26px color-mix(in srgb, var(--node-c, var(--accent)) 40%, transparent);
@@ -7158,7 +7194,12 @@ html {
 .mw-theme-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
 .mw-theme-btn:focus-visible { outline: 2px solid var(--accent-highlight); outline-offset: 3px; }
 
-.mw-glyph-m { animation: mw-glyph-draw 2s ease-out 0.3s forwards; }
+.mw-glyph-m {
+  animation:
+    mw-glyph-draw 2s ease-out 0.3s forwards,
+    mw-glyph-breathe 4.2s ease-in-out 2.4s infinite,
+    mw-ignite 1.15s ease-in-out 2.35s 2;
+}
 .mw-glyph-star { animation: mw-star-pulse 3s ease-in-out infinite; transform-origin: center; }
 
 @keyframes mw-rotate-dash { to { transform: rotate(360deg); } }
@@ -7169,12 +7210,8 @@ html {
 }
 @keyframes mw-rotate-dot { to { transform: rotate(-360deg); } }
 @keyframes mw-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
-@keyframes mw-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.22); }
 }
 @keyframes mw-draw { to { stroke-dashoffset: 0; } }
 @keyframes mw-pop-in {
@@ -7182,6 +7219,16 @@ html {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 @keyframes mw-glyph-draw { to { stroke-dashoffset: 0; } }
+@keyframes mw-glyph-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes mw-ignite {
+  0%, 100% { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent-highlight) 40%, transparent)); }
+  25% { filter: drop-shadow(0 0 13px #ff9d2e) drop-shadow(0 0 24px rgba(255, 77, 32, 0.55)); }
+  50% { filter: drop-shadow(0 0 8px #ffc24d); }
+  75% { filter: drop-shadow(0 0 17px #ff7a1f) drop-shadow(0 0 28px rgba(255, 177, 59, 0.5)); }
+}
 @keyframes mw-star-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.15); opacity: 0.85; }
@@ -7323,7 +7370,7 @@ html {
   transform:
     translate(-50%, -50%)
     rotate(var(--spark-a, 0deg))
-    translateX(clamp(160px, 31vw, 235px))
+    translateX(min(29cqw, 235px))
     rotate(calc(-1 * var(--spark-a, 0deg)))
     scale(0.5);
   animation: mw-sparkle-twinkle 5.1s ease-in-out var(--spark-d, 0s) infinite;
@@ -7331,11 +7378,11 @@ html {
 @keyframes mw-sparkle-twinkle {
   0%, 100% {
     opacity: 0;
-    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(clamp(160px, 31vw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(0.5);
+    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(min(29cqw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(0.5);
   }
   50% {
     opacity: 0.9;
-    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(clamp(160px, 31vw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(1);
+    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(min(29cqw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(1);
   }
 }
 
@@ -7367,7 +7414,40 @@ html {
 @keyframes mw-burst {
   0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(34px) scale(0.6); }
   15% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(clamp(170px, 32vw, 250px)) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(min(31cqw, 250px)) scale(1); }
+}
+
+/* — شريط التنقل السفلي: مسار واحد بيتحرك — الصفحات بتلف ورا بعض بالترتيب —
+   وقفة عند اللمس/الفوكس، وثبات كامل مع Reduce Motion. */
+.mw-nav-viewport {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
+.mw-nav-track {
+  animation: mw-nav-marquee 30s linear infinite;
+  will-change: transform;
+}
+.mw-bottom-nav:hover .mw-nav-track,
+.mw-bottom-nav:focus-within .mw-nav-track {
+  animation-play-state: paused;
+}
+@keyframes mw-nav-marquee {
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mw-nav-track { animation: none !important; }
 }
 
 /* احترام تقليل الحركة: لا دوران، لا طَفْو، لا رسم تدريجي — كل حاجة تثبت */
@@ -7390,6 +7470,7 @@ html {
   }
   .mw-root .mw-shimmer-band { opacity: 0 !important; }
   .mw-line { animation: none !important; stroke-dashoffset: 0 !important; }
+  .mw-glyph-m { stroke-dashoffset: 0 !important; }
   .mw-node,
   .mw-node-card,
   .mw-center,
