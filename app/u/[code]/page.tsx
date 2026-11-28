@@ -23,6 +23,7 @@ type SocialProfileData = {
   avatar_url?: string | null;
   cover_url?: string | null;
   bio?: string | null;
+  handle?: string | null;
   university?: string | null;
   faculty?: string | null;
   major?: string | null;
@@ -120,6 +121,9 @@ export default async function UserPublicPage({ params }: { params: Promise<{ cod
             </div>
             <div className="pb-1">
               <h1 className="text-xl font-extrabold">{profile.display_name ?? "طالب Magicly"}</h1>
+              {profile.handle ? (
+                <p className="mono text-xs font-semibold text-marker" dir="ltr">@{profile.handle}</p>
+              ) : null}
               <p className="mono text-xs text-ink-soft" dir="ltr">{profile.public_user_code}</p>
             </div>
           </div>

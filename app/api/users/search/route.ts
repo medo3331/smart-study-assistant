@@ -66,6 +66,7 @@ export async function GET(req: Request) {
       profiles: results.map((p: any) => ({
         profile_id: p.profile_id,
         display_name: p.display_name,
+        handle: p.handle ?? null,
         avatar_url: p.avatar_url,
         university: p.university,
         faculty: p.faculty,

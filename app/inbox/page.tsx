@@ -192,6 +192,9 @@ export default function InboxPage() {
     return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
   });
 
+  // بيانات المحادثة المفتوحة — عشان الهيدر يعرض اسم الطرف التاني مش نص عام
+  const selectedConvData = conversations.find((c) => c.id === selectedConv) ?? null;
+
   // === NEW CONVERSATION MODAL STATE ===
   const [isNewConvOpen, setIsNewConvOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState<"name" | "mag_id">("name");
@@ -214,6 +217,19 @@ export default function InboxPage() {
 
   // ريدايركت الدعم القديم (/support و/dashboard/support) بييجي بـ?category=support —
   // فنفتح تاب الدعم مباشرة من الرابط (الصفحة client فمابتقدرش تقرا searchParams سيرفر سايد).
+  useEffect(() => {
+    // تحميل المستخدم الحالي — من غيره الرسايل مابتتعرفش تميّز اتجاه المُرسل
+    (async () => {
+      try {
+        const sb = createClient();
+        const { data } = await sb.auth.getUser();
+        setUser(data.user ?? null);
+      } catch {
+        // تجاهل
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get("category");
@@ -270,7 +286,7 @@ export default function InboxPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <ui.Input
-              placeholder="ابحث عن شخص أو محادثة…"
+              placeholder="ابحث بالاسم أو @المعرف أو محادثة…"
               value={searchQuery}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
               className="pl-9"
@@ -290,9 +306,9 @@ export default function InboxPage() {
                       {u.display_name?.charAt(0) || "?"}
                     </div>
                     <div className="text-sm text-ink">{u.display_name}</div>
-                    {u.university && (
-                      <div className="text-xs text-slate-400 truncate">{u.university}</div>
-                    )}
+                    <div className="text-xs text-slate-400 truncate" dir="ltr">
+                      {u.handle ? `@${u.handle}` : (u.university ?? "")}
+                    </div>
                   </button>
                 ))}
                 {userSearchLoading && (
@@ -367,7 +383,7 @@ export default function InboxPage() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <ui.Input
-                      placeholder="ابحث عن طالب بالاسم…"
+                      placeholder="ابحث عن طالب بالاسم أو @المعرف…"
                       value={searchQuery}
                       onChange={(e) => { setSearchQuery(e.target.value); }}
                       className="pl-9"
@@ -391,9 +407,9 @@ export default function InboxPage() {
                                 {u.display_name?.charAt(0) || "?"}
                               </div>
                               <div className="text-sm text-ink">{u.display_name}</div>
-                              {u.university && (
-                                <div className="text-xs text-slate-400 truncate">{u.university}</div>
-                              )}
+                              <div className="text-xs text-slate-400 truncate" dir="ltr">
+                                {u.handle ? `@${u.handle}` : (u.university ?? "")}
+                              </div>
                             </button>
                           ))
                         ) : (
@@ -406,11 +422,11 @@ export default function InboxPage() {
                   <form onSubmit={handleMagIdLookup} className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <ui.Input
-                      placeholder="أدخل MAG ID... (private)"
+                      placeholder="MAG-XXX-XXXX"
                       value={magIdInput}
                       onChange={(e) => setMagIdInput(e.target.value)}
                       className="pl-9"
-                      type="password"
+                      dir="ltr"
                     />
                     <button
                       type="submit"
@@ -744,7 +760,9 @@ export default function InboxPage() {
                                   <button onClick={() => setSelectedConv(null)} className="p-1 rounded-lg hover:bg-paper/30">
                                     <X className="w-5 h-5 text-slate-400" />
                                   </button>
-                                  <h2 className="font-semibold text-ink flex-1">محادثة مع المستخدم</h2>
+                                  <h2 className="font-semibold text-ink flex-1 truncate">
+                                    {selectedConvData?.title ?? "محادثة"}
+                                  </h2>
                                   <ui.Badge variant="info">مفتوح</ui.Badge>
                                   <button className="p-2 rounded-lg hover:bg-paper/30 text-slate-400">
                                     <Paperclip className="w-5 h-5" />

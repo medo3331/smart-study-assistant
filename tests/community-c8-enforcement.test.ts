@@ -137,3 +137,34 @@ describe("C9 — community moderation page + AI contract", () => {
     expect(autoReply).toContain("/inbox?category=support");
   });
 });
+
+// ---------------------------------------------------------------------------
+// C10 — إصلاح عرض طوابير الإشراف + إشعار المشرفين بالبلاغات + بحث أقوى للمشرفين
+// ---------------------------------------------------------------------------
+
+describe("C10 — moderation queues fix + report notification contract", () => {
+  const listFixSql = read("db/110-moderation-list-fix.sql");
+  const modHandlers = read("lib/community/moderation-handlers.ts");
+
+  it("migration fixes every social_profiles join to use user_id", () => {
+    expect(listFixSql).toContain("create or replace function public.mod_list_reports");
+    expect(listFixSql).toContain("create or replace function public.mod_list_actions");
+    expect(listFixSql).toContain("create or replace function public.mod_list_appeals");
+    expect(listFixSql).toContain("create or replace function public.mod_list_audit");
+    // مفيش أي join على عمود id غير الموجود في social_profiles
+    expect(listFixSql).not.toMatch(/social_profiles\s+sp\d?\s+on\s+sp\d?\.id\s*=/);
+    expect((listFixSql.match(/sp\d?\.user_id =/g) ?? []).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("filing a report notifies the moderation team with details", () => {
+    expect(modHandlers).toContain('from("site_admins").select("user_id")');
+    expect(modHandlers).toContain("🚩 بلاغ جديد في المجتمع");
+    expect(modHandlers).toContain('"/community/moderation"');
+  });
+
+  it("add_moderator lookup falls back to display name and auth users", () => {
+    expect(modRoute).toContain(".ilike(\"display_name\", identifier)");
+    expect(modRoute).toContain("auth.admin.listUsers");
+    expect(modRoute).toContain("/community/moderation");
+  });
+});

@@ -98,3 +98,36 @@ export async function PATCH(req:Request){
   return NextResponse.json({success:true});
  }catch(e){console.error("[notifications] PATCH",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
 }
+export async function DELETE(req:Request){
+ try{
+  const supabase=await createClient();
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user)return NextResponse.json({success:false,error:"Authentication required."},{status:401});
+
+  const body=await req.json().catch(()=>null);
+
+  // حذف كل الإشعارات المقروءة
+  if(body?.allRead===true){
+   let {error}=await supabase.from("notifications").delete().eq("recipient_id",user.id).not("read_at","is",null);
+   if(error) ({error}=await supabase.from("notifications").delete().eq("user_id",user.id).eq("is_read",true));
+   if(error){
+    if(isNotificationsSchemaMissing(error)){return NextResponse.json({success:false,error:NOTIFICATIONS_SCHEMA_MISSING_MESSAGE,schemaMissing:true},{status:503})}
+    console.error("[notifications] DELETE allRead",error.message);
+    return NextResponse.json({success:false,error:"Failed to delete."},{status:500});
+   }
+   return NextResponse.json({success:true});
+  }
+
+  const id=body?.id;
+  if(!isUuid(id))return NextResponse.json({success:false,error:"Invalid id."},{status:400});
+  // حذف إشعار واحد — فرض ملكية المستلم إجباريًا مع fallback للسكيما القديمة
+  let {error}=await supabase.from("notifications").delete().eq("id",id).eq("recipient_id",user.id);
+  if(error) ({error}=await supabase.from("notifications").delete().eq("id",id).eq("user_id",user.id));
+  if(error){
+   if(isNotificationsSchemaMissing(error)){return NextResponse.json({success:false,error:NOTIFICATIONS_SCHEMA_MISSING_MESSAGE,schemaMissing:true},{status:503})}
+   console.error("[notifications] DELETE id",error.message);
+   return NextResponse.json({success:false,error:"Failed to delete."},{status:500});
+  }
+  return NextResponse.json({success:true});
+ }catch(e){console.error("[notifications] DELETE",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
+}

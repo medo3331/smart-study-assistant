@@ -45,6 +45,7 @@ type RequestRow = {
 
 type SocialProfile = {
   display_name: string | null;
+  handle: string | null;
   bio: string | null;
   avatar_url: string | null;
   cover_url: string | null;
@@ -113,6 +114,7 @@ export default function CommunityHubPage() {
   // profile editor
   const [profile, setProfile] = useState<SocialProfile | null>(null);
   const [interestsText, setInterestsText] = useState("");
+  const [handleDraft, setHandleDraft] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -162,6 +164,7 @@ export default function CommunityHubPage() {
         setProfile(data.profile);
         if (data.profile.user_id) setCurrentUserId(data.profile.user_id);
         setInterestsText((data.profile.interests || []).join("، "));
+        setHandleDraft(data.profile.handle ?? "");
       }
     } catch {
       // تجاهل
@@ -339,7 +342,7 @@ export default function CommunityHubPage() {
       const res = await fetch("/api/community/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...profile, interests }),
+        body: JSON.stringify({ ...profile, interests, handle: handleDraft.trim() || null }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -793,6 +796,22 @@ export default function CommunityHubPage() {
                   className={inputCls}
                   maxLength={60}
                 />
+              </Field>
+              <Field label="اسم المستخدم في المجتمع (يظهر باسم @user)">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-ink-soft" dir="ltr">@</span>
+                  <input
+                    value={handleDraft}
+                    onChange={(e) => setHandleDraft(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    className={`${inputCls} font-mono`}
+                    dir="ltr"
+                    maxLength={20}
+                    placeholder="مثال: ahmed_2005"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-ink-soft">
+                  3–20 حرف إنجليزي صغير أو أرقام أو _ — بيه البحث عنك في الرسايل والمجتمع، وتقدر تغيّره في أي وقت.
+                </p>
               </Field>
               <Field label="نبذة عنك">
                 <textarea
