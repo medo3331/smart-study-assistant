@@ -2,9 +2,11 @@
 import { UserSearch, Users } from "lucide-react";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { hasPermission } from "@/lib/auth-roles";
-import { searchUsers } from "@/app/admin/actions/users-search";
+import { searchUsersPaged } from "@/app/admin/actions/users-search";
 import { banUser, unbanUser } from "@/app/admin/actions/users-ban";
+import { listPurchaseRequests, type PurchaseRequestAdminView } from "@/lib/admin/purchase-requests";
 import UserAiLookup from "@/components/admin/UserAiLookup";
+import SubscriptionRequestsTable from "@/app/admin/subscription-requests/SubscriptionRequestsTable";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
 
 /**
@@ -27,6 +29,7 @@ export default async function AdminUsersPage({
     code?: string;
     after?: string;
     before?: string;
+    page?: string;
     success?: string;
     error?: string;
   }>;
@@ -34,29 +37,63 @@ export default async function AdminUsersPage({
   const sp = await searchParams;
   const { user, supabase } = await requireAdminPermission("users.read");
 
-  const [canBan, canUnban, canGrantCredits] = await Promise.all([
+  const [canBan, canUnban, canGrantCredits, canReviewSubscriptions] = await Promise.all([
     hasPermission(supabase, user.id, user.email ?? null, "users.ban"),
     hasPermission(supabase, user.id, user.email ?? null, "users.unban"),
     hasPermission(supabase, user.id, user.email ?? null, "credits.manage"),
+    hasPermission(supabase, user.id, user.email ?? null, "subscriptions.manage"),
   ]);
 
   const plan = sp.plan ?? "all";
   const status = sp.status ?? "all";
   const code = sp.code ?? "all";
+  const page = Math.max(1, Number(sp.page ?? "1") || 1);
+  const PAGE_SIZE = 50;
   let userSearchResults: any[] = [];
+  let totalUsers = 0;
   let searchError: string | null = null;
   try {
-    userSearchResults = await searchUsers(
+    const paged = await searchUsersPaged(
       (sp.q ?? "").trim(),
       plan,
       status,
       code,
       sp.after || null,
-      sp.before || null
+      sp.before || null,
+      page,
+      PAGE_SIZE
     );
+    userSearchResults = paged.rows;
+    totalUsers = paged.total;
   } catch (e: any) {
     searchError = e?.message || "تعذّر جلب المستخدمين";
   }
+
+  // طلبات دفع الاشتراكات — تظهر في مركز المستخدمين لمن يملك subscriptions.manage
+  let subscriptionRequests: PurchaseRequestAdminView[] = [];
+  if (canReviewSubscriptions) {
+    try {
+      const all = await listPurchaseRequests(200, "plan");
+      subscriptionRequests = all.filter((r) => r.kind === "plan");
+    } catch {
+      // الجداول غير مطبقة بعد — القسم يظهر فاضي بدل كسر الصفحة
+    }
+  }
+
+  // بناء رابط صفحة مع الحفاظ على كل فلاتر البحث
+  function pageHref(targetPage: number): string {
+    const params = new URLSearchParams();
+    if (sp.q) params.set("q", sp.q);
+    if (plan !== "all") params.set("plan", plan);
+    if (status !== "all") params.set("status", status);
+    if (code !== "all") params.set("code", code);
+    if (sp.after) params.set("after", sp.after);
+    if (sp.before) params.set("before", sp.before);
+    if (targetPage > 1) params.set("page", String(targetPage));
+    const qs = params.toString();
+    return `/admin/users${qs ? `?${qs}` : ""}`;
+  }
+  const totalPages = Math.max(1, Math.ceil(totalUsers / PAGE_SIZE));
 
   const exportHref =
     `/api/admin/users/export?q=${encodeURIComponent(sp.q ?? "")}` +
@@ -160,13 +197,22 @@ export default async function AdminUsersPage({
         {userSearchResults.length === 0 ? (
           <AdminNotice>لا توجد نتائج لهذه الفلاتر. عدّل البحث أو الفلاتر لعرض النتائج من الداتابيز.</AdminNotice>
         ) : (
-          <AdminTableWrap>
+          <>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+              <span>
+                إجمالي المسجلين المطابقين: <strong className="text-amber-300">{totalUsers}</strong> مستخدم · صفحة {page} من {totalPages}
+              </span>
+              <span className="text-slate-500">كل المسجلين متاحون بالترقيم — لا حد 50 صلب.</span>
+            </div>
+            <AdminTableWrap>
             <thead>
               <tr className="bg-slate-950/60 text-amber-300">
                 <th className="text-right px-3 py-2">الاسم</th>
                 <th className="text-right px-3 py-2">الإيميل</th>
                 <th className="text-right px-3 py-2">كود المستخدم</th>
                 <th className="text-right px-3 py-2">الخطة</th>
+                <th className="text-right px-3 py-2">الشخصية</th>
+                <th className="text-right px-3 py-2">تاريخ التسجيل</th>
                 <th className="text-right px-3 py-2">الحالة</th>
                 <th className="text-right px-3 py-2">إجراء</th>
               </tr>
@@ -189,6 +235,10 @@ export default async function AdminUsersPage({
                     <span className="inline-block bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold">
                       {u.on_trial ? "Trial" : u.plan_key || "Free"}
                     </span>
+                  </td>
+                  <td className="px-3 py-2 text-[10px] text-slate-400">{u.persona || "—"}</td>
+                  <td className="px-3 py-2 text-[10px] whitespace-nowrap">
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString("ar-EG") : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <span className={u.is_banned ? "text-rose-400 font-bold" : "text-emerald-400"}>{u.is_banned ? "محظور" : "نشط"}</span>
@@ -221,6 +271,26 @@ export default async function AdminUsersPage({
               ))}
             </tbody>
           </AdminTableWrap>
+
+            {/* ترقيم الصفحات — لكل المسجلين */}
+            <div className="flex items-center justify-between mt-3 text-xs">
+              <Link
+                href={pageHref(Math.max(1, page - 1))}
+                aria-disabled={page <= 1}
+                className={`rounded bg-slate-800 px-3 py-1.5 ${page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-slate-700"}`}
+              >
+                → السابق
+              </Link>
+              <span className="text-slate-400">صفحة {page} من {totalPages}</span>
+              <Link
+                href={pageHref(Math.min(totalPages, page + 1))}
+                aria-disabled={page >= totalPages}
+                className={`rounded bg-slate-800 px-3 py-1.5 ${page >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-slate-700"}`}
+              >
+                التالي ←
+              </Link>
+            </div>
+          </>
         )}
 
         <AdminNotice tone="default">
@@ -228,6 +298,16 @@ export default async function AdminUsersPage({
           الفحص بيتم في السيرفر جوه الـaction نفسه، مش بإخفاء الزر بس.
         </AdminNotice>
       </AdminCard>
+
+      {canReviewSubscriptions ? (
+        <AdminCard
+          title="طلبات دفع الاشتراكات"
+          description="بيانات المستخدم اللي عمل الطلب + إثبات الدفع + محادثة الدعم — عدّل الطلب (الباقة/المدة/المبلغ) ثم اقبل أو ارفض. القسم الكامل في /admin/subscription-requests."
+          tone={subscriptionRequests.some((r) => r.status === "payment_submitted") ? "amber" : "purple"}
+        >
+          <SubscriptionRequestsTable requests={subscriptionRequests} />
+        </AdminCard>
+      ) : null}
 
       <AdminCard tone="purple">
         <h2 className="text-base font-bold text-purple-300 flex items-center gap-2">
