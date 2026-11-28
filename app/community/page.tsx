@@ -14,6 +14,7 @@ import type { SocialProfileSummary, CommunityPostRow } from "@/lib/community/typ
 import { relationErrorAr } from "@/lib/community/types";
 import PostCard from "@/components/community/PostCard";
 import CommunityComposer from "@/components/community/CommunityComposer";
+import StoriesBar from "@/components/community/StoriesBar";
 import ModerationStatus from "@/components/community/ModerationStatus";
 
 type LeaderRow = {
@@ -517,6 +518,9 @@ export default function CommunityHubPage() {
               ))}
             </div>
           )}
+
+          {/* الحالات (ستوريز — C18) */}
+          <StoriesBar />
 
           {/* الكومبوزر (C7 — مطوّر + Magic AI) */}
           <CommunityComposer

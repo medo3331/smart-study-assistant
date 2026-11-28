@@ -322,14 +322,15 @@ export default function AdminModerationClient() {
             <p className="text-sm text-slate-500">مفيش كلمات ممنوعة لسه.</p>
           ) : (
             <ul className="flex flex-wrap gap-2">
-              {blockedWords.map((w) => (
+              {blockedWords.map((w, i) => (
                 <li key={w.id} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  <span className="font-medium">{w.word}</span>
+                  {/* الكلمة نفسها مش بتتعرض — بس عددها وترتيبها (خصوصية) */}
+                  <span className="font-medium" title="الكلمة مخفية">كلمة #{i + 1}</span>
                   <button
                     onClick={() => void post({ action: "remove_blocked_word", wordId: w.id }, `rm-${w.id}`).then((ok) => { if (ok) void load(); })}
                     disabled={busy !== null}
                     className="text-slate-400 hover:text-red-600 disabled:opacity-50"
-                    aria-label={`حذف ${w.word}`}
+                    aria-label={`حذف الكلمة رقم ${i + 1}`}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

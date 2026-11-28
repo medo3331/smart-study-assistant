@@ -19,8 +19,10 @@ import SupportSection from "@/components/communication/SupportSection";
 import {
   Search, MessageCircle, Send, X, Plus, Inbox, LifeBuoy,
   UserPlus, Loader2, Check, ShieldAlert, Paperclip, Mic, Square,
-  Pencil, Trash2, File as FileIcon,
+  Pencil, Trash2, File as FileIcon, Users,
 } from "lucide-react";
+
+type Member = { user_id: string; display_name: string | null; avatar_url: string | null; last_active_at: string | null };
 
 type Conversation = {
   id: string;
@@ -29,6 +31,11 @@ type Conversation = {
   last_message_body: string | null;
   last_message_at: string | null;
   message_count: number;
+  is_group?: boolean;
+  group_name?: string | null;
+  members?: Member[];
+  participant_count?: number;
+  other_last_active_at?: string | null;
 };
 
 type Msg = {
@@ -92,6 +99,14 @@ export default function InboxClient() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [requestNote, setRequestNote] = useState<{ state: "sent" | "incoming" | "error"; text: string } | null>(null);
+
+  // نافذة جروب جديد (C18)
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [friends, setFriends] = useState<{ friend_id: string; display_name: string | null; avatar_url: string | null }[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [groupPicked, setGroupPicked] = useState<Set<string>>(new Set());
+  const [groupCreating, setGroupCreating] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -426,6 +441,63 @@ export default function InboxClient() {
     }
   };
 
+  // ------------------------------------------------------------- الجروبات (C18)
+  const openGroupModal = async () => {
+    setGroupOpen(true);
+    setGroupName("");
+    setGroupPicked(new Set());
+    setFriendsLoading(true);
+    try {
+      const res = await fetch("/api/community/friends");
+      const data = await res.json();
+      setFriends(data.success ? (data.friends ?? []) : []);
+    } catch { setFriends([]); }
+    finally { setFriendsLoading(false); }
+  };
+
+  const toggleGroupPick = (id: string) => {
+    setGroupPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const createGroup = async () => {
+    if (!groupName.trim() || groupPicked.size === 0) return;
+    setGroupCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/conversations/group", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: groupName.trim(), participant_ids: [...groupPicked] }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || "تعذّر إنشاء الجروب.");
+        return;
+      }
+      setGroupOpen(false);
+      setTab("chats");
+      void loadConversations();
+      if (data.conversation?.id) void openConversation(data.conversation.id);
+    } catch {
+      setError("مشكلة شبكة — حاول تاني.");
+    } finally {
+      setGroupCreating(false);
+    }
+  };
+
+  // حالة النشاط: «نشط الآن» لو آخر ظهور أقل من 5 دقايق
+  const activityLabel = (lastActive: string | null | undefined): { text: string; online: boolean } | null => {
+    if (!lastActive) return null;
+    const diffMin = (Date.now() - new Date(lastActive).getTime()) / 60_000;
+    if (diffMin < 5) return { text: "نشط الآن", online: true };
+    if (diffMin < 60 * 24) return { text: `آخر ظهور ${new Date(lastActive).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}`, online: false };
+    return { text: `آخر ظهور ${new Date(lastActive).toLocaleDateString("ar-EG", { day: "numeric", month: "short" })}`, online: false };
+  };
+
   // ------------------------------------------------------------- الطلبات
   const respondRequest = async (req: MsgRequest, accept: boolean) => {
     const url = `/api/messages/requests/${req.id}/${accept ? "accept" : "reject"}`;
@@ -471,13 +543,22 @@ export default function InboxClient() {
               <Inbox className="h-5 w-5 text-marker" />
               الرسايل
             </h1>
-            <button
-              onClick={() => { setNewConvOpen(true); setRequestNote(null); setSearchInput(""); setResults([]); }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-marker px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              محادثة جديدة
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void openGroupModal()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-marker/50 bg-marker/5 px-3 py-1.5 text-xs font-bold text-marker transition hover:bg-marker/10"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                جروب
+              </button>
+              <button
+                onClick={() => { setNewConvOpen(true); setRequestNote(null); setSearchInput(""); setResults([]); }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-marker px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                محادثة جديدة
+              </button>
+            </div>
           </div>
           <div className="flex gap-1 rounded-xl border border-rule/40 bg-paper-2/60 p-1">
             {([
@@ -525,7 +606,10 @@ export default function InboxClient() {
                     {avatar(c.other_avatar, c.title, "h-11 w-11 text-sm")}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-semibold text-ink">{c.title}</span>
+                        <span className="truncate font-semibold text-ink">
+                          {c.is_group && <Users className="ml-1 inline h-3.5 w-3.5 text-marker" />}
+                          {c.title}
+                        </span>
                         {c.last_message_at && (
                           <span className="shrink-0 text-[10px] text-slate-400">
                             {new Date(c.last_message_at).toLocaleDateString("ar-EG", { day: "numeric", month: "short" })}
@@ -651,8 +735,22 @@ export default function InboxClient() {
                 <X className="h-5 w-5 text-ink-soft" />
               </button>
               {avatar(selectedConvMeta?.other_avatar ?? null, selectedConvMeta?.title ?? "محادثة", "h-9 w-9 text-xs")}
-              <h2 className="min-w-0 flex-1 truncate font-bold text-ink">{selectedConvMeta?.title ?? "محادثة"}</h2>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">نشطة</span>
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate font-bold text-ink">{selectedConvMeta?.title ?? "محادثة"}</h2>
+                {selectedConvMeta?.is_group ? (
+                  <p className="truncate text-[11px] text-slate-400">
+                    {(selectedConvMeta.members ?? []).map((mm) => mm.display_name || "طالب").join("، ") || "جروب مذاكرة"}
+                  </p>
+                ) : (() => {
+                  const act = activityLabel(selectedConvMeta?.other_last_active_at);
+                  return act ? (
+                    <p className={`flex items-center gap-1 text-[11px] ${act.online ? "text-emerald-600" : "text-slate-400"}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${act.online ? "animate-pulse bg-emerald-500" : "bg-slate-300"}`} />
+                      {act.text}
+                    </p>
+                  ) : null;
+                })()}
+              </div>
             </header>
 
             <div ref={listRef} className="flex-1 space-y-2.5 overflow-y-auto p-4">
@@ -720,6 +818,12 @@ export default function InboxClient() {
                           </div>
                         ) : (
                           <>
+                            {/* اسم المرسل في الجروبات */}
+                            {selectedConvMeta?.is_group && !mine && (
+                              <p className="mb-0.5 text-[11px] font-bold text-marker">
+                                {selectedConvMeta.members?.find((mm) => mm.user_id === m.sender_id)?.display_name ?? "طالب"}
+                              </p>
+                            )}
                             {/* الوسائط */}
                             {m.message_type === "image" && m.media_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -839,6 +943,65 @@ export default function InboxClient() {
           </>
         )}
       </main>
+
+      {/* ------------------------------------------------ نافذة جروب جديد */}
+      {groupOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-paper shadow-2xl">
+            <div className="flex items-center justify-between border-b border-rule/40 p-4">
+              <h2 className="text-lg font-extrabold text-ink">جروب مذاكرة جديد</h2>
+              <button onClick={() => setGroupOpen(false)} className="rounded-lg p-1.5 hover:bg-paper-2" aria-label="إغلاق">
+                <X className="h-5 w-5 text-ink-soft" />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <input
+                autoFocus
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="اسم الجروب (مثال: مذاكرة فيزيا — ثانية ثانوي)…"
+                maxLength={60}
+                className="w-full rounded-xl border border-rule/50 bg-paper-2/50 px-3 py-2.5 text-sm text-ink outline-none focus:border-marker"
+              />
+              {friendsLoading ? (
+                <div className="py-3 text-center text-xs text-slate-400"><Loader2 className="ml-1 inline h-3.5 w-3.5 animate-spin" /> جاري تحميل أصحابك…</div>
+              ) : friends.length === 0 ? (
+                <div className="rounded-xl bg-paper-2/50 p-4 text-center text-xs text-slate-400">
+                  مفيش أصدقاء لسه — ضيف أصحاب من صفحة المجتمع الأول، وبعدها تقدر تعمل جروب.
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-400">اختار الأعضاء ({groupPicked.size} مختار):</p>
+                  <ul className="space-y-1.5">
+                    {friends.map((f) => (
+                      <li key={f.friend_id}>
+                        <button
+                          onClick={() => toggleGroupPick(f.friend_id)}
+                          className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-right transition ${
+                            groupPicked.has(f.friend_id) ? "border-marker bg-marker/5" : "border-rule/40 hover:bg-paper-2/70"
+                          }`}
+                        >
+                          {avatar(f.avatar_url, f.display_name, "h-9 w-9 text-xs")}
+                          <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{f.display_name ?? "طالب"}</span>
+                          {groupPicked.has(f.friend_id) && <Check className="h-4 w-4 shrink-0 text-marker" />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <button
+                onClick={() => void createGroup()}
+                disabled={!groupName.trim() || groupPicked.size === 0 || groupCreating}
+                className="w-full rounded-xl bg-marker py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
+              >
+                {groupCreating ? <Loader2 className="ml-1 inline h-4 w-4 animate-spin" /> : null}
+                إنشاء الجروب
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ------------------------------------------------ نافذة محادثة جديدة */}
       {newConvOpen && (

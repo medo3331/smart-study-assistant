@@ -51,32 +51,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "participant_ids is required." }, { status: 400 });
     }
 
-    // Validate participants exist and are active users
-    const validParticipants = [];
-    for (const pid of participant_ids) {
-      const { data: u, error: e } = await serverClient
-        .from("auth.users")
-        .select("id")
-        .eq("id", pid)
-        .single();
-      if (e || !u) {
-        return NextResponse.json({ success: false, error: `Participant ${pid} not found or inactive.` }, { status: 400 });
-      }
-      validParticipants.push(pid);
+    // Owner must be a valid participant — المالك هو المستخدم الحالي دايمًا
+    const owner = user.id;
+    const requested = [...new Set((participant_ids as string[]).filter((pid) => typeof pid === "string" && pid))];
+    if (!requested.includes(owner)) requested.push(owner);
+
+    // Validate participants exist (service client — auth.users مش متاح عبر PostgREST)
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const service = createServiceClient();
+
+    const { data: existing, error: profError } = await service
+      .from("profiles")
+      .select("id")
+      .in("id", requested);
+    if (profError) {
+      console.error("[conversations/group] Profile lookup:", profError);
+      return NextResponse.json({ success: false, error: "Failed to validate participants." }, { status: 500 });
+    }
+    const found = new Set((existing ?? []).map((p: { id: string }) => p.id));
+    const missing = requested.filter((pid) => !found.has(pid));
+    if (missing.length > 0) {
+      return NextResponse.json({ success: false, error: "بعض الأعضاء المختارين مش موجودين." }, { status: 400 });
     }
 
-    // Owner must be a valid participant
-    const owner = owner_id || user.id;
-    if (!validParticipants.includes(owner)) {
-      return NextResponse.json({ success: false, error: "Owner must be a participant." }, { status: 400 });
-    }
-
-    // Create conversation
-    const { data: conversation, error: convError } = await serverClient
+    // Create conversation (service — insert باسم المنشئ + أعمدة الجروب)
+    const { data: conversation, error: convError } = await service
       .from("conversations")
       .insert({
-        title: name,
+        title: name.trim().slice(0, 60),
         status: "active",
+        is_group: true,
+        group_name: name.trim().slice(0, 60),
+        created_by: owner,
       })
       .select("*")
       .single();
@@ -86,14 +92,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Failed to create conversation." }, { status: 500 });
     }
 
-    // Add all participants
-    const participants = validParticipants.map((pid) => ({
+    // Add all participants (service — RLS بيمنع إضافة غيرك بعميل مصادق)
+    const participants = requested.map((pid) => ({
       conversation_id: conversation.id,
       participant_id: pid,
-      role: pid === owner ? "admin" : "member",
+      role: pid === owner ? "owner" : "member",
     }));
 
-    const { error: partError } = await serverClient
+    const { error: partError } = await service
       .from("conversation_participants")
       .insert(participants);
 
@@ -102,24 +108,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Failed to add participants." }, { status: 500 });
     }
 
-    // Set the owner
-    const { error: ownerError } = await serverClient
-      .from("conversation_participants")
-      .update({ role: "owner" })
-      .eq("conversation_id", conversation.id)
-      .eq("participant_id", owner);
-
-    if (ownerError) {
-      console.error("[conversations/group] Owner update error:", ownerError);
-      return NextResponse.json({ success: false, error: "Failed to set owner." }, { status: 500 });
-    }
-
     return NextResponse.json({
       success: true,
       conversation: {
         id: conversation.id,
         title: conversation.title,
         status: conversation.status,
+        is_group: true,
         owner_id: owner,
       },
     }, { status: 201 });
