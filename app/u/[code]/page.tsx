@@ -13,6 +13,8 @@ import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/server";
 import ProfileActions from "@/components/community/ProfileActions";
 import UserPosts from "@/components/community/UserPosts";
+import { itemById } from "@/lib/shop/catalog";
+import { companionStages } from "@/lib/shop/catalog";
 import type { RelationState } from "@/lib/community/types";
 
 type SocialProfileData = {
@@ -35,6 +37,37 @@ type SocialProfileData = {
   is_self?: boolean;
   relation?: { state: RelationState; request_id?: string };
 };
+
+/* --------------------------------------------------------------------------
+   Showcase 🏆 — المقتنيات المعروضة على البروفايل (db/122)
+   العناصر المخصصة (من الأدمن) بتيجي بميتاداتاها من الـRPC، والثابتة
+   بتتقري من الكتالوج المحلي (itemById) — مصدر واحد للشكل في كل الصفحات.
+   -------------------------------------------------------------------------- */
+
+type ShowcaseRow = {
+  item_id: string;
+  favorite: boolean;
+  slot: string | null;
+  price: number;
+  metadata: { custom?: boolean; poster?: boolean; name?: string; desc?: string; value?: string; image?: string } | null;
+};
+type ShowcaseData = { equipped: Record<string, string>; items: ShowcaseRow[] } | null;
+
+function showcaseItem(row: ShowcaseRow) {
+  if (row.metadata?.custom) {
+    return {
+      id: row.item_id,
+      name: row.metadata.name ?? row.item_id,
+      value: row.metadata.value ?? "",
+      image: row.metadata.image ?? null,
+      // slot مخصصة: null في الجدول يعني بوستر
+      slot: row.metadata.poster ? "posters" : row.slot,
+    };
+  }
+  const it = itemById(row.item_id);
+  if (!it) return null;
+  return { id: it.id, name: it.name, value: it.value, image: null, slot: it.category === "posters" ? "posters" : it.category };
+}
 
 export default async function UserPublicPage({ params }: { params: Promise<{ code?: string }> }) {
   const sp = await params;
@@ -83,6 +116,27 @@ export default async function UserPublicPage({ params }: { params: Promise<{ cod
   const isFriend = relation.state === "friends";
   const showAcademic = !isPrivate || isFriend;
 
+  // 🏆 Showcase — العناصر الملبوسة + المقتنيات المعروضة (db/122)
+  let showcase: ShowcaseData = null;
+  {
+    const { data: sc } = await supabase.rpc("get_showcase_by_code", {
+      p_code: profile.public_user_code!,
+      p_allow: showAcademic,
+    });
+    showcase = (sc as ShowcaseData) ?? null;
+  }
+  const showcaseResolved = (showcase?.items ?? [])
+    .map(showcaseItem)
+    .filter((x): x is NonNullable<ReturnType<typeof showcaseItem>> => x !== null);
+  const equippedTitleId = showcase?.equipped?.title ?? null;
+  const equippedAvatarId = showcase?.equipped?.avatar ?? null;
+  const equippedTitle = (equippedTitleId ? itemById(equippedTitleId) : null)?.value
+    ?? (showcase?.items ?? []).find((r) => r.metadata?.custom && r.item_id === equippedTitleId)?.metadata?.value
+    ?? null;
+  const equippedAvatarEmoji = (equippedAvatarId ? itemById(equippedAvatarId) : null)?.value
+    ?? (showcase?.items ?? []).find((r) => r.metadata?.custom && r.item_id === equippedAvatarId && !r.metadata?.poster)?.metadata?.value
+    ?? null;
+
   // QR للرابط العام — نفس معلومة الصفحة المعروضة (من المرحلة السابقة)
   const { SITE_URL } = await import("@/lib/seo");
   const profileUrl = `${SITE_URL}/u/${profile.public_user_code}`;
@@ -109,18 +163,30 @@ export default async function UserPublicPage({ params }: { params: Promise<{ cod
         {/* الهوية */}
         <div className="-mt-10 flex items-end justify-between gap-4">
           <div className="flex items-end gap-4">
-            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border-2 border-paper bg-paper-3 shadow-md">
-              {profile.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profile.avatar_url} alt={profile.display_name ?? "الطالب"} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-2xl font-extrabold text-ink-soft">
-                  {(profile.display_name ?? "؟").slice(0, 1)}
-                </div>
-              )}
+            <div className="relative h-20 w-20 shrink-0">
+              <div className="h-20 w-20 overflow-hidden rounded-2xl border-2 border-paper bg-paper-3 shadow-md">
+                {profile.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profile.avatar_url} alt={profile.display_name ?? "الطالب"} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-2xl font-extrabold text-ink-soft">
+                    {(profile.display_name ?? "؟").slice(0, 1)}
+                  </div>
+                )}
+              </div>
+              {equippedAvatarEmoji ? (
+                <span className="absolute -bottom-1.5 -left-1.5 rounded-full border border-rule bg-paper px-1.5 py-0.5 text-base shadow-sm" title="Avatar من Magicly Market">
+                  {equippedAvatarEmoji}
+                </span>
+              ) : null}
             </div>
             <div className="pb-1">
               <h1 className="text-xl font-extrabold">{profile.display_name ?? "طالب Magicly"}</h1>
+              {equippedTitle ? (
+                <span className="mt-0.5 inline-block rounded-full bg-marker/10 px-2 py-0.5 text-xs font-bold text-marker">
+                  {equippedTitle}
+                </span>
+              ) : null}
               {profile.handle ? (
                 <p className="mono text-xs font-semibold text-marker" dir="ltr">@{profile.handle}</p>
               ) : null}
@@ -151,6 +217,39 @@ export default async function UserPublicPage({ params }: { params: Promise<{ cod
         <div className="grid gap-6 py-6 md:grid-cols-[1fr_200px]">
           <div className="space-y-5">
             {profile.bio && <p className="leading-relaxed text-ink">{profile.bio}</p>}
+
+            {/* 🏆 My Showcase — المقتنيات المعروضة (db/122) */}
+            {showcaseResolved.length > 0 && (
+              <section className="space-y-2">
+                <h2 className="text-sm font-bold text-ink-soft">🏆 My Showcase</h2>
+                <div className="grid grid-cols-3 gap-3">
+                  {showcaseResolved.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex min-h-24 flex-col items-center justify-center gap-1 rounded-xl border border-rule bg-paper-2/50 p-3 text-center"
+                    >
+                      {item.slot === "posters" ? (
+                        item.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.image} alt={item.name} className="h-24 w-full rounded-lg object-cover" />
+                        ) : (
+                          <p className="text-sm font-extrabold leading-snug text-ink">“{item.value || item.name}”</p>
+                        )
+                      ) : item.slot === "avatar" ? (
+                        <span className="text-4xl leading-none">{item.value}</span>
+                      ) : item.slot === "companions" ? (
+                        <span className="text-4xl leading-none">{companionStages(item.value)[0]}</span>
+                      ) : (
+                        <span className="rounded-full bg-marker/10 px-2.5 py-1 text-xs font-bold text-marker">{item.name}</span>
+                      )}
+                      {item.slot !== "posters" && (
+                        <span className="text-[11px] font-medium text-ink-soft">{item.name}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* المعلومات الأكاديمية — مخفية تلقائيًا للخصوصية */}
             {showAcademic && (

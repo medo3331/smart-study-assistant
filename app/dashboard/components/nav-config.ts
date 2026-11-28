@@ -95,6 +95,7 @@ export type NavIconName =
   | "quran"
   | "worship"
   | "break"
+  | "arcade"
   | "escape"
   | "progress"
   | "achievements"
@@ -240,6 +241,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "community", icon: "community", label: "المجتمع", latin: "Community", href: "/community" },
       { id: "referrals", icon: "referrals", label: "الإحالات", latin: "Referrals", href: "/dashboard/referrals" },
       { id: "shop", icon: "shop", label: "المتجر", latin: "Shop", href: "/shop" },
+      { id: "arcade", icon: "break", label: "الألعاب", latin: "Arcade", href: "/games" },
       { id: "rewards", icon: "rewards", label: "المكافآت", latin: "Rewards", href: "/rewards" },
     ],
   },

@@ -42,10 +42,41 @@ export default function BreakPage() {
     return () => window.clearInterval(id); 
   }, [running, seconds]);
 
-  const claim = async (game: 'memory'|'reaction'|'quiz') => { 
+  const claim = async (game: 'memory'|'reaction'|'quiz'|'penalty') => { 
     const { data, error } = await supabase.rpc('claim_break_game', { p_game: game }); 
     const row = Array.isArray(data) ? data[0] : data; 
     setNote(error ? error.message : row?.message ?? 'تم'); 
+  };
+
+  // ⚽ جول ولا لا؟ — ٣ أهداف متتالية = مكافأة (سيرفر-أوثوريتيتيف عبر claim_break_game)
+  type PenaltyState = {
+    phase: 'aim' | 'shot' | 'done';
+    streak: number;
+    keeper: 'left' | 'center' | 'right' | null;
+    shot: 'left' | 'center' | 'right' | null;
+    result: 'goal' | 'saved' | null;
+  };
+  const CORNERS: { id: 'left'|'center'|'right'; label: string }[] = [
+    { id: 'right', label: 'يمين ➡️' },
+    { id: 'center', label: 'وسط ⬆️' },
+    { id: 'left', label: 'يسار ⬅️' },
+  ];
+  const [penalty, setPenalty] = useState<PenaltyState>({ phase: 'aim', streak: 0, keeper: null, shot: null, result: null });
+
+  const shoot = (corner: 'left'|'center'|'right') => {
+    if (penalty.phase !== 'aim') return;
+    const keeper = (['left', 'center', 'right'] as const)[Math.floor(Math.random() * 3)];
+    const scored = corner !== keeper;
+    const streak = scored ? penalty.streak + 1 : 0;
+    setPenalty({ phase: 'shot', streak, keeper, shot: corner, result: scored ? 'goal' : 'saved' });
+    window.setTimeout(() => {
+      if (streak >= 3) {
+        setPenalty({ phase: 'done', streak: 0, keeper: null, shot: null, result: null });
+        void claim('penalty');
+      } else {
+        setPenalty({ phase: 'aim', streak, keeper: null, shot: null, result: null });
+      }
+    }, 1100);
   };
 
   const submitRiddle = async () => { 
@@ -91,6 +122,7 @@ export default function BreakPage() {
         <>
           <Link href="/missions" className="btn btn-quiet text-sm">مهام اليوم</Link>
           <Link href="/escape-room" className="btn btn-quiet text-sm">غرفة الهروب</Link>
+          <Link href="/games" className="btn btn-quiet text-sm">🕹️ الألعاب</Link>
         </>
       }
     >
@@ -136,6 +168,30 @@ export default function BreakPage() {
               <button className="btn btn-marker text-sm" onClick={()=>void submitQuiz()}>تحقق</button>
             </>}
           </> : <p className="text-sm text-ink-soft">بيجهّز سؤال من خطتك…</p>}
+        </section>
+
+        {/* ⚽ جول ولا لا؟ — ركلات ترجيح */}
+        <section className="sheet-card p-5 space-y-3">
+          <h2 className="h3">⚽ جول ولا لا؟</h2>
+          <p className="text-sm text-ink-soft">سجّل ٣ جول متتاليين في مرمى الحارس وخد مكافأتك 🪙</p>
+          {penalty.streak > 0 && penalty.phase === 'aim' && (
+            <p className="tag">🔥 هاتريك قريب: {penalty.streak}/3</p>
+          )}
+          {penalty.phase === 'shot' ? (
+            <p className={`text-sm font-bold ${penalty.result === 'goal' ? 'text-marker' : 'text-ink-soft'}`}>
+              {penalty.result === 'goal'
+                ? `جول! ⚽ الحارس رمى ${penalty.keeper === 'left' ? 'يمين' : penalty.keeper === 'right' ? 'يسار' : 'النص'}`
+                : `الحارس تصدى! 🧤 جرّب تاني`}
+            </p>
+          ) : (
+            <div className="flex gap-2">
+              {CORNERS.map((c) => (
+                <button key={c.id} className="btn btn-quiet flex-1 text-sm" onClick={() => shoot(c.id)} disabled={penalty.phase !== 'aim'}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 🧩 فزورة اليوم */}
