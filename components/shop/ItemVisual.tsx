@@ -108,10 +108,19 @@ export function ItemVisual({
       );
     }
 
-    /* البوستر: اقتباس منمق على تدرّج لوني من لون الندرة — معاينة حقيقية
-       للمنتج النصي (البوسترز المرفوعة بصور هتتجاوز هنا لما تدعم الأصول) */
+    /* البوستر: لو فيه تصميم مرفوع من الأدمن بنوريه بالكامل — ولو لسه
+       نصي بنعرضه اقتباس منمق على تدرّج لوني من لون الندرة */
     case "posters": {
       const rar = RARITY[item.rarity];
+      const image = typeof item.metadata?.image === "string" ? item.metadata.image : null;
+      if (image) {
+        return (
+          <div className="shop-thumb !p-0 overflow-hidden" aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image} alt="" className="w-full h-full object-cover" loading="lazy" />
+          </div>
+        );
+      }
       return (
         <div className="shop-thumb !p-0 overflow-hidden" aria-hidden>
           <div

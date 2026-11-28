@@ -20,6 +20,64 @@ export interface StoreItemActionResult {
   message: string;
 }
 
+export interface AssetUploadResult {
+  ok: boolean;
+  url?: string;
+  message: string;
+}
+
+const MAX_ASSET_BYTES = 2 * 1024 * 1024; // 2MB
+const ALLOWED_ASSET_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+/** رفع تصميم بوستر/صورة عنصر إلى Storage (bucket: store-assets).
+ *  الكتابة service-role فقط من هنا — مفيش سياسات كتابة للعملاء. */
+export async function uploadStoreAsset(formData: FormData): Promise<AssetUploadResult> {
+  let actor;
+  try {
+    ({ actor } = await requireAdminActor("rewards.manage"));
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "غير مصرح" };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, message: "اختار صورة الأول." };
+  }
+  if (file.size > MAX_ASSET_BYTES) {
+    return { ok: false, message: "الصورة كبيرة — الحد الأقصى 2MB (اضغطها قبل الرفع)." };
+  }
+  if (!ALLOWED_ASSET_TYPES.includes(file.type)) {
+    return { ok: false, message: "الصيغ المدعومة: PNG / JPG / WebP / GIF." };
+  }
+
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : file.type === "image/gif" ? "gif" : "jpg";
+  const path = `posters/${crypto.randomUUID()}.${ext}`;
+
+  try {
+    const db = createServiceClient();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const { error } = await db.storage.from("store-assets").upload(path, bytes, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (error) throw error;
+    const { data } = db.storage.from("store-assets").getPublicUrl(path);
+    await recordAuditLog({
+      actor: actor.userId, actor_email: actor.userEmail ?? null, action: "rewards.manage",
+      resource_type: "store_asset", resource_id: path,
+      details: { op: "upload", size: file.size, type: file.type }, result: "PASS",
+    });
+    return { ok: true, url: data.publicUrl, message: "الصورة اترفعت." };
+  } catch (e) {
+    await recordAuditLog({
+      actor: actor.userId, actor_email: actor.userEmail ?? null, action: "rewards.manage",
+      resource_type: "store_asset", resource_id: path,
+      details: { op: "upload", reason: e instanceof Error ? e.message : "unknown" }, result: "FAIL",
+    });
+    return { ok: false, message: `فشل الرفع: ${e instanceof Error ? e.message : "unknown"}` };
+  }
+}
+
 /** الأقسام اللي بتشتغل لعناصر مخصصة — قيمها إيموجي/نص فمتطلباتش CSS أو باكات.
  *  «posters» نوع خاص: slot=null في الجدول مع metadata.poster=true. */
 const ALLOWED_SLOTS = ["avatar", "title", "companion", "posters"] as const;
@@ -41,6 +99,8 @@ export async function createStoreItem(input: {
   rarity: string;
   price: number;
   creditsPrice?: number | null;
+  image?: string | null;
+  collection?: string | null;
 }): Promise<StoreItemActionResult> {
   let actor;
   try {
@@ -70,11 +130,15 @@ export async function createStoreItem(input: {
   if (creditsPrice !== null && (!Number.isInteger(creditsPrice) || creditsPrice <= 0 || creditsPrice > 100000)) {
     return { ok: false, message: "سعر الكريدت (لو موجود) لازم رقم موجب." };
   }
+  if (input.image && !/^https?:\/\//.test(input.image)) {
+    return { ok: false, message: "رابط الصورة غير صالح." };
+  }
 
   const id = slot === "posters" ? `poster.custom-${crypto.randomUUID().slice(0, 8)}` : `${slot}.custom-${crypto.randomUUID().slice(0, 8)}`;
-  const metadata = slot === "posters"
-    ? { custom: true, poster: true, name, desc, value, collection: "egyptian-vibes" }
-    : { custom: true, name, desc, value };
+  const metadata: Record<string, unknown> = slot === "posters"
+    ? { custom: true, poster: true, name, desc, value, collection: input.collection ?? "egyptian-vibes" }
+    : { custom: true, name, desc, value, collection: input.collection ?? null };
+  if (input.image) metadata.image = input.image;
 
   try {
     await pgQuery(
@@ -162,6 +226,8 @@ export async function updateStoreItem(input: {
   price?: number;
   creditsPrice?: number | null;
   active?: boolean;
+  image?: string | null;
+  collection?: string | null;
 }): Promise<StoreItemActionResult> {
   let actor;
   try {
@@ -201,6 +267,17 @@ export async function updateStoreItem(input: {
     if (!Number.isInteger(input.creditsPrice) || input.creditsPrice <= 0 || input.creditsPrice > 100000) {
       return { ok: false, message: "سعر الكريدت لازم رقم موجب أو فاضي." };
     }
+  }
+  if (input.image !== undefined) {
+    if (input.image !== null && !/^https?:\/\//.test(input.image)) {
+      return { ok: false, message: "رابط الصورة غير صالح." };
+    }
+    meta.image = input.image;
+  }
+  if (input.collection !== undefined) {
+    const col = input.collection?.trim() || null;
+    if (col && !/^[a-z0-9-]{2,40}$/.test(col)) return { ok: false, message: "معرّف المجموعة غير صالح." };
+    meta.collection = col;
   }
   if (Object.keys(meta).length === 0 && input.rarity === undefined && input.price === undefined
       && input.creditsPrice === undefined && input.active === undefined) {

@@ -5,9 +5,9 @@
  * الحماية في السيرفر (rewards.manage + Audit Log).
  */
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createStoreItem, deleteStoreItem, updateStoreItem } from "@/app/admin/actions/store-items";
+import { createStoreItem, deleteStoreItem, updateStoreItem, uploadStoreAsset } from "@/app/admin/actions/store-items";
 import { RARITIES, RARITY } from "@/lib/shop/rarity";
 import type { CustomStoreItem } from "@/lib/admin/store-items";
 
@@ -15,11 +15,65 @@ const inputCls = "w-full rounded bg-slate-800 border border-slate-700 p-2 text-x
 const btnCls = "rounded bg-amber-500/20 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50";
 
 const SLOT_OPTIONS: { id: string; label: string; hint: string }[] = [
-  { id: "posters", label: "بوستر 🖼️", hint: "اقتباس نصي منمق — تقدر تعدّله في أي وقت" },
+  { id: "posters", label: "بوستر 🖼️", hint: "تصميم مرفوع أو اقتباس نصي — تقدر تعدّله في أي وقت" },
   { id: "avatar", label: "صورة رمزية 🖼️", hint: "إيموجي واحد أو أكثر — بيظهر بدل الصورة" },
   { id: "title", label: "لقب 🏷️", hint: "نص قصير بيظهر تحت الاسم" },
   { id: "companion", label: "رفيق 🐾", hint: "مراحل مفصولة بـ · زي: 🥚·🐣·🐔" },
 ];
+
+const COLLECTION_OPTIONS = [
+  { id: "", label: "بدون مجموعة" },
+  { id: "egyptian-vibes", label: "🇪🇬 Egyptian Vibes" },
+  { id: "youth-vibes", label: "⚽ كورة & شباب" },
+];
+
+/** حقل رفع تصميم البوستر — بيرفع على Storage وبيحط الرابط في النموذج */
+function AssetField({ url, onUrl, onFeedback }: {
+  url: string | null;
+  onUrl: (u: string | null) => void;
+  onFeedback: (r: { ok: boolean; message: string }) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function upload() {
+    const file = fileRef.current?.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.set("file", file);
+    const res = await uploadStoreAsset(fd);
+    setUploading(false);
+    onFeedback(res);
+    if (res.ok && res.url) onUrl(res.url);
+  }
+
+  return (
+    <div className="text-[11px] text-slate-300">
+      <span>تصميم البوستر (اختياري — PNG/JPG/WebP حتى 2MB)</span>
+      <div className="flex items-center gap-2 mt-1">
+        {url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="معاينة" className="w-10 h-14 object-cover rounded border border-slate-600" />
+        )}
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-[10px]" />
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => void upload()}
+          className="rounded bg-sky-600/20 border border-sky-600/40 px-2 py-1 text-[11px] font-bold text-sky-300 hover:bg-sky-600/30 disabled:opacity-50"
+        >
+          {uploading ? "…" : "رفع"}
+        </button>
+        {url && (
+          <button type="button" onClick={() => onUrl(null)} className="rounded bg-slate-700 px-2 py-1 text-[11px] text-slate-200">
+            شيل الصورة
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
   const router = useRouter();
@@ -33,9 +87,11 @@ export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
   const [rarity, setRarity] = useState<string>("common");
   const [price, setPrice] = useState("500");
   const [creditsPrice, setCreditsPrice] = useState("");
+  const [image, setImage] = useState<string | null>(null);
+  const [collection, setCollection] = useState("youth-vibes");
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ name: "", desc: "", value: "", rarity: "common", price: "", creditsPrice: "" });
+  const [edit, setEdit] = useState({ name: "", desc: "", value: "", rarity: "common", price: "", creditsPrice: "", image: null as string | null, collection: "" });
 
   function submit() {
     const amt = parseInt(price, 10);
@@ -49,10 +105,12 @@ export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
         rarity,
         price: Number.isFinite(amt) ? amt : -1,
         creditsPrice: cAmt !== null && Number.isFinite(cAmt) ? cAmt : null,
+        image,
+        collection: collection || null,
       });
       setFeedback(res);
       if (res.ok) {
-        setName(""); setDesc(""); setValue(""); setCreditsPrice("");
+        setName(""); setDesc(""); setValue(""); setCreditsPrice(""); setImage(null);
         router.refresh();
       }
     });
@@ -67,6 +125,8 @@ export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
       rarity: it.rarity && isRarityStr(it.rarity) ? it.rarity : "common",
       price: String(it.price),
       creditsPrice: it.creditsPrice === null ? "" : String(it.creditsPrice),
+      image: it.image,
+      collection: it.collection ?? "",
     });
   }
 
@@ -86,6 +146,8 @@ export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
         rarity: edit.rarity,
         price: Number.isFinite(amt) ? amt : undefined,
         creditsPrice: cRaw === "" ? null : Number.isFinite(parseInt(cRaw, 10)) ? parseInt(cRaw, 10) : undefined,
+        image: edit.image,
+        collection: edit.collection || null,
       });
       setFeedback(res);
       if (res.ok) {
@@ -162,6 +224,19 @@ export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
             الوصف (اختياري)
             <input value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={200} className={inputCls} />
           </label>
+          <label className="block text-[11px] text-slate-300">
+            المجموعة (Collection — بيظهر تاب ليها في المتجر)
+            <select value={collection} onChange={(e) => setCollection(e.target.value)} className={inputCls}>
+              {COLLECTION_OPTIONS.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+          {slot === "posters" && (
+            <div className="sm:col-span-2">
+              <AssetField url={image} onUrl={setImage} onFeedback={setFeedback} />
+            </div>
+          )}
         </div>
         <button type="button" disabled={pending || !ready} onClick={submit} className={`${btnCls} mt-3`}>
           إضافة للمتجر
@@ -208,6 +283,17 @@ export function StoreItemsClient({ items }: { items: CustomStoreItem[] }) {
                       الوصف
                       <input value={edit.desc} onChange={(e) => setEdit({ ...edit, desc: e.target.value })} maxLength={200} className={inputCls} />
                     </label>
+                    <label className="block text-[11px] text-slate-300">
+                      المجموعة
+                      <select value={edit.collection} onChange={(e) => setEdit({ ...edit, collection: e.target.value })} className={inputCls}>
+                        {COLLECTION_OPTIONS.map((c) => (
+                          <option key={c.id} value={c.id}>{c.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="sm:col-span-2">
+                      <AssetField url={edit.image} onUrl={(u) => setEdit({ ...edit, image: u })} onFeedback={setFeedback} />
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button type="button" disabled={pending} onClick={() => saveEdit(it.id)} className={btnCls}>حفظ</button>

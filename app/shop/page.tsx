@@ -73,6 +73,12 @@ const SORTS: { id: Sort; label: string }[] = [
 /** ترتيب الندرة تنازلي — الأندر الأول. */
 const RARITY_RANK = new Map(RARITIES.map((r, i) => [r, i]));
 
+/** أسماء التابات (Collections) بالعربي — المعرّفات من ميتاداتا الجدول. */
+const COLLECTION_LABELS: Record<string, string> = {
+  "egyptian-vibes": "🇪🇬 Egyptian Vibes",
+  "youth-vibes": "⚽ كورة & شباب",
+};
+
 /** ملبوس؟ الصناديق مالهاش خانة (`slot === null`) فعمرها ما تبقى ملبوسة. */
 function isEquipped(state: ShopState, item: ShopItem): boolean {
   const slot = slotOf(item);
@@ -86,6 +92,7 @@ export default function ShopPage() {
   const shop = useShop(supabase, userId);
 
   const [cat, setCat] = useState<Category | "all">("all");
+  const [collection, setCollection] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("featured");
   const [hideLocked, setHideLocked] = useState(false);
@@ -194,8 +201,23 @@ export default function ShopPage() {
     () => (state ? [...CATALOG, ...(state.customItems ?? [])] : CATALOG),
     [state],
   );
+
+  /* التابات (Collections) — من ميتاداتا العناصر المخصصة: كل مجموعة
+     ملزوقة collection في الجدول بتظهر تاب بفلتر على كل الأقسام. */
+  const collections = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const i of catalog) {
+      const c = typeof i.metadata?.collection === "string" ? i.metadata.collection : null;
+      if (c && !names.has(c)) names.set(c, COLLECTION_LABELS[c] ?? c);
+    }
+    return [...names.entries()];
+  }, [catalog]);
+
   const shown = useMemo(() => {
     let list = catalog.filter((i) => (cat === "all" ? true : i.category === cat));
+    if (collection) {
+      list = list.filter((i) => i.metadata?.collection === collection);
+    }
 
     const q = query.trim();
     if (q) {
@@ -236,7 +258,7 @@ export default function ShopPage() {
         break;
     }
     return out;
-  }, [cat, query, sort, hideLocked, state]);
+  }, [cat, collection, query, sort, hideLocked, state]);
 
   const ownedItems = useMemo(
     () => (state ? catalog.filter((item) => state.ownedIds.has(item.id)) : []),
@@ -360,6 +382,38 @@ export default function ShopPage() {
           </button>
         )}
       </div>
+
+      {/* التابات (Collections) — بتظهر بس لما العناصر بتاعتها تكون موجودة */}
+      {collections.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+          {collections.map(([id, label]) => {
+            const on = collection === id;
+            return (
+              <button
+                key={id}
+                onClick={() => { setCollection(on ? null : id); setCat("all"); }}
+                aria-pressed={on}
+                className={`text-[11px] whitespace-nowrap px-3 py-2 rounded-full border transition font-bold ${
+                  on
+                    ? "bg-ink text-paper-2 border-ink"
+                    : "bg-paper-2 text-ink-soft border-rule hover:text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+          {collection && (
+            <button
+              onClick={() => setCollection(null)}
+              aria-pressed={false}
+              className="text-[11px] whitespace-nowrap px-3 py-2 rounded-full border border-rule text-ink-soft hover:text-ink transition"
+            >
+              <X className="w-3 h-3 inline" aria-hidden /> إلغاء الفلتر
+            </button>
+          )}
+        </div>
+      )}
 
       {/* الأقسام — شريط بيتمرّر أفقياً على الموبايل */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">

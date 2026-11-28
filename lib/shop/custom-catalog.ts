@@ -24,6 +24,8 @@ export type CustomCatalogRow = {
     name?: string;
     desc?: string;
     value?: string;
+    collection?: string;
+    image?: string;
   } | null;
 };
 
@@ -49,7 +51,7 @@ export function customRowToItem(row: CustomCatalogRow): ShopItem | null {
       creditsPrice: row.credits_price ?? undefined,
       value: m.value,
       unlock: null,
-      metadata: { custom: true, poster: true },
+      metadata: { custom: true, poster: true, collection: m.collection, image: m.image },
     };
   }
   if (!(row.slot === "avatar" || row.slot === "title" || row.slot === "companion")) return null;
@@ -63,7 +65,7 @@ export function customRowToItem(row: CustomCatalogRow): ShopItem | null {
     creditsPrice: row.credits_price ?? undefined,
     value: m.value,
     unlock: null,
-    metadata: { custom: true },
+    metadata: { custom: true, collection: m.collection, image: m.image },
   };
 }
 

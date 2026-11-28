@@ -15,6 +15,8 @@ export interface CustomStoreItem {
   desc: string;
   value: string;
   active: boolean;
+  collection: string | null;
+  image: string | null;
 }
 
 export async function getCustomStoreItems(): Promise<CustomStoreItem[]> {
@@ -45,6 +47,8 @@ export async function getCustomStoreItems(): Promise<CustomStoreItem[]> {
       desc: (m.desc as string | undefined) ?? "",
       value: (m.value as string | undefined) ?? "",
       active: m.active !== false,
+      collection: (m.collection as string | undefined) ?? null,
+      image: (m.image as string | undefined) ?? null,
     };
   });
 }
