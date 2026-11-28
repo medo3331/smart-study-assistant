@@ -26,6 +26,7 @@ import {
   type ExplanationMode,
   type ExplanationVersion,
 } from "@/lib/lesson/explanations";
+import { citedToText } from "@/lib/lesson/cited-derive";
 import { useLessonStudio } from "../LessonStudioProvider";
 
 /**
@@ -146,6 +147,9 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   // الشرح المبني على التفريغ (citations) — جاهز من الكاش أو بييتولّد.
   const [cited, setCited] = useState<LessonCitedExplanation | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  // 🎚️ الأوضاع الثلاثة فوق التفريغ (P2): لما الدرس يكون مربوط، الوضع التلخيصي
+  // derivation نصي والأوضاع التانية توليد AI محكم بالاقتباس — كلها فوق التفريغ.
+  const [linkedModes, setLinkedModes] = useState<Partial<Record<ExplanationMode, LinkedModePayload>>>({});
 
   /** تطبيق حالة الربط من رد الراوت (GET أو فعل الربط/الفصل). */
   const applyLinkState = (data: any) => {
@@ -243,6 +247,49 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     }
   };
 
+  /** وضع من الأوضاع الثلاثة فوق التفريغ (الدرس المربوط) — الراوت بيرجّع cited
+   *  (عام/تفصيلي) أو نص م derivé من التفريغ (تلخيصي). force=true = «أعد الشرح». */
+  const fetchLinkedMode = async (mode: ExplanationMode, opts?: { force?: boolean }) => {
+    setActiveMode(mode);
+    setContentError(null);
+    setLoading(true);
+    try {
+      const response = await fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, mode, force: opts?.force === true }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error?.message || "لم نتمكن من توليد الشرح، حاول تاني.");
+      }
+      const version = typeof data?.version === "number" ? data.version : null;
+      const previousVersions = Array.isArray(data?.previousVersions)
+        ? (data.previousVersions as ExplanationVersion[])
+        : [];
+      if (data.cited) {
+        setLinkedModes((prev) => ({
+          ...prev,
+          [mode]: { kind: "cited", cited: data.cited as LessonCitedExplanation, version, previousVersions },
+        }));
+      } else if (typeof data.content === "string" && data.content.trim()) {
+        setLinkedModes((prev) => ({
+          ...prev,
+          [mode]: { kind: "text", text: data.content as string, version, previousVersions },
+        }));
+      } else {
+        throw new Error("الرد جه بدون شرح. حاول تاني.");
+      }
+      setSourceMeta({ cached: typeof data?.cached === "boolean" ? data.cached : null, version });
+      setAllVersions((prev) => ({ ...prev, [mode]: previousVersions }));
+      setShowVersions(false);
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "حصل خطأ أثناء توليد الشرح، حاول تاني.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /** ربط المحاضرة بالدرس — الراوت بيحفظ التفريغ وينفي أي محتوى قديم. */
   const handleLink = async (lectureId: string) => {
     setLinkBusy(true);
@@ -260,6 +307,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
       applyLinkState(data);
       setCited(null);
       setSummary(null);
+      setLinkedModes({});
       setLinkModalOpen(false);
       // توليد فوري للشرح الجديد من التفريغ المرتبط.
       void generateCited();
@@ -287,6 +335,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
       applyLinkState(data);
       setCited(null);
       setSummary(null);
+      setLinkedModes({});
       setLinkModalOpen(false);
       // نرجع لمسار الأوضاع — لو مفيش محتوى محلي نجيب «الشرح» الأساسي.
       if (modeContent.simple) {
@@ -303,6 +352,21 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   };
 
   const handleModeClick = (mode: NonNullable<SmartViewMode>) => {
+    // الدرس مربوط: الأوضاع الثلاثة فوق التفريغ — والتابات القديمة = العرض الأساسي (cited).
+    if (link) {
+      if (isExplanationMode(mode)) {
+        if (linkedModes[mode]) {
+          setActiveMode(mode);
+          setContentError(null);
+          return;
+        }
+        void fetchLinkedMode(mode);
+        return;
+      }
+      setActiveMode(null);
+      setContentError(null);
+      return;
+    }
     // اتحمّل قبل كده في نفس الزيارة → عرض فوري من الكاش المحلي.
     if (modeContent[mode]) {
       setActiveMode(mode);
@@ -310,6 +374,13 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
       return;
     }
     void fetchContent(mode);
+  };
+
+  /** ♻️ أعد الشرح — صياغة جديدة بنفس الوضع الحالي (مربوط: فوق التفريغ، غير مربوط: المخزّن). */
+  const regenerate = () => {
+    if (!activeMode || !isExplanationMode(activeMode)) return;
+    if (link) void fetchLinkedMode(activeMode, { force: true });
+    else void fetchContent(activeMode, { force: true });
   };
 
   const retryFetch = () => {
@@ -336,6 +407,31 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           if (stored.cited) {
             setCited(stored.cited);
             setSummary(typeof stored.summary === "string" ? stored.summary : null);
+            // بذر الأوضاع الثلاثة المخزّنة فوق التفريغ — التبديل فوري من غير نداء.
+            const seeded: Partial<Record<ExplanationMode, LinkedModePayload>> = {};
+            if (typeof stored.modes.summary === "string" && stored.modes.summary.trim()) {
+              seeded.summary = { kind: "text", text: stored.modes.summary, version: null, previousVersions: [] };
+            }
+            const citedVersionsMap = data.citedVersions ?? {};
+            for (const m of ["general", "detailed"] as const) {
+              const storedCitedMode = data.citedModes?.[m];
+              if (storedCitedMode) {
+                const prev = Array.isArray(citedVersionsMap[m]) ? citedVersionsMap[m] : [];
+                seeded[m] = {
+                  kind: "cited",
+                  cited: storedCitedMode as LessonCitedExplanation,
+                  version: prev.length + 1,
+                  previousVersions: prev as ExplanationVersion[],
+                };
+              }
+            }
+            if (Object.keys(seeded).length > 0) {
+              setLinkedModes(seeded);
+              setAllVersions((prev) => ({
+                ...prev,
+                ...Object.fromEntries(Object.entries(seeded).map(([m, p]) => [m, p.previousVersions])),
+              }));
+            }
           } else {
             void generateCited();
           }
@@ -369,11 +465,22 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
 
   const content = activeMode ? (modeContent[activeMode] ?? null) : null;
 
+  // 🎚️ العرض الفعلي في المسار المربوط: وضع من الثلاثة فوق التفريغ أو العرض الأساسي.
+  const linkedPayload = activeMode && isExplanationMode(activeMode) ? linkedModes[activeMode] ?? null : null;
+  const displayCited = linkedPayload?.kind === "cited" ? linkedPayload.cited : cited;
+  const displayText = link
+    ? linkedPayload
+      ? linkedPayload.kind === "cited"
+        ? citedToText(linkedPayload.cited)
+        : linkedPayload.text
+      : null
+    : content;
+
   // 🗺️ P1-4 — تغذية الـ Navigator: الأقسام من الشرح المخزّن (cited أو markdown).
   useEffect(() => {
-    studio.setOutline(extractOutline({ cited, modes: modeContent }));
+    studio.setOutline(extractOutline({ cited: displayCited, modes: modeContent }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- بنحدّث الـ outline لما المحتوى نفسه يتغير بس.
-  }, [cited, modeContent]);
+  }, [displayCited, modeContent]);
 
   // 🧭 تتبّع القسم الحالي — أعلى heading ظاهر في الشرح (للـ Navigator والـ Resume).
   const sectionTrackRef = useRef<HTMLDivElement | null>(null);  useEffect(() => {
@@ -398,7 +505,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     headings.forEach((h) => observer.observe(h));
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- إعادة الربط لما المحتوى يتغير بس.
-  }, [content, cited]);
+  }, [displayText, displayCited]);
 
   // 🎚️ مستوى الشرح + طريقة الشرح — P2: الأوضاع الثلاثة بتحدد الوضع ومستواه.
   useEffect(() => {
@@ -414,9 +521,9 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
 
   // 🧠 snapshot الشرح المخزّن — الـ Tutor بيبقى واعي بالشرح المعروض (مطلب P2).
   useEffect(() => {
-    studio.setExplanationSnapshot(content);
+    studio.setExplanationSnapshot(displayText);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- بنحدّث الـ snapshot لما المحتوى نفسه يتغير بس.
-  }, [content]);
+  }, [displayText]);
 
   // أربع طرق لشرح نفس الحاجة — مش تسلسل، فمفيش أرقام ولا أيقونات، الاسم لوحده كفاية
   const tabs: { id: NonNullable<SmartViewMode>; label: string }[] = [
@@ -427,13 +534,84 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   ];
 
   const panelVisible = link
-    ? Boolean(cited || contentError || loading)
+    ? Boolean(cited || linkedPayload || contentError || loading)
     : Boolean(activeMode);
 
   // ── P2: طريقة الشرح — الأوضاع الثلاثة مصدر واحد للمحرك (Learn والـ Tutor) ──
   const activeIsExplanationMode = Boolean(activeMode && isExplanationMode(activeMode));
   const activeVersions = activeMode && isExplanationMode(activeMode) ? allVersions[activeMode] ?? [] : [];
-  const sourceLabel = link ? "المحاضرة المرتبطة" : sourceMeta.cached === false ? "توليد جديد" : "الشرح المخزّن";
+  const sourceLabel = link
+    ? linkedPayload
+      ? "من التفريغ المرتبط"
+      : "المحاضرة المرتبطة"
+    : sourceMeta.cached === false
+      ? "توليد جديد"
+      : "الشرح المخزّن";
+  const hasActiveExplanationContent =
+    activeIsExplanationMode &&
+    Boolean(activeMode && (modeContent[activeMode] ?? (isExplanationMode(activeMode) ? linkedModes[activeMode] : undefined)));
+
+  /** صف «طريقة الشرح» — نفس الأزرار في المسار المربوط وغير المربوط (نفس المحرك). */
+  const explanationModeControls = (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-bold text-ink-soft shrink-0">طريقة الشرح:</span>
+        {EXPLANATION_MODES.map((mode) => (
+          <button
+            key={mode}
+            onClick={() => handleModeClick(mode)}
+            aria-pressed={activeMode === mode}
+            className={`text-[11.5px] font-bold px-3 py-1.5 rounded-[6px] border transition ${
+              activeMode === mode
+                ? "bg-ink text-paper-2 border-ink"
+                : "bg-paper border-rule text-ink-soft hover:text-ink hover:bg-paper-3"
+            }`}
+          >
+            {EXPLANATION_MODE_LABELS[mode]}
+          </button>
+        ))}
+        {hasActiveExplanationContent && (
+          <button
+            onClick={regenerate}
+            disabled={loading}
+            className="btn btn-quiet text-[11px] px-2.5 py-1.5 shrink-0"
+            title="توليد صياغة جديدة — الإصدار القديم بيتحفظ في الإصدارات السابقة"
+          >
+            ♻️ أعد الشرح
+          </button>
+        )}
+      </div>
+      {/* 🏷️ شفافية المصدر — الطالب عارف الشرح جاي منين دايمًا */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="tag tag-quiet">المصدر: {sourceLabel}</span>
+        {activeIsExplanationMode && sourceMeta.version != null && (
+          <span className="tag tag-quiet">إصدار {sourceMeta.version}</span>
+        )}
+        {activeVersions.length > 0 && (
+          <button
+            onClick={() => setShowVersions((v) => !v)}
+            aria-expanded={showVersions}
+            className="btn btn-quiet text-[10.5px] px-2 py-1"
+          >
+            {showVersions ? "إخفاء الإصدارات السابقة" : `الإصدارات السابقة (${activeVersions.length})`}
+          </button>
+        )}
+      </div>
+      {activeIsExplanationMode && showVersions && activeVersions.length > 0 && (
+        <div className="space-y-1.5 rounded-xl border border-rule bg-paper-2 p-2.5">
+          <p className="text-[10.5px] text-ink-soft">صياغات سابقة لنفس الوضع — محفوظة، مش بتتمسح:</p>
+          {activeVersions.map((v, i) => (
+            <details key={i} className="rounded-lg border border-rule bg-paper px-2.5 py-1.5">
+              <summary className="text-[11px] font-bold text-ink cursor-pointer">
+                إصدار سابق{v.generatedAt ? ` — ${new Date(v.generatedAt).toLocaleDateString("ar-EG")}` : ""}
+              </summary>
+              <p className="mt-1.5 text-[11px] text-ink-soft leading-relaxed whitespace-pre-wrap line-clamp-8">{v.text}</p>
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div dir="rtl">
@@ -448,97 +626,43 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
         />
       </div>
       {link ? (
-        /* 🔗 الدرس مربوط بمحاضرة — بديل التابات: مصدر واحد + إجراءاته */
-        <div className="flex flex-wrap items-center gap-2 bg-paper border border-rule p-2 rounded-[var(--r-sm)]">
-          <span className="tag tag-quiet inline-flex items-center gap-1.5 min-w-0">
-            <span aria-hidden>🎙️</span>
-            <span className="truncate max-w-[14rem]">مبني على: {link.lectureTitle}</span>
-          </span>
-          <div className="flex items-center gap-1.5 ms-auto">
-            <button
-              onClick={() => setLinkModalOpen(true)}
-              disabled={loading || linkBusy}
-              className="btn btn-quiet text-xs px-2.5 py-1.5"
-            >
-              غيّر المحاضرة
-            </button>
-            <button
-              onClick={() => void generateCited(true)}
-              disabled={loading || linkBusy}
-              className="btn btn-quiet text-xs px-2.5 py-1.5"
-            >
-              أعد التوليد
-            </button>
-            <button
-              onClick={() => void handleUnlink()}
-              disabled={loading || linkBusy}
-              className="btn btn-quiet text-xs px-2.5 py-1.5"
-            >
-              افصل
-            </button>
+        /* 🔗 الدرس مربوط بمحاضرة — مصدر واحد + الأوضاع الثلاثة فوق التفريغ + إجراءاته */
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 bg-paper border border-rule p-2 rounded-[var(--r-sm)]">
+            <span className="tag tag-quiet inline-flex items-center gap-1.5 min-w-0">
+              <span aria-hidden>🎙️</span>
+              <span className="truncate max-w-[14rem]">مبني على: {link.lectureTitle}</span>
+            </span>
+            <div className="flex items-center gap-1.5 ms-auto">
+              <button
+                onClick={() => setLinkModalOpen(true)}
+                disabled={loading || linkBusy}
+                className="btn btn-quiet text-xs px-2.5 py-1.5"
+              >
+                غيّر المحاضرة
+              </button>
+              <button
+                onClick={() => void generateCited(true)}
+                disabled={loading || linkBusy}
+                className="btn btn-quiet text-xs px-2.5 py-1.5"
+              >
+                أعد التوليد
+              </button>
+              <button
+                onClick={() => void handleUnlink()}
+                disabled={loading || linkBusy}
+                className="btn btn-quiet text-xs px-2.5 py-1.5"
+              >
+                افصل
+              </button>
+            </div>
           </div>
+          {explanationModeControls}
         </div>
       ) : (
         <>
         {/* 🎚️ طريقة الشرح (P2) — شرح عام / تلخيصي / تفصيلي: نفس المحرك اللي بيستدعيه الـ Tutor */}
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-bold text-ink-soft shrink-0">طريقة الشرح:</span>
-            {EXPLANATION_MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => handleModeClick(mode)}
-                aria-pressed={activeMode === mode}
-                className={`text-[11.5px] font-bold px-3 py-1.5 rounded-[6px] border transition ${
-                  activeMode === mode
-                    ? "bg-ink text-paper-2 border-ink"
-                    : "bg-paper border-rule text-ink-soft hover:text-ink hover:bg-paper-3"
-                }`}
-              >
-                {EXPLANATION_MODE_LABELS[mode]}
-              </button>
-            ))}
-            {activeIsExplanationMode && modeContent[activeMode as ExplanationMode] && (
-              <button
-                onClick={() => void fetchContent(activeMode as ExplanationMode, { force: true })}
-                disabled={loading}
-                className="btn btn-quiet text-[11px] px-2.5 py-1.5 shrink-0"
-                title="توليد صياغة جديدة — الإصدار القديم بيتحفظ في الإصدارات السابقة"
-              >
-                ♻️ أعد الشرح
-              </button>
-            )}
-          </div>
-          {/* 🏷️ شفافية المصدر — الطالب عارف الشرح جاي منين دايمًا */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="tag tag-quiet">المصدر: {sourceLabel}</span>
-            {activeIsExplanationMode && sourceMeta.version != null && (
-              <span className="tag tag-quiet">إصدار {sourceMeta.version}</span>
-            )}
-            {activeVersions.length > 0 && (
-              <button
-                onClick={() => setShowVersions((v) => !v)}
-                aria-expanded={showVersions}
-                className="btn btn-quiet text-[10.5px] px-2 py-1"
-              >
-                {showVersions ? "إخفاء الإصدارات السابقة" : `الإصدارات السابقة (${activeVersions.length})`}
-              </button>
-            )}
-          </div>
-          {activeIsExplanationMode && showVersions && activeVersions.length > 0 && (
-            <div className="space-y-1.5 rounded-xl border border-rule bg-paper-2 p-2.5">
-              <p className="text-[10.5px] text-ink-soft">صياغات سابقة لنفس الوضع — محفوظة، مش بتتمسح:</p>
-              {activeVersions.map((v, i) => (
-                <details key={i} className="rounded-lg border border-rule bg-paper px-2.5 py-1.5">
-                  <summary className="text-[11px] font-bold text-ink cursor-pointer">
-                    إصدار سابق{v.generatedAt ? ` — ${new Date(v.generatedAt).toLocaleDateString("ar-EG")}` : ""}
-                  </summary>
-                  <p className="mt-1.5 text-[11px] text-ink-soft leading-relaxed whitespace-pre-wrap line-clamp-8">{v.text}</p>
-                </details>
-              ))}
-            </div>
-          )}
-        </div>
+        {explanationModeControls}
         {/* التاب المفتوح بيتعلّم بالحبر: bg-ink — الأصفر مش لون "المختار" */}
         <div className="flex items-center gap-1.5 mt-2">
           <div className="flex items-center gap-1 bg-paper border border-rule p-1 rounded-[var(--r-sm)] flex-1">
@@ -587,7 +711,29 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
                 <p className="tag justify-center">{link ? "بيجهّز الشرح من التفريغ" : "بيجهّز الشرح"}</p>
               </div>
             ) : link ? (
-              cited ? (
+              linkedPayload ? (
+                /* 🎚️ وضع من الأوضاع الثلاثة فوق التفريغ — المراجع متحقَّقة منه برضه */
+                linkedPayload.kind === "cited" ? (
+                  linkedAudio?.lectureId === link.lectureId && linkedAudio.hasAudio ? (
+                    <LectureCitationProvider>
+                      <div className="space-y-3">
+                        <LectureAudioPlayer
+                          lectureId={link.lectureId}
+                          durationSeconds={null}
+                          segments={linkedAudio.segments}
+                        />
+                        <LinkedCitedView cited={linkedPayload.cited} lectureId={link.lectureId} summary={null} />
+                      </div>
+                    </LectureCitationProvider>
+                  ) : (
+                    <LessonCitedExplanationView cited={linkedPayload.cited} lectureId={link.lectureId} summary={null} />
+                  )
+                ) : (
+                  <div ref={sectionTrackRef} className="text-[12.5px] text-ink leading-relaxed">
+                    {renderMarkdownLite(linkedPayload.text)}
+                  </div>
+                )
+              ) : cited ? (
                 linkedAudio?.lectureId === link.lectureId && linkedAudio.hasAudio ? (
                   <LectureCitationProvider>
                     <div className="space-y-3">
@@ -648,7 +794,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
                 <div className="mt-3">
                   <AddToNotebookMenu
                     buildDraft={() => {
-                      const text = content ?? summary ?? "";
+                      const text = displayText ?? summary ?? "";
                       if (!text.trim()) return null;
                       return {
                         title: topic,
@@ -688,6 +834,14 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
 export type LearningStyle = "practical" | "visual" | "academic";
 /** الأوضاع الأربعة القديمة + أوضاع الشرح الثلاثة (P2: شرح عام/تلخيصي/تفصيلي) — نفس المحرك. */
 type SmartViewMode = "simple" | "academic" | "visual" | "practical" | ExplanationMode | null;
+
+/**
+ * 🎚️ وضع من الأوضاع الثلاثة فوق التفريغ (الدرس المربوط):
+ *   cited — توليد AI محكم بالاقتباس (عام/تفصيلي) · text — derivation نصي (تلخيصي).
+ */
+type LinkedModePayload =
+  | { kind: "cited"; cited: LessonCitedExplanation; version: number | null; previousVersions: ExplanationVersion[] }
+  | { kind: "text"; text: string; version: number | null; previousVersions: ExplanationVersion[] };
 
 interface ResourceLink {
   title: string;

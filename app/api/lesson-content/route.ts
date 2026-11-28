@@ -7,12 +7,22 @@ import { recordAiOperation } from "@/lib/ai/operations";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 import {
   buildCitedMessages,
+  CITED_MODE_HINTS,
   extractSegments,
   normalizeForMatch,
   parseCitedExplanation,
   type LessonCitedExplanation,
   type TimedSegment,
 } from "@/lib/lesson/citations";
+import {
+  citedModeKey,
+  citedToText,
+  citedVersionsKey,
+  collectCitedVersions,
+  deriveSummaryFromCited,
+  readCitedMode,
+  readCitedVersions,
+} from "@/lib/lesson/cited-derive";
 import { subjectMatches } from "@/lib/academics/subject-match";
 import {
   isExplanationMode,
@@ -20,6 +30,7 @@ import {
   readExplanationVersions,
   collectExplanationVersions,
   EXPLANATION_MODE_LABELS,
+  MAX_EXPLANATION_VERSIONS,
   type ExplanationMode,
 } from "@/lib/lesson/explanations";
 
@@ -374,12 +385,23 @@ export async function GET(req: Request) {
     const linkState = await buildLinkState(supabase, user.id, day, subjectName, linkedLectureId);
 
     const storedContent = readStoredContent(row);
+    // الأوضاع الم citied فوق التفريغ (general/detailed) — كائنات جوّه explanation jsonb.
+    const citedModes =
+      storedContent.rawExplanation
+        ? {
+            general: readCitedMode(storedContent.rawExplanation, "general"),
+            detailed: readCitedMode(storedContent.rawExplanation, "detailed"),
+          }
+        : { general: null, detailed: null };
     return NextResponse.json({
       ok: true,
       ...linkState,
       content: storedContent,
+      citedModes,
       // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
       explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
+      // إصدارات الأوضاع الم citied — بتترجع كنص للمعاينة.
+      citedVersions: collectCitedVersions(storedContent.rawExplanation),
     });
   } catch (error) {
     console.error("lesson-content GET error:", error);
@@ -510,7 +532,7 @@ export async function POST(req: Request) {
 
     const { data: row } = await supabase
       .from("lesson_content")
-      .select("explanation, cited_explanation, summary, source_lecture_id, transcript")
+      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at")
       .eq("user_id", user.id)
       .eq("day_id", dayId)
       .maybeSingle();
@@ -539,26 +561,27 @@ export async function POST(req: Request) {
       }
 
       if (segments.length > 0) {
-        if (!force && stored.cited) {
-          return NextResponse.json({
-            ok: true,
-            linked: true,
-            cached: true,
-            cited: stored.cited,
-            summary: stored.summary,
-          });
-        }
+        /** حفظ best-effort — merge جوه الصف (فشل الحفظ ما يكسرش الرد). */
+        const saveLessonContent = async (patch: Record<string, unknown>): Promise<boolean> => {
+          const now = new Date().toISOString();
+          try {
+            const { error: upsertError } = await supabase.from("lesson_content").upsert(
+              { user_id: user.id, day_id: dayId, ...patch, updated_at: now },
+              { onConflict: "user_id,day_id" }
+            );
+            if (upsertError) {
+              console.warn("lesson-content: حفظ فشل (migration ناقصة؟):", upsertError.message);
+              return false;
+            }
+            return true;
+          } catch (saveError) {
+            console.warn("lesson-content: حفظ فشل:", saveError);
+            return false;
+          }
+        };
 
-        let completion;
-        try {
-          completion = await aiRouter.completeChat("chat", {
-            messages: buildCitedMessages({ topic, subject: subjectName, description, segments }),
-            temperature: 0.3,
-            maxTokens: 4096,
-            usage,
-          });
-        } catch (error) {
-          if (!(error instanceof AiProviderError)) throw error;
+        /** رد خطأ موحّد لأخطاء مزوّد الـ AI. */
+        const providerError = (error: AiProviderError) => {
           const isRate = error.status === 429;
           const isUnavailable = error.status === 503;
           return NextResponse.json(
@@ -572,17 +595,15 @@ export async function POST(req: Request) {
             },
             { status: isUnavailable ? 503 : isRate ? 429 : 502 }
           );
-        }
+        };
 
-        const parsed = parseCitedExplanation(completion.content ?? "", segments);
-        if (!parsed.ok) {
-          // الموديل رجع مراجع غير صالحة — مش بنحفظ «أرقام وهمية».
-          console.warn("lesson-content: cited rejected:", parsed.reason);
-          return NextResponse.json(
+        /** رد خطأ Citations المرفوضة. */
+        const citedInvalid = () =>
+          NextResponse.json(
             {
               error: {
                 message:
-                  parsed.reason === "BAD_HONESTY"
+                  parsedReason === "BAD_HONESTY"
                     ? "الرد جه بأكثر من ثلث المراجع مش متطابقة مع التفريغ. جرّب تاني."
                     : "الرد جه بدون مراجع صالحة من التفريغ. جرّب تاني.",
                 code: "CITED_INVALID",
@@ -590,50 +611,213 @@ export async function POST(req: Request) {
             },
             { status: 502 }
           );
-        }
+        let parsedReason: string | null = null;
 
-        void recordAiOperation(supabase, {
-          userId: user.id,
-          provider: completion.provider,
-          model: completion.model,
-          taskType: "chat",
-          status: "completed",
-          usage: completion.usage,
-          contentLength: (completion.content ?? "").length,
-        });
-
-        const now = new Date().toISOString();
-        let saved = false;
-        try {
-          const { error: upsertError } = await supabase.from("lesson_content").upsert(
-            {
-              user_id: user.id,
-              day_id: dayId,
-              cited_explanation: parsed.cited,
-              summary: parsed.summary,
-              ...(transcriptFromLecture ? { transcript: { segments } } : {}),
-              model: completion.model ?? null,
-              generated_at: now,
-              updated_at: now,
-            },
-            { onConflict: "user_id,day_id" }
-          );
-          if (upsertError) {
-            console.warn("lesson-content: حفظ فشل (migration ناقصة؟):", upsertError.message);
-          } else {
-            saved = true;
+        /**
+         * ensureCited — قراءة/توليد الشرح **الأساسي** المبني على التفريغ.
+         * المصدر الأساسي للدرس المربوط — الأوضاع الثلاثة بتشتغل فوقه.
+         */
+        const ensureCited = async (
+          forceFlag: boolean
+        ): Promise<
+          | { ok: true; cited: LessonCitedExplanation; summary: string | null; cached: boolean; saved: boolean }
+          | { ok: false; response: NextResponse }
+        > => {
+          if (!forceFlag && stored.cited) {
+            return { ok: true, cited: stored.cited, summary: stored.summary, cached: true, saved: true };
           }
-        } catch (saveError) {
-          console.warn("lesson-content: حفظ فشل:", saveError);
+
+          let completion;
+          try {
+            completion = await aiRouter.completeChat("chat", {
+              messages: buildCitedMessages({ topic, subject: subjectName, description, segments }),
+              temperature: 0.3,
+              maxTokens: 4096,
+              usage,
+            });
+          } catch (error) {
+            if (!(error instanceof AiProviderError)) throw error;
+            return { ok: false, response: providerError(error) };
+          }
+
+          const parsed = parseCitedExplanation(completion.content ?? "", segments);
+          if (!parsed.ok) {
+            // الموديل رجع مراجع غير صالحة — مش بنحفظ «أرقام وهمية».
+            console.warn("lesson-content: cited rejected:", parsed.reason);
+            parsedReason = parsed.reason;
+            return { ok: false, response: citedInvalid() };
+          }
+
+          void recordAiOperation(supabase, {
+            userId: user.id,
+            provider: completion.provider,
+            model: completion.model,
+            taskType: "chat",
+            status: "completed",
+            usage: completion.usage,
+            contentLength: (completion.content ?? "").length,
+          });
+
+          const saved = await saveLessonContent({
+            cited_explanation: parsed.cited,
+            summary: parsed.summary,
+            ...(transcriptFromLecture ? { transcript: { segments } } : {}),
+            model: completion.model ?? null,
+            generated_at: new Date().toISOString(),
+          });
+
+          return { ok: true, cited: parsed.cited, summary: parsed.summary, cached: false, saved };
+        };
+
+        /* ── الأوضاع الثلاثة فوق التفريغ (P2): التفريغ هو المصدر الأساسي ── */
+        if (isExplanationMode(mode)) {
+          if (mode === "summary") {
+            // التلخيصي: derivation نصي من الشرح الم citied — بدون AI (اقتصادي بالكامل).
+            let baseCited = stored.cited;
+            let baseSaved = true;
+            if (!baseCited) {
+              const base = await ensureCited(force);
+              if (!base.ok) return base.response;
+              baseCited = base.cited;
+              baseSaved = base.saved;
+            }
+            const text = deriveSummaryFromCited(baseCited!);
+            if (!text.trim()) {
+              return NextResponse.json(
+                { error: { message: "الشرح المرتبط بالتفريغ فاضي — أعد التوليد الأول.", code: "CITED_INVALID" } },
+                { status: 502 }
+              );
+            }
+            const cached =
+              typeof stored.modes.summary === "string" && stored.modes.summary.trim() === text.trim();
+            let saved = baseSaved;
+            if (!cached) {
+              saved = await saveLessonContent({
+                explanation: { ...stored.rawExplanation, summary: text },
+              });
+            }
+            return NextResponse.json({
+              ok: true,
+              linked: true,
+              source: "transcript",
+              mode,
+              explanationMode: mode,
+              modeLabel: EXPLANATION_MODE_LABELS.summary,
+              content: text,
+              cached,
+              saved,
+              version: null,
+              previousVersions: [],
+            });
+          }
+
+          // general / detailed — توليد AI محكم بالاقتباس فوق نفس التفريغ.
+          const storedCitedMode = readCitedMode(stored.rawExplanation, mode);
+          if (storedCitedMode && !force) {
+            const versions = readCitedVersions(stored.rawExplanation, mode);
+            return NextResponse.json({
+              ok: true,
+              linked: true,
+              source: "transcript",
+              mode,
+              explanationMode: mode,
+              modeLabel: EXPLANATION_MODE_LABELS[mode],
+              cited: storedCitedMode,
+              cached: true,
+              saved: true,
+              version: versions.length + 1,
+              previousVersions: versions.map((v) => ({
+                text: citedToText(v.cited),
+                generatedAt: v.generatedAt,
+                model: null,
+              })),
+            });
+          }
+
+          let completion;
+          try {
+            completion = await aiRouter.completeChat("chat", {
+              messages: buildCitedMessages({
+                topic,
+                subject: subjectName,
+                description,
+                segments,
+                modeHint: CITED_MODE_HINTS[mode],
+              }),
+              temperature: 0.3,
+              maxTokens: 4096,
+              usage,
+            });
+          } catch (error) {
+            if (!(error instanceof AiProviderError)) throw error;
+            return providerError(error);
+          }
+
+          const parsed = parseCitedExplanation(completion.content ?? "", segments);
+          if (!parsed.ok) {
+            console.warn("lesson-content: cited overlay rejected:", parsed.reason);
+            parsedReason = parsed.reason;
+            return citedInvalid();
+          }
+
+          void recordAiOperation(supabase, {
+            userId: user.id,
+            provider: completion.provider,
+            model: completion.model,
+            taskType: "chat",
+            status: "completed",
+            usage: completion.usage,
+            contentLength: (completion.content ?? "").length,
+          });
+
+          // الإصدار القديم بيتنفد للإصدارات — مش بيتمسح (نفس فلسفة الأوضاع المخزّنة).
+          const previousVersions = readCitedVersions(stored.rawExplanation, mode);
+          const versionsList = storedCitedMode
+            ? [{ cited: storedCitedMode, generatedAt: row?.generated_at ?? new Date().toISOString() }, ...previousVersions].slice(
+                0,
+                MAX_EXPLANATION_VERSIONS
+              )
+            : previousVersions;
+          const saved = await saveLessonContent({
+            explanation: {
+              ...stored.rawExplanation,
+              [citedModeKey(mode)]: parsed.cited,
+              [citedVersionsKey(mode)]: versionsList,
+            },
+            model: completion.model ?? null,
+            generated_at: new Date().toISOString(),
+          });
+
+          return NextResponse.json({
+            ok: true,
+            linked: true,
+            source: "transcript",
+            mode,
+            explanationMode: mode,
+            modeLabel: EXPLANATION_MODE_LABELS[mode],
+            cited: parsed.cited,
+            cached: false,
+            saved,
+            version: versionsList.length + 1,
+            previousVersions: versionsList.map((v) => ({
+              text: citedToText(v.cited),
+              generatedAt: v.generatedAt,
+              model: null,
+            })),
+          });
         }
 
+        /* ── المسار الأساسي: الشرح المبني على التفريغ (المصدر الأساسي للدرس المربوط) ── */
+        const base = await ensureCited(force);
+        if (!base.ok) return base.response;
         return NextResponse.json({
           ok: true,
           linked: true,
-          cached: false,
-          saved,
-          cited: parsed.cited,
-          summary: parsed.summary,
+          source: "transcript",
+          cached: base.cached,
+          saved: base.saved,
+          cited: base.cited,
+          summary: base.summary,
         });
       }
 

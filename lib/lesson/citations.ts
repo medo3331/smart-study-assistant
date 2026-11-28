@@ -140,6 +140,14 @@ export function capSegmentsForPrompt(segments: TimedSegment[]): TimedSegment[] {
   return picked;
 }
 
+/** تلميح وضع الشرح فوق التفريغ — يُضاف للبرومبت (الأوضاع الثلاثة فوق التفريغ). */
+export const CITED_MODE_HINTS: Record<"general" | "detailed", string> = {
+  general:
+    "الوضع المطلوب: **شرح عام** — فهم أساسي مختصر يجاوب «الموضوع ده إيه وليه مهم» في نقاط قليلة واضحة (من ٣ لـ ٥ أقسام صغيرة)، من غير استرسال ولا تفاصيل جانبية. الالتزام بقواعد المرجع زي ما هي.",
+  detailed:
+    "الوضع المطلوب: **شرح تفصيلي كامل بعمق** — قسّم الشرح لأقسام أكثر، عرّف كل مفهوم بدقة، اشرح ليه وفكّر خطوة بخطوة، واذكر الأمثلة والأرقام اللي في التفريغ. الالتزام بقواعد المرجع زي ما هي.",
+};
+
 /** بنبني رسائل التوليد (نظام + مستخدم) من التفريغ والموضوع. */
 export function buildCitedMessages(input: {
   topic: string;
@@ -147,8 +155,10 @@ export function buildCitedMessages(input: {
   /** وصف الدرس من study_days — سياق إضافي للـ AI (اختياري). */
   description?: string;
   segments: TimedSegment[];
+  /** تلميح وضع الشرح (شرح عام/تفصيلي فوق التفريغ — P2) — اختياري. */
+  modeHint?: string;
 }): AiChatMessage[] {
-  const { topic, subject, description } = input;
+  const { topic, subject, description, modeHint } = input;
   const segments = capSegmentsForPrompt(input.segments);
 
   const lines = segments.map((segment) => `[S${segment.index}] ${segment.text}`);
@@ -156,6 +166,7 @@ export function buildCitedMessages(input: {
   const header = [
     `الدرس: "${topic}"${subject ? ` — مادة ${subject}` : ""}.`,
     description ? `وصف الدرس: ${description.slice(0, 500)}` : "",
+    modeHint ?? "",
     "هذا تفريغ المحاضرة (كل سطر: رقم المقطع S<رقم> ثم النص):",
     "استخدم الأرقام دي بالظبط في `seg`.",
   ]

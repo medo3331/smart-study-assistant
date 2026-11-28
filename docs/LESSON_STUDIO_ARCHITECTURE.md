@@ -275,9 +275,17 @@ lesson_content (PK: user_id + day_id)
 > الأوضاع دي مفاتيح نصية جوّه `explanation` jsonb **بدون أي migration**، وإعادة التوليد
 > («أعد الشرح») بتحفظ **إصدارًا جديدًا** — القديم بيتنفد لقائمة تحت `<mode>__versions`
 > (مش بيتمسح بدون تأكيد). العقود في `lib/lesson/explanations.ts`، والتوليد جوه
-> `/api/lesson-content` نفسه (مفيش endpoint جديد). الدرس المربوط بمحاضرة بيفضل يعرض
-> الشرح المبني على التفريغ (cited) — «المحاضرة المرتبطة» هي مصدره، والأوضاع الثلاثة
-> بتشتغل في المسار غير المربوط والـ Tutor واعي بالوضع في الحالتين.
+> `/api/lesson-content` نفسه (مفيش endpoint جديد).
+>
+> **الأوضاع الثلاثة فوق التفريغ (P2 — قرار المستخدم):** لما الدرس مربوط بمحاضرة عندها تفريغ،
+> التفريغ (cited) بيبقى **المصدر الأساسي** والأوضاع الثلاثة بتشتغل **فوقه**:
+>   • `summary` (تلخيصي) — **derivation نصي بدون AI** من الشرح الم citied (`deriveSummaryFromCited`
+>     في `lib/lesson/cited-derive.ts`)، بيخزّن جوه `explanation.summary`.
+>   • `general` / `detailed` — توليد AI محكم بالاقتباس فوق نفس التفريغ (`buildCitedMessages`
+>     بـ `modeHint` من `CITED_MODE_HINTS` + نفس تحقّق `parseCitedExplanation`) — بيخزّنوا كائنات
+>     cited تحت `explanation.<mode>__cited` وإصداراتهم تحت `<mode>__cited__versions`.
+>   • الـ badge في تاب Learn يوضّح «من التفريغ المرتبط» — والمراجع (seg + quote) محفوظة في
+>     كل الأوضاع فوق التفريغ.
 > الأوضاع القديمة الأربعة (`simple/academic/visual/practical`) لسه صالحة ومتخزّنة، والقراءة بتقبل الاتنين.
 
 نضيف أعمدة على **نفس الجدول** (مش جدول جديد — التدقيق أسس ده صح):
