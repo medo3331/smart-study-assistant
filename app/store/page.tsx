@@ -46,8 +46,13 @@ export default async function StorePage() {
       <div className="max-w-3xl mx-auto px-4 py-10">
         <Link href="/dashboard" className="text-sm text-[#9AA0C0] hover:text-white mb-6 inline-block">← العودة للوحة</Link>
         <h1 className="text-3xl font-extrabold mb-2">المتجر</h1>
-        <p className="text-[#9AA0C0] mb-8">
+        <p className="text-[#9AA0C0] mb-2">
           اشترِ رصيد AI Credits: اطلب الحزمة، حوّل المبلغ، أكّد الدفع برقم العملية — وسيشحن الرصيد بعد مراجعة الإدارة.
+        </p>
+        <p className="mb-8 text-sm">
+          <Link href="/shop" className="text-violet-300 underline underline-offset-4 hover:text-violet-200">
+            عايز كوينز؟ شحن الكوينز والتبديل بين الكوينز والكريدت في متجر المنصة ↗
+          </Link>
         </p>
         <StoreClient packs={packs} instructions={instructions} isAuthenticated={isAuthenticated} />
         <footer className="text-center text-xs text-[#7A8298] pt-6 mt-8 border-t border-[#2A3050]">Magiclly — دفع يدوي</footer>

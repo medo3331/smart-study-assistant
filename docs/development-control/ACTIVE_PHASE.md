@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **المرحلة** | `DEV-M2` — Magicly Market (متجر `/shop` الموحّد + الشراء المختلط الذري) |
-| **الحالة** | ⏳ **لم تبدأ** — بانتظار البدء |
+| **الحالة** | 🔄 **جارية** — الجزء ١ (Market Money + Exchange) مكتمل ومطبّق على الإنتاج |
 | **الفرع** | `feat/community-c1-discovery` |
 | **آخر تحديث** | 2026-11-28 |
 | **ملف المرحلة السابقة** | `phases/dev-m1-economy-foundation.md` (مكتملة — تقرير الإغلاق داخله) |
@@ -18,6 +18,10 @@
 - الحارس `trg_coin_ledger_earn_guard` يمنع كتابة الكلاينت على `coin_ledger` (مُثبت).
 - قواعد 29 مصدر — مصادر DEV-M1 والفلوس `is_live=false`.
 - التفاصيل: `phases/dev-m1-economy-foundation.md` · قرارات D-M-01..07 في `DECISIONS.md`.
+
+## 1ب. ما أُغلق داخل DEV-M2 حتى الآن
+
+- **الجزء ١ — Market Money + Exchange (✅ 2026-11-28):** `db/115` مطبّقة على الإنتاج — باقات الكوينز بالفلوس عبر مسار الدفع اليدوي (D-M-09) + التبديل الذري بالاتجاهين مع سقوف يومية (D-M-08) + واجهات `/shop` و`/store` والإدارة. التفاصيل: `phases/dev-m2-market-money-exchange.md`.
 
 ## 2. نطاق DEV-M2 (من `docs/STORE_GAMES_REBUILD_PROPOSAL.md`)
 
@@ -40,3 +44,4 @@
 | التاريخ | الحدث |
 |---|---|
 | 2026-11-28 | إغلاق DEV-M1 (تطبيق 113/114 على الإنتاج + تحقق كامل + commit `286f952a`) — فتح DEV-M2 |
+| 2026-11-28 | DEV-M2 جزء ١: Market Money + Exchange — db/115 على الإنتاج + smoke transactional + واجهات (D-M-08/D-M-09) |

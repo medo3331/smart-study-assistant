@@ -10,9 +10,11 @@ import { createServiceClient } from "@/lib/supabase/admin";
 export type PurchaseRequestRow = {
   id: string;
   user_id: string;
-  kind: "credits" | "plan";
+  kind: "credits" | "plan" | "coins";
   pack_id: string | null;
   credits: number | null;
+  coin_pack_id: string | null;
+  coins: number | null;
   plan_key: string | null;
   plan_duration_days: number | null;
   amount: number | null;

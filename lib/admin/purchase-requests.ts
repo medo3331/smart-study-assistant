@@ -23,7 +23,7 @@ export type PurchaseRequestsOverview = {
   cancelled: number;
 };
 
-export async function listPurchaseRequests(limit = 200, kind?: "credits" | "plan"): Promise<PurchaseRequestAdminView[]> {
+export async function listPurchaseRequests(limit = 200, kind?: "credits" | "plan" | "coins"): Promise<PurchaseRequestAdminView[]> {
   const db = createServiceClient();
   let query = db
     .from("purchase_requests")

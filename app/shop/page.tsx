@@ -14,7 +14,8 @@
    ⚠️ متجر النهارده والعجلة بيبانوا في «الكل» وبدون بحث بس. في نتيجة
    مفلترة الاتنين بيبقوا ضوضاء بين المستخدم واللي بيدوّر عليه.
 
-   ⚠️ الكوينز بتتكسب بالمذاكرة **بس**. مفيش شرا بفلوس حقيقية في أي مكان.
+   ⚠️ الكوينز بتتكسب بالمذاكرة أساسًا، ومن db/115 فيه شحن بالفلوس (D-M-09)
+   وتبديل مع الكريدت (D-M-08) — القسمين بيخفوا لو جداول db/115 مش متطبقة.
 
    ⚠️ الصفحة تحت `/shop` مش `/dashboard/shop` عشان النقل من الداشبورد
    والمخزن يبقى `push` واحد، ونفس سابقة `/community`.
@@ -37,6 +38,8 @@ import { BOXES, type BoxTier } from "@/lib/shop/boxes";
 import { useShop } from "@/lib/shop/use-shop";
 import { BoxPanel } from "@/components/shop/BoxPanel";
 import { BoxSheet } from "@/components/shop/BoxSheet";
+import { CoinPacksPanel } from "@/components/shop/CoinPacksPanel";
+import { ExchangeWidget } from "@/components/shop/ExchangeWidget";
 import { DailyStrip } from "@/components/shop/DailyStrip";
 import { ItemCard } from "@/components/shop/ItemCard";
 import { ItemSheet } from "@/components/shop/ItemSheet";
@@ -263,13 +266,18 @@ export default function ShopPage() {
     <PageShell
       eyebrow="المتجر"
       title="اصرف كوينزك"
-      lede="الكوينز بتتكسب بالمذاكرة بس — مفيش شرا بفلوس هنا ولا هيبقى."
+      lede="الكوينز بتتكسب بالمذاكرة — وفيه كمان شحن بالفلوس وتبديل مع الكريدت."
       feedbackPage="shop"
       feedbackLabel="المتجر"
       action={
-        <button onClick={() => router.push("/inventory")} className="btn btn-quiet text-sm">
-          مخزني
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push("/store")} className="btn btn-quiet text-sm">
+            شحن الكريدت
+          </button>
+          <button onClick={() => router.push("/inventory")} className="btn btn-quiet text-sm">
+            مخزني
+          </button>
+        </div>
       }
     >
       <ShopBar state={state} />
@@ -364,6 +372,18 @@ export default function ShopPage() {
           وهو بيكتب. */}
       {showExtras && (
         <>
+          {/* شحن الكوينز بالفلوس + التبديل مع الكريدت — بيبانوا في «الكل»
+              بس وبيخفوا لو جداول db/115 مش متطبقة بعد */}
+          <CoinPacksPanel
+            supabase={supabase}
+            coinBalance={state.balance}
+            onCoinsGranted={shop.reload}
+          />
+          <ExchangeWidget
+            supabase={supabase}
+            coinBalance={state.balance}
+            onChanged={shop.reload}
+          />
           <DailyStrip
             offers={shop.daily}
             balance={state.balance}

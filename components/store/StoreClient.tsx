@@ -189,7 +189,9 @@ export default function StoreClient({
                       <span className="font-bold">
                         {r.kind === "plan"
                           ? `اشتراك ${r.plan_key === "pro" ? "احترافي" : r.plan_key === "ultra" ? "ألتميت" : r.plan_key} · ${r.plan_duration_days} يوم`
-                          : `${r.credits} كريدت`}
+                          : r.kind === "coins"
+                            ? `${r.coins} كوين`
+                            : `${r.credits} كريدت`}
                       </span>
                       <span className="text-[#9AA0C0] font-mono" dir="ltr">
                         {r.amount != null ? `${Number(r.amount).toFixed(0)} ${r.currency}` : ""}
