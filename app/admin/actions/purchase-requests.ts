@@ -11,8 +11,15 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/lib/admin/audit-log-record";
 import { requireAdminActor } from "@/lib/admin/action-guard";
-import { notifyUser } from "@/lib/store/purchase-requests";
+import { getTicketMessages } from "@/lib/admin/purchase-requests";
+import { appendTicketAdminReply, notifyUser } from "@/lib/store/purchase-requests";
 import { isUuid } from "@/lib/credits/grants";
+
+/** قراءة محادثة الدعم المرتبطة بطلب (للعرض في لوحة المراجعة). */
+export async function fetchPurchaseTicketMessages(requestId: string) {
+  await requireAdminActor("subscriptions.manage");
+  return getTicketMessages(requestId);
+}
 
 export interface PurchaseRequestActionResult {
   ok: boolean;
@@ -26,14 +33,14 @@ async function loadRequest(requestId: string) {
   const db = createServiceClient();
   const { data, error } = await db
     .from("purchase_requests")
-    .select("id, user_id, kind, credits, plan_key, plan_duration_days, amount, currency, status")
+    .select("id, user_id, kind, credits, plan_key, plan_duration_days, amount, currency, status, ticket_id")
     .eq("id", requestId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data as {
     id: string; user_id: string; kind: "credits" | "plan";
     credits: number | null; plan_key: string | null; plan_duration_days: number | null;
-    amount: number | null; currency: string; status: string;
+    amount: number | null; currency: string; status: string; ticket_id: string | null;
   } | null;
 }
 
@@ -148,6 +155,12 @@ export async function approvePurchaseRequest(requestId: string, adminNote?: stri
       ? `تمت الموافقة على اشتراك ${planLabel(request.plan_key)} وتفعيله.${note ? ` ملاحظة الإدارة: ${note}` : ""}`
       : `تمت الموافقة على طلبك وإضافة ${request.credits} كريدت لرصيدك.${note ? ` ملاحظة الإدارة: ${note}` : ""}`
   );
+  await appendTicketAdminReply(
+    request.ticket_id,
+    adminUserId,
+    `✅ تم قبول طلب الاشتراك وتفعيل باقة ${planLabel(request.plan_key)} لمدة ${request.plan_duration_days ?? 30} يوم.${note ? `\nملاحظة الإدارة: ${note}` : ""}`,
+    true
+  );
   await recordAuditLog({
     actor: adminUserId, actor_email: actor.userEmail ?? null, action: "subscriptions.manage", resource_type: "purchase_request", resource_id: requestId,
     details: { request_id: requestId, kind: request.kind, user_id: request.user_id, amount: request.amount, note }, result: "PASS",
@@ -188,12 +201,122 @@ export async function rejectPurchaseRequest(requestId: string, adminNote?: strin
     request.kind === "plan" ? "لم يتم قبول طلب الاشتراك ❌" : "لم يتم قبول طلب شراء الكريدت ❌",
     `بعد مراجعة إثبات الدفع، لم يتم قبول الطلب.${note ? ` السبب: ${note}` : " تواصل مع الدعم للاستفسار."}`
   );
+  await appendTicketAdminReply(
+    request.ticket_id,
+    adminUserId,
+    `❌ لم يتم قبول طلب الاشتراك بعد مراجعة إثبات الدفع.${note ? `\nالسبب: ${note}` : ""}`,
+    true
+  );
   await recordAuditLog({
     actor: adminUserId, actor_email: actor.userEmail ?? null, action: "subscriptions.manage", resource_type: "purchase_request", resource_id: requestId,
     details: { request_id: requestId, kind: request.kind, user_id: request.user_id, note }, result: "PASS",
   });
 
   return { ok: true, message: "تم رفض الطلب وإشعار المستخدم." };
+}
+
+export interface PurchaseRequestUpdateInput {
+  requestId: string;
+  planKey?: string;
+  durationDays?: number;
+  amount?: number;
+  adminNote?: string;
+}
+
+/**
+ * تعديل الطلب من الأدمن قبل المراجعة النهائية: الباقة / المدة / المبلغ / ملاحظة.
+ * مسموح فقط قبل القرار (awaiting_payment أو payment_submitted) ولكل تعديل سجل audit.
+ */
+export async function updatePurchaseRequestAdmin(input: PurchaseRequestUpdateInput): Promise<PurchaseRequestActionResult> {
+  let actor;
+  try {
+    ({ actor } = await requireAdminActor("subscriptions.manage"));
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "غير مصرح", error: "authorization_denied" };
+  }
+  const adminUserId = actor.userId!;
+  const db = createServiceClient();
+
+  if (!isUuid(input.requestId)) {
+    return { ok: false, message: "معرّف الطلب غير صالح.", error: "invalid_request_id" };
+  }
+  const request = await loadRequest(input.requestId).catch(() => null);
+  if (!request) {
+    return { ok: false, message: "الطلب غير موجود.", error: "not_found" };
+  }
+  if (request.status !== "awaiting_payment" && request.status !== "payment_submitted") {
+    return { ok: false, message: "لا يمكن تعديل الطلب بعد صدور القرار.", error: "status_invalid" };
+  }
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.planKey !== undefined) {
+    const planKey = input.planKey.trim().toLowerCase();
+    if (!["pro", "ultra"].includes(planKey)) {
+      return { ok: false, message: "الباقة يجب أن تكون pro أو ultra.", error: "invalid_plan" };
+    }
+    updates.plan_key = planKey;
+  }
+  if (input.durationDays !== undefined) {
+    if (!Number.isInteger(input.durationDays) || input.durationDays < 1 || input.durationDays > 365) {
+      return { ok: false, message: "المدة يجب أن تكون من 1 إلى 365 يوم.", error: "invalid_duration" };
+    }
+    updates.plan_duration_days = input.durationDays;
+  }
+  if (input.amount !== undefined) {
+    if (!Number.isFinite(input.amount) || input.amount < 0) {
+      return { ok: false, message: "المبلغ غير صالح.", error: "invalid_amount" };
+    }
+    updates.amount = input.amount;
+  }
+  if (input.adminNote !== undefined) {
+    updates.admin_note = input.adminNote.trim().slice(0, MAX_NOTE) || null;
+  }
+
+  const { error: updateError } = await db
+    .from("purchase_requests")
+    .update(updates)
+    .eq("id", input.requestId)
+    .in("status", ["awaiting_payment", "payment_submitted"]);
+  if (updateError) {
+    return { ok: false, message: `فشل التعديل: ${updateError.message}`, error: "update_failed" };
+  }
+
+  await recordAuditLog({
+    actor: adminUserId, actor_email: actor.userEmail ?? null, action: "subscriptions.manage",
+    resource_type: "purchase_request", resource_id: input.requestId,
+    details: { request_id: input.requestId, action: "admin_edit", changes: updates }, result: "PASS",
+  });
+
+  return { ok: true, message: "تم حفظ التعديلات على الطلب." };
+}
+
+/** رد الإدارة في محادثة الدعم المرتبطة بطلب اشتراك (تظهر للمستخدم في /inbox). */
+export async function replyToPurchaseTicket(requestId: string, message: string): Promise<PurchaseRequestActionResult> {
+  let actor;
+  try {
+    ({ actor } = await requireAdminActor("subscriptions.manage"));
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "غير مصرح", error: "authorization_denied" };
+  }
+  const adminUserId = actor.userId!;
+  const text = (message ?? "").trim().slice(0, 5000);
+  if (!text) {
+    return { ok: false, message: "اكتب نص الرد أولًا.", error: "empty_message" };
+  }
+  if (!isUuid(requestId)) {
+    return { ok: false, message: "معرّف الطلب غير صالح.", error: "invalid_request_id" };
+  }
+  const request = await loadRequest(requestId).catch(() => null);
+  if (!request?.ticket_id) {
+    return { ok: false, message: "الطلب غير مرتبط بمحادثة دعم.", error: "no_ticket" };
+  }
+  await appendTicketAdminReply(request.ticket_id, adminUserId, text, false);
+  await recordAuditLog({
+    actor: adminUserId, actor_email: actor.userEmail ?? null, action: "subscriptions.manage",
+    resource_type: "purchase_request", resource_id: requestId,
+    details: { request_id: requestId, action: "ticket_reply" }, result: "PASS",
+  });
+  return { ok: true, message: "تم إرسال الرد في المحادثة." };
 }
 
 function planLabel(planKey: string | null): string {

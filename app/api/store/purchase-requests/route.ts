@@ -14,7 +14,11 @@
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { notifyAdmins, type PurchaseRequestRow } from "@/lib/store/purchase-requests";
+import {
+  createSupportTicketForRequest,
+  notifyAdmins,
+  type PurchaseRequestRow,
+} from "@/lib/store/purchase-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +57,7 @@ export async function POST(req: Request) {
   const packId = typeof (body as { packId?: unknown }).packId === "string" ? (body as { packId: string }).packId.trim() : "";
   const planKeyRaw = typeof (body as { planKey?: unknown }).planKey === "string" ? (body as { planKey: string }).planKey.trim().toLowerCase() : "";
   const durationDaysRaw = Number((body as { durationDays?: unknown }).durationDays);
+  const viaSupport = (body as { viaSupport?: unknown }).viaSupport === true;
 
   // ── منع الطلبات المكرّرة: طلب نشط واحد لنفس الهدف ──
   const activeStatuses = ["awaiting_payment", "payment_submitted"] as const;
@@ -156,12 +161,26 @@ export async function POST(req: Request) {
     if (insertError || !created) {
       return NextResponse.json({ ok: false, error: "تعذر إنشاء الطلب. حاول مرة أخرى.", code: "INSERT_FAILED" }, { status: 500 });
     }
+
+    // مسار رسايل الدعم: فتح تذكرة بالمحادثة وربطها بالطلب.
+    let ticketId: string | null = null;
+    if (viaSupport) {
+      ticketId = await createSupportTicketForRequest({
+        userId: user.id,
+        requestId: created.id,
+        planLabel: row.display_name_ar || row.name || row.plan_key,
+        durationDays,
+        amount,
+        currency: row.currency || "EGP",
+      });
+    }
+
     void notifyAdmins({
       title: "طلب اشتراك جديد",
-      message: `باقة ${row.display_name_ar || row.name || row.plan_key} لمدة ${durationDays} يوم — في انتظار تأكيد الدفع. راجع /admin/purchase-requests`,
+      message: `باقة ${row.display_name_ar || row.name || row.plan_key} لمدة ${durationDays} يوم${viaSupport ? " — عبر رسايل الدعم" : ""} — في انتظار تأكيد الدفع. راجع /admin/subscription-requests`,
       type: "warning",
     });
-    return NextResponse.json({ ok: true, requestId: created.id, status: "awaiting_payment" }, { status: 201 });
+    return NextResponse.json({ ok: true, requestId: created.id, ticketId, status: "awaiting_payment" }, { status: 201 });
   }
 
   return NextResponse.json({ ok: false, error: "نوع الطلب غير معروف.", code: "KIND_INVALID" }, { status: 400 });

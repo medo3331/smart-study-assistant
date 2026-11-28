@@ -10,6 +10,8 @@ export type PurchaseRequestAdminView = PurchaseRequestRow & {
   user_email: string | null;
   user_name: string | null;
   user_code: string | null;
+  ticket_title: string | null;
+  ticket_status: string | null;
 };
 
 export type PurchaseRequestsOverview = {
@@ -21,13 +23,15 @@ export type PurchaseRequestsOverview = {
   cancelled: number;
 };
 
-export async function listPurchaseRequests(limit = 200): Promise<PurchaseRequestAdminView[]> {
+export async function listPurchaseRequests(limit = 200, kind?: "credits" | "plan"): Promise<PurchaseRequestAdminView[]> {
   const db = createServiceClient();
-  const { data: requests, error } = await db
+  let query = db
     .from("purchase_requests")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (kind) query = query.eq("kind", kind);
+  const { data: requests, error } = await query;
   if (error) throw new Error(error.message);
   const rows = (requests ?? []) as PurchaseRequestRow[];
   if (rows.length === 0) return [];
@@ -41,15 +45,51 @@ export async function listPurchaseRequests(limit = 200): Promise<PurchaseRequest
     ((profiles ?? []) as Array<{ id: string; email?: string | null; display_name?: string | null; public_user_code?: string | null }>).map((p) => [p.id, p])
   );
 
+  const ticketIds = Array.from(new Set(rows.map((r) => r.ticket_id).filter((id): id is string => !!id)));
+  const ticketMap = new Map<string, { title: string | null; status: string | null }>();
+  if (ticketIds.length > 0) {
+    const { data: tickets } = await db
+      .from("support_tickets")
+      .select("id, title, status")
+      .in("id", ticketIds);
+    for (const t of (tickets ?? []) as Array<{ id: string; title?: string | null; status?: string | null }>) {
+      ticketMap.set(t.id, { title: t.title ?? null, status: t.status ?? null });
+    }
+  }
+
   return rows.map((r) => {
     const p = profileMap.get(r.user_id);
+    const ticket = r.ticket_id ? ticketMap.get(r.ticket_id) : undefined;
     return {
       ...r,
       user_email: p?.email ?? null,
       user_name: p?.display_name ?? null,
       user_code: p?.public_user_code ?? null,
+      ticket_title: ticket?.title ?? null,
+      ticket_status: ticket?.status ?? null,
     };
   });
+}
+
+/** رسائل محادثة الدعم المرتبطة بطلب (لعرضها في لوحة المراجعة). */
+export async function getTicketMessages(requestId: string): Promise<
+  Array<{ id: string; author_role: string; body: string; created_at: string }>
+> {
+  const db = createServiceClient();
+  const { data: request } = await db
+    .from("purchase_requests")
+    .select("ticket_id")
+    .eq("id", requestId)
+    .maybeSingle();
+  const ticketId = (request as { ticket_id?: string | null } | null)?.ticket_id;
+  if (!ticketId) return [];
+  const { data: messages } = await db
+    .from("support_messages")
+    .select("id, author_role, body, created_at")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true })
+    .limit(100);
+  return (messages ?? []) as Array<{ id: string; author_role: string; body: string; created_at: string }>;
 }
 
 export async function getPurchaseRequestsOverview(): Promise<PurchaseRequestsOverview> {
