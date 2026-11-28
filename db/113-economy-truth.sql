@@ -114,9 +114,9 @@ insert into public.coin_source_rules (id, amount, daily_cap, is_live) values
   -- مصادر متغيّرة — المبلغ الحقيقي من جدول مرجعي (كتالوج/جوايز/تعويض)،
   -- وamount هنا تمثيلي. box_refund بدون سقف يومي بالتصميم (محدود
   -- بمعاملة الصندوق نفسها: تعويض < سعر).
-  ('achievement',      100,   1,  true),
-  ('wheel',             30,   1,  true),
-  ('box_refund',       100,  null, true)
+  ('achievement',      300,   5,  true),
+  ('wheel',            120,   1,  true),
+  ('box_refund',      1000,  null, true)
 on conflict (id) do update set
   amount = excluded.amount,
   daily_cap = excluded.daily_cap,
@@ -329,7 +329,7 @@ begin
       end if;
 
     when 'daily_mission' then
-      if v_ref is null or v_ref !~ '^mission:[a-z]+:\d{4}-\d{2}-\d{2}$' then
+      if v_ref is null or v_ref !~ '^mission:[a-z_]+:\d{4}-\d{2}-\d{2}$' then
         raise exception 'award_coins: daily_mission محتاج مرجع mission:نوع:يوم';
       end if;
       if not exists (
@@ -445,13 +445,9 @@ begin
   if not v_capped then
     -- on conflict do nothing: الفهرس الفريد (user_id, source, ref_id)
     -- بيرجّع awarded = 0 بدل exception عند التكرار.
-    -- app.coin_bypass = تصريح الكتابة للحارس (db/114) — is_local=true
-    -- يعني بيخلص مع الـ transaction لوحده.
-    perform set_config('app.coin_bypass', 'on', true);
     insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata, source_class)
     values (v_uid, p_source, v_amount, 'earn', v_ref, coalesce(p_metadata, '{}'::jsonb), v_class)
     on conflict do nothing;
-    perform set_config('app.coin_bypass', 'off', true);
 
     if found then
       v_awarded := v_amount;
@@ -469,107 +465,206 @@ revoke all on function public.award_coins(text, text, jsonb) from public, anon;
 grant execute on function public.award_coins(text, text, jsonb) to authenticated;
 
 -- ----------------------------------------------------------------------------
--- ٤) _award_coins_variable — المبالغ المتغيرة (achievement / wheel / box_refund)
---    مسار داخلي: ممنوع على anon وauthenticated — بتُنادى من دوال definer فقط
---    (sync_achievements / spin_wheel / open_box بعد تحويلها في db/114).
---    المبلغ بيتحقق إنه ضمن حدود المصدر ومش من الكلاينت.
+-- ٤أ) _award_coins_core — نواة المنح (المعتمدة من الإنتاج كنسخة كانون)
+--    بتشتغل بس من دوال definer (REVOKE تحت). بتتحقق من القاعدة المركزية،
+--    بتقفل المحفظة، بتحترم daily_cap، والفهرس الفريد بيمنع التكرار.
+--    المصادر المتغيرة تم التحقق من مبلغها في _award_coins_variable قبلها.
 -- ----------------------------------------------------------------------------
+
+create or replace function public._award_coins_core(
+  p_uid      uuid,
+  p_source   text,
+  p_ref      text,
+  p_amount   int,
+  p_metadata jsonb default '{}'::jsonb
+)
+returns table (awarded int, balance int, capped boolean)
+language plpgsql
+security definer
+set search_path = public, pg_catalog
+as $$
+declare
+  v_rule      public.coin_source_rules%rowtype;
+  v_today_cnt int;
+  v_awarded   int := 0;
+  v_capped    boolean := false;
+begin
+  if p_uid is null then
+    raise exception '_award_coins_core: uid required';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception '_award_coins_core: invalid amount';
+  end if;
+
+  select * into v_rule
+    from public.coin_source_rules
+   where id = p_source;
+
+  if not found then
+    raise exception 'award_coins: مصدر مش معروف: %', p_source;
+  end if;
+  if not v_rule.is_live then
+    raise exception 'award_coins: المصدر % لسه مش شغّال', p_source;
+  end if;
+
+  -- المصادر الثابتة لازم تطابق القاعدة بالحرف.
+  -- المصادر المتغيرة (achievement/wheel/box_refund) تم التحقق من مبلغها
+  -- في _award_coins_variable مقابل الجدول المرجعي قبل الوصول هنا.
+  if not v_rule.is_variable and p_amount <> v_rule.amount then
+    raise exception 'award_coins: مبلغ المصدر % غير مطابق للقاعدة (%)', p_source, v_rule.amount;
+  end if;
+
+  insert into public.coin_wallets (user_id) values (p_uid)
+    on conflict (user_id) do nothing;
+
+  -- قفل المحفظة: يمنع طلبين متزامنين من قراءة نفس عدّاد السقف.
+  perform 1 from public.coin_wallets where user_id = p_uid for update;
+
+  if v_rule.daily_cap is not null then
+    select count(*) into v_today_cnt
+      from public.coin_ledger
+     where user_id = p_uid
+       and source = p_source
+       and source_type = 'earn'
+       and created_at >= (public.cairo_day()::timestamp at time zone 'Africa/Cairo');
+
+    if v_today_cnt >= v_rule.daily_cap then
+      v_capped := true;
+    end if;
+  end if;
+
+  if not v_capped then
+    /* on conflict do nothing مقصود: نفس (user, source, ref) = awarded 0
+       بدل exception. الفهرس الفريد هو الطبقة الأخيرة ضد التكرار. */
+    insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata)
+    values (p_uid, p_source, p_amount, 'earn', p_ref, coalesce(p_metadata, '{}'::jsonb))
+    on conflict do nothing;
+
+    if found then
+      v_awarded := p_amount;
+    end if;
+  end if;
+
+  return query
+    select v_awarded,
+           coalesce((select sum(l.amount)::int from public.coin_ledger l where l.user_id = p_uid), 0),
+           v_capped;
+end;
+$$;
+
+revoke all on function public._award_coins_core(uuid, text, text, int, jsonb)
+  from public, anon, authenticated, service_role;
+
+-- ----------------------------------------------------------------------------
+-- ٤ب) _award_coins_variable — المبالغ المتغيرة (achievement / wheel / box_refund)
+--    النسخة الكانونة المعتمدة من الإنتاج (أدق من المسودة الأولى): المبلغ
+--    بيتحقق مقابل الجدول المرجعي لكل مصدر (achievements_catalog /
+--    shop_wheel_prizes / shop_refunds) مش ضد حدود واسعة — والكتابة
+--    بتفوّض لـ _award_coins_core. مسار داخلي: ممنوع على أي دور كلاينت
+--    بالـ REVOKE (current_user جوه definer = المالك فمش معيار تمييز).
+-- ----------------------------------------------------------------------------
+
 create or replace function public._award_coins_variable(
   p_source   text,
   p_ref_id   text,          -- null مسموح (box_refund — قرار صريح في db/shop.sql)
   p_amount   int,
   p_metadata jsonb default '{}'::jsonb
 )
-returns int
+returns table (awarded int, balance int, capped boolean)
 language plpgsql
 security definer
 set search_path = public, pg_catalog
 as $$
 declare
-  v_uid     uuid := auth.uid();
-  v_cap     int;
-  v_live    boolean;
-  v_bounds  int[];
-  v_awarded int := 0;
-  v_class   text;
+  v_uid      uuid := auth.uid();
+  v_expected int;
+  v_max      int;
+  v_ach      text;
+  v_rarity   text;
+  v_ref      text := p_ref_id;
 begin
-  /* حماية المسار: الدالة دي بتُنادى من دوال definer داخلية بس
-     (sync_achievements / spin_wheel / open_box). المتصل الداخلي بيعمل
-     set_config('app.coin_bypass','on',true) قبل النداء — اللي إعداده
-     محليًا في جلسته (authenticated) مابيناديش الدالة أصلاً لأنها
-     ممنوعة عليه بالـ REVOKE تحت. */
-  if coalesce(current_setting('app.coin_bypass', true), '') <> 'on' then
-    raise exception '_award_coins_variable: نداء من خارج المسار الداخلي';
+  if v_uid is null then
+    raise exception '_award_coins_variable: لازم تكون داخل بحسابك';
+  end if;
+  if coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) then
+    raise exception '_award_coins_variable: الزائر مايكسبش';
+  end if;
+  if p_source not in ('achievement', 'wheel', 'box_refund') then
+    raise exception '_award_coins_variable: مصدر غير مسموح: %', p_source;
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception '_award_coins_variable: مبلغ غير صالح';
   end if;
 
-  select daily_cap, is_live
-    into v_cap, v_live
-    from public.coin_source_rules
-   where id = p_source;
-
-  if not found then
-    raise exception '_award_coins_variable: مصدر مش معروف: %', p_source;
+  -- الحد الأعلى الموثّق في السجل المركزي (وليس مبلغًا يختاره العميل).
+  select r.amount into v_max from public.coin_source_rules r where r.id = p_source;
+  if v_max is null then
+    raise exception '_award_coins_variable: مصدر غير مسجّل: %', p_source;
   end if;
-  if not v_live then
-    raise exception '_award_coins_variable: المصدر % لسه مش شغّال', p_source;
+  if p_amount > v_max then
+    raise exception '_award_coins_variable: المبلغ % يتجاوز الحد الأعلى % للمصدر %', p_amount, v_max, p_source;
   end if;
 
-  /* حدود المبلغ لكل مصدر متغيّر — مش من الكلاينت، من الدالة نفسها.
-     achievement: كتالوج الإنجازات (والتحقق النهائي في الدالة المستدعية
-     بمقارنة achievements_catalog.coins). wheel: جوايز العجلة.
-     box_refund: جدول shop_refunds. الحدود هنا أوسع من القيم الحالية
-     عن قصد — هي حاجز ضد التلاعب، مش مصدر الحقيقة للقيمة. */
-  v_bounds := case p_source
-    when 'achievement' then array[1, 500]
-    when 'wheel'       then array[1, 500]
-    when 'box_refund'  then array[1, 2000]
-    else null
-  end;
-
-  if v_bounds is null then
-    raise exception '_award_coins_variable: المصدر % مش مصدر متغيّر', p_source;
-  end if;
-  if p_amount is null or p_amount < v_bounds[1] or p_amount > v_bounds[2] then
-    raise exception '_award_coins_variable: مبلغ % خارج حدود المصدر % (%)', p_source, p_amount, v_bounds;
-  end if;
-
-  v_class := case p_source
-    when 'achievement' then 'system'
-    when 'wheel'       then 'games'
-    when 'box_refund'  then 'system'
-    else 'other'
-  end;
-
-  insert into public.coin_wallets (user_id) values (v_uid)
-    on conflict (user_id) do nothing;
-
-  perform 1 from public.coin_wallets where user_id = v_uid for update;
-
-  if v_cap is not null then
-    if (select count(*) from public.coin_ledger
-         where user_id = v_uid
-           and source = p_source
-           and source_type = 'earn'
-           and created_at >= (public.cairo_day()::timestamp
-                              at time zone 'Africa/Cairo')) >= v_cap then
-      return 0;
+  if p_source = 'achievement' then
+    v_ach := coalesce(p_ref_id, '');
+    if v_ach like 'achievement:%' then
+      v_ach := split_part(v_ach, ':', 2);
     end if;
+    if v_ach = '' then
+      raise exception '_award_coins_variable: achievement محتاج معرّف الإنجاز';
+    end if;
+
+    select coins into v_expected
+      from public.achievements_catalog
+     where id = v_ach;
+
+    if v_expected is null then
+      raise exception '_award_coins_variable: إنجاز غير معروف: %', v_ach;
+    end if;
+    if p_amount <> v_expected then
+      raise exception '_award_coins_variable: مبلغ الإنجاز % غير مطابق (%)', v_ach, v_expected;
+    end if;
+    if not exists (
+      select 1 from public.user_achievements ua
+       where ua.user_id = v_uid and ua.achievement_id = v_ach
+    ) then
+      raise exception '_award_coins_variable: الإنجاز مش مسجّل على حسابك';
+    end if;
+
+    v_ref := 'achievement:' || v_ach;
+
+  elsif p_source = 'wheel' then
+    select coins into v_expected
+      from public.shop_wheel_prizes
+     where id = p_ref_id;
+
+    if v_expected is null or p_amount <> v_expected then
+      raise exception '_award_coins_variable: جائزة العجلة غير مطابقة';
+    end if;
+    -- الفهرس الفريد على (user, 'wheel', يوم القاهرة) يمنع أكثر من لفة/يوم.
+    v_ref := public.cairo_day()::text;
+
+  else -- box_refund
+    v_rarity := p_metadata ->> 'rarity';
+    select coins into v_expected
+      from public.shop_refunds
+     where rarity = v_rarity;
+
+    if v_expected is null or p_amount <> v_expected then
+      raise exception '_award_coins_variable: تعويض الصندوق غير مطابق';
+    end if;
+    -- ref يفضل null عن قصد: تعويضات متعددة مشروعة خلال اليوم، ومحدودة
+    -- بعملية فتح صندوق فعلية (خصم حقيقي في نفس المعاملة).
+    v_ref := null;
   end if;
 
-  insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata, source_class)
-  values (v_uid, p_source, p_amount, 'earn', p_ref_id, coalesce(p_metadata, '{}'::jsonb), v_class)
-  on conflict do nothing;
-
-  if found then
-    v_awarded := p_amount;
-  end if;
-
-  return v_awarded;
+  return query
+    select * from public._award_coins_core(v_uid, p_source, v_ref, p_amount, p_metadata);
 end;
 $$;
 
 revoke all on function public._award_coins_variable(text, text, int, jsonb)
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 
 -- ----------------------------------------------------------------------------
 -- ٥) add_coins_grant — عملات مش مكتسبة بالمذاكرة (D-M-01 / D-M-05)
@@ -597,7 +692,7 @@ declare
 begin
   /* current_user = postgres (definer) يعني نداء داخلي من دالة definer —
      مسموح. نداء مباشر من service_role كمان مسموح. مستخدم عادي ممنوع
-     بالـ REVOKE تحت + بفحص coin_bypass. */
+     بالـ REVOKE تحت. */
   if current_user in ('authenticated', 'anon')
      and coalesce((auth.jwt() ->> 'role'), '') not in ('service_role', 'postgres')
   then
@@ -635,11 +730,9 @@ begin
 
   perform 1 from public.coin_wallets where user_id = p_user_id for update;
 
-  perform set_config('app.coin_bypass', 'on', true);
   insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata, source_class)
   values (p_user_id, p_source, p_amount, 'earn', p_ref_id, coalesce(p_metadata, '{}'::jsonb), p_source_class)
   on conflict do nothing;
-  perform set_config('app.coin_bypass', 'off', true);
 
   if found then
     v_awarded := p_amount;
@@ -663,7 +756,7 @@ revoke execute on function public.answer_break_quiz(text)   from anon;
 revoke execute on function public.solve_escape_step(text)   from anon;
 revoke execute on function public.sync_achievements()       from anon;
 revoke execute on function public.spin_wheel()              from anon;
-revoke execute on function public.open_box(uuid)            from anon;
+revoke execute on function public.open_box(text)            from anon;
 revoke execute on function public.purchase_item(text)       from anon;
 
 -- ============================================================================

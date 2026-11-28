@@ -216,7 +216,8 @@ export const COIN_SOURCES = {
   wheel: {
     id: "wheel",
     label: "عجلة الحظ",
-    amount: 30,
+    /* amount = أغلى جائزة (w.120) — الحد الأعلى الصارم في _award_coins_variable. */
+    amount: 120,
     live: true,
     dailyCap: 1,
     kind: "internal",
@@ -225,18 +226,20 @@ export const COIN_SOURCES = {
   achievement: {
     id: "achievement",
     label: "إنجاز",
-    /* المبلغ الحقيقي من achievements_catalog.coins (٣٠–٣٠٠) — الرقم هنا
-       تمثيلي للسييد بس، والمسار المتغيّر هو اللي بيكتبه. */
-    amount: 100,
+    /* amount = أغلى إنجاز (first-course=300) — الحد الأعلى الصارم في
+       _award_coins_variable. dailyCap=5/يوم هو السقف الأصلي من الإنتاج
+       (db/45) — الإنجازات مرة/حياة لكن ممكن تتفتح مجموعة في نفس اليوم. */
+    amount: 300,
     live: true,
-    dailyCap: 1,
+    dailyCap: 5,
     kind: "internal",
     sourceClass: "study",
   },
   box_refund: {
     id: "box_refund",
     label: "تعويض صندوق مكرر",
-    amount: 100,
+    /* amount = أغلى تعويض (mythic=1000) — الحد الأعلى الصارم. */
+    amount: 1000,
     live: true,
     dailyCap: null,
     kind: "internal",
