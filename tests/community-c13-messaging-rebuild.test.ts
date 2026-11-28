@@ -57,10 +57,11 @@ describe("C13 — messaging rebuild contract", () => {
     expect(client).toContain("data.conversation?.id");
     // تحديث دوري للرسايل والمحادثات
     expect(client).toContain("setInterval");
-    // اللايف شات — Realtime على جدول messages (C13.2)
-    expect(client).toContain('channel(`messaging:${selectedConv}`)');
+    // اللايف شات — Realtime على جدول messages (C13.2) + broadcast للكتابة (C19)
+    expect(client).toContain('channel(`messaging:${selectedConv}`');
     expect(client).toContain('"postgres_changes"');
     expect(client).toContain('table: "messages"');
+    expect(client).toContain('event: "typing"');
     // الاتجاه: رسايلي على اليسار (RTL) — مرتبطة بالمستخدم المحمّل
     expect(client).toContain("m.sender_id === me");
   });

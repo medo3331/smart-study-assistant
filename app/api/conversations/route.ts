@@ -62,11 +62,12 @@ export async function GET(req: Request) {
     let otherByConv = new Map<string, MemberInfo>();
     let memberListByConv = new Map<string, (MemberInfo & { user_id: string })[]>();
     let lastMsgByConv = new Map<string, string>();
+    const unreadByConv = new Map<string, number>();
     if (convIds.length > 0) {
       const [partsRes, msgsRes] = await Promise.all([
         serverClient
           .from("conversation_participants")
-          .select("conversation_id, participant_id")
+          .select("conversation_id, participant_id, last_read_at")
           .in("conversation_id", convIds),
         serverClient
           .from("messages")
@@ -75,7 +76,11 @@ export async function GET(req: Request) {
           .order("created_at", { ascending: false })
           .limit(convIds.length * 20),
       ]);
-      const parts = (partsRes.data ?? []) as { conversation_id: string; participant_id: string }[];
+      const parts = (partsRes.data ?? []) as { conversation_id: string; participant_id: string; last_read_at: string | null }[];
+      const myReadByConv = new Map<string, string>();
+      for (const p of parts) {
+        if (p.participant_id === user.id && p.last_read_at) myReadByConv.set(p.conversation_id, p.last_read_at);
+      }
       const otherIds = [...new Set(parts.filter((p) => p.participant_id !== user.id).map((p) => p.participant_id))];
       const profIds = [...new Set(parts.map((p) => p.participant_id))];
       const profsRes = profIds.length > 0
@@ -110,8 +115,13 @@ export async function GET(req: Request) {
       for (const c of conversations as any[]) {
         if (c.is_group) memberListByConv.set(c.id, membersOf(c.id));
       }
-      for (const m of (msgsRes.data ?? []) as { conversation_id: string; body: string }[]) {
+      for (const m of (msgsRes.data ?? []) as { conversation_id: string; body: string; sender_id: string; created_at: string }[]) {
         if (!lastMsgByConv.has(m.conversation_id)) lastMsgByConv.set(m.conversation_id, m.body);
+        // غير المقروء: رسايل من غيري بعد آخر قراءة ليا (سقف 20+)
+        const readAt = myReadByConv.get(m.conversation_id);
+        if (m.sender_id !== user.id && m.created_at > (readAt ?? "1970-01-01")) {
+          unreadByConv.set(m.conversation_id, Math.min((unreadByConv.get(m.conversation_id) ?? 0) + 1, 21));
+        }
       }
     }
 
@@ -129,7 +139,7 @@ export async function GET(req: Request) {
         members,
         participant_count: members.length,
         other_last_active_at: other?.last_active_at ?? null,
-        unread_count: 0,
+        unread_count: unreadByConv.get(c.id) ?? 0,
         last_message_at: c.updated_at,
         last_message_id: null,
         last_message_body: lastMsgByConv.get(c.id) ?? null,

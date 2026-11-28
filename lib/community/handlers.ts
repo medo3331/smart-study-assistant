@@ -129,6 +129,7 @@ const ALLOWED_PROFILE_FIELDS = [
   "display_name", "bio", "avatar_url", "cover_url",
   "university", "faculty", "major", "year", "interests",
   "account_privacy", "allow_friend_requests", "allow_messages", "show_academic_info",
+  "chat_wallpaper", // C19 — خلفية الشات: preset key (wp-*) أو URL صورة
 ] as const;
 
 export async function profilePatchHandler(req: Request) {
@@ -186,6 +187,12 @@ export async function profilePatchHandler(req: Request) {
   }
   if (patch.interests !== undefined && !Array.isArray(patch.interests)) {
     return NextResponse.json({ success: false, error: "الاهتمامات لازم تكون قائمة." }, { status: 400 });
+  }
+  if (patch.chat_wallpaper !== undefined && patch.chat_wallpaper !== null) {
+    const wp = String(patch.chat_wallpaper);
+    if (wp.length > 500 || !(wp === "" || /^wp-[a-z0-9-]+$/.test(wp) || /^https:\/\/[^\s]+$/.test(wp))) {
+      return NextResponse.json({ success: false, error: "قيمة خلفية غير صالحة." }, { status: 400 });
+    }
   }
   if (Object.keys(patch).length === 0) {
     if (handleChanged) {

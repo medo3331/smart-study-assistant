@@ -78,11 +78,30 @@ export async function GET(
     // 6. Get next cursor
     const nextCursor = actualMessages.length > 0 ? actualMessages[actualMessages.length - 1].created_at : null;
 
+    // 7. C19 — تعليم القراءة: تحديث آخر قراءة ليا + آخر قراءة الطرف التاني (لعلامات ✓✓)
+    const nowIso = new Date().toISOString();
+    await serverClient
+      .from("conversation_participants")
+      .update({ last_read_at: nowIso })
+      .eq("conversation_id", params.id)
+      .eq("participant_id", user.id);
+    const { data: peerRows } = await serverClient
+      .from("conversation_participants")
+      .select("last_read_at")
+      .eq("conversation_id", params.id)
+      .neq("participant_id", user.id);
+    const peerLastReadAt = ((peerRows ?? []) as { last_read_at: string | null }[])
+      .map((r) => r.last_read_at)
+      .filter((t): t is string => !!t)
+      .sort()
+      .pop() ?? null;
+
     return NextResponse.json({
       success: true,
       messages: actualMessages,
       hasMore,
       nextCursor,
+      peer_last_read_at: peerLastReadAt,
       pagination: { limit, hasMore, nextCursor },
     });
   } catch (error) {

@@ -13,13 +13,14 @@
 // ===========================================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import * as ui from "@/components/ui";
 import SupportSection from "@/components/communication/SupportSection";
 import {
   Search, MessageCircle, Send, X, Plus, Inbox, LifeBuoy,
   UserPlus, Loader2, Check, ShieldAlert, Paperclip, Mic, Square,
-  Pencil, Trash2, File as FileIcon, Users,
+  Pencil, Trash2, File as FileIcon, Users, Palette, CheckCheck,
 } from "lucide-react";
 
 type Member = { user_id: string; display_name: string | null; avatar_url: string | null; last_active_at: string | null };
@@ -36,6 +37,7 @@ type Conversation = {
   members?: Member[];
   participant_count?: number;
   other_last_active_at?: string | null;
+  unread_count?: number;
 };
 
 type Msg = {
@@ -79,6 +81,27 @@ type Tab = "chats" | "requests" | "support";
 
 const MAG_RE = /^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i;
 
+// C19 — خلفيات الشات الجاهزة (ستايل واتساب)
+const WALLPAPERS: { key: string; label: string; css: string }[] = [
+  { key: "wp-aurora",  label: "شفق",     css: "linear-gradient(135deg,#0f2027,#203a43,#2c5364)" },
+  { key: "wp-dusk",    label: "غروب",    css: "linear-gradient(135deg,#42275a,#734b6d)" },
+  { key: "wp-mint",    label: "نعناع",   css: "linear-gradient(135deg,#d4fc79,#96e6a1)" },
+  { key: "wp-sand",    label: "رمل",     css: "linear-gradient(135deg,#f6d365,#fda085)" },
+  { key: "wp-sky",     label: "سما",     css: "linear-gradient(135deg,#89f7fe,#66a6ff)" },
+  { key: "wp-rose",    label: "وردة",    css: "linear-gradient(135deg,#fbc2eb,#a6c1ee)" },
+  { key: "wp-forest",  label: "غابة",    css: "linear-gradient(135deg,#134e5e,#71b280)" },
+  { key: "wp-night",   label: "ليل",     css: "linear-gradient(135deg,#232526,#414345)" },
+];
+
+const wallpaperStyle = (wp: string): React.CSSProperties | undefined => {
+  if (!wp) return undefined;
+  if (wp.startsWith("http")) {
+    return { backgroundImage: `url(${wp})`, backgroundSize: "cover", backgroundPosition: "center" };
+  }
+  const preset = WALLPAPERS.find((w) => w.key === wp);
+  return preset ? { backgroundImage: preset.css } : undefined;
+};
+
 export default function InboxClient() {
   const [me, setMe] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("chats");
@@ -107,6 +130,14 @@ export default function InboxClient() {
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [groupPicked, setGroupPicked] = useState<Set<string>>(new Set());
   const [groupCreating, setGroupCreating] = useState(false);
+
+  // C19 — تجربة واتساب: قراءة ✓✓ + يكتب الآن + خلفية الشات
+  const [peerLastReadAt, setPeerLastReadAt] = useState<string | null>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingSentAtRef = useRef(0);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const [wallpaper, setWallpaper] = useState<string>("");
+  const [wpOpen, setWpOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -149,6 +180,31 @@ export default function InboxClient() {
   }, []);
 
   useEffect(() => { void loadMe(); }, [loadMe]);
+
+  // C19 — خلفية الشات الخاصة بيا (preset أو صورة)
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/community/profile");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.profile?.chat_wallpaper) setWallpaper(String(data.profile.chat_wallpaper));
+      } catch { /* تجاهل */ }
+    })();
+  }, []);
+
+  const saveWallpaper = async (value: string) => {
+    const prev = wallpaper;
+    setWallpaper(value);
+    setWpOpen(false);
+    try {
+      await fetch("/api/community/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_wallpaper: value || null }),
+      });
+    } catch { setWallpaper(prev); }
+  };
   useEffect(() => {
     void loadConversations();
     void loadRequests();
@@ -183,7 +239,7 @@ export default function InboxClient() {
     if (!selectedConv) return;
     const sb = createClient();
     const ch = sb
-      .channel(`messaging:${selectedConv}`)
+      .channel(`messaging:${selectedConv}`, { config: { broadcast: { self: false } } })
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${selectedConv}` },
@@ -208,8 +264,20 @@ export default function InboxClient() {
           void loadConversations();
         }
       )
+      // C19 — مؤشر «يكتب الآن…» عبر broadcast (مؤقت، من غير داتابيز)
+      .on("broadcast", { event: "typing" }, (msg: { payload?: { uid?: string } }) => {
+        if (msg.payload?.uid && msg.payload.uid !== me) {
+          setPeerTyping(true);
+          setTimeout(() => setPeerTyping(false), 3000);
+        }
+      })
       .subscribe();
-    return () => { void sb.removeChannel(ch); };
+    channelRef.current = ch;
+    return () => {
+      channelRef.current = null;
+      void sb.removeChannel(ch);
+      setPeerTyping(false);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConv]);
 
@@ -223,7 +291,11 @@ export default function InboxClient() {
     try {
       const res = await fetch(`/api/conversations/${convId}`, { cache: "no-store" });
       const data = await res.json();
-      if (data.success) setMessages(data.messages ?? []);
+      if (data.success) {
+        setMessages(data.messages ?? []);
+        // آخر قراءة الطرف التاني — لعلامات ✓✓ (C19)
+        setPeerLastReadAt(data.peer_last_read_at ?? null);
+      }
       else if (!silent) setError(data.error || "تعذّر فتح المحادثة.");
     } catch { if (!silent) setError("مشكلة شبكة."); }
     finally { setMsgLoading(false); }
@@ -489,13 +561,19 @@ export default function InboxClient() {
     }
   };
 
-  // حالة النشاط: «نشط الآن» لو آخر ظهور أقل من 5 دقايق
+  // حالة النشاط — ستايل واتساب: «متصل الآن» / «آخر ظهور اليوم الساعة…» / «أمس»
   const activityLabel = (lastActive: string | null | undefined): { text: string; online: boolean } | null => {
     if (!lastActive) return null;
-    const diffMin = (Date.now() - new Date(lastActive).getTime()) / 60_000;
-    if (diffMin < 5) return { text: "نشط الآن", online: true };
-    if (diffMin < 60 * 24) return { text: `آخر ظهور ${new Date(lastActive).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}`, online: false };
-    return { text: `آخر ظهور ${new Date(lastActive).toLocaleDateString("ar-EG", { day: "numeric", month: "short" })}`, online: false };
+    const t = new Date(lastActive);
+    const diffMin = (Date.now() - t.getTime()) / 60_000;
+    const time = t.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    if (diffMin < 2) return { text: "متصل الآن", online: true };
+    const d = new Date();
+    const isToday = t.toDateString() === d.toDateString();
+    const isYesterday = new Date(d.getTime() - 86_400_000).toDateString() === t.toDateString();
+    if (isToday) return { text: `آخر ظهور اليوم الساعة ${time}`, online: false };
+    if (isYesterday) return { text: `آخر ظهور أمس الساعة ${time}`, online: false };
+    return { text: `آخر ظهور ${t.toLocaleDateString("ar-EG", { day: "numeric", month: "long" })} الساعة ${time}`, online: false };
   };
 
   // ------------------------------------------------------------- الطلبات
@@ -595,33 +673,49 @@ export default function InboxClient() {
                   <p className="mt-1 text-xs">اضغط «محادثة جديدة» وابحث بالاسم أو @المعرف أو كود MAG.</p>
                 </div>
               ) : (
-                conversations.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => void openConversation(c.id)}
-                    className={`flex w-full items-center gap-3 rounded-xl p-3 text-right transition ${
-                      selectedConv === c.id ? "bg-marker/10" : "hover:bg-paper-2/70"
-                    }`}
-                  >
-                    {avatar(c.other_avatar, c.title, "h-11 w-11 text-sm")}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-semibold text-ink">
-                          {c.is_group && <Users className="ml-1 inline h-3.5 w-3.5 text-marker" />}
-                          {c.title}
-                        </span>
-                        {c.last_message_at && (
-                          <span className="shrink-0 text-[10px] text-slate-400">
-                            {new Date(c.last_message_at).toLocaleDateString("ar-EG", { day: "numeric", month: "short" })}
-                          </span>
+                conversations.map((c) => {
+                  const convOnline = !c.is_group && activityLabel(c.other_last_active_at)?.online;
+                  const unread = c.unread_count ?? 0;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => void openConversation(c.id)}
+                      className={`flex w-full items-center gap-3 rounded-xl p-3 text-right transition ${
+                        selectedConv === c.id ? "bg-marker/10" : "hover:bg-paper-2/70"
+                      }`}
+                    >
+                      <span className="relative shrink-0">
+                        {avatar(c.other_avatar, c.title, "h-11 w-11 text-sm")}
+                        {convOnline && (
+                          <span className="absolute bottom-0 left-0 h-3 w-3 rounded-full border-2 border-paper bg-emerald-500" aria-label="متصل الآن" />
                         )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-semibold text-ink">
+                            {c.is_group && <Users className="ml-1 inline h-3.5 w-3.5 text-marker" />}
+                            {c.title}
+                          </span>
+                          {c.last_message_at && (
+                            <span className="shrink-0 text-[10px] text-slate-400">
+                              {new Date(c.last_message_at).toLocaleDateString("ar-EG", { day: "numeric", month: "short" })}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs text-slate-400">
+                            {c.last_message_body || `${c.message_count} رسالة`}
+                          </p>
+                          {unread > 0 && (
+                            <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              {unread > 20 ? "20+" : unread}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <p className="truncate text-xs text-slate-400">
-                        {c.last_message_body || `${c.message_count} رسالة`}
-                      </p>
-                    </div>
-                  </button>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
           )}
@@ -737,7 +831,9 @@ export default function InboxClient() {
               {avatar(selectedConvMeta?.other_avatar ?? null, selectedConvMeta?.title ?? "محادثة", "h-9 w-9 text-xs")}
               <div className="min-w-0 flex-1">
                 <h2 className="truncate font-bold text-ink">{selectedConvMeta?.title ?? "محادثة"}</h2>
-                {selectedConvMeta?.is_group ? (
+                {peerTyping ? (
+                  <p className="animate-pulse text-[11px] font-semibold text-marker">يكتب الآن…</p>
+                ) : selectedConvMeta?.is_group ? (
                   <p className="truncate text-[11px] text-slate-400">
                     {(selectedConvMeta.members ?? []).map((mm) => mm.display_name || "طالب").join("، ") || "جروب مذاكرة"}
                   </p>
@@ -751,9 +847,74 @@ export default function InboxClient() {
                   ) : null;
                 })()}
               </div>
+              <button
+                onClick={() => setWpOpen((v) => !v)}
+                className="rounded-lg p-1.5 text-ink-soft transition hover:bg-paper-3 hover:text-marker"
+                aria-label="تغيير خلفية الشات" title="خلفية الشات"
+              >
+                <Palette className="h-5 w-5" />
+              </button>
             </header>
 
-            <div ref={listRef} className="flex-1 space-y-2.5 overflow-y-auto p-4">
+            {/* لوحة الخلفية (C19) */}
+            {wpOpen && (
+              <div className="absolute left-4 top-14 z-40 w-64 rounded-2xl border border-rule bg-paper p-3 shadow-xl">
+                <p className="mb-2 text-xs font-bold text-ink">خلفية الشات</p>
+                <div className="grid grid-cols-4 gap-2">
+                  <button
+                    onClick={() => void saveWallpaper("")}
+                    className={`h-10 rounded-lg border border-rule bg-paper-2 text-[10px] font-bold text-ink-soft ${!wallpaper ? "ring-2 ring-marker" : ""}`}
+                    title="بدون خلفية"
+                  >
+                    بدون
+                  </button>
+                  {WALLPAPERS.map((w) => (
+                    <button
+                      key={w.key}
+                      onClick={() => void saveWallpaper(w.key)}
+                      style={{ backgroundImage: w.css }}
+                      className={`h-10 rounded-lg transition hover:scale-105 ${wallpaper === w.key ? "ring-2 ring-marker" : ""}`}
+                      title={w.label}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={() => document.getElementById("chat-wallpaper-input")?.click()}
+                  className="mt-2 w-full rounded-lg border border-rule/50 py-1.5 text-xs font-semibold text-ink-soft transition hover:text-marker"
+                >
+                  صورة من جهازك…
+                </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  id="chat-wallpaper-input"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    void (async () => {
+                      try {
+                        const fd = new FormData();
+                        fd.append("file", f);
+                        const res = await fetch("/api/conversations/upload", { method: "POST", body: fd });
+                        const data = await res.json();
+                        if (data.success) void saveWallpaper(data.url);
+                      } catch { /* تجاهل */ }
+                    })();
+                  }}
+                />
+              </div>
+            )}
+
+            <div
+              ref={listRef}
+              className="relative flex-1 space-y-2.5 overflow-y-auto p-4"
+              style={wallpaperStyle(wallpaper)}
+            >
+              {/* طبقة تبييض خفيفة فوق الخلفية عشان وضوح الرسايل */}
+              {wallpaper && <div className="pointer-events-none absolute inset-0 bg-white/45" aria-hidden />}
+              <div className="relative">
               {msgLoading ? (
                 <div className="space-y-3">{[1, 2, 3].map((i) => <ui.Skeleton key={i} className="h-14 w-2/3" />)}</div>
               ) : messages.length === 0 ? (
@@ -842,6 +1003,13 @@ export default function InboxClient() {
                             <p className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-slate-400"}`}>
                               {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
                               {m.edited_at ? " · عدّلت" : ""}
+                              {mine && (
+                                peerLastReadAt && m.created_at <= peerLastReadAt ? (
+                                  <CheckCheck className="mr-0.5 inline h-3 w-3 text-sky-300" aria-label="اتقرأت" />
+                                ) : (
+                                  <Check className="mr-0.5 inline h-3 w-3" aria-label="اتبعت" />
+                                )
+                              )}
                             </p>
                           </>
                         )}
@@ -850,6 +1018,7 @@ export default function InboxClient() {
                   );
                 })
               )}
+              </div>
             </div>
 
             {error && (
@@ -922,7 +1091,15 @@ export default function InboxClient() {
                 </button>
                 <textarea
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    // C19 — إشارة الكتابة (كل ثانيتين بحد أقصى)
+                    const now = Date.now();
+                    if (channelRef.current && me && now - typingSentAtRef.current > 2000) {
+                      typingSentAtRef.current = now;
+                      void channelRef.current.send({ type: "broadcast", event: "typing", payload: { uid: me } });
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(e); }
                   }}
