@@ -336,7 +336,7 @@ function shouldTryNextCandidate(error: { status: number; message?: string }): bo
  * 🔀 **تجاوز بيئي لاختيار موديلات التوليد** — `EXAM_GENERATION_MODELS`.
  *
  * ⚠️ **ليه**: في الإنتاج كل نداءات لـGroq بس وتوقّفت. تشغيل
- *    موديل تاني (مثل `llama-3.3-70b-versatile`) لازم يكون **قرار
+ *    موديل تاني (مثل `qwen/qwen3.8-27b`) لازم يكون **قرار
  *    تشغيلي** مش تعديل كود ⇒ متغير بيئة في Vercel = تبديل فوري ✓
  *    من غير إعادة نشر.
  *
@@ -774,8 +774,8 @@ export type MultiProviderConfig = {
 };
 
 export const AI_PROVIDERS: MultiProviderConfig[] = [
-  { name: "groq", baseURL: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "llama-3.3-70b-versatile" },
-  { name: "openrouter", baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", model: "meta-llama/llama-3-8b-instruct:free" },
+  { name: "groq", baseURL: "https://api.groq.com/openai/v1", apiKeyEnv: "GROQ_API_KEY", model: "qwen/qwen3.8-27b" },
+  { name: "openrouter", baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", model: "meta-llama/llama-3.3-70b-instruct" },
   { name: "mistral", baseURL: "https://api.mistral.ai/v1", apiKeyEnv: "MISTRAL_API_KEY", model: "mistral-small-latest" },
   { name: "together", baseURL: "https://api.together.xyz/v1", apiKeyEnv: "TOGETHER_API_KEY", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free" },
   { name: "cerebras", baseURL: "https://api.cerebras.ai/v1", apiKeyEnv: "CEREBRAS_API_KEY", model: "llama3.1-8b" },

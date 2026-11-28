@@ -48,7 +48,7 @@ function callProvider(create: () => Promise<{ content: string; usage?: { prompt_
     .catch((err: unknown) => {
       // ⬛️ exactly the C4.1 shape: record the throw, then rethrow.
       recordDirectProviderAttempt({
-        usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "llama-3.3-70b-versatile",
+        usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "qwen/qwen3.8-27b",
         status: "failed_no_response", latencyMs: doneMs(),
       });
       throw err;
@@ -56,7 +56,7 @@ function callProvider(create: () => Promise<{ content: string; usage?: { prompt_
     .then((completion) => {
       const textResult = completion.content || "";
       recordDirectProviderAttempt({
-        usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "llama-3.3-70b-versatile",
+        usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "qwen/qwen3.8-27b",
         status: textResult ? "completed" : "failed_after_response",
         promptTokens: completion.usage?.prompt_tokens,
         completionTokens: completion.usage?.completion_tokens,

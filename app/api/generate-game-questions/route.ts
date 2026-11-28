@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       // 🧾 C4: identity created ONCE for this logical request.
       const usage = resolveUsageRequestContext(request, userId ?? null, { feature: "quiz" });
       const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "qwen/qwen3.8-27b",
       messages: [
         { role: "system", content: "You are a helpful educational assistant that outputs strictly in JSON format." },
         { role: "user", content: prompt }
@@ -63,14 +63,14 @@ export async function POST(request: Request) {
         // ⚠️ `async` + `await`: the write must land BEFORE the rethrow, so the
         //    failed attempt is never lost when the route unwinds.
         await recordDirectProviderAttempt({
-          usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "llama-3.3-70b-versatile",
+          usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "qwen/qwen3.8-27b",
           status: "failed_no_response", latencyMs: doneMs(),
         });
         throw err;
       });
 
     const textResult = completion.choices[0]?.message?.content || "";
-    await recordDirectProviderAttempt({ usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "llama-3.3-70b-versatile", status: textResult ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
+    await recordDirectProviderAttempt({ usage, feature: "quiz", attemptNo: 0, provider: "groq", model: "qwen/qwen3.8-27b", status: textResult ? "completed" : "failed_after_response", promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, latencyMs: doneMs() });
     const jsonStartIndex = textResult.indexOf("[");
     const jsonEndIndex = textResult.lastIndexOf("]") + 1;
     const jsonString = textResult.substring(jsonStartIndex, jsonEndIndex);
