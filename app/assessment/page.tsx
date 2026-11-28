@@ -172,6 +172,11 @@ export default function AssessmentPage() {
   const [universitiesDB, setUniversitiesDB] = useState<{ id: string; name: string }[]>([]);
   const [facultiesDB, setFacultiesDB] = useState<{ id: string; name: string; university_id: string }[]>([]);
   const [departmentsDB, setDepartmentsDB] = useState<{ id: string; name: string; faculty_id: string }[]>([]);
+  /* الإدخال اليدوي — اقتراح مش إجباري: لو جامعته/كليته/قسمه مش في القايمة يكتبهم بنفسه. */
+  const [uniManual, setUniManual] = useState(false);
+  const [customUniversityName, setCustomUniversityName] = useState("");
+  const [customFacultyName, setCustomFacultyName] = useState("");
+  const [customDepartmentName, setCustomDepartmentName] = useState("");
   const [levelsDB, setLevelsDB] = useState<{ id: string; name: string; order_index: number }[]>([]);
   const [semestersDB, setSemestersDB] = useState<{ id: string; name: string }[]>([]);
   const [universityId, setUniversityId] = useState<string | null>(null);
@@ -351,6 +356,11 @@ export default function AssessmentPage() {
     setSemesterId(null);
   }
 
+  const uniManualDone = uniManual
+    && customUniversityName.trim().length > 0
+    && customFacultyName.trim().length > 0
+    && customDepartmentName.trim().length > 0;
+
   function choosePersona(nextPersona: Persona) {
     setPersona(nextPersona);
     // المستوى خاص بالطالب؛ إبقاؤه بعد اختيار شخصية تانية يخلّي بيانات
@@ -492,12 +502,20 @@ export default function AssessmentPage() {
       education_stage_id: persona === "student" ? (eduStageId ?? null) : null,
       education_grade_id: persona === "student" && !isUni ? (eduGradeId ?? null) : null,
       education_track_id: persona === "student" && !isUni ? (eduTrackId ?? null) : null,
-      university_id: isUni ? universityId : null,
-      faculty_id: isUni ? facultyId : null,
-      department_id: isUni ? departmentId : null,
+      university_id: isUni && !uniManualDone ? universityId : null,
+      faculty_id: isUni && !uniManualDone ? facultyId : null,
+      department_id: isUni && !uniManualDone ? departmentId : null,
       academic_level_id: isUni ? academicLevelId : null,
       semester_id: isUni ? semesterId : null,
-      faculty_name: isUni ? (facultiesDB.find((f) => f.id === facultyId)?.name ?? null) : null,
+      university_name: isUni
+        ? (uniManualDone ? customUniversityName.trim() : universitiesDB.find((u) => u.id === universityId)?.name ?? null)
+        : null,
+      faculty_name: isUni
+        ? (uniManualDone ? customFacultyName.trim() : facultiesDB.find((f) => f.id === facultyId)?.name ?? null)
+        : null,
+      department_name: isUni
+        ? (uniManualDone ? customDepartmentName.trim() : departmentsDB.find((d) => d.id === departmentId)?.name ?? null)
+        : null,
       edu_year: isUni ? (levelsDB.find((l) => l.id === academicLevelId)?.order_index ?? null) : null,
     };
 
@@ -656,7 +674,9 @@ export default function AssessmentPage() {
     if (!eduStageId) return true;
     const stageCode = stagesDB.find((s) => s.id === eduStageId)?.code;
     if (stageCode === "UNIVERSITY") {
-      return !(universityId && facultyId && departmentId && academicLevelId && semesterId);
+      const idsDone = universityId && facultyId && departmentId && academicLevelId && semesterId;
+      const manualDone = uniManualDone && academicLevelId && semesterId;
+      return !(idsDone || manualDone);
     }
     if (!eduGradeId) return true;
     const gradeOrder = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? 0;
@@ -668,7 +688,8 @@ export default function AssessmentPage() {
     persona, needsStudentLevel, studentLevel,
     eduStageId, eduGradeId, eduTrackId,
     stagesDB, gradesDB, tracksDB, tracksLoading,
-    universityId, facultyId, departmentId, academicLevelId, semesterId
+    universityId, facultyId, departmentId, academicLevelId, semesterId,
+    uniManualDone
   ]);
 
   return (
@@ -836,7 +857,7 @@ export default function AssessmentPage() {
                             <button
                               key={u.id}
                               type="button"
-                              onClick={() => { resetUniversity(); setUniversityId(u.id); }}
+                              onClick={() => { resetUniversity(); setUniManual(false); setUniversityId(u.id); }}
                               aria-pressed={universityId === u.id}
                               className={`chip transition ${universityId === u.id ? "!bg-ink !text-paper-2 !border-ink" : ""}`}
                             >
@@ -846,7 +867,52 @@ export default function AssessmentPage() {
                           {universitiesDB.length === 0 && <span className="text-xs text-ink-soft">{locale === "ar" ? "جارِي التحميل…" : "Loading…"}</span>}
                         </div>
                       </div>
-                      {universityId && (
+                      <button
+                        type="button"
+                        onClick={() => { resetUniversity(); setUniManual((v) => !v); }}
+                        aria-pressed={uniManual}
+                        className="mt-1 text-xs underline underline-offset-4 text-ink-soft hover:text-ink transition"
+                      >
+                        {uniManual
+                          ? (locale === "ar" ? "← رجوع لقائمة الجامعات" : "← Back to the list")
+                          : (locale === "ar" ? "مش لاقي جامعتك؟ اكتبها بنفسك" : "Can't find your university? Type it")}
+                      </button>
+                      {uniManual && (
+                        <div className="space-y-3">
+                          <div>
+                            <label htmlFor="custom-university" className="field-label">{locale === "ar" ? "اسم جامعتك" : "University name"}</label>
+                            <input
+                              id="custom-university"
+                              value={customUniversityName}
+                              onChange={(e) => setCustomUniversityName(e.target.value)}
+                              className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
+                              placeholder={locale === "ar" ? "مثال: جامعة الأزهر" : "e.g. Al-Azhar University"}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="custom-faculty" className="field-label">{locale === "ar" ? "كليتك" : "Faculty"}</label>
+                            <input
+                              id="custom-faculty"
+                              value={customFacultyName}
+                              onChange={(e) => setCustomFacultyName(e.target.value)}
+                              className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
+                              placeholder={locale === "ar" ? "مثال: كلية الهندسة" : "e.g. Faculty of Engineering"}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="custom-department" className="field-label">{locale === "ar" ? "قسمك" : "Department"}</label>
+                            <input
+                              id="custom-department"
+                              value={customDepartmentName}
+                              onChange={(e) => setCustomDepartmentName(e.target.value)}
+                              className="field text-sm w-full h-[48px] min-h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition"
+                              placeholder={locale === "ar" ? "مثال: هندسة الحاسبات" : "e.g. Computer Engineering"}
+                            />
+                          </div>
+                          <p className="text-xs text-ink-soft">{locale === "ar" ? "المواد بتتكتب يدوي في خطوة المواد." : "Subjects are typed manually in the subjects step."}</p>
+                        </div>
+                      )}
+                      {universityId && !uniManual && (
                       <div>
                         <p className="field-label">{locale === "ar" ? "الكلية" : "Faculty"}</p>
                         <div className="chip-row" role="list">
@@ -864,7 +930,7 @@ export default function AssessmentPage() {
                         </div>
                       </div>
                       )}
-                      {facultyId && (
+                      {facultyId && !uniManual && (
                       <div>
                         <p className="field-label">{locale === "ar" ? "القسم" : "Department"}</p>
                         <div className="chip-row" role="list">
@@ -882,7 +948,7 @@ export default function AssessmentPage() {
                         </div>
                       </div>
                       )}
-                      {departmentId && (
+                      {(departmentId || (uniManual && customDepartmentName.trim())) && (
                       <div>
                         <p className="field-label">{locale === "ar" ? "المستوى الدراسي" : "Academic level"}</p>
                         <div className="chip-row" role="list">
