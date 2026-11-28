@@ -5,6 +5,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
+import { revalidatePath } from "next/cache";
 import { recordAuditLog } from "@/lib/admin/audit-log-record";
 import { requireAdminActor, ActionAuthError } from "@/lib/admin/action-guard";
 import type { ActorContext } from "@/lib/policy";
@@ -198,20 +199,29 @@ export async function revokeSubscription(
       return { ok: false, message: "المستخدم غير موجود" };
     }
     const userId = userRow.id;
-    const { data: latest } = await db.from("subscription_activations").select("id, plan_key").eq("user_id", userId).is("revoked_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const { data: latest, error: lookupError } = await db.from("subscription_activations").select("id, plan_key").eq("user_id", userId).is("revoked_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (lookupError) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", user_id: userId, reason: "activation_lookup_failed", error: lookupError.message }, result: "FAIL" });
+      return { ok: false, message: "تعذر التحقق من الاشتراك: " + lookupError.message };
+    }
     if (!latest) {
       await recordAuditLog({ ...auditBase, details: { op: "revoke", user_id: userId, reason: "no_active_activation" }, result: "FAIL" });
       return { ok: false, message: "لا يوجد اشتراك نشط للإلغاء" };
     }
-    const { error: revErr } = await db.from("subscription_activations").update({ revoked_at: new Date().toISOString(), revoked_by: adminUserId }).eq("id", (latest as any).id);
-    if (revErr) {
-      await recordAuditLog({ ...auditBase, details: { op: "revoke", user_id: userId, reason: "update_failed", error: revErr.message }, result: "FAIL" });
-      return { ok: false, message: "فشل الإلغاء: " + revErr.message };
+    const { data: revokedRows, error: revokeError } = await db.rpc("admin_revoke_subscription", {
+      p_user_id: userId,
+      p_revoked_by: adminUserId,
+      p_note: note,
+    });
+    if (revokeError) {
+      await recordAuditLog({ ...auditBase, details: { op: "revoke", user_id: userId, reason: "atomic_revoke_failed", error: revokeError.message }, result: "FAIL" });
+      const missing = revokeError.code === "PGRST202" || revokeError.message.includes("admin_revoke_subscription");
+      return { ok: false, message: missing ? "يلزم تطبيق db/56-admin-user-operations-center.sql لإلغاء الاشتراك وتحديث الخطة والحصة معًا." : "فشل الإلغاء: " + revokeError.message };
     }
-    await db.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").is("expires_at", null);
-    await db.from("entitlements").update({ expires_at: new Date().toISOString() }).eq("user_id", userId).eq("kind", "plan").gt("expires_at", new Date().toISOString());
-    await recordAuditLog({ ...auditBase, resource_id: userId, details: { op: "revoke", user_id: userId, activation_id: (latest as any).id, plan_key: (latest as any).plan_key, note: note || null }, result: "PASS" });
-    return { ok: true, message: "تم إلغاء الاشتراك" };
+    await recordAuditLog({ ...auditBase, resource_id: userId, details: { op: "revoke", user_id: userId, activation_id: Array.isArray(revokedRows) ? revokedRows[0]?.activation_id : latest.id, plan_key: latest.plan_key, note: note || null }, result: "PASS" });
+    revalidatePath("/admin/subscriptions");
+    revalidatePath(`/admin/users/${userId}`);
+    return { ok: true, message: "تم إلغاء الاشتراك وتحديث الخطة والحصة إلى Free" };
   } catch (e: any) {
     await recordAuditLog({ ...auditBase, details: { op: "revoke", reason: "unexpected_error", error: e?.message }, result: "FAIL" });
     return { ok: false, message: "خطأ غير متوقع: " + (e?.message || String(e)) };

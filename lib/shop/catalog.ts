@@ -144,6 +144,16 @@ const AVATARS: readonly (readonly [string, string, string, Rarity])[] = [
   ["phoenix", "🔥", "عنقاء — بيرجع بعد كل انقطاع", "legendary"],
   ["galaxy-brain", "🌌", "عقل مجرّة", "legendary"],
   ["crown", "👑", "التاج", "mythic"],
+  // DEV-M3 — دفعة موسم الامتحانات (append فقط: فهرس العناصر القديمة
+  // ثابت فأسعارها في db/shop.sql ما بتتغيرش)
+  ["graduate", "🎓", "خريج — الوصول", "rare"],
+  ["scientist", "🧪", "عالِم المعمل", "uncommon"],
+  ["books", "📚", "عاشق الكتب", "uncommon"],
+  ["rocket", "🚀", "صاروخ التقدم", "rare"],
+  ["brain", "🧠", "العقل المدبّر", "epic"],
+  ["alien", "👽", "ذكاء من بره الكوكب", "epic"],
+  ["wizard", "🧙", "ساحر المذاكرة", "legendary"],
+  ["astronaut", "🧑‍🚀", "رائد فضاء — أعلى من الجميع", "legendary"],
 ];
 
 const AVATAR_ITEMS: ShopItem[] = AVATARS.map(([id, emoji, desc, rarity], i) => ({
@@ -226,6 +236,11 @@ const TITLES: readonly (readonly [string, string, string, Rarity])[] = [
   ["knowledge-king", "ملك المعرفة", "أعلى درجة", "legendary"],
   ["legend", "أسطورة", "دوري الأساطير", "legendary"],
   ["the-one", "الوحيد", "لقب واحد بس في كل حساب", "mythic"],
+  // DEV-M3 — ألقاب الإنجاز الجديدة
+  ["quiz-master", "فاهم", "بيجيب الدرجة النهائية", "rare"],
+  ["scholar", "عالِم", "قراءته ومذاكرته كتير", "uncommon"],
+  ["champion", "بطل الأسبوع", "متصدر أسبوع Magicly", "epic"],
+  ["timekeeper", "منظّم", "بيظبط وقته كل يوم", "uncommon"],
 ];
 
 const TITLE_ITEMS: ShopItem[] = TITLES.map(([id, name, desc, rarity], i) => ({
@@ -284,6 +299,9 @@ const COMPANIONS: readonly (readonly [string, string, string, string, Rarity])[]
   ["star", "نجمة", "✨·⭐·🌟·💫", "بتلمع بالمستوى", "epic"],
   ["dragon", "تنين", "🥚·🦎·🐉·🔥", "التطوّر الكامل", "legendary"],
   ["void", "الفراغ", "⚫·🌑·🌌·🕳️", "مفيش حد يعرف هو إيه", "mythic"],
+  // DEV-M3 — رفقاء جداد
+  ["bunny", "أرنب", "🥚·🐰·🐇·🏆", "بيقفز كل ما تتقدم", "rare"],
+  ["hamster", "هامستر", "🌾·🐹·🐿️·✨", "بيخزّن إنجازك زي المخزن", "epic"],
 ];
 
 const COMPANION_ITEMS: ShopItem[] = COMPANIONS.map(
@@ -474,6 +492,114 @@ const USEFUL_ITEMS: ShopItem[] = [
 ];
 
 // ============================================================================
+// المتجر التعليمي — 4 تجارب AI هجينة (D-M-03/D-M-11)
+// ============================================================================
+/**
+ * تجارب AI بتتشترى **كوينز + كريدت مع بعض** — الخصم الذري في
+ * `purchase_item` (db/116). الأسعار من التصميم §3 متظبطة على نطاقات
+ * الندرة، والـ effect = entitlement بيتفتح لما تجارب AI تتفعّل (DEV-M3).
+ * ⚠️ الأرقام لازم تطابق db/116 — الكتالوج مرآة للجدول.
+ */
+const LEARNING_ITEMS: ShopItem[] = [
+  {
+    id: "learning.ai-exam-experience",
+    category: "learning" as Category,
+    name: "تجربة الامتحان بالذكاء الاصطناعي",
+    desc: "امتحان تجربة متكامل يتولّد لك — كوينز + كريدت",
+    rarity: "rare",
+    price: 500,
+    creditsPrice: 30,
+    value: "ai-exam-experience",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "ai-exam-experience" } },
+  },
+  {
+    id: "learning.ai-advanced-review",
+    category: "learning" as Category,
+    name: "مراجعة متقدمة بالذكاء الاصطناعي",
+    desc: "مراجعة معمّقة لأدائك مع خطة تحسين — كوينز + كريدت",
+    rarity: "epic",
+    price: 1000,
+    creditsPrice: 50,
+    value: "ai-advanced-review",
+    unlock: null,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "ai-advanced-review" } },
+  },
+  {
+    id: "learning.magic-persona-plus",
+    category: "learning" as Category,
+    name: "التجربة الشخصية Magic المتقدمة",
+    desc: "مساعد مذاكرة شخصي متقدم — كوينز + كريدت",
+    rarity: "epic",
+    price: 1200,
+    creditsPrice: 75,
+    value: "magic-persona-plus",
+    unlock: null,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "magic-persona-plus" } },
+  },
+  {
+    id: "learning.smart-review-pack",
+    category: "learning" as Category,
+    name: "حزمة المراجعة الذكية الموسّعة",
+    desc: "أكبر حزمة مراجعة — كوينز + كريدت",
+    rarity: "legendary",
+    price: 2000,
+    creditsPrice: 100,
+    value: "smart-review-pack",
+    unlock: null,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "smart-review-pack" } },
+  },
+];
+
+// ============================================================================
+// الحزم والعروض (DEV-M4 — التصميم §8)
+// ============================================================================
+/**
+ * شرا واحد بيمنح كل المكونات في نفس المعاملة (`purchase_item` نوع
+ * 'bundle' — db/117). السعر دايمًا أقل من مجموع مكوناته — دي فكرة
+ * الحزمة. ⚠️ مرآة db/117: المعرّفات والأسعار لازم تتطابق.
+ */
+const BUNDLE_ITEMS: ShopItem[] = [
+  {
+    id: "shop.bundle-starter",
+    category: "bundles" as Category,
+    name: "حزمة البداية",
+    desc: "أفاتار دولفين + برواز أركان + لقب «منتظم» — بسعر أقل من لوحدهم",
+    rarity: "rare",
+    price: 600,
+    value: "starter",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "bundle", items: ["avatar.dolphin", "frame.corners", "title.regular"] } },
+  },
+  {
+    id: "shop.bundle-collector",
+    category: "bundles" as Category,
+    name: "حزمة هواة الجمع",
+    desc: "رفيق شبح + روبوت + برواز هالة — للنادي الحصري",
+    rarity: "epic",
+    price: 1500,
+    value: "collector",
+    unlock: null,
+    metadata: { useful: { type: "bundle", items: ["companion.ghost", "companion.robot", "frame.glow"] } },
+  },
+  {
+    id: "shop.bundle-study",
+    category: "bundles" as Category,
+    name: "حزمة المذاكرة",
+    desc: "مراجعة متقدمة + تجربة امتحان بالذكاء الاصطناعي — كوينز + كريدت",
+    rarity: "epic",
+    price: 1200,
+    creditsPrice: 60,
+    value: "study",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "bundle", items: [], entitlements: [{ kind: "feature", value: "ai-advanced-review" }, { kind: "feature", value: "ai-exam-experience" }] } },
+  },
+];
+
+// ============================================================================
 // الكتالوج المجمّع
 // ============================================================================
 
@@ -494,6 +620,8 @@ export const CATALOG: readonly ShopItem[] = [
   ...EFFECT_ITEMS,
   ...DAILY_ITEMS,
   ...USEFUL_ITEMS,
+  ...LEARNING_ITEMS,
+  ...BUNDLE_ITEMS,
 ];
 
 /**

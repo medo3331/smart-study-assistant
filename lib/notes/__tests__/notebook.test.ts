@@ -71,7 +71,7 @@ describe("ensureNotebook", () => {
   const options = () => ({
     newId: nextId,
     now: () => NOW,
-    defaultTitle: "دفتر",
+    defaultTitle: "النوتة",
   });
 
   it("creates a notebook AND its first page in storage when none exist", async () => {

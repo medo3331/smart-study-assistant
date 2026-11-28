@@ -1,0 +1,53 @@
+{
+  "applied": true,
+  "credits_price_before": [],
+  "learning_before": [
+    {
+      "n": 0
+    }
+  ],
+  "hybrids_after": [
+    {
+      "id": "learning.ai-advanced-review",
+      "price": 1000,
+      "credits_price": 50,
+      "rarity": "epic"
+    },
+    {
+      "id": "learning.ai-exam-experience",
+      "price": 500,
+      "credits_price": 30,
+      "rarity": "rare"
+    },
+    {
+      "id": "learning.magic-persona-plus",
+      "price": 1200,
+      "credits_price": 75,
+      "rarity": "epic"
+    },
+    {
+      "id": "learning.smart-review-pack",
+      "price": 2000,
+      "credits_price": 100,
+      "rarity": "legendary"
+    }
+  ],
+  "fn_def": {
+    "has_credits_price": true,
+    "has_hybrid": true,
+    "has_useful": true,
+    "credit_check_before_spend": true
+  },
+  "view_opts": [
+    {
+      "reloptions": [
+        "security_invoker=true"
+      ]
+    }
+  ],
+  "catalog_total": [
+    {
+      "n": 94
+    }
+  ]
+}

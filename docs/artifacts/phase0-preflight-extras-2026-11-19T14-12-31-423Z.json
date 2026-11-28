@@ -1,0 +1,1123 @@
+{
+  "phase": "P0-A-extras",
+  "startedAt": "2026-11-19T14:12:31.423Z",
+  "readOnly": true,
+  "queries": {
+    "q19_migration_history": [
+      {
+        "version": "20261019142532",
+        "name": "create_user_feedback_table"
+      },
+      {
+        "version": "20261019165015",
+        "name": "referral_system_base"
+      },
+      {
+        "version": "20261019165137",
+        "name": "referral_promotion_rpc"
+      },
+      {
+        "version": "20261019173011",
+        "name": "claim_referral_bonus_and_activate"
+      },
+      {
+        "version": "20261019173303",
+        "name": "claim_referral_bonus_and_activate"
+      },
+      {
+        "version": "20261025150053",
+        "name": "referral_credits_ensure"
+      },
+      {
+        "version": "20261025225710",
+        "name": "add_plan_pricing_fields"
+      },
+      {
+        "version": "20261025230810",
+        "name": "credit_pricing_reserve_amount"
+      },
+      {
+        "version": "20261025230821",
+        "name": "credit_pricing_refund_amount"
+      },
+      {
+        "version": "20261025231512",
+        "name": "ai_service_usage_daily_and_rpc"
+      },
+      {
+        "version": "20261025231713",
+        "name": "reserve_ai_credit_advisory_lock"
+      },
+      {
+        "version": "20261029204854",
+        "name": "payments_ledger"
+      },
+      {
+        "version": "20261029205354",
+        "name": "profile_avatar_storage"
+      },
+      {
+        "version": "20261029211526",
+        "name": "payments_fields"
+      },
+      {
+        "version": "20261029225930",
+        "name": "expand_support_ticket_categories"
+      },
+      {
+        "version": "20261031114023",
+        "name": "announcement_email_sender_override"
+      }
+    ],
+    "q20_function_security": [
+      {
+        "proname": "answer_break_riddle",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "award_coins",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "claim_break_game",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "claim_daily_mission",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "claim_weekly_mission",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "complete_study_day",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "increment_xp",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "open_box",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "purchase_item",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "solve_escape_step",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "spin_wheel",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      },
+      {
+        "proname": "sync_achievements",
+        "security_definer": true,
+        "owner": "postgres",
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+      }
+    ],
+    "q21_routine_privileges": [
+      {
+        "routine_name": "answer_break_riddle",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "answer_break_riddle",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "answer_break_riddle",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "answer_break_riddle",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "award_coins",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "award_coins",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "award_coins",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "award_coins",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_break_game",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_break_game",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_break_game",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_break_game",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_daily_mission",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_daily_mission",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_daily_mission",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_daily_mission",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_weekly_mission",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_weekly_mission",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_weekly_mission",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "claim_weekly_mission",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "complete_study_day",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "complete_study_day",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "complete_study_day",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "complete_study_day",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "increment_xp",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "increment_xp",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "increment_xp",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "increment_xp",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "open_box",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "open_box",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "open_box",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "open_box",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "purchase_item",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "purchase_item",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "purchase_item",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "purchase_item",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "solve_escape_step",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "solve_escape_step",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "solve_escape_step",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "solve_escape_step",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "spin_wheel",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "spin_wheel",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "spin_wheel",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "spin_wheel",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "sync_achievements",
+        "grantee": "anon",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "sync_achievements",
+        "grantee": "authenticated",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "sync_achievements",
+        "grantee": "postgres",
+        "privilege_type": "EXECUTE"
+      },
+      {
+        "routine_name": "sync_achievements",
+        "grantee": "service_role",
+        "privilege_type": "EXECUTE"
+      }
+    ],
+    "q22_table_privileges": [
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "anon",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "postgres",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_ledger",
+        "grantee": "service_role",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "anon",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "postgres",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_source_rules",
+        "grantee": "service_role",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "anon",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "postgres",
+        "privilege_type": "UPDATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "DELETE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "INSERT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "SELECT"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE"
+      },
+      {
+        "table_name": "coin_wallets",
+        "grantee": "service_role",
+        "privilege_type": "UPDATE"
+      }
+    ],
+    "q23_achievements_catalog": [
+      {
+        "id": "first-step",
+        "coins": 30,
+        "xp": 50,
+        "kind": "days_done",
+        "target": 1,
+        "sort_order": 10
+      },
+      {
+        "id": "ten-steps",
+        "coins": 80,
+        "xp": 150,
+        "kind": "days_done",
+        "target": 10,
+        "sort_order": 20
+      },
+      {
+        "id": "fifty-steps",
+        "coins": 200,
+        "xp": 400,
+        "kind": "days_done",
+        "target": 50,
+        "sort_order": 30
+      },
+      {
+        "id": "week-streak",
+        "coins": 60,
+        "xp": 100,
+        "kind": "streak",
+        "target": 7,
+        "sort_order": 40
+      },
+      {
+        "id": "month-streak",
+        "coins": 250,
+        "xp": 500,
+        "kind": "streak",
+        "target": 30,
+        "sort_order": 50
+      },
+      {
+        "id": "level-five",
+        "coins": 100,
+        "xp": 0,
+        "kind": "level",
+        "target": 5,
+        "sort_order": 60
+      },
+      {
+        "id": "first-boss",
+        "coins": 120,
+        "xp": 150,
+        "kind": "badges",
+        "target": 1,
+        "sort_order": 70
+      },
+      {
+        "id": "first-course",
+        "coins": 300,
+        "xp": 300,
+        "kind": "courses",
+        "target": 1,
+        "sort_order": 80
+      }
+    ],
+    "q24_wheel_prizes": [
+      {
+        "id": "w.10",
+        "coins": 10,
+        "weight": 2200
+      },
+      {
+        "id": "w.120",
+        "coins": 120,
+        "weight": 100
+      },
+      {
+        "id": "w.15",
+        "coins": 15,
+        "weight": 1800
+      },
+      {
+        "id": "w.20",
+        "coins": 20,
+        "weight": 1400
+      },
+      {
+        "id": "w.30",
+        "coins": 30,
+        "weight": 800
+      },
+      {
+        "id": "w.40",
+        "coins": 40,
+        "weight": 900
+      },
+      {
+        "id": "w.5",
+        "coins": 5,
+        "weight": 2400
+      },
+      {
+        "id": "w.60",
+        "coins": 60,
+        "weight": 400
+      }
+    ],
+    "q25_refunds": [
+      {
+        "rarity": "common",
+        "coins": 20
+      },
+      {
+        "rarity": "uncommon",
+        "coins": 50
+      },
+      {
+        "rarity": "rare",
+        "coins": 110
+      },
+      {
+        "rarity": "epic",
+        "coins": 220
+      },
+      {
+        "rarity": "legendary",
+        "coins": 450
+      },
+      {
+        "rarity": "mythic",
+        "coins": 1000
+      }
+    ],
+    "q26_break_riddles_count": [
+      {
+        "riddles": 3
+      }
+    ],
+    "q27_escape_puzzles_count": [
+      {
+        "puzzles": 3
+      }
+    ],
+    "q28_signup_bonus_rows": [
+      {
+        "rows": 81,
+        "first_at": "2026-09-01T18:46:17.156Z",
+        "last_at": "2026-11-17T16:39:48.483Z"
+      }
+    ],
+    "q29_streak_tier_rows": [],
+    "q30_earn_by_day": [
+      {
+        "cairo_day": "2026-11-18T22:00:00.000Z",
+        "rows": 1,
+        "coins": 10
+      },
+      {
+        "cairo_day": "2026-11-17T22:00:00.000Z",
+        "rows": 3,
+        "coins": 30
+      },
+      {
+        "cairo_day": "2026-11-16T22:00:00.000Z",
+        "rows": 6,
+        "coins": 80
+      },
+      {
+        "cairo_day": "2026-11-15T22:00:00.000Z",
+        "rows": 5,
+        "coins": 70
+      },
+      {
+        "cairo_day": "2026-11-14T22:00:00.000Z",
+        "rows": 11,
+        "coins": 160
+      },
+      {
+        "cairo_day": "2026-11-13T22:00:00.000Z",
+        "rows": 10,
+        "coins": 140
+      },
+      {
+        "cairo_day": "2026-11-12T22:00:00.000Z",
+        "rows": 8,
+        "coins": 95
+      },
+      {
+        "cairo_day": "2026-11-11T22:00:00.000Z",
+        "rows": 8,
+        "coins": 96
+      },
+      {
+        "cairo_day": "2026-11-10T22:00:00.000Z",
+        "rows": 6,
+        "coins": 80
+      },
+      {
+        "cairo_day": "2026-11-09T22:00:00.000Z",
+        "rows": 8,
+        "coins": 120
+      },
+      {
+        "cairo_day": "2026-11-08T22:00:00.000Z",
+        "rows": 3,
+        "coins": 28
+      },
+      {
+        "cairo_day": "2026-11-07T22:00:00.000Z",
+        "rows": 9,
+        "coins": 118
+      },
+      {
+        "cairo_day": "2026-11-06T22:00:00.000Z",
+        "rows": 21,
+        "coins": 289
+      },
+      {
+        "cairo_day": "2026-11-05T22:00:00.000Z",
+        "rows": 13,
+        "coins": 183
+      },
+      {
+        "cairo_day": "2026-11-04T22:00:00.000Z",
+        "rows": 6,
+        "coins": 66
+      },
+      {
+        "cairo_day": "2026-11-03T22:00:00.000Z",
+        "rows": 8,
+        "coins": 96
+      },
+      {
+        "cairo_day": "2026-11-02T22:00:00.000Z",
+        "rows": 15,
+        "coins": 197
+      },
+      {
+        "cairo_day": "2026-11-01T22:00:00.000Z",
+        "rows": 11,
+        "coins": 148
+      },
+      {
+        "cairo_day": "2026-10-31T22:00:00.000Z",
+        "rows": 4,
+        "coins": 48
+      },
+      {
+        "cairo_day": "2026-10-30T22:00:00.000Z",
+        "rows": 7,
+        "coins": 103
+      },
+      {
+        "cairo_day": "2026-10-29T22:00:00.000Z",
+        "rows": 8,
+        "coins": 93
+      },
+      {
+        "cairo_day": "2026-10-28T21:00:00.000Z",
+        "rows": 4,
+        "coins": 53
+      },
+      {
+        "cairo_day": "2026-10-27T21:00:00.000Z",
+        "rows": 3,
+        "coins": 43
+      },
+      {
+        "cairo_day": "2026-10-26T21:00:00.000Z",
+        "rows": 10,
+        "coins": 126
+      },
+      {
+        "cairo_day": "2026-10-25T21:00:00.000Z",
+        "rows": 6,
+        "coins": 66
+      },
+      {
+        "cairo_day": "2026-10-24T21:00:00.000Z",
+        "rows": 19,
+        "coins": 259
+      },
+      {
+        "cairo_day": "2026-10-23T21:00:00.000Z",
+        "rows": 13,
+        "coins": 173
+      },
+      {
+        "cairo_day": "2026-10-22T21:00:00.000Z",
+        "rows": 7,
+        "coins": 62
+      },
+      {
+        "cairo_day": "2026-10-21T21:00:00.000Z",
+        "rows": 12,
+        "coins": 133
+      },
+      {
+        "cairo_day": "2026-10-20T21:00:00.000Z",
+        "rows": 6,
+        "coins": 54
+      }
+    ]
+  },
+  "definitions": {
+    "handle_signup_bonus()": "CREATE OR REPLACE FUNCTION public.handle_signup_bonus()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_catalog'\nAS $function$\r\ndeclare\r\n  v_amount int;\r\nbegin\r\n  -- استثناء الزائر المجهول — لا نمنح\r\n  if coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) then\r\n    return new;\r\n  end if;\r\n\r\n  select amount into v_amount from public.coin_source_rules where id = 'signup_bonus' and is_live = true;\r\n  if not found then return new; end if;\r\n\r\n  insert into public.coin_wallets (user_id) values (new.id) on conflict (user_id) do nothing;\r\n\r\n  insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata)\r\n  values (new.id, 'signup_bonus', v_amount, 'earn', new.id::text, jsonb_build_object('trigger', 'profile_insert'))\r\n  on conflict do nothing;\r\n\r\n  return new;\r\nend;\r\n$function$\n",
+    "daily_missions()": "CREATE OR REPLACE FUNCTION public.daily_missions()\n RETURNS TABLE(mission text, label text, done boolean, claimed boolean, coins integer, xp integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_catalog'\nAS $function$\r\ndeclare v_uid uuid := auth.uid(); v_day date := public.cairo_day();\r\nbegin\r\n  if v_uid is null then raise exception 'daily_missions: لازم تكون داخل بحسابك'; end if;\r\n  return query\r\n  select m.id, m.label, m.done, exists(select 1 from public.daily_mission_claims c where c.user_id=v_uid and c.day=v_day and c.mission=m.id), 5, 10\r\n  from (\r\n    select 'study'::text id, 'أكمل خطوة مذاكرة'::text label, exists(select 1 from public.coin_ledger l where l.user_id=v_uid and l.source='day_done' and l.source_type='earn' and l.created_at >= (v_day::timestamp at time zone 'Africa/Cairo')) done\r\n    union all select 'goal', 'أنجز هدفًا في المخطط', exists(select 1 from public.coin_ledger l where l.user_id=v_uid and l.source='goal_done' and l.source_type='earn' and l.created_at >= (v_day::timestamp at time zone 'Africa/Cairo'))\r\n    union all select 'riddle', 'حل فزورة البريك', exists(select 1 from public.break_riddle_sessions s where s.user_id=v_uid and s.day=v_day and s.solved_at is not null)\r\n    union all select 'game', 'أكمل لعبة بريك', exists(select 1 from public.break_game_claims g where g.user_id=v_uid and g.day=v_day)\r\n  ) m;\r\nend; $function$\n",
+    "weekly_missions()": "CREATE OR REPLACE FUNCTION public.weekly_missions()\n RETURNS TABLE(id text, label text, week_key text, steps_target integer, days_target integer, steps_done integer, days_done integer, done boolean, claimed boolean, coins integer, xp integer, ends_on date)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_catalog'\nAS $function$\r\ndeclare\r\n  v_uid    uuid := auth.uid();\r\n  v_week   text := public.current_quiz_week();\r\n  v_start  date := public.current_quiz_week()::date;\r\n  v_ends   date := (public.current_quiz_week()::date + 6);\r\n  v_steps  int := 0;\r\n  v_days   int := 0;\r\n  c_steps  constant int := 5;\r\n  c_days   constant int := 3;\r\n  c_coins  constant int := 150;\r\n  c_xp     constant int := 120;\r\nbegin\r\n  if v_uid is null then\r\n    raise exception 'weekly_missions: لازم تكون داخل بحسابك';\r\n  end if;\r\n\r\n  select count(*) into v_steps\r\n    from public.coin_ledger l\r\n   where l.user_id = v_uid\r\n     and l.source = 'day_done'\r\n     and l.source_type = 'earn'\r\n     and l.created_at >= (v_start::timestamp at time zone 'Africa/Cairo')\r\n     and l.created_at <  ((v_start + 7)::timestamp at time zone 'Africa/Cairo');\r\n\r\n  select count(distinct (l.created_at at time zone 'Africa/Cairo')::date) into v_days\r\n    from public.coin_ledger l\r\n   where l.user_id = v_uid\r\n     and l.source in ('day_done', 'goal_done')\r\n     and l.source_type = 'earn'\r\n     and l.created_at >= (v_start::timestamp at time zone 'Africa/Cairo')\r\n     and l.created_at <  ((v_start + 7)::timestamp at time zone 'Africa/Cairo');\r\n\r\n  return query\r\n  select 'weekly'::text,\r\n         'أكمل ٥ مراحل وذاكر ٣ أيام'::text,\r\n         v_week,\r\n         c_steps,\r\n         c_days,\r\n         v_steps,\r\n         v_days,\r\n         (v_steps >= c_steps and v_days >= c_days),\r\n         exists (\r\n           select 1 from public.weekly_mission_claims w\r\n            where w.user_id = v_uid and w.week_key = v_week\r\n         ),\r\n         c_coins,\r\n         c_xp,\r\n         v_ends;\r\nend;\r\n$function$\n",
+    "_streak_apply(uuid)": "CREATE OR REPLACE FUNCTION public._streak_apply(p_uid uuid)\n RETURNS TABLE(streak integer, grew boolean, last_study_day date)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_catalog'\nAS $function$\r\ndeclare\r\n  v_today  date := public.cairo_day();\r\n  v_streak int;\r\n  v_last   date;\r\n  v_new    int;\r\n  v_bonus_xp int := 0;\r\nbegin\r\n  if p_uid is null then\r\n    raise exception '_streak_apply: p_uid required';\r\n  end if;\r\n\r\n  select coalesce(p.streak, 0), p.last_study_day\r\n    into v_streak, v_last\r\n    from public.profiles p\r\n   where p.id = p_uid\r\n   for update;\r\n\r\n  if not found then\r\n    raise exception '_streak_apply: profile not found';\r\n  end if;\r\n\r\n  if v_last is not null and v_last >= v_today then\r\n    return query select v_streak, false, v_last;\r\n    return;\r\n  end if;\r\n\r\n  if v_last is not null and v_last = v_today - 1 then\r\n    v_new := greatest(coalesce(v_streak, 0), 0) + 1;\r\n  else\r\n    v_new := 1;\r\n  end if;\r\n\r\n  perform set_config('app.streak_bypass', 'on', true);\r\n  update public.profiles\r\n     set streak = v_new,\r\n         last_study_day = v_today\r\n   where id = p_uid;\r\n  perform set_config('app.streak_bypass', 'off', true);\r\n\r\n  /* ── مكافآت اليوم (زي db/43) ── */\r\n  if v_new >= 2 then\r\n    begin\r\n      perform public.award_coins('streak_day', v_today::text);\r\n    exception when others then\r\n      null;\r\n    end;\r\n  end if;\r\n\r\n  /* ── محطات السلسلة (Phase 2) ──\r\n     Coins من جدول القواعد عبر award_coins، وXP هنا مباشرة.\r\n     كل حاجة ملفوفة في begin/exception: مصدر لسه مش مهيّأ مايكسرش تسجيل اليوم. */\r\n  if v_new % 3 = 0 then\r\n    begin\r\n      perform public.award_coins('streak_tier_3', v_today::text);\r\n    exception when others then\r\n      null;\r\n    end;\r\n    v_bonus_xp := v_bonus_xp + 15;\r\n  end if;\r\n\r\n  if v_new % 7 = 0 then\r\n    begin\r\n      perform public.award_coins('perfect_week', v_today::text);\r\n    exception when others then\r\n      null;\r\n    end;\r\n    v_bonus_xp := v_bonus_xp + 50;\r\n  end if;\r\n\r\n  if v_new % 30 = 0 then\r\n    begin\r\n      perform public.award_coins('streak_tier_30', v_today::text);\r\n    exception when others then\r\n      null;\r\n    end;\r\n    v_bonus_xp := v_bonus_xp + 200;\r\n  end if;\r\n\r\n  if v_bonus_xp > 0 then\r\n    perform set_config('app.xp_bypass', 'on', true);\r\n    update public.profiles\r\n       set xp = greatest(0, coalesce(xp, 0) + v_bonus_xp)\r\n     where id = p_uid;\r\n    perform set_config('app.xp_bypass', 'off', true);\r\n  end if;\r\n\r\n  return query select v_new, true, v_today;\r\nend;\r\n$function$\n"
+  },
+  "errors": [],
+  "finishedAt": "2026-11-19T14:12:33.260Z"
+}

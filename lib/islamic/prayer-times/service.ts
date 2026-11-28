@@ -199,6 +199,14 @@ async function fetchFromAlAdhan(params: PrayerTimesRequestParams): Promise<AlAdh
 }
 
 /**
+ * AlAdhan (iso8601=false) بيرجع أوقات زي "05:12 (EET)" — نشيل لاحقة المنطقة
+ * الزمنية قبل تحليل الوقت، وإلا Number("12 (EET)") = NaN.
+ */
+function cleanTime(timeStr: string): string {
+  return timeStr.replace(/\s*\(.*?\)\s*$/, "").trim();
+}
+
+/**
  * Normalize AlAdhan response to internal PrayerTimes model
  */
 function normalizeAlAdhanResponse(
@@ -216,7 +224,7 @@ function normalizeAlAdhanResponse(
   const now = new Date();
 
   const parseTimeToTimestamp = (timeStr: string): number =>
-    zonedDateTimeToTimestamp(localDate, timeStr, params.timezone);
+    zonedDateTimeToTimestamp(localDate, cleanTime(timeStr), params.timezone);
 
   const prayerNames = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha", "Imsak", "Midnight"] as const;
   const timestamps: Record<string, number> = {};
@@ -322,7 +330,7 @@ function getNextPrayerFromTimestamps(
   const [year, month, day] = localDate.split("-").map(Number);
   const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
   const nextLocalDate = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, "0")}-${String(nextDay.getUTCDate()).padStart(2, "0")}`;
-  const fajrTomorrow = zonedDateTimeToTimestamp(nextLocalDate, timings.Fajr, timezone);
+  const fajrTomorrow = zonedDateTimeToTimestamp(nextLocalDate, cleanTime(timings.Fajr), timezone);
   
   return {
     name: "Fajr",
@@ -427,9 +435,10 @@ export async function getTodayPrayerTimes(
   longitude: number,
   timezone: string,
   calculationMethod: CalculationMethodId = "egyptian",
-  madhab: MadhabId = "shafi"
+  madhab: MadhabId = "shafi",
+  date?: Date
 ): Promise<PrayerTimes> {
-  const now = new Date();
+  const now = date ?? new Date();
   return getPrayerTimes({
     date: now,
     localDate: dateInTimeZone(now, timezone),

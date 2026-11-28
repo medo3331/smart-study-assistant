@@ -1,3 +1,4 @@
+-- ⚠️ DEPRECATED بعد db/113 + db/114 (ECONOMY TRUTH — 2026-11-28): النسخ الوحيدة الصالحة من award_coins / _award_coins_variable / add_coins_grant في db/113-economy-truth.sql، وتحويلات الكتابات في db/114-economy-route-writers.sql. **ماتشغّلش الملف ده تاني بعد 113/114** — آخر تعريف بيكتب على النسخة الموحّدة والحارس هيوقف كتاباته المباشرة.
 -- ============================================================================
 -- العبادة × اقتصاد الكوينز الموجود — ملف الهجرة الوحيد للمهمة دي.
 -- شغّله في Supabase → SQL Editor بعد ما تكون شغّلت الجزء بتاع جداول التقدّم
@@ -234,9 +235,6 @@ declare
   v_capped    boolean := false;
   v_ref       text := p_ref_id;
   v_day       text := ((now() at time zone 'utc')::date)::text;
-  v_local_day date;
-  v_timezone  text;
-  v_local_start timestamptz;
   v_days      int;
   /* متغيرات تحقق مصادر العبادة: اليوم والاسم المشتقين من المرجع */
   v_wday      date;
@@ -250,18 +248,6 @@ begin
   if coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) then
     raise exception 'award_coins: الزائر مايكسبش كوينز — سجّل حساب';
   end if;
-
-  select nullif(p.worship_settings ->> 'timezone', '')
-    into v_timezone
-    from public.profiles p
-   where p.id = v_uid;
-  v_timezone := coalesce(v_timezone, 'UTC');
-  begin
-    v_local_day := (now() at time zone v_timezone)::date;
-    v_local_start := v_local_day::timestamp at time zone v_timezone;
-  exception when invalid_parameter_value then
-    raise exception 'award_coins: منطقة زمنية غير صالحة في الإعدادات';
-  end;
 
   -- المبلغ من الجدول، مش من الكلاينت.
   select amount, daily_cap, is_live
@@ -367,9 +353,6 @@ begin
       end if;
       v_wday  := (left(v_ref, 10))::date;
       v_wname := substr(v_ref, 12);
-      if v_wday <> v_local_day then
-        raise exception 'award_coins: لا يمكن صرف مكافأة صلاة عن يوم سابق أو لاحق';
-      end if;
       if v_wname not in ('fajr','dhuhr','asr','maghrib','isha') then
         raise exception 'award_coins: اسم صلاة غير مسموح: %', v_wname;
       end if;
@@ -388,9 +371,6 @@ begin
         raise exception 'award_coins: worship_quran محتاج مرجع تاريخ صالح';
       end if;
       v_wday := v_ref::date;
-      if v_wday <> v_local_day then
-        raise exception 'award_coins: لا يمكن صرف مكافأة القرآن عن يوم سابق أو لاحق';
-      end if;
       if not exists (
         select 1 from public.worship_progress w
          where w.user_id = v_uid
@@ -412,9 +392,6 @@ begin
       end if;
       v_wday  := (left(v_ref, 10))::date;
       v_wname := substr(v_ref, 12);
-      if v_wday <> v_local_day then
-        raise exception 'award_coins: لا يمكن صرف مكافأة أذكار عن يوم سابق أو لاحق';
-      end if;
       if v_wname not in ('morning','evening','after-prayer','sleep','general') then
         raise exception 'award_coins: تصنيف أذكار غير معروف: %', v_wname;
       end if;
@@ -422,13 +399,7 @@ begin
         select 1 from public.worship_progress w
          where w.user_id = v_uid
            and w.day = v_wday
-           and coalesce((w.adhkar ->> v_wname)::int, 0) >= case v_wname
-             when 'morning' then 8
-             when 'evening' then 11
-             when 'after-prayer' then 104
-             when 'sleep' then 5
-             when 'general' then 101
-           end
+           and coalesce((w.adhkar ->> v_wname)::int, 0) > 0
       ) then
         raise exception 'award_coins: الأذكار دي مش متسجّلة على حسابك';
       end if;
@@ -448,11 +419,8 @@ begin
      where user_id = v_uid
        and source  = p_source
        and source_type = 'earn'
-       and created_at >= case
-         when p_source in ('worship_prayer', 'worship_quran', 'worship_adhkar')
-           then v_local_start
-         else (((now() at time zone 'utc')::date)::timestamp at time zone 'utc')
-       end;
+       and created_at >= (((now() at time zone 'utc')::date)::timestamp
+                          at time zone 'utc');
 
     if v_today_cnt >= v_cap then
       v_capped := true;
@@ -479,7 +447,9 @@ $$;
 revoke all on function public.award_coins(text, text, jsonb) from public;
 grant execute on function public.award_coins(text, text, jsonb) to authenticated;
 
--- ملخص اليوم الذي تقرؤه واجهة مركز العبادة؛ اليوم وحدود مكافآته حسب منطقة الحساب.
+-- ملخص يوم العبادة في استدعاء واحد (كوينز + سلسلة + تقدّم اليوم).
+-- الكود بيتنادى عليه من lib/worship-data.ts (supabase.rpc("worship_daily_summary")).
+-- اليوم بيتحدد بمنطقة المستخدم الزمنية المحفوظة، وUTC لو مفيش.
 create or replace function public.worship_daily_summary()
 returns table (
   day date,

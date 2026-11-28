@@ -117,6 +117,8 @@ type LectureOption = {
 type LinkState = {
   link: { lectureId: string; lectureTitle: string } | null;
   lectures: LectureOption[];
+  /** تسجيلات الطالب التانية من مواد مختلفة — مش بنخفيها، مش بنفلترها كليًا. */
+  otherLectures: LectureOption[];
   suggestion: (LectureOption & { inList: boolean }) | null;
 };
 
@@ -236,6 +238,15 @@ async function buildLinkState(
 
   const lectures = subjectMatched.map(toOption);
 
+  // باقي تسجيلات الطالب (بره مادة الدرس) — متاحة للربط كمان، التفريغ الأول.
+  // allRows مرتّبة created_at desc بالفعل، فبنحافظ على الترتيب داخل كل مجموعة.
+  const matchedIds = new Set(subjectMatched.map((row) => row.id as string));
+  const otherRows = allRows.filter((row) => !matchedIds.has(row.id as string));
+  const otherLectures = [
+    ...otherRows.filter((row) => transcriptIds.has(row.id as string)),
+    ...otherRows.filter((row) => !transcriptIds.has(row.id as string)),
+  ].map(toOption);
+
   // ٥) الاقتراح الذكي: أول من يطابق اسمه اسم الدرس — من قائمة المادة
   //    الأول، وإلا من كل المحاضرات (عنوان مطابق = المحاضرة الصحيحة حتى
   //    لو مالهاش مادة مسجّلة).
@@ -249,7 +260,7 @@ async function buildLinkState(
     ? { ...toOption(anyRow), inList: Boolean(inListRow) }
     : null;
 
-  return { link, lectures, suggestion };
+  return { link, lectures, otherLectures, suggestion };
 }
 
 /** محتوى الصف المحفوظ — أوضاع markdown + الشرح الم citied + الملخص. */

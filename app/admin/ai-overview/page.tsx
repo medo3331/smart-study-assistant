@@ -9,13 +9,13 @@ export default function AdminAiOverviewPage() {
     fetch("/api/admin/ai-overview")
       .then(async (r) => {
         const j = await r.json();
-        if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+        if (!j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
         setData(j);
       })
       .catch((e) => setErr(e?.message || "تعذّر جلب البيانات"));
   }, []);
 
-  if (err) return <div className="p-6"><AdminNotice tone="rose">{err}</AdminNotice></div>;
+  if (!data && err) return <div className="p-6"><AdminNotice tone="rose">{err}</AdminNotice></div>;
   if (!data) return <div className="p-6">جاري التحميل…</div>;
 
 
@@ -24,23 +24,28 @@ export default function AdminAiOverviewPage() {
   const models = data.models ?? [];
   const agents = data.agents ?? [];
   const system = data.system ?? {};
+  const providers = data.providers ?? {};
+  const tasks = data.tasks ?? [];
+  const format = (value: unknown) => value == null ? "غير متاح" : String(value);
 
   return (
 
     <div className="space-y-6 p-6">
       <AdminPageHeader title="AI Overview" subtitle="نظرة عامة على استخدام الذكاء الاصطناعي والحدود والنماذج" badge="ai" permissionKey="admin" />
-       {data.dbError ? <AdminNotice tone="amber">تحذير: {data.dbError}</AdminNotice> : null}
+       {!data.usageAvailable ? <AdminNotice tone="amber">تعذر الوصول لقاعدة بيانات سجل الاستخدام. ستظهر بيانات السجل البرمجي والموديلات؛ أرقام الاستخدام أدناه غير متاحة وليست صفرًا.</AdminNotice> : null}
+       {data.dbError ? <AdminNotice tone="amber">سبب تعذر الاستخدام: {data.dbError}</AdminNotice> : null}
+       {err ? <AdminNotice tone="rose">{err}</AdminNotice> : null}
 
 
       <AdminCard title="إحصائيات الاستخدام" tone="blue">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <AdminStatCard label="إجمالي الطلبات" value={o.totalRequests ?? 0} tone="blue" />
-          <AdminStatCard label="آخر 24 ساعة" value={o.last24h ?? 0} tone="emerald" />
-          <AdminStatCard label="آخر 3 ساعات" value={o.last3h ?? 0} tone="amber" />
-          <AdminStatCard label="Entitlements" value={o.entitlements ?? 0} tone="purple" />
-          <AdminStatCard label="Nemotron Super (24h)" value={o.super24h ?? 0} tone="default" />
-          <AdminStatCard label="Nemotron Ultra (24h)" value={o.ultra24h ?? 0} tone="default" />
-          <AdminStatCard label="ضيوف (24h)" value={o.guest24h ?? "N/A"} tone="default" />
+          <AdminStatCard label="إجمالي الطلبات" value={format(o.totalRequests)} tone="blue" />
+          <AdminStatCard label="آخر 24 ساعة" value={format(o.last24h)} tone="emerald" />
+          <AdminStatCard label="آخر 3 ساعات" value={format(o.last3h)} tone="amber" />
+          <AdminStatCard label="Entitlements" value={format(o.entitlements)} tone="purple" />
+          <AdminStatCard label="Nemotron Super (24h)" value={format(o.super24h)} tone="default" />
+          <AdminStatCard label="Nemotron Ultra (24h)" value={format(o.ultra24h)} tone="default" />
+          <AdminStatCard label="ضيوف (24h)" value={format(o.guest24h)} tone="default" />
         </div>
       </AdminCard>
 
@@ -60,21 +65,35 @@ export default function AdminAiOverviewPage() {
       <AdminCard title={`النماذج (${models.length})`} tone="default">
         <AdminTableWrap>
           <thead>
-            <tr><th>النموذج</th><th>المزوّد</th><th>مفعّل</th><th>Free Endpoint</th><th>Gated</th></tr>
+            <tr><th>النموذج</th><th>المزوّد</th><th>التفعيل/الاختيار</th><th>حالة التهيئة</th><th>القدرات</th><th>المهام</th><th>Gated</th></tr>
           </thead>
           <tbody>
             {models.map((m: any) => (
               <tr key={m.id}>
-                <td className="font-mono text-[10px]">{m.displayName || m.id}</td>
+                <td className="font-mono text-[10px]" title={m.id}>{m.displayName || m.id}</td>
                 <td>{m.provider}</td>
-                <td>{m.enabled ? "✓" : "—"}</td>
-                <td>{m.freeEndpoint ? "✓" : "—"}</td>
+                <td>{m.enabled ? (m.selectableByConfiguration ? "مفعّل · قابل للاختيار" : "مفعّل · مدفوع/مقيد") : "معطّل"}</td>
+                <td>{m.providerConfigured ? `مهيأ · ${m.providerHealth}` : "مفتاح غير مهيأ"}</td>
+                <td>{(m.capabilities || []).join("، ") || "—"}</td>
+                <td>{(m.tasks || []).join("، ") || "—"}</td>
                 <td>{m.gated ? (m.entitlement || "gated") : "—"}</td>
               </tr>
             ))}
-            {models.length === 0 && <tr><td colSpan={5} className="text-center py-4">لا توجد نماذج.</td></tr>}
+            {models.length === 0 && <tr><td colSpan={7} className="text-center py-4">لا توجد نماذج.</td></tr>}
           </tbody>
         </AdminTableWrap>
+      </AdminCard>
+
+      <AdminCard title={`المزوّدون وحالة التشغيل (${Object.keys(providers).length})`} tone="blue">
+        <AdminTableWrap>
+          <thead><tr><th>المزوّد</th><th>الإعداد</th><th>الصحة المرصودة</th><th>نتائج حقيقية في هذه العملية</th><th>آخر نجاح</th></tr></thead>
+          <tbody>{Object.entries(providers).map(([name, provider]: [string, any]) => <tr key={name}><td>{name}</td><td>{provider.configured ? "المفتاح موجود" : "غير مهيأ"}</td><td>{provider.healthStatus === "NOT_CHECKED" ? "لم يُفحص/لا توجد نتيجة مرصودة" : provider.healthStatus}</td><td>{provider.observedInThisProcess ? `${provider.successCount} نجاح · ${provider.failureCount} فشل` : "لا توجد بيانات مرصودة"}</td><td>{provider.lastSuccessAt ? new Date(provider.lastSuccessAt).toLocaleString() : "غير متاح"}</td></tr>)}</tbody>
+        </AdminTableWrap>
+        <p className="mt-2 text-xs text-slate-400">الحالة المرصودة داخل العملية قد تُصفّر عند إعادة تشغيل الخادم أو تختلف بين النسخ؛ وجود المفتاح لا يثبت أن اتصال المزوّد يعمل الآن.</p>
+      </AdminCard>
+
+      <AdminCard title={`توجيه المهام (${tasks.length})`} tone="amber">
+        <AdminTableWrap><thead><tr><th>المهمة</th><th>ترتيب النماذج</th></tr></thead><tbody>{tasks.map((task: any) => <tr key={task.task}><td>{task.task}</td><td className="font-mono text-[10px]">{task.modelIds.join(" ← ")}</td></tr>)}</tbody></AdminTableWrap>
       </AdminCard>
 
       <AdminCard title={`الوكلاء (Agents) (${agents.length})`} tone="purple">

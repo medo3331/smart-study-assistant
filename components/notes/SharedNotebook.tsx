@@ -1,6 +1,6 @@
 // components/notes/SharedNotebook.tsx
 //
-// 📖 عارض الدفاتر المشتركة — للقراءة فقط، بدون تسجيل ولا أدوات.
+// 📖 عارض النوتات المشتركة — للقراءة فقط، بدون تسجيل ولا أدوات.
 //
 // بيجيب الحمولة من GET /api/notes/share/<id> وبيعرض الصفحات بنفس
 // محرك الرسم بتاع النوته (renderPageContent) — بس من غير أزرار تحرير.
@@ -11,15 +11,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  PAGE_HEIGHT,
-  PAGE_WIDTH,
+  pageDimensions,
   paintPageBackground,
   paintImage,
   paintShapeStroke,
   paintStroke,
   paintText,
 } from "@/lib/notes/canvas";
-import type { NoteImage, NoteText, NotesTemplate, Stroke } from "@/lib/notes/types";
+import type { PageFormat, NoteImage, NoteText, NotesTemplate, Stroke } from "@/lib/notes/types";
+import { VALID_PAGE_FORMATS } from "@/lib/notes/validation";
 import { useTheme } from "@/theme/ThemeProvider";
 
 interface SharedPage {
@@ -35,6 +35,7 @@ interface SharedPage {
 interface SharedNotebookData {
   title: string;
   pageCount: number;
+  pageFormat: PageFormat;
   pages: SharedPage[];
 }
 
@@ -97,18 +98,24 @@ export default function SharedNotebook() {
         const pages: SharedPage[] = Array.isArray(payload.payload?.pages)
           ? payload.payload.pages
           : [];
+        const rawFormat = payload.payload?.pageFormat;
+        const pageFormat: PageFormat =
+          typeof rawFormat === "string" && VALID_PAGE_FORMATS.includes(rawFormat as PageFormat)
+            ? (rawFormat as PageFormat)
+            : "a4";
         await loadImages(pages);
         if (cancelled) return;
         setData({
-          title: typeof payload.title === "string" ? payload.title : "دفتر",
+          title: typeof payload.title === "string" ? payload.title : "النوتة",
           pageCount: pages.length,
+          pageFormat,
           pages,
         });
         setPageId(pages[0]?.id ?? null);
         setLoading(false);
       } catch {
         if (!cancelled) {
-          setError("مقدرناش نحمّل الدفتر — جرّب تاني.");
+          setError("مقدرناش نحمّل النوتة — جرّب تاني.");
           setLoading(false);
         }
       }
@@ -130,13 +137,14 @@ export default function SharedNotebook() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const page = data.pages[pageIndex];
+    const { width: pageW, height: pageH } = pageDimensions(data.pageFormat);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = PAGE_WIDTH * dpr;
-    canvas.height = PAGE_HEIGHT * dpr;
-    canvas.style.width = `${PAGE_WIDTH}px`;
-    canvas.style.height = `${PAGE_HEIGHT}px`;
+    canvas.width = pageW * dpr;
+    canvas.height = pageH * dpr;
+    canvas.style.width = `${pageW}px`;
+    canvas.style.height = `${pageH}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintPageBackground(ctx, page.template, PAGE_WIDTH, PAGE_HEIGHT);
+    paintPageBackground(ctx, page.template, pageW, pageH);
     for (const image of page.content.images ?? []) {
       paintImage(ctx, image, (src) => imagesRef.current.get(src) ?? null);
     }
@@ -150,7 +158,7 @@ export default function SharedNotebook() {
   if (loading) {
     return (
       <div className="shared-page">
-        <p className="notes-hint">بنحمّل الدفتر…</p>
+        <p className="notes-hint">بنحمّل النوتة…</p>
       </div>
     );
   }
@@ -158,13 +166,13 @@ export default function SharedNotebook() {
     return (
       <div className="shared-page">
         <div className="notes-alert" data-tone="error">
-          <strong>مفيش دفتر هنا</strong>
+          <strong>مفيش نوتة هنا</strong>
           <br />
           {error ?? "لينك المشاركة مش موجود أو اتلغى."}
         </div>
         <p className="notes-hint">
-          لو لينك من صاحب الدفتر — اطلب لينك جديد منه. أو{" "}
-          <Link href="/notes" className="notes-link">افتح دفاترك</Link>.
+          لو لينك من صاحب النوتة — اطلب لينك جديد منه. أو{" "}
+          <Link href="/notes" className="notes-link">افتح نوتاتك</Link>.
         </p>
       </div>
     );
@@ -226,7 +234,7 @@ export default function SharedNotebook() {
       ) : null}
 
       <p className="notes-hint" style={{ textAlign: "center", marginTop: 12 }}>
-        عايز دفتر زي ده؟{" "}
+        عايز نوتة زي ده؟{" "}
         <Link href="/notes" className="notes-link">افتح Magicly Notes</Link>
       </p>
     </div>

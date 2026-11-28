@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   NextPrayerCard,
@@ -19,10 +19,13 @@ import {
 import { Reveal } from "@/components/ui/Reveal";
 import { useTodayPrayerTimes } from "@/hooks/usePrayerTimes";
 import { generateDailyProgressItems } from "@/lib/islamic/utils";
+import type { DailyProgressItem } from "@/lib/islamic/types";
 import type { Surah } from "@/lib/islamic/types";
 import { getAllSurahs } from "@/lib/islamic/quran";
 import { localWorshipDate } from "@/lib/islamic/worship-progress";
-import { WORSHIP_REWARD_LABELS } from "@/lib/worship-rewards";
+import {
+  WORSHIP_REWARD_LABELS,
+} from "@/lib/worship-rewards";
 
 /**
  * Main Worship Dashboard Page — /worship
@@ -32,6 +35,7 @@ import { WORSHIP_REWARD_LABELS } from "@/lib/worship-rewards";
  * • المواقيت من AlAdhan بإعدادات المستخدم المحفوظة.
  * • التقدّم من worship-progress المحلي مدموج مع worship_progress في الداتابيز.
  * • الكوينز والسلسلة من الداتابيز، والمكافأة بتظهر بعد تأكيد السيرفر فقط.
+ * • مراجع أيام المكافآت بيوم المستخدم المحلي (منطقة زمنية) — مرحلة العبادات ١.
  */
 export default function WorshipPage() {
   return (
@@ -67,11 +71,96 @@ function WorshipHome() {
     settings?.madhab,
   );
 
+  /* ── أحداث العبادة → مكافآت award_coins (مراجع يوم المستخدم المحلي) ──── */
+
+  /** إتمام صلاة مفروضة: +٣ لكل صلاة (سقف ٥/يوم من قواعد الداتابيز). */
+  const completePrayer = useCallback(
+    async (prayerId: string) => {
+      if (!shared || !shared.user || shared.user.is_anonymous) return;
+      const day = localWorshipDate(new Date(), settings!.timezone);
+      await shared.recordEvent(
+        (d) => ({ ...d, prayers: { ...d.prayers, [prayerId]: true } }),
+        "worship_prayer",
+        `${day}-${prayerId}`,
+        { activity: "prayer", prayer: prayerId, date: day },
+        (reward) => showReward(reward.coins),
+      );
+    },
+    [shared, showReward, settings?.timezone],
+  );
+
+  /** إتمام هدف ذكر (تصنيف كامل): +٣ لكل تصنيف (سقف ٣/يوم). */
+  const completeDhikrTarget = useCallback(
+    async (category: string, count: number) => {
+      if (!shared || !shared.user || shared.user.is_anonymous) return;
+      const day = localWorshipDate(new Date(), settings!.timezone);
+      await shared.recordEvent(
+        (day2) => ({
+          ...day2,
+          adhkar: {
+            ...day2.adhkar,
+            [category]: { completed: true, count },
+          },
+        }),
+        "worship_adhkar",
+        `${day}-${category}`,
+        { activity: "adhkar", category, date: day },
+        (reward) => showReward(reward.coins),
+      );
+    },
+    [shared, showReward, settings?.timezone],
+  );
+
+  /** إكمال ورد القرآن من قائمة المهام — نفس مرجع اليوم عشان مفيش صرف مزدوج. */
+  const completeQuranWird = useCallback(
+    async () => {
+      if (!shared || !shared.user || shared.user.is_anonymous) return;
+      const day = localWorshipDate(new Date(), settings!.timezone);
+      const target = settings?.quranDailyTarget ?? 10;
+      await shared.recordEvent(
+        (d) => ({
+          ...d,
+          quran: {
+            ...d.quran,
+            dailyCount: Math.max(d.quran.dailyCount, target),
+          },
+        }),
+        "worship_quran",
+        day,
+        { activity: "quran-wird", date: day, manual: true },
+        (reward) => showReward(reward.coins),
+      );
+    },
+    [shared, showReward, settings?.quranDailyTarget, settings?.timezone],
+  );
+
+  /** معالج الأزرار في «إنجازاتك اليوم». */
+  const handleCompleteItem = useCallback(
+    (item: DailyProgressItem) => {
+      if (item.completed || !item.id) return;
+      if (
+        ["fajr", "dhuhr", "asr", "maghrib", "isha"].includes(item.id)
+      ) {
+        void completePrayer(item.id);
+      } else if (item.id === "morning_adhkar") {
+        void completeDhikrTarget("morning", 33);
+      } else if (item.id === "evening_adhkar") {
+        void completeDhikrTarget("evening", 33);
+      } else if (item.id === "sleep_adhkar") {
+        // أذكار النوم حدث تتبّع بدون مكافأة مستقلة — ضمن أذكار اليوم.
+        void completeDhikrTarget("sleep", 10);
+      } else if (item.id === "quran_wird") {
+        void completeQuranWird();
+      }
+    },
+    [completePrayer, completeDhikrTarget, completeQuranWird],
+  );
+
   /* ── الحالات ────────────────────────────────────────────────────────── */
   if (!settingsLoaded || isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#7C5CFF]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#10B981]" />
         <span className="ml-3 text-[#9AA0C0]">جاري تحميل مواقيت الصلاة…</span>
       </div>
     );
@@ -83,7 +172,7 @@ function WorshipHome() {
         <p className="text-[#FB923C]">⚠️ {error ?? "تعذر تحميل بيانات العبادة."}</p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 rounded-lg bg-[#7C5CFF] px-4 py-2 text-white transition-colors hover:bg-[#6A4CE8]"
+          className="mt-4 rounded-lg bg-[#10B981] px-4 py-2 text-white transition-colors hover:bg-[#059669]"
         >
           إعادة المحاولة
         </button>
@@ -97,17 +186,24 @@ function WorshipHome() {
       .filter(([, v]) => v)
       .map(([k]) => k),
   );
-  const morningCompleted = progress.adhkar["morning"]?.completed ?? false;
-  const eveningCompleted = progress.adhkar["evening"]?.completed ?? false;
+  const morningCount = progress.adhkar["morning"]?.count ?? 0;
+  const eveningCount = progress.adhkar["evening"]?.count ?? 0;
+  const morningCompleted =
+    progress.adhkar["morning"]?.completed ||
+    (shared.summary?.cloud.adhkar["morning"] ?? 0) >= 33;
+  const eveningCompleted =
+    progress.adhkar["evening"]?.completed ||
+    (shared.summary?.cloud.adhkar["evening"] ?? 0) >= 33;
 
   const quranDailyCount = progress.quran.dailyCount;
   const quranTarget = settings!.quranDailyTarget;
+  const quranWirdDone = quranDailyCount >= quranTarget && quranTarget > 0;
   const readingSurah = surahs.find((surah) => surah.id === progress.quran.surahId);
   const readingPosition = progress.quran.updatedAt
     ? `${readingSurah?.arabicName ?? `السورة ${progress.quran.surahId}`} — الآية ${progress.quran.ayahId}${readingSurah ? ` من ${readingSurah.ayahCount}` : ""}`
     : "افتح المصحف لتسجيل موضع القراءة";
-  const quranWirdDone = quranDailyCount >= quranTarget && quranTarget > 0;
 
+  // قائمة المهام بتعرض الصلوات المفروضة فقط — الشروق مش صلاة.
   const prayerOnlyTimes = prayerTimes?.times.filter((prayer) => prayer.name !== "Sunrise") ?? [];
   const nextPrayerOnlyIndex = prayerOnlyTimes.findIndex((prayer) => prayer.isNext);
   const effectiveNextPrayerIndex = nextPrayerOnlyIndex >= 0
@@ -158,7 +254,7 @@ function WorshipHome() {
               ⚙️
             </Link>
           </div>
-          <p className="text-[#B69CFF]">
+          <p className="text-[#6EE7B7]">
             نسأل الله لك يومًا مباركًا مليئًا بالطاعات والتوفيق
           </p>
           <div className="flex flex-wrap items-center gap-4 text-sm text-[#9AA0C0]">
@@ -187,7 +283,7 @@ function WorshipHome() {
                 </span>
               </>
             )}
-            <span className="font-mono font-bold text-[#2DD4BF]">
+            <span className="font-mono font-bold text-[#34D399]">
               {getDailyPercent(
                 prayersDoneCount,
                 morningCompleted,
@@ -219,8 +315,8 @@ function WorshipHome() {
             completed: prayersDoneCount >= 5,
           }}
           adhkarProgress={{
-            current: Number(morningCompleted) + Number(eveningCompleted),
-            target: 2,
+            current: morningCount + eveningCount,
+            target: 66,
             completed: morningCompleted && eveningCompleted,
           }}
           quranProgress={{
@@ -235,12 +331,15 @@ function WorshipHome() {
       {/* Quran Daily Wird Card */}
       <Reveal index={4}>
         <QuranWirdCard
+          surahName={readingSurah?.name ?? "Al-Fatihah"}
           arabicSurahName={readingSurah?.arabicName ?? `السورة ${progress.quran.surahId}`}
           currentAyah={quranDailyCount}
           targetAyah={quranTarget}
+          totalAyahs={readingSurah?.ayahCount ?? 286}
           progress={
             quranTarget > 0 ? (quranDailyCount / quranTarget) * 100 : 0
           }
+          juzNumber={readingSurah?.juzNumber ? readingSurah.juzNumber : 1}
           readingPosition={readingPosition}
           onContinue={() => {
             window.location.href = "/worship/quran";
@@ -254,7 +353,8 @@ function WorshipHome() {
         <DailyProgress
           items={dailyProgressItems}
           title="إنجازاتك اليوم"
-          subtitle="ملخص تقدمك — افتح العبادة لتسجيلها من صفحتها"
+          subtitle="اضغط على أي عبادة لتسجيل إتمامها — المكافأة بتتأكد من السيرفر"
+          onCompleteItem={handleCompleteItem}
         />
       </Reveal>
 
@@ -302,16 +402,16 @@ function WorshipHome() {
           <h2 className="text-xl font-bold text-white">الوصول السريع</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Link href="/worship/quran">
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#2DD4BF]/20 hover:bg-white/[0.04]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-xl text-[#2DD4BF]">
+              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#34D399]/20 hover:bg-white/[0.04]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34D399]/15 text-xl text-[#34D399]">
                   📖
                 </span>
                 <span className="text-sm font-medium text-white">القرآن</span>
               </button>
             </Link>
             <Link href="/worship/adhkar">
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#7C5CFF]/20 hover:bg-white/[0.04]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#7C5CFF]/15 text-xl text-[#7C5CFF]">
+              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#10B981]/20 hover:bg-white/[0.04]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#10B981]/15 text-xl text-[#10B981]">
                   🤲
                 </span>
                 <span className="text-sm font-medium text-white">الأذكار</span>
@@ -326,8 +426,8 @@ function WorshipHome() {
               </button>
             </Link>
             <Link href="/worship#tasbih">
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#2DD4BF]/20 hover:bg-white/[0.04]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2DD4BF]/15 text-xl text-[#2DD4BF]">
+              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4 text-center transition-all hover:border-[#34D399]/20 hover:bg-white/[0.04]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34D399]/15 text-xl text-[#34D399]">
                   📿
                 </span>
                 <span className="text-sm font-medium text-white">التسبيح</span>

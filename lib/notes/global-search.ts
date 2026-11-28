@@ -1,8 +1,8 @@
 // lib/notes/global-search.ts
 //
-// 🔍 بحث شامل عبر كل دفاتر الطالب — pure، بدون React.
+// 🔍 بحث شامل عبر كل نوتات الطالب — pure، بدون React.
 //
-// البحث بيمشي على: أسماء الدفاتر، أسماء الصفحات، والنصوص المطبوعة.
+// البحث بيمشي على: أسماء النوتات، أسماء الصفحات، والنصوص المطبوعة.
 // المساحات غير الفارغة بتتحمل عربي/إنجليزي وأي حالة (bail لو الاستعلام قصير).
 
 import type { NoteRepository } from "./repository";
@@ -57,7 +57,7 @@ function pageSearchTexts(page: StoragePage): string[] {
   return texts;
 }
 
-/** ⬇ يبني محتوى بحث كامل (دفاتر×صفحات×نصوص) من مستودع واحد — بيعدي كل الدفاتر. */
+/** ⬇ يبني محتوى بحث كامل (نوتات×صفحات×نصوص) من مستودع واحد — بيعدي كل النوتات. */
 export async function buildSearchIndex(
   repo: NoteRepository,
 ): Promise<Array<{ notebook: StorageNotebook; pages: StoragePage[] }>> {
@@ -74,7 +74,7 @@ export async function buildSearchIndex(
   return indexed;
 }
 
-/** 🔍 يبحث في الـ index المبنى — بيرجّع النتائج جماعية حسب الدفتر. */
+/** 🔍 يبحث في الـ index المبنى — بيرجّع النتائج جماعية حسب النوتة. */
 export function searchIndex(
   index: Array<{ notebook: StorageNotebook; pages: StoragePage[] }>,
   rawQuery: string,

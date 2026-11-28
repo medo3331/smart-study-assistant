@@ -12,6 +12,12 @@
 
 import type { AiUsageContext } from "@/lib/ai/usage-context";
 
+/** دور محادثة واحد — أضيق من ChatTurn العام (بدون nullables) للبناء النظيف. */
+export interface UnifiedChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface UnifiedAIInput {
   prompt: string;
   imageInput?: File | unknown;     // from Magic upload button (existing)
@@ -24,6 +30,15 @@ export interface UnifiedAIInput {
   // Unified brain: server-built system prompt (persona + student context + study facts).
   // Built server-side only — client must never send it.
   system?: string;
+  /**
+   * 🧠 ذاكرة المحادثة — أدوار المحادثة الحالية من `chat_messages` (server-side فقط).
+   *
+   * ⚠️ **ليه:** UnifiedChat بيبعت آخر رسالة بس، و`unifiedAI` كان بيبنى
+   *   `[system, user]` من غير أي سجل — فالموديل كان بي«نسى»رسالة قبلها
+   *   («الملف اللي لسه بتعمله»). السجل بيتقري من الداتابيز في الـ route
+   *   ويتمرّر هنا — العميل لا يرسله ولا يعدّله.
+   */
+  history?: UnifiedChatTurn[];
   /**
    * 🧾 Phase 5-C5 — shadow usage context.
    *
@@ -52,6 +67,14 @@ export interface UnifiedAIResult {
     visionFallback?: boolean;
   };
   reasoning?: string;             // why router chose this agent (for debug / coach context)
+  /**
+   * 📡 التوصيل التدريجي — الإجابة اكتملت جزئيًا والموديل لوّم بـ `[[متابعة]]`.
+   *
+   * 💡 **ليه:** الشرح الطويل في رد واحد بياخد توكنز كتير (TPM) ووقت تفكير طويل
+   *   فيضرب حدود المزوّد المجاني (429) أو مهلة الدالة. بتقسيم الشرح لأجزاء
+   *   متتالية، كل طلب صغير وسريع — والواجهة تعرض جزء جزء ورا بعض.
+   */
+  hasMore?: boolean;
   error?: string;
   code?: string;
   errorCode?: string;

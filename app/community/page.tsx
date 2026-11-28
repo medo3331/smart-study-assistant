@@ -1,443 +1,960 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { createClient } from "@/lib/supabase/client";
-import { CommunityQuiz, type QuizResult } from "@/components/CommunityQuiz";
-import { FeedbackWidget } from "@/components/FeedbackWidget";
-import { CommunityInvite } from "@/components/CommunityInvite";
+// ===========================================================================
+// MAGICLY — Community C1: مركز الاكتشاف والعلاقات
+// ===========================================================================
+// تابات: اكتشف (بحث + اقتراحات) · الأصدقاء · الطلبات · ملفي
+// كل الإجراءات عبر /api/community/* والـRPCs بتفرض الخصوصية والحظر سيرفر سايد.
+// ===========================================================================
 
-interface LeaderboardEntry {
-  id: string;
-  name: string;
-  xp: number;
-  streak: number;
-  isYou?: boolean;
-}
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle, Rss, Bookmark, Hash, Crown, Flame } from "lucide-react";
+import type { SocialProfileSummary, CommunityPostRow } from "@/lib/community/types";
+import { relationErrorAr } from "@/lib/community/types";
+import PostCard from "@/components/community/PostCard";
+import CommunityComposer from "@/components/community/CommunityComposer";
+import ModerationStatus from "@/components/community/ModerationStatus";
 
-// صف من لوحة صدارة المسابقة (RPC: weekly_quiz_leaderboard)
-interface CompEntry {
-  user_id: string;
-  display_name: string;
-  best_score: number;
-  best_total: number;
-  best_accuracy: number;
-  is_you: boolean;
-}
-
-// أحسن نتيجة ليك الأسبوع ده (RPC: my_weekly_best)
-interface MyBest {
-  best_score: number;
-  best_total: number;
-  best_accuracy: number;
-  attempts: number;
+type LeaderRow = {
   rank: number;
-}
+  user_id: string;
+  display_name: string | null;
+  public_user_code: string | null;
+  avatar_url: string | null;
+  xp: number;
+  streak: number | null;
+};
 
-// ⏳ الوقت المتبقي لنهاية الأسبوع (السبت 23:59) — نفس أسبوع المسابقة في الداتابيز
-function getTimeUntilWeekEnd() {
-  const now = new Date();
-  const daysUntilSaturday = (6 - now.getDay() + 7) % 7;
-  const endOfWeek = new Date(now);
-  endOfWeek.setDate(now.getDate() + daysUntilSaturday);
-  endOfWeek.setHours(23, 59, 59, 999);
-  const diffMs = Math.max(0, endOfWeek.getTime() - now.getTime());
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
-  const minutes = Math.floor((diffMs / (1000 * 60)) % 60);
-  return { days, hours, minutes };
-}
+type FriendRow = {
+  friend_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  public_user_code: string | null;
+  friends_since: string;
+};
 
-export default function CommunityPage() {
-  const router = useRouter();
-  const [supabase] = useState(() => createClient());
+type RequestRow = {
+  request_id: string;
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  public_user_code: string | null;
+  created_at: string;
+};
 
-  const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [isGuest, setIsGuest] = useState(false);
-  const [xp, setXp] = useState(0);
-  const [streak, setStreak] = useState(1);
-  const [quizSubject, setQuizSubject] = useState("مراجعة عامة");
+type SocialProfile = {
+  display_name: string | null;
+  handle: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  cover_url: string | null;
+  university: string | null;
+  faculty: string | null;
+  major: string | null;
+  year: string | null;
+  interests: string[] | null;
+  account_privacy: "public" | "private";
+  allow_friend_requests: boolean;
+  allow_messages: boolean;
+  show_academic_info: boolean;
+};
 
-  const [activeTab, setActiveTab] = useState<"leaderboard" | "competition">("leaderboard");
-  const [timeLeft, setTimeLeft] = useState(getTimeUntilWeekEnd());
+type Tab = "feed" | "discover" | "friends" | "requests" | "saved" | "profile";
 
-  // لوحة الصدارة الرئيسية (XP) — مستخدمين حقيقيين من profiles
-  const [board, setBoard] = useState<LeaderboardEntry[]>([]);
-  const [boardLoading, setBoardLoading] = useState(true);
-  const [yourRank, setYourRank] = useState<number | null>(null);
-  const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
+const btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed";
+const primaryBtn = `${btn} bg-marker text-white hover:opacity-90`;
+const ghostBtn = `${btn} border border-rule text-ink hover:bg-paper-2`;
+const smallBtn = "inline-flex items-center gap-1.5 rounded-lg border border-rule px-2.5 py-1 text-xs font-semibold text-ink transition hover:bg-paper-2 disabled:opacity-50";
+const inputCls = "w-full rounded-xl border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-marker";
 
-  // المسابقة الأسبوعية
-  const [comp, setComp] = useState<CompEntry[]>([]);
-  const [compLoading, setCompLoading] = useState(true);
-  const [myBest, setMyBest] = useState<MyBest | null>(null);
-  const [showQuiz, setShowQuiz] = useState(false);
+const TABS: { id: Tab; label: string; icon: typeof Search }[] = [
+  { id: "feed", label: "الفيد", icon: Rss },
+  { id: "discover", label: "اكتشف", icon: Search },
+  { id: "friends", label: "الأصدقاء", icon: Users },
+  { id: "requests", label: "الطلبات", icon: Bell },
+  { id: "saved", label: "المحفوظات", icon: Bookmark },
+  { id: "profile", label: "ملفي", icon: UserIcon },
+];
 
-  // 🏆 لوحة الصدارة الرئيسية: أعلى ٢٠ بالـ XP + ترتيبك الحقيقي عبر عدّ الأعلى منك
-  const loadBoard = useCallback(
-    async (uid: string | null, myXp: number, myStreak: number) => {
-      setBoardLoading(true);
-      const { data } = await supabase
-        .from("public_profiles")
-        .select("id, xp, streak, display_name")
-        .order("xp", { ascending: false })
-        .limit(20);
+export default function CommunityHubPage() {
+  const [tab, setTab] = useState<Tab>("feed");
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-      const entries: LeaderboardEntry[] = (data || []).map((row: {
-        id: string;
-        xp: number | null;
-        streak: number | null;
-        display_name: string | null;
-      }) => ({
-        id: row.id,
-        name:
-          row.id === uid
-            ? "أنت"
-            : row.display_name?.trim() || `لاعب #${String(row.id).slice(0, 4)}`,
-        xp: row.xp || 0,
-        streak: row.streak || 0,
-        isYou: row.id === uid,
-      }));
+  // feed
+  const [feed, setFeed] = useState<CommunityPostRow[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedBefore, setFeedBefore] = useState<string | null>(null);
+  const [feedDone, setFeedDone] = useState(false);
+  // الكومبوزر في مكوّن مستقل CommunityComposer (C7 + Magic AI)
 
-      // لو مش ضمن العشرين، ضيف صفّك عشان تشوف نفسك في القايمة
-      if (uid && !entries.some((e) => e.isYou)) {
-        entries.push({ id: uid, name: "أنت", xp: myXp, streak: myStreak, isYou: true });
+  // leaderboard + trending
+  const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [trending, setTrending] = useState<{ tag: string; post_count: number }[]>([]);
+
+  // saved
+  const [savedPosts, setSavedPosts] = useState<CommunityPostRow[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+
+  // discover
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SocialProfileSummary[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState<SocialProfileSummary[]>([]);
+  const [requested, setRequested] = useState<Record<string, "sent" | "error">>({});
+
+  // friends & requests
+  const [friends, setFriends] = useState<FriendRow[]>([]);
+  const [incoming, setIncoming] = useState<RequestRow[]>([]);
+  const [outgoing, setOutgoing] = useState<RequestRow[]>([]);
+  const [relationsLoading, setRelationsLoading] = useState(false);
+
+  // profile editor
+  const [profile, setProfile] = useState<SocialProfile | null>(null);
+  const [interestsText, setInterestsText] = useState("");
+  const [handleDraft, setHandleDraft] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [canModerate, setCanModerate] = useState(false);
+
+  const loadRelations = useCallback(async () => {
+    setRelationsLoading(true);
+    try {
+      const res = await fetch("/api/community/friends");
+      if (res.status === 401) {
+        setAuthed(false);
+        return;
       }
-      entries.sort((a, b) => b.xp - a.xp);
-      setBoard(entries);
-      setBoardLoading(false);
-
-      // الترتيب الحقيقي = عدد اللي الـ XP بتاعهم أعلى منك + ١
-      if (uid) {
-        const [{ count: above }, { count: total }] = await Promise.all([
-          supabase.from("public_profiles").select("id", { count: "exact", head: true }).gt("xp", myXp),
-          supabase.from("public_profiles").select("id", { count: "exact", head: true }),
-        ]);
-        setYourRank((above ?? 0) + 1);
-        setTotalPlayers(total ?? entries.length);
+      setAuthed(true);
+      const data = await res.json();
+      if (data.success) {
+        setFriends(data.friends || []);
+        setIncoming(data.incoming || []);
+        setOutgoing(data.outgoing || []);
       }
-    },
-    [supabase]
-  );
-
-  // 🎯 المسابقة: لوحة صدارة الكويز الأسبوعية + أحسن نتيجة ليك
-  const loadCompetition = useCallback(async () => {
-    setCompLoading(true);
-    const [{ data: lb }, { data: mine }] = await Promise.all([
-      supabase.rpc("weekly_quiz_leaderboard", { p_limit: 20 }),
-      supabase.rpc("my_weekly_best"),
-    ]);
-    setComp((lb as CompEntry[]) || []);
-    const mineRow = Array.isArray(mine) ? mine[0] : mine;
-    setMyBest((mineRow as MyBest) || null);
-    setCompLoading(false);
-  }, [supabase]);
-
-  // 🔴 تحميل المستخدم الحالي + الاسم + المادة، وبعدين اللوحات
-  useEffect(() => {
-    const load = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      let uid: string | null = null;
-      let curXp = 0;
-      let curStreak = 1;
-      let guest = false;
-
-      if (user) {
-        uid = user.id;
-        guest = !!user.is_anonymous;
-        const fullName = (user.user_metadata?.full_name as string | undefined)?.trim();
-
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("xp, streak, display_name, subject, field")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profile) {
-          curXp = profile.xp || 0;
-          curStreak = profile.streak || 1;
-          setQuizSubject(profile.subject?.trim() || profile.field?.trim() || "مراجعة عامة");
-
-          // انسخ الاسم لـ profiles أول مرة عشان يظهر لباقي الناس في الصدارة
-          const savedName = (profile.display_name as string | undefined)?.trim();
-          if (!savedName && fullName && !guest) {
-            supabase.from("profiles").update({ display_name: fullName }).eq("id", user.id).then();
-          }
-        }
-      }
-
-      setUserId(uid);
-      setIsGuest(guest);
-      setXp(curXp);
-      setStreak(curStreak);
-      setLoading(false);
-
-      await Promise.all([loadBoard(uid, curXp, curStreak), loadCompetition()]);
-    };
-    load();
-  }, [supabase, loadBoard, loadCompetition]);
-
-  // ⏳ تحديث العدّاد كل دقيقة
-  useEffect(() => {
-    const interval = setInterval(() => setTimeLeft(getTimeUntilWeekEnd()), 60 * 1000);
-    return () => clearInterval(interval);
+    } catch {
+      setActionError("مشكلة شبكة — حاول تاني.");
+    } finally {
+      setRelationsLoading(false);
+    }
   }, []);
 
-  // بعد ما الكويز يتسجّل: زوّد XP محلياً وحدّث اللوحتين
-  const handleQuizSubmitted = useCallback(
-    (result: QuizResult) => {
-      const newXp = xp + result.xpEarned;
-      setXp(newXp);
-      loadBoard(userId, newXp, streak);
-      loadCompetition();
-    },
-    [xp, userId, streak, loadBoard, loadCompetition]
-  );
+  const loadSuggestions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/community/suggestions");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) setSuggestions(data.suggestions || []);
+    } catch {
+      // الاقتراحات ليست حرجة — نتجاهل الفشل بصمت
+    }
+  }, []);
 
-  if (loading) {
+  const loadProfile = useCallback(async () => {
+    try {
+      const res = await fetch("/api/community/profile");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && data.profile) {
+        setProfile(data.profile);
+        if (data.profile.user_id) setCurrentUserId(data.profile.user_id);
+        setInterestsText((data.profile.interests || []).join("، "));
+        setHandleDraft(data.profile.handle ?? "");
+      }
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  const loadFeed = useCallback(async (before?: string | null, append = false) => {
+    setFeedLoading(true);
+    try {
+      const url = `/api/community/posts${before ? `?before=${encodeURIComponent(before)}` : ""}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const posts: CommunityPostRow[] = data.success ? data.posts || [] : [];
+      setFeed((prev) => (append ? [...prev, ...posts] : posts));
+      if (posts.length < 20) setFeedDone(true);
+      else setFeedBefore(posts[posts.length - 1]?.created_at ?? null);
+    } catch {
+      setFeed([]);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, []);
+
+  const loadSaved = useCallback(async () => {
+    setSavedLoading(true);
+    try {
+      const res = await fetch("/api/community/saved-posts");
+      const data = await res.json();
+      setSavedPosts(data.success ? data.posts || [] : []);
+    } catch {
+      setSavedPosts([]);
+    } finally {
+      setSavedLoading(false);
+    }
+  }, []);
+
+  const loadLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/community/leaderboard");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) {
+        setLeaderboard(data.leaderboard || []);
+        setMyRank(data.myRank ?? null);
+      }
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  const loadTrending = useCallback(async () => {
+    try {
+      const res = await fetch("/api/community/trending");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) setTrending(data.trending || []);
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "feed" && feed.length === 0 && !feedDone) void loadFeed(null, false);
+    if (tab === "saved" && savedPosts.length === 0) void loadSaved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  useEffect(() => {
+    void loadLeaderboard();
+    void loadTrending();
+  }, [loadLeaderboard, loadTrending]);
+
+  useEffect(() => {
+    void loadRelations();
+    void loadSuggestions();
+    void loadProfile();
+  }, [loadRelations, loadSuggestions, loadProfile]);
+
+  // هل المستخدم مشرف مجتمع؟ لإظهار رابط لوحة الإشراف داخل المجتمع
+  useEffect(() => {
+    void fetch("/api/community/can-moderate")
+      .then((r) => r.json())
+      .then((d) => setCanModerate(d.success && d.canModerate === true))
+      .catch(() => undefined);
+  }, []);
+
+  const runSearch = useCallback(async (q: string) => {
+    if (!q.trim()) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/users/search?query=${encodeURIComponent(q)}&limit=20`);
+      const data = await res.json();
+      setResults(data.success ? data.profiles || [] : []);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const sendFriendRequest = async (targetId: string) => {
+    setActionError(null);
+    try {
+      const res = await fetch("/api/community/friends", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request", target: targetId }),
+      });
+      const data = await res.json();
+      if (data.ok === false) {
+        setRequested((prev) => ({ ...prev, [targetId]: "error" }));
+        setActionError(relationErrorAr(data.code, data.error || "تعذّر إرسال الطلب."));
+      } else {
+        setRequested((prev) => ({ ...prev, [targetId]: "sent" }));
+        void loadSuggestions();
+      }
+    } catch {
+      setActionError("مشكلة شبكة — حاول تاني.");
+    }
+  };
+
+  const friendAction = async (
+    action: "accept" | "reject" | "cancel" | "remove",
+    payload: { requestId?: string; target?: string },
+  ) => {
+    setActionError(null);
+    try {
+      const res = await fetch("/api/community/friends", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...payload }),
+      });
+      const data = await res.json();
+      if (data.ok === false) {
+        setActionError(relationErrorAr(data.code, data.error || "تعذّر تنفيذ الإجراء."));
+      }
+      await loadRelations();
+    } catch {
+      setActionError("مشكلة شبكة — حاول تاني.");
+    }
+  };
+
+  const startChat = async (targetId: string) => {
+    setActionError(null);
+    try {
+      const res = await fetch("/api/messages/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiver_profile_id: targetId, note: "" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setActionError(data?.error || "تعذّر بدء المحادثة.");
+        return;
+      }
+      window.location.href = "/inbox";
+    } catch {
+      setActionError("مشكلة شبكة — حاول تاني.");
+    }
+  };
+
+  const saveProfile = async () => {
+    if (!profile) return;
+    setSavingProfile(true);
+    setProfileSaved(false);
+    setProfileError(null);
+    try {
+      const interests = interestsText
+        .split(/[,،]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const res = await fetch("/api/community/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...profile, interests, handle: handleDraft.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setProfileError(data.error || "تعذّر الحفظ.");
+      } else {
+        setProfileSaved(true);
+        void loadProfile();
+      }
+    } catch {
+      setProfileError("مشكلة شبكة — حاول تاني.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  if (authed === false) {
     return (
-      <div className="min-h-screen bg-paper flex items-center justify-center" dir="rtl">
-        <p className="tag animate-pulse">بيحمّل</p>
-      </div>
+      <main className="mx-auto w-full max-w-2xl px-4 py-16 text-center" dir="rtl">
+        <Users className="mx-auto mb-4 h-12 w-12 text-ink-soft" />
+        <h1 className="text-2xl font-extrabold text-ink">مجتمع Magicly</h1>
+        <p className="mt-2 text-sm text-ink-soft">
+          سجّل دخولك عشان تلاقي زمايلك، تبعت طلبات صداقة، وتتابع طلاب في نفس مجالك.
+        </p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link href="/login?next=/community" className={primaryBtn}>
+            تسجيل الدخول
+          </Link>
+          <Link href="/community/competitions" className={ghostBtn}>
+            تحديات المجتمع
+          </Link>
+        </div>
+      </main>
     );
   }
 
-  const rankBadge = (index: number) =>
-    index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : String(index + 1);
+  const pendingCount = incoming.length;
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans bg-paper text-ink" dir="rtl">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* ترويسة الصفحة */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="eyebrow eyebrow-flush mb-2">المجتمع</p>
-            <h1 className="h2">
-              <span className="mark mark-tilt">اتنافس وذاكر</span>
-            </h1>
-          </div>
-          <button onClick={() => router.push("/dashboard")} className="btn btn-quiet text-sm shrink-0">
-            الرجوع للداشبورد
-          </button>
+    <main className="mx-auto w-full max-w-5xl px-3 py-5 sm:px-5 sm:py-8" dir="rtl">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-ink">مجتمع Magicly</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            لاقي زمايلك في نفس جامعتك وتخصصك — أصدقاء، متابعة، واكتشاف طلاب بيذاكروا زيّك.
+          </p>
         </div>
-
-        {/* تبديل العرض */}
-        <div className="flex bg-paper-2 border border-rule p-1 rounded-[var(--r-sm)] gap-1">
-          {([
-            { id: "leaderboard", label: "الصدارة" },
-            { id: "competition", label: "المسابقة" },
-          ] as const).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              aria-pressed={activeTab === t.id}
-              className={`mono flex-1 py-2.5 rounded-[6px] transition ${
-                activeTab === t.id ? "bg-ink text-paper-2" : "text-ink-soft hover:text-ink"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/community/groups"
+            className="inline-flex items-center gap-2 rounded-full border border-rule bg-paper-2 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-paper/50"
+          >
+            <Users className="h-4 w-4" />
+            المجموعات
+          </Link>
+          <Link
+            href="/community/competitions"
+            className="inline-flex items-center gap-2 rounded-full border border-rule bg-paper-2 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-paper/50"
+          >
+            <Trophy className="h-4 w-4" />
+            التحديات والمسابقات
+          </Link>
         </div>
+      </header>
 
-        <AnimatePresence mode="wait">
-          {activeTab === "leaderboard" ? (
-            <motion.div
-              key="leaderboard"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="space-y-4"
-            >
-              {/* بطاقة ترتيبك */}
-              <div className="sheet-card sheet-card-live p-5 flex items-end justify-between gap-4">
-                <div>
-                  <p className="tag mb-1.5">ترتيبك على المنصة</p>
-                  <p className="ltr-num font-display font-extrabold text-3xl text-ink leading-none tnum">
-                    {yourRank ? `#${yourRank}` : "—"}
-                  </p>
-                </div>
-                <div className="text-left space-y-1">
-                  {totalPlayers != null && <p className="mono ltr-num">من {totalPlayers}</p>}
-                  <p className="mono ltr-num font-bold text-ink">{xp} XP</p>
-                  <p className="mono ltr-num">{streak} يوم سلسلة</p>
-                </div>
-              </div>
-
-              {/* الترتيب الكامل — مستخدمين حقيقيين */}
-              <div className="sheet-card p-5 space-y-1.5">
-                <p className="tag mb-2.5">أعلى المتصدّرين</p>
-                {boardLoading ? (
-                  <p className="text-xs text-ink-soft text-center py-6">بيحمّل الترتيب…</p>
-                ) : board.length === 0 ? (
-                  <p className="text-xs text-ink-soft text-center py-6">مفيش بيانات كفاية لعرض الترتيب دلوقتي.</p>
-                ) : (
-                  board.map((entry, index) => (
-                    <div
-                      key={entry.id}
-                      className={`flex items-center justify-between gap-3 p-2.5 rounded-[var(--r-sm)] border transition ${
-                        entry.isYou ? "border-ink bg-paper-3" : "bg-paper border-rule"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span
-                          className={`w-7 h-7 shrink-0 rounded-[var(--r-sm)] flex items-center justify-center font-mono text-xs font-bold ${
-                            index === 0 ? "bg-ink text-paper-2" : "bg-paper-3 text-ink-soft"
-                          }`}
-                        >
-                          {index + 1}
-                        </span>
-                        <span className="text-xs font-bold text-ink truncate">{entry.name}</span>
-                        {entry.isYou && <span className="tag shrink-0">إنت</span>}
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="mono tnum ltr-num">{entry.streak} يوم</span>
-                        <span className="mono tnum ltr-num font-bold text-ink">{entry.xp} XP</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="competition"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="space-y-4"
-            >
-              {/* العدّاد */}
-              <div className="sheet-card sheet-card-live p-5">
-                <p className="tag mb-3">المسابقة بتتصفّر خلال</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "يوم", value: timeLeft.days },
-                    { label: "ساعة", value: timeLeft.hours },
-                    { label: "دقيقة", value: timeLeft.minutes },
-                  ].map((unit) => (
-                    <div key={unit.label} className="bg-paper rounded-[var(--r-sm)] p-3 text-center">
-                      <p className="ltr-num font-display font-extrabold text-2xl text-ink leading-none tnum">
-                        {unit.value}
-                      </p>
-                      <p className="tag justify-center mt-1.5">{unit.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* بطاقة الكويز — الحدث الرئيسي */}
-              <div className="sheet-card p-6 space-y-4">
-                <div>
-                  <p className="eyebrow eyebrow-flush mb-1.5">تحدي الأسبوع</p>
-                  <h2 className="h3">كويز {quizSubject}</h2>
-                </div>
-                <p className="text-xs text-ink-soft leading-relaxed">
-                  {`جاوب ١٠ أسئلة في ${quizSubject}. كل إجابة صح بتديك XP يرفعك في الصدارة الرئيسية، وأحسن نتيجة ليك الأسبوع ده هي اللي بتترتّب في المسابقة. الأسئلة بتتغيّر كل مرة.`}
-                </p>
-
-                {/* أحسن نتيجة ليك الأسبوع ده */}
-                <div className="bg-paper border border-rule rounded-[var(--r-sm)] p-4">
-                  {myBest ? (
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="tag mb-1">أحسن نتيجة ليك الأسبوع ده</p>
-                        <p className="text-sm font-bold text-ink">
-                          <span className="ltr-num tnum">{myBest.best_score}</span> /{" "}
-                          <span className="ltr-num tnum">{myBest.best_total}</span>{" "}
-                          <span className="text-ink-soft">
-                            (<span className="ltr-num tnum">{myBest.best_accuracy}</span>%)
-                          </span>
-                        </p>
-                      </div>
-                      <div className="text-left shrink-0">
-                        <p className="tag mb-1 justify-end">ترتيبك</p>
-                        <p className="ltr-num font-display font-extrabold text-xl text-ink leading-none tnum">
-                          #{myBest.rank}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-ink-soft leading-relaxed m-0">
-                      لسه ما لعبتش الأسبوع ده. أول كويز بيحجزلك مكان في الصدارة.
-                    </p>
-                  )}
-                </div>
-
-                <button onClick={() => setShowQuiz(true)} className="btn btn-marker btn-block text-sm">
-                  {myBest ? "حسّن نتيجتك" : `ابدأ كويز ${quizSubject}`}
-                </button>
-                {isGuest && (
-                  <p className="mono text-ink-soft text-center">
-                    داخل كزائر — الكويز تمرين لحد ما تسجّل حساب
-                  </p>
-                )}
-              </div>
-
-              {/* لوحة صدارة المسابقة */}
-              <div className="sheet-card p-5 space-y-1.5">
-                <p className="tag mb-2.5">صدارة المسابقة الأسبوع ده</p>
-                {compLoading ? (
-                  <p className="text-xs text-ink-soft text-center py-6">بيحمّل…</p>
-                ) : comp.length === 0 ? (
-                  <div className="notice">
-                    <p className="m-0 text-[11px] leading-relaxed">
-                      لسه محدش سجّل نتيجة الأسبوع ده. كن أول واحد يتصدّر!
-                    </p>
-                  </div>
-                ) : (
-                  comp.map((entry, index) => (
-                    <div
-                      key={entry.user_id}
-                      className={`flex items-center justify-between gap-3 p-2.5 rounded-[var(--r-sm)] border transition ${
-                        entry.is_you ? "border-ink bg-paper-3" : "bg-paper border-rule"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span
-                          className={`w-7 h-7 shrink-0 rounded-[var(--r-sm)] flex items-center justify-center font-mono text-xs font-bold ${
-                            index === 0 ? "bg-ink text-paper-2" : "bg-paper-3 text-ink-soft"
-                          }`}
-                        >
-                          {rankBadge(index)}
-                        </span>
-                        <span className="text-xs font-bold text-ink truncate">
-                          {entry.is_you ? "أنت" : entry.display_name}
-                        </span>
-                        {entry.is_you && <span className="tag shrink-0">إنت</span>}
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="mono tnum ltr-num">
-                          {entry.best_score}/{entry.best_total}
-                        </span>
-                        <span className="mono tnum ltr-num font-bold text-ink">{entry.best_accuracy}%</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <CommunityInvite variant="banner" />
-      </div>
-
-      {showQuiz && (
-        <CommunityQuiz
-          subject={quizSubject}
-          isGuest={isGuest}
-          onClose={() => setShowQuiz(false)}
-          onSubmitted={handleQuizSubmitted}
-        />
+      {actionError && (
+        <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-red-600" role="alert">
+          {actionError}
+        </div>
       )}
 
-      <FeedbackWidget page="community" featureLabel="صفحة المجتمع" />
+      <nav className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="أقسام المجتمع">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            aria-current={tab === id ? "page" : undefined}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+              tab === id
+                ? "bg-marker text-white"
+                : "border border-rule bg-paper-2 text-ink hover:bg-paper/50"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+            {id === "requests" && pendingCount > 0 && (
+              <span className="rounded-full bg-danger px-1.5 text-xs font-bold text-white">{pendingCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* 🛡️ C9 — رابط لوحة الإشراف للمشرفين (يظهر للمخوّلين فقط) */}
+      {canModerate && (
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+          <span className="flex items-center gap-2 text-xs font-bold text-amber-700">
+            🛡️ أنت مشرف مجتمع — عندك صلاحيات مراجعة التقارير والعقوبات
+          </span>
+          <Link
+            href="/community/moderation"
+            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-500"
+          >
+            فتح لوحة الإشراف
+          </Link>
+        </div>
+      )}
+
+      {/* 🛡️ C4 — لافتة حالة الإشراف (عقوبة نشطة / اعتراض) */}
+      <ModerationStatus />
+
+      {/* -------------------------------------------------------- الفيد --- */}
+      {tab === "feed" && (
+        <section className="space-y-4">
+          {/* الصدارة — ترتيب الطلاب حسب XP */}
+          {leaderboard.length > 0 && (
+            <div className="rounded-2xl border border-rule bg-paper-2 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  صدارة الطلاب (XP)
+                </h2>
+                {myRank !== null && (
+                  <span className="rounded-full bg-marker/10 px-3 py-1 text-xs font-bold text-marker">
+                    ترتيبك: #{myRank}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {leaderboard.map((l) => (
+                  <Link
+                    key={l.user_id}
+                    href={`/u/${l.public_user_code ?? l.user_id}`}
+                    className="flex w-24 shrink-0 flex-col items-center gap-1 rounded-xl border border-rule bg-paper p-2 text-center transition hover:border-marker/50"
+                  >
+                    {l.rank <= 3 && <span aria-hidden>{l.rank === 1 ? "🥇" : l.rank === 2 ? "🥈" : "🥉"}</span>}
+                    {l.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={l.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-marker/10 font-bold text-marker">
+                        {(l.display_name || "؟").trim().charAt(0)}
+                      </div>
+                    )}
+                    <span className="w-full truncate text-xs font-bold text-ink">{l.display_name || "طالب"}</span>
+                    <span className="text-[11px] text-ink-soft">{l.xp} XP</span>
+                    {l.streak !== null && l.streak > 0 && (
+                      <span className="flex items-center gap-0.5 text-[11px] text-amber-600">
+                        <Flame className="h-3 w-3" />{l.streak}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ترندات الهاشتاجات */}
+          {trending.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1 text-xs font-bold text-ink-soft">
+                <Flame className="h-3.5 w-3.5 text-amber-500" /> ترند:
+              </span>
+              {trending.map((t) => (
+                <Link
+                  key={t.tag}
+                  href={`/community/tag/${encodeURIComponent(t.tag)}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-rule bg-paper-2 px-3 py-1 text-xs font-semibold text-marker transition hover:bg-paper"
+                >
+                  <Hash className="h-3 w-3" />
+                  {t.tag}
+                  <span className="text-ink-soft">({t.post_count})</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* الكومبوزر (C7 — مطوّر + Magic AI) */}
+          <CommunityComposer
+            displayName={profile?.display_name}
+            onPublished={() => {
+              setFeedDone(false);
+              void loadFeed(null, false);
+              void loadTrending();
+            }}
+          />
+
+          {/* المنشورات */}
+          {feedLoading && feed.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              جارٍ تحميل الفيد...
+            </p>
+          ) : feed.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              الفيد فاضي لسه — انشر أول منشور، أو ضيف أصدقاء من تاب «اكتشف» عشان تشوف منشوراتهم هنا.
+            </p>
+          ) : (
+            <>
+              {feed.map((p) => (
+                <PostCard
+                  key={p.post_id}
+                  post={p}
+                  currentUserId={currentUserId}
+                  onDeleted={(id) => setFeed((prev) => prev.filter((x) => x.post_id !== id))}
+                  onQuoted={() => void loadFeed(null, false)}
+                />
+              ))}
+              {!feedDone && feedBefore && (
+                <button
+                  onClick={() => void loadFeed(feedBefore, true)}
+                  disabled={feedLoading}
+                  className={`${ghostBtn} mx-auto block`}
+                >
+                  {feedLoading ? "جارٍ التحميل..." : "تحميل المزيد"}
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* --------------------------------------------------- المحفوظات --- */}
+      {tab === "saved" && (
+        <section>
+          {savedLoading ? (
+            <p className="text-sm text-ink-soft">جارٍ التحميل...</p>
+          ) : savedPosts.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              مفيش منشورات محفوظة — اضغط «حفظ» على أي منشور في الفيد.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {savedPosts.map((p) => (
+                <PostCard
+                  key={p.post_id}
+                  post={p}
+                  currentUserId={currentUserId}
+                  onDeleted={(id) => setSavedPosts((prev) => prev.filter((x) => x.post_id !== id))}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ------------------------------------------------------- اكتشف --- */}
+      {tab === "discover" && (
+        <section>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void runSearch(query);
+            }}
+            className="mb-4 flex gap-2"
+            role="search"
+          >
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث بالاسم أو كود MAG (مثال: MAG-ABC-1234)..."
+              className="w-full rounded-xl border border-rule bg-paper-2 px-4 py-2.5 text-sm text-ink outline-none focus:border-marker"
+              aria-label="بحث عن الطلاب"
+            />
+            <button type="submit" className={primaryBtn} disabled={searching}>
+              {searching ? "جارٍ البحث..." : "بحث"}
+            </button>
+          </form>
+
+          {results.length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {results.map((p) => (
+                <PersonCard
+                  key={p.profile_id}
+                  id={p.profile_id}
+                  name={p.display_name}
+                  avatarUrl={p.avatar_url}
+                  subtitle={[p.university, p.faculty].filter(Boolean).join(" — ") || null}
+                  bio={p.is_visible ? p.bio : null}
+                  note={p.is_visible ? null : "حساب خاص — البيانات المختصرة فقط"}
+                  action={
+                    requested[p.profile_id] === "sent" ? (
+                      <span className="text-xs font-semibold text-emerald-600">تم إرسال الطلب ✓</span>
+                    ) : requested[p.profile_id] === "error" ? (
+                      <span className="text-xs font-semibold text-red-600">حاول تاني</span>
+                    ) : (
+                      <button onClick={() => void sendFriendRequest(p.profile_id)} className={smallBtn}>
+                        <UserPlus className="h-3.5 w-3.5" />
+                        إضافة صديق
+                      </button>
+                    )
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            <>
+              <h2 className="mb-3 text-lg font-bold text-ink">اقتراحات ليك</h2>
+              {suggestions.length === 0 ? (
+                <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+                  مفيش اقتراحات حاليًا — املأ بياناتك الأكاديمية في تاب «ملفي» عشان نقترحلك طلاب من نفس جامعتك وتخصصك.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {suggestions.map((p) => (
+                    <PersonCard
+                      key={p.profile_id}
+                      id={p.profile_id}
+                      name={p.display_name}
+                      avatarUrl={p.avatar_url}
+                      subtitle={[p.university, p.faculty, p.specialization].filter(Boolean).join(" — ") || null}
+                      bio={p.is_visible ? p.bio : null}
+                      action={
+                        requested[p.profile_id] === "sent" ? (
+                          <span className="text-xs font-semibold text-emerald-600">تم إرسال الطلب ✓</span>
+                        ) : (
+                          <button onClick={() => void sendFriendRequest(p.profile_id)} className={smallBtn}>
+                            <UserPlus className="h-3.5 w-3.5" />
+                            إضافة صديق
+                          </button>
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* ---------------------------------------------------- الأصدقاء --- */}
+      {tab === "friends" && (
+        <section>
+          {relationsLoading ? (
+            <p className="text-sm text-ink-soft">جارٍ التحميل...</p>
+          ) : friends.length === 0 ? (
+            <p className="rounded-xl border border-rule bg-paper-2 px-4 py-6 text-center text-sm text-ink-soft">
+              لسه مفيش أصدقاء — ابدأ من تاب «اكتشف» وابعت طلبات صداقة.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {friends.map((f) => (
+                <PersonCard
+                  key={f.friend_id}
+                  id={f.friend_id}
+                  name={f.display_name}
+                  avatarUrl={f.avatar_url}
+                  magCode={f.public_user_code}
+                  action={
+                    <div className="flex gap-2">
+                      <button onClick={() => void startChat(f.friend_id)} className={smallBtn}>
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        محادثة
+                      </button>
+                      <button
+                        onClick={() => void friendAction("remove", { target: f.friend_id })}
+                        className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-soft hover:text-red-600"
+                      >
+                        إزالة
+                      </button>
+                    </div>
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ----------------------------------------------------- الطلبات --- */}
+      {tab === "requests" && (
+        <section className="space-y-6">
+          <div>
+            <h2 className="mb-3 text-lg font-bold text-ink">طلبات واردة ({incoming.length})</h2>
+            {incoming.length === 0 ? (
+              <p className="rounded-xl border border-rule bg-paper-2 px-4 py-4 text-center text-sm text-ink-soft">
+                مفيش طلبات واردة.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {incoming.map((r) => (
+                  <div
+                    key={r.request_id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rule bg-paper-2 px-4 py-3"
+                  >
+                    <PersonInline name={r.display_name} magCode={r.public_user_code} userId={r.user_id} />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => void friendAction("accept", { requestId: r.request_id })}
+                        className={`${smallBtn} !bg-emerald-600 !text-white`}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        قبول
+                      </button>
+                      <button
+                        onClick={() => void friendAction("reject", { requestId: r.request_id })}
+                        className="rounded-lg border border-rule px-3 py-1 text-xs font-semibold text-ink-soft hover:text-red-600"
+                      >
+                        <X className="ml-1 inline h-3.5 w-3.5" />
+                        رفض
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <h2 className="mb-3 text-lg font-bold text-ink">طلبات أرسلتها ({outgoing.length})</h2>
+            {outgoing.length === 0 ? (
+              <p className="rounded-xl border border-rule bg-paper-2 px-4 py-4 text-center text-sm text-ink-soft">
+                مفيش طلبات معلّقة.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {outgoing.map((r) => (
+                  <div
+                    key={r.request_id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rule bg-paper-2 px-4 py-3"
+                  >
+                    <PersonInline name={r.display_name} magCode={r.public_user_code} userId={r.user_id} />
+                    <button
+                      onClick={() => void friendAction("cancel", { requestId: r.request_id })}
+                      className="text-xs font-semibold text-ink-soft hover:text-red-600"
+                    >
+                      إلغاء الطلب
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* -------------------------------------------------------- ملفي --- */}
+      {tab === "profile" && (
+        <section className="mx-auto max-w-2xl">
+          {!profile ? (
+            <p className="text-sm text-ink-soft">جارٍ تحميل ملفك...</p>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveProfile();
+              }}
+              className="space-y-4 rounded-2xl border border-rule bg-paper-2 p-5"
+            >
+              <Field label="الاسم الظاهر">
+                <input
+                  value={profile.display_name ?? ""}
+                  onChange={(e) => setProfile({ ...profile, display_name: e.target.value })}
+                  className={inputCls}
+                  maxLength={60}
+                />
+              </Field>
+              <Field label="اسم المستخدم في المجتمع (يظهر باسم @user)">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-ink-soft" dir="ltr">@</span>
+                  <input
+                    value={handleDraft}
+                    onChange={(e) => setHandleDraft(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    className={`${inputCls} font-mono`}
+                    dir="ltr"
+                    maxLength={20}
+                    placeholder="مثال: ahmed_2005"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-ink-soft">
+                  3–20 حرف إنجليزي صغير أو أرقام أو _ — بيه البحث عنك في الرسايل والمجتمع، وتقدر تغيّره في أي وقت.
+                </p>
+              </Field>
+              <Field label="نبذة عنك">
+                <textarea
+                  value={profile.bio ?? ""}
+                  onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                  className={`${inputCls} min-h-24`}
+                  maxLength={500}
+                />
+              </Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="الجامعة">
+                  <input value={profile.university ?? ""} onChange={(e) => setProfile({ ...profile, university: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label="الكلية">
+                  <input value={profile.faculty ?? ""} onChange={(e) => setProfile({ ...profile, faculty: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label="التخصص">
+                  <input value={profile.major ?? ""} onChange={(e) => setProfile({ ...profile, major: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label="السنة الدراسية">
+                  <input value={profile.year ?? ""} onChange={(e) => setProfile({ ...profile, year: e.target.value })} className={inputCls} />
+                </Field>
+              </div>
+              <Field label="الاهتمامات (افصل بينهم بفاصلة)">
+                <input value={interestsText} onChange={(e) => setInterestsText(e.target.value)} className={inputCls} />
+              </Field>
+              <Field label="خصوصية الحساب">
+                <select
+                  value={profile.account_privacy}
+                  onChange={(e) => setProfile({ ...profile, account_privacy: e.target.value as "public" | "private" })}
+                  className={inputCls}
+                >
+                  <option value="public">عام — الطلاب يقدروا يلاقوك ويتابعوك</option>
+                  <option value="private">خاص — طلب صداقة قبل الوصول لبياناتك</option>
+                </select>
+              </Field>
+              <div className="space-y-2 rounded-xl bg-paper/40 p-3">
+                <Toggle
+                  label="السماح بطلبات الصداقة"
+                  checked={profile.allow_friend_requests}
+                  onChange={(v) => setProfile({ ...profile, allow_friend_requests: v })}
+                />
+                <Toggle
+                  label="السماح بمراسلتك"
+                  checked={profile.allow_messages}
+                  onChange={(v) => setProfile({ ...profile, allow_messages: v })}
+                />
+                <Toggle
+                  label="إظهار بياناتي الأكاديمية (الجامعة/الكلية/التخصص)"
+                  checked={profile.show_academic_info}
+                  onChange={(v) => setProfile({ ...profile, show_academic_info: v })}
+                />
+              </div>
+              {profileError && <p className="text-sm text-red-600">{profileError}</p>}
+              {profileSaved && <p className="text-sm text-emerald-600">تم الحفظ ✓</p>}
+              <button type="submit" className={primaryBtn} disabled={savingProfile}>
+                {savingProfile ? "جارٍ الحفظ..." : "حفظ التغييرات"}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------- helpers ---
+
+function PersonCard({
+  id,
+  name,
+  avatarUrl,
+  magCode,
+  subtitle,
+  bio,
+  note,
+  action,
+}: {
+  id: string;
+  name: string | null;
+  avatarUrl: string | null;
+  magCode?: string | null;
+  subtitle?: string | null;
+  bio?: string | null;
+  note?: string | null;
+  action: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-rule bg-paper-2 p-4">
+      <div className="flex items-start gap-3">
+        <Avatar url={avatarUrl} name={name} />
+        <div className="min-w-0 flex-1">
+          <Link href={`/u/${magCode ?? id}`} className="block truncate font-bold text-ink hover:text-marker">
+            {name || "طالب بدون اسم"}
+          </Link>
+          {magCode && <p className="text-xs text-ink-soft">{magCode}</p>}
+          {subtitle && <p className="mt-0.5 truncate text-xs text-ink-soft">{subtitle}</p>}
+          {bio && <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{bio}</p>}
+          {note && <p className="mt-1 text-xs italic text-ink-soft">{note}</p>}
+        </div>
+      </div>
+      <div className="mt-3">{action}</div>
     </div>
+  );
+}
+
+function PersonInline({ name, magCode, userId }: { name: string | null; magCode: string | null; userId: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Link href={`/u/${magCode ?? userId}`} className="font-semibold text-ink hover:text-marker">
+        {name || "طالب"}
+      </Link>
+      {magCode && <span className="text-xs text-ink-soft">{magCode}</span>}
+    </div>
+  );
+}
+
+function Avatar({ url, name }: { url: string | null; name: string | null }) {
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={name || "صورة"} className="h-12 w-12 shrink-0 rounded-full object-cover" />;
+  }
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-marker/10 text-lg font-bold text-marker">
+      {(name || "؟").trim().charAt(0)}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-ink">
+      <span>{label}</span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 accent-[var(--primary,#6366f1)]" />
+    </label>
   );
 }

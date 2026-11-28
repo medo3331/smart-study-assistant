@@ -21,6 +21,21 @@ export type EngagementTrustLevel = "server" | "client_reported";
 export const ENGAGEMENT_EVENT_TYPES = {
   /** امتحان اتسلّم وتصحيحه اتعمل على السيرفر. */
   EXAM_COMPLETED: "exam_completed",
+  /**
+   * إكمال يوم دراسة موثّق — بيُصدر من داخل `complete_study_day` (SECURITY
+   * DEFINER) بعد تأكيد الإكمال على السيرفر، بنفس المعاملة. إثبات مهمات الدراسة.
+   */
+  STUDY_COMPLETED: "study_completed",
+  /** حل فزورة البريك — إجابة مُتحقق منها سيرفريًا داخل answer_break_riddle. */
+  BREAK_RIDDLE_SOLVED: "break_riddle_solved",
+  /** حل Quiz Rush — إجابة مُتحقق منها سيرفريًا داخل answer_break_quiz. */
+  BREAK_QUIZ_SOLVED: "break_quiz_solved",
+  /** إكمال غرفة الهروب — الخطوات الثلاث مُتحقق منها سيرفريًا. */
+  ESCAPE_ROOM_SOLVED: "escape_room_solved",
+  /** كسب وسام فصل — يُصدر من داخل grant_badge بعد تأكيد الإنجاز سيرفريًا. */
+  BADGE_EARNED: "badge_earned",
+  /** فتح إنجاز — المقاييس محسوبة سيرفريًا داخل sync_achievements. */
+  ACHIEVEMENT_UNLOCKED: "achievement_unlocked",
   /** حفظ نوتة من local-first client ⇒ discovery فقط. */
   NOTES_SAVED: "notes_saved",
   /** محاضرة اتحفظت في `public.lectures` (من الجلسة). */
@@ -54,6 +69,48 @@ export type EventSpec = {
  * الـDB هو المرجع النهائي؛ لو اتغيّر، لازم يتظبط هنا.
  */
 export const ENGAGEMENT_EVENT_SPECS: Record<EngagementEventType, EventSpec> = {
+  [ENGAGEMENT_EVENT_TYPES.STUDY_COMPLETED]: {
+    sourceTable: "study_days",
+    trustLevel: "server",
+    allowedMetadataKeys: ["day_number", "xp_reward"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 30,
+  },
+  [ENGAGEMENT_EVENT_TYPES.BREAK_RIDDLE_SOLVED]: {
+    sourceTable: "break_riddle_sessions",
+    trustLevel: "server",
+    allowedMetadataKeys: ["attempts_used", "riddle_id"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 5,
+  },
+  [ENGAGEMENT_EVENT_TYPES.BREAK_QUIZ_SOLVED]: {
+    sourceTable: "break_quiz_sessions",
+    trustLevel: "server",
+    allowedMetadataKeys: ["attempts_used"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 5,
+  },
+  [ENGAGEMENT_EVENT_TYPES.ESCAPE_ROOM_SOLVED]: {
+    sourceTable: "escape_sessions",
+    trustLevel: "server",
+    allowedMetadataKeys: ["attempts_used"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 5,
+  },
+  [ENGAGEMENT_EVENT_TYPES.BADGE_EARNED]: {
+    sourceTable: "badges",
+    trustLevel: "server",
+    allowedMetadataKeys: ["chapter_number", "accuracy", "subject"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 10,
+  },
+  [ENGAGEMENT_EVENT_TYPES.ACHIEVEMENT_UNLOCKED]: {
+    sourceTable: "user_achievements",
+    trustLevel: "server",
+    allowedMetadataKeys: ["metric", "progress"],
+    maxMetadataBytes: 2048,
+    maxEventsPerHour: 5,
+  },
   [ENGAGEMENT_EVENT_TYPES.EXAM_COMPLETED]: {
     sourceTable: "exam_sessions",
     trustLevel: "server",

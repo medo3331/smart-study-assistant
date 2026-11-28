@@ -8,6 +8,7 @@ import {
   detectExamRequestFromHistory,
   extractSubject,
   EXAM_REQUEST_PROMPT_RULES,
+  isExamPlanningStatement,
 } from "../exam-request";
 
 /**
@@ -246,5 +247,52 @@ describe("المساعد — اقتراح الموضوع العام", () => {
   it("قواعد البرومبت بتقول صراحةً: متقولش «مفيش محاضرات»", () => {
     expect(EXAM_REQUEST_PROMPT_RULES).toContain("موضوع عام");
     expect(EXAM_REQUEST_PROMPT_RULES).toContain("مفيش محاضرات");
+  });
+});
+
+describe("نيّة التخطيط مقابل طلب التوليد — «عندي امتحان»", () => {
+  it("«عندي امتحان في الشبكات بعد يومين» مش طلب توليد — التخطيط بيرجّع للموديل", () => {
+    expect(isExamPlanningStatement("عندي امتحان في الشبكات بعد يومين")).toBe(true);
+    expect(detectExamRequest("عندي امتحان في الشبكات بعد يومين")).toBeNull();
+    expect(containsExamSignal("عندي امتحان بعد يومين ومش مذاكر حاجة")).toBe(false);
+    expect(
+      detectExamRequestFromHistory([
+        { role: "user", content: "عندي امتحان في الشبكات بعد يومين" },
+      ])
+    ).toBeNull();
+  });
+
+  it("صيغ تخطيط تانية: «امتحاني السبت» و«مش مستعد» و«رتبلي المهمات»", () => {
+    expect(isExamPlanningStatement("امتحاني السبت على الشبكات")).toBe(true);
+    expect(isExamPlanningStatement("مش مستعد لامتحان الرياضيات")).toBe(true);
+    expect(isExamPlanningStatement("امتحان الشبكات قرب — رتبلي المهمات")).toBe(true);
+    expect(detectExamRequest("باقي على الامتحان يومين")).toBeNull();
+  });
+
+  it("التوليد الصريح بيكسب لو اتقال مع حكي عن امتحان جاي", () => {
+    expect(isExamPlanningStatement("عندي امتحان في الفيزياء، اختبرني")).toBe(false);
+    const request = detectExamRequest("عندي امتحان، اعمل لي امتحان من 10 أسئلة");
+    expect(request?.active).toBe(true);
+  });
+
+  it("حكي عن امتحان جاي بعد طلب توليد قديم مش بيرجّع زر المولّد", () => {
+    expect(
+      detectExamRequestFromHistory([
+        { role: "user", content: "اعمل لي امتحان في الفيزياء" },
+        { role: "assistant", content: "تمام — افتح مولّد الامتحان وأكمل الإعدادات." },
+        { role: "user", content: "عندي امتحان شبكات بعد يومين" },
+      ])
+    ).toBeNull();
+  });
+
+  it("«اختبرني» طلب توليد صريح حتى من غير كلمة امتحان", () => {
+    const request = detectExamRequest("اختبرني في الشبكات");
+    expect(request?.active).toBe(true);
+    expect(containsExamSignal("اختبرني في الشبكات")).toBe(true);
+  });
+
+  it("قواعد البرومبت بتفصل التخطيط عن التوليد", () => {
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("متبعتش روابط ولا زر مولّد");
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("طلب توليد صريح");
   });
 });

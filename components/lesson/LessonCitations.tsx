@@ -20,7 +20,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ArrowUpLeft, Check, Copy, X } from "lucide-react";
+import { ArrowUpLeft, Check, Copy, Play, X } from "lucide-react";
 import type { LessonCitedClaim, LessonCitedExplanation } from "@/lib/lesson/citations";
 
 /** تنسيق التوقيت `mm:ss` (محلي — متجيبش حاجة من مكتبات خارجية). */
@@ -76,12 +76,15 @@ function CitationPeek({
   quote,
   lectureId,
   onClose,
+  onSeek,
 }: {
   seg: number;
   start: number | null;
   quote: string;
   lectureId: string;
   onClose: () => void;
+  /** لو فيه مشغّل صوت مسجّل — «استمع من هنا» تشغّل التسجيل من اللحظة دي. */
+  onSeek?: (seconds: number) => void;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -123,6 +126,16 @@ function CitationPeek({
         {quote}
       </blockquote>
       <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-rule">
+        {onSeek && start != null && (
+          <button
+            type="button"
+            onClick={() => onSeek(start)}
+            className="mono inline-flex items-center gap-1.5 text-xs text-ink hover:text-redpen transition"
+          >
+            <Play size={13} aria-hidden />
+            استمع من هنا
+          </button>
+        )}
         <button
           type="button"
           onClick={() => router.push(`/lectures/${lectureId}`)}
@@ -182,12 +195,14 @@ function ClaimItem({
   lectureId,
   openUid,
   setOpenUid,
+  onSeek,
 }: {
   uid: string;
   claim: LessonCitedClaim;
   lectureId: string;
   openUid: string | null;
   setOpenUid: (value: string | null) => void;
+  onSeek?: (seconds: number) => void;
 }) {
   const isOpen = openUid === uid;
   const hasSource = claim.seg !== null && claim.seg !== undefined;
@@ -218,6 +233,7 @@ function ClaimItem({
           quote={claim.quote ?? ""}
           lectureId={lectureId}
           onClose={() => setOpenUid(null)}
+          onSeek={onSeek}
         />
       )}
     </li>
@@ -235,10 +251,13 @@ export function LessonCitedExplanationView({
   cited,
   lectureId,
   summary,
+  onSeek,
 }: {
   cited: LessonCitedExplanation;
   lectureId: string;
   summary?: string | null;
+  /** اختياري — بييجي من LectureCitationProvider لما التسجيل مربوط جوّه الدرس. */
+  onSeek?: (seconds: number) => void;
 }) {
   const [openUid, setOpenUid] = useState<string | null>(null);
 
@@ -256,6 +275,7 @@ export function LessonCitedExplanationView({
                 lectureId={lectureId}
                 openUid={openUid}
                 setOpenUid={setOpenUid}
+                onSeek={onSeek}
               />
             ))}
           </ul>

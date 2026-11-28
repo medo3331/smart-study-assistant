@@ -204,7 +204,7 @@ function AdhkarHome() {
       <Reveal index={2}>
         <GlassCard className="p-6">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#7C5CFF]/15 text-[#B69CFF]">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#10B981]/15 text-[#6EE7B7]">
               <Landmark size={24} aria-hidden />
             </div>
             <div>
@@ -215,16 +215,16 @@ function AdhkarHome() {
                 سببٌ للطمأنينة والبركة في الوقت والعمل، وحفظٌ من كل سوء.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-[#7C5CFF]/15 px-3 py-1 text-xs text-[#B69CFF]">
+                <span className="rounded-full bg-[#10B981]/15 px-3 py-1 text-xs text-[#6EE7B7]">
                   مصادر معتمدة
                 </span>
-                <span className="rounded-full bg-[#2DD4BF]/15 px-3 py-1 text-xs text-[#2DD4BF]">
+                <span className="rounded-full bg-[#34D399]/15 px-3 py-1 text-xs text-[#34D399]">
                   بدون إنترنت
                 </span>
                 <span className="rounded-full bg-[#FB923C]/15 px-3 py-1 text-xs text-[#FB923C]">
                   عداد تفاعلي
                 </span>
-                <span className="rounded-full bg-[#B69CFF]/15 px-3 py-1 text-xs text-[#B69CFF]">
+                <span className="rounded-full bg-[#6EE7B7]/15 px-3 py-1 text-xs text-[#6EE7B7]">
                   تتبع التقدم على حسابك
                 </span>
               </div>
@@ -237,4 +237,4 @@ function AdhkarHome() {
 }
 
 const backLinkClass =
-  "flex items-center gap-1 text-sm text-[#B69CFF] transition-colors hover:text-[#7C5CFF]";
+  "flex items-center gap-1 text-sm text-[#6EE7B7] transition-colors hover:text-[#10B981]";

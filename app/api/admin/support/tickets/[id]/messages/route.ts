@@ -22,7 +22,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   if(error||!msg){console.error("[admin reply]",error?.message);return NextResponse.json({success:false,error:"Failed to reply."},{status:500});}
   await service.from("support_tickets").update({status:"open",updated_at:new Date().toISOString()}).eq("id",id);
   try {
-   await service.from("notifications").insert({recipient_id:ticket.user_id,type:"support_reply",title:"رد على تذكرتك",body:text.slice(0,200),link_url:`/dashboard/support?ticket=${id}`});
+   await service.from("notifications").insert({recipient_id:ticket.user_id,type:"support_reply",title:"رد على تذكرتك",body:text.slice(0,200),link_url:`/inbox?category=support&ticket=${id}`});
   } catch (notificationError) {
    console.error("[admin reply notification]", notificationError instanceof Error ? notificationError.message : notificationError);
   }

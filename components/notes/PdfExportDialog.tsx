@@ -49,7 +49,7 @@ export default function PdfExportDialog({
       >
         <h2 className="notes-modal-title">تصدير PDF</h2>
         <p className="notes-modal-sub">
-          اختار الصفحات اللي عايز تطلعها في الملف — بيتصدّروا بنفس ترتيب الدفتر.
+          اختار الصفحات اللي عايز تطلعها في الملف — بيتصدّروا بنفس ترتيب النوتة.
         </p>
         <div className="notes-modal-pages">
           {pages.map((page, index) => (

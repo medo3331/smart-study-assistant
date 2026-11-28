@@ -16,30 +16,14 @@
    ملاحظة: كلاسات `.wheel-*` في globals.css بتاعة عجلة حظ المتجر — دي `.mw-*`.
    ========================================================================== */
 
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-/* ميديا-كوئيري بدون setState جوه effect — النمط الموصى بيه في React 19
-   (بيتفادى تحذير react-hooks/set-state-in-effect وبيتحدّث لحظيًا).
-   SSR بيرندر الوضع الدائري، والعميل بيصوب أول حاجة لو الشاشة صغيرة. */
-function useMediaQuery(query: string): boolean {
-  return useSyncExternalStore(
-    useCallback(
-      (onStoreChange) => {
-        const mql = window.matchMedia(query);
-        mql.addEventListener("change", onStoreChange);
-        return () => mql.removeEventListener("change", onStoreChange);
-      },
-      [query],
-    ),
-    () => window.matchMedia(query).matches,
-    () => false,
-  );
-}
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Home, BookOpen, FolderOpen, Landmark, Sparkles,
   ShoppingBag, BarChart3, Settings, GraduationCap, Bell, Flame,
+  Volume2, VolumeX,
 } from "lucide-react";
 import {
   useTheme,
@@ -49,9 +33,20 @@ import {
   type ThemeId,
 } from "@/theme/ThemeProvider";
 import { useReducedMotion } from "@/lib/useReducedMotion";
-import {
-  Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+
+/* ⚡ الأداء: recharts (~360KB غير مضغوط مع d3) كانت جزء من أول حزمة
+   لـ `/dashboard` وهي مجرد كروت تحت الطيّة. الكروت اتنقلت لملف منفصل
+   وبتتحمّل بعد الهيدريشن. المكوّنان بيرجّعوا `null` لو الداتا فاضية،
+   والـ placeholder بياخد نفس ارتفاع الكارت عشان مفيش layout shift. */
+const WheelBarChart = dynamic(() => import("./magic-wheel/WheelCharts").then((m) => m.WheelBarChart), {
+  ssr: false,
+  loading: () => <div className="h-36 w-full md:h-40" aria-hidden />,
+});
+const WheelDonutChart = dynamic(() => import("./magic-wheel/WheelCharts").then((m) => m.WheelDonutChart), {
+  ssr: false,
+  loading: () => <div className="h-36 w-36 shrink-0 md:h-40 md:w-40" aria-hidden />,
+});
 
 /* --------------------------------------------------------------------------
    ألوان الأفرع — وضع «الملون» بس (في باقي الثيمات الفرع بياخد لون الأكسنت).
@@ -70,6 +65,67 @@ const BRANCH_COLORS = [
 
 /* مواضع الأفرع التسعة على الدائرة (نفس هندسة البريف المعتمد). */
 const ANGLES_DEG = [270, 230, 190, 150, 110, 70, 30, -10, -50];
+
+const WHEEL_SOUND_KEY = "magicly_wheel_sound";
+const wheelSoundSubscribers = new Set<() => void>();
+function subscribeWheelSound(onStoreChange: () => void) {
+  wheelSoundSubscribers.add(onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    wheelSoundSubscribers.delete(onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+function getWheelSoundSnapshot(): boolean {
+  try {
+    return window.localStorage.getItem(WHEEL_SOUND_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function setWheelSoundPref(on: boolean) {
+  try {
+    if (on) window.localStorage.setItem(WHEEL_SOUND_KEY, "1");
+    else window.localStorage.removeItem(WHEEL_SOUND_KEY);
+  } catch {
+    return;
+  }
+  wheelSoundSubscribers.forEach((cb) => cb());
+}
+function useWheelSound(): [boolean, (on: boolean) => void] {
+  const on = useSyncExternalStore(subscribeWheelSound, getWheelSoundSnapshot, () => false);
+  return [on, setWheelSoundPref];
+}
+
+let wheelAudioCtx: AudioContext | null = null;
+function playCelebrationChime() {
+  try {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+    wheelAudioCtx = wheelAudioCtx ?? new Ctor();
+    const ctx = wheelAudioCtx;
+    if (ctx.state === "suspended") void ctx.resume();
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t0 = now + i * 0.09;
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.07, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.26);
+    });
+  } catch {
+    return;
+  }
+}
 
 /* ==========================================================================
    تعريفات الأفرع — المسارات مستخرجة من app/ فعليًا (انضبطت يوم التنفيذ):
@@ -155,6 +211,8 @@ export interface MagicWheelProps {
   onChangeRange?: (r: "weekly" | "monthly") => void;
   weeklyFocusHoursLabel?: string;
   notificationsEnabled?: boolean;
+  /* الفرع المميّز كأهم خطوة حالية للطالب (Next Best Action) */
+  activeBranch?: WheelBranchId;
   /* فتح درج الإعدادات بدون تنقّل — الداشبورد بيمرّر setIsMenuOpen(true) */
   onOpenSettings?: () => void;
 }
@@ -271,7 +329,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
     currentDay, currentDayId, totalDays, subject, completedSteps, progressPct, currentChapter,
     streak, coursesCount, subjectBreakdown,
     activeChartData, analyticsRange, onChangeRange, weeklyFocusHoursLabel,
-    notificationsEnabled,
+    notificationsEnabled, activeBranch,
   } = props;
 
   const { theme, setTheme } = useTheme();
@@ -281,8 +339,6 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   const colors = useThemeColors();
   const router = useRouter();
 
-  /* أقل من 640px (زي ما البريف بيعمل) → شبكة عمودية بدل الدائرة */
-  const isVertical = useMediaQuery("(max-width: 640px)");
 
   const branches = buildWheelBranches({ currentDay, currentDayId });
 
@@ -292,6 +348,43 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   const openSettings = useCallback(() => {
     router.push("/dashboard/settings");
   }, [router]);
+
+  const [celebrating, setCelebrating] = useState(false);
+  const [soundOn] = useWheelSound();
+  const celebrateTimerRef = useRef<number | null>(null);
+
+  const startCelebration = useCallback(() => {
+    setCelebrating(true);
+    if (celebrateTimerRef.current) window.clearTimeout(celebrateTimerRef.current);
+    celebrateTimerRef.current = window.setTimeout(() => setCelebrating(false), 1900);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (celebrateTimerRef.current) window.clearTimeout(celebrateTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onReward = (e: Event) => {
+      const source = (e as CustomEvent<{ source?: string }>).detail?.source;
+      if (source === "daily_login" || source === "signup_bonus") return;
+      startCelebration();
+      if (soundOn) playCelebrationChime();
+    };
+    window.addEventListener("foundation:coins", onReward as EventListener);
+    return () => window.removeEventListener("foundation:coins", onReward as EventListener);
+  }, [soundOn, startCelebration]);
+
+  const prevProgressRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevProgressRef.current;
+    prevProgressRef.current = progressPct ?? null;
+    if (prev !== null && progressPct !== undefined && progressPct > prev) {
+      startCelebration();
+      if (soundOn) playCelebrationChime();
+    }
+  }, [progressPct, soundOn, startCelebration]);
 
   /* 🎨 زرار الثيمات الأربعة — بيدور على MAGIC_THEME_CYCLE ويحفظ عبر
      ThemeProvider (localStorage.theme + data-theme) زي التصميم بالظبط. */
@@ -344,6 +437,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setTheme(nextTheme)}
@@ -366,36 +460,36 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </span>
             <span>{currentLabel}</span>
           </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = !soundOn;
+                setWheelSoundPref(next);
+                if (next) playCelebrationChime();
+              }}
+              className="mw-theme-btn"
+              aria-pressed={soundOn}
+              aria-label={soundOn ? "كتم صوت احتفال العجلة" : "تشغيل صوت احتفال العجلة"}
+            >
+              {soundOn ? <Volume2 size={14} aria-hidden /> : <VolumeX size={14} aria-hidden />}
+              <span>{soundOn ? "الصوت شغّال" : "الصوت مكتوم"}</span>
+            </button>
+          </div>
         </header>
 
-        {/* ═════ أفرع العجلة — شبكة عمودية على الموبايل ═════ */}
-        {isVertical ? (
-          <nav
-            aria-label="تنقل العجلة — عرض شبكي"
-            className="grid w-full grid-cols-2 gap-3 md:grid-cols-3"
+        {/* ═════ أفرع العجلة — العرض الدائري (كل الشاشات: العجلة بتتقاس نسبيًا فتصغر على الموبايل) ═════ */}
+          <div
+            className={`mw-wheel-square relative mx-auto flex aspect-square w-full max-w-[720px] items-center justify-center${reduced ? "" : " mw-cycle"}${celebrating && !reduced ? " mw-celebrate" : ""}`}
           >
-            {branches.map((b, i) => (
-              <WheelBranch
-                key={b.id}
-                branch={b}
-                color={colorFor(i)}
-                badge={badgeFor(b.id)}
-                onOpenSettings={openSettings}
-                layout="grid"
-              />
-            ))}
-          </nav>
-        ) : (
-          /* ═════ العرض الدائري ═════ */
-          <div className="relative mx-auto flex aspect-square w-full max-w-[720px] items-center justify-center">
             <div
               className="mw-ring mw-ring-dash"
-              style={{ width: "clamp(320px, 62vw, 470px)", height: "clamp(320px, 62vw, 470px)" }}
+              style={{ width: "min(65cqw, 470px)", height: "min(65cqw, 470px)" }}
               aria-hidden
             />
             <div
               className="mw-ring mw-ring-dot"
-              style={{ width: "clamp(270px, 52vw, 390px)", height: "clamp(270px, 52vw, 390px)" }}
+              style={{ width: "min(54cqw, 390px)", height: "min(54cqw, 390px)" }}
               aria-hidden
             />
 
@@ -404,7 +498,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                 يعيشوا في نفس نظام 0–100 (في النسخة القديمة كانت الخطوط %
                 والنقاط px فتتضارب). */}
             <svg
-              className="pointer-events-none absolute inset-0 z-[5] h-full w-full overflow-visible"
+              className={`pointer-events-none absolute inset-0 z-[5] h-full w-full overflow-visible${reduced ? "" : " mw-orbit"}`}
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
               aria-hidden
@@ -446,7 +540,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             <Link
               href="/"
               className="mw-center"
-              style={{ width: 160, height: 160 }}
+              style={{ width: "min(30cqw, 160px)", height: "min(30cqw, 160px)" }}
               aria-label="Magic — العودة للرئيسية"
             >
               <MagiclyGlyph className="h-10 w-12 text-[#FFB13B] drop-shadow-[0_0_12px_rgba(255,177,59,0.75)]" />
@@ -456,7 +550,10 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </Link>
 
             {/* الأفرع التسعة */}
-            <nav aria-label="تنقل العجلة — عرض دائري" className="contents">
+            <nav
+              aria-label="تنقل العجلة — عرض دائري"
+              className={reduced ? "contents" : "mw-orbit"}
+            >
               {branches.map((b, i) => {
                 const a = ANGLES_DEG[i];
                 const r = 36;
@@ -466,8 +563,12 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                 return (
                   <div
                     key={b.id}
-                    className="absolute"
-                    style={{ top: `${cy}%`, left: `${cx}%` }}
+                    className="absolute h-0 w-0"
+                    style={{
+                      top: `${cy}%`,
+                      left: `${cx}%`,
+                      ["--mw-delay" as string]: `${i * 800}ms`,
+                    }}
                   >
                     <WheelBranch
                       branch={b}
@@ -476,14 +577,52 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                       onOpenSettings={openSettings}
                       layout="circle"
                       delayMs={reduced ? 0 : i * 130}
-                      size="clamp(80px, 13vw, 118px)"
+                      size="clamp(66px, 19cqw, 118px)"
+                      highlight={b.id === activeBranch}
                     />
                   </div>
                 );
               })}
             </nav>
+
+            {!reduced && (
+              <div className="mw-shimmer" aria-hidden>
+                <span className="mw-shimmer-band" />
+              </div>
+            )}
+
+            {!reduced && (
+              <div className="mw-sparkles" aria-hidden>
+                {[0, 1, 2].map((k) => (
+                  <span
+                    key={k}
+                    className="mw-sparkle"
+                    style={{
+                      ["--spark-a" as string]: `${120 * k + 40}deg`,
+                      ["--spark-d" as string]: `${k * 1.7}s`,
+                    }}
+                  >
+                    <Sparkles size={12} />
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {celebrating && !reduced && (
+              <div className="mw-burst" aria-hidden>
+                {Array.from({ length: 10 }, (_, k) => (
+                  <span
+                    key={k}
+                    className="mw-burst-dot"
+                    style={{
+                      ["--burst-a" as string]: `${k * 36}deg`,
+                      ["--burst-d" as string]: `${(k % 2) * 120}ms`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        )}
 
         {/* ═════ شريط الإحصاءات — بيانات حقيقية من props الداشبورد ═════ */}
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
@@ -559,30 +698,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </div>
             {activeChartData && activeChartData.length > 0 ? (
               <>
-                <div className="h-36 w-full md:h-40" dir="ltr">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activeChartData} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: colors.muted, fontSize: 9 }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis tick={{ fill: colors.muted, fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        cursor={{ fill: colors.rule, opacity: 0.35 }}
-                        contentStyle={{
-                          backgroundColor: colors.card,
-                          border: `1px solid ${colors.rule}`,
-                          borderRadius: 10,
-                          fontSize: 11,
-                          direction: "rtl",
-                        }}
-                      />
-                      <Bar dataKey="minutes" name="دقايق تركيز" radius={[3, 3, 0, 0]} fill={colors.accent} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <WheelBarChart data={activeChartData} colors={colors} />
                 {weeklyFocusHoursLabel && (
                   <p className="mt-2 font-mono text-[0.6rem]" style={{ color: "var(--muted)" }}>
                     الإجمالي: {weeklyFocusHoursLabel} — من جدول النشاط (activity_log)
@@ -607,48 +723,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             </div>
             {subjectBreakdown && subjectBreakdown.length > 0 ? (
               <div className="flex items-center gap-4">
-                <div className="relative h-36 w-36 shrink-0 md:h-40 md:w-40" dir="ltr">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={subjectBreakdown}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius="58%"
-                        outerRadius="82%"
-                        paddingAngle={3}
-                        stroke={colors.card}
-                        strokeWidth={2}
-                        isAnimationActive={!reduced}
-                      >
-                        {subjectBreakdown.map((_, i) => (
-                          <Cell key={i} fill={BRANCH_COLORS[i % BRANCH_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: colors.card,
-                          border: `1px solid ${colors.rule}`,
-                          borderRadius: 10,
-                          fontSize: 11,
-                          direction: "rtl",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-lg font-extrabold md:text-xl" style={{ color: "var(--text)" }}>
-                      {Math.round(
-                        (subjectBreakdown.reduce((s, d) => s + d.completed, 0) /
-                          Math.max(1, subjectBreakdown.reduce((s, d) => s + d.value, 0))) * 100,
-                      )}
-                      %
-                    </span>
-                    <span className="font-mono text-[0.5rem] uppercase tracking-widest" style={{ color: "var(--muted)" }}>
-                      مكتمل
-                    </span>
-                  </div>
-                </div>
+                <WheelDonutChart data={subjectBreakdown} colors={colors} reduced={reduced} />
                 <ul className="min-w-0 flex-1 space-y-1.5" aria-label="اكتمال كل مادة">
                   {subjectBreakdown.slice(0, 6).map((d, i) => {
                     const pct = d.value ? Math.round((d.completed / d.value) * 100) : 0;
@@ -685,7 +760,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
    keyboard-focusable بطبيعته (مفيش div بـ tabIndex) + aria-label مزدوج.
    ========================================================================== */
 function WheelBranch({
-  branch, color, badge, onOpenSettings, layout, delayMs = 0, size,
+  branch, color, badge, onOpenSettings, layout, delayMs = 0, size, highlight = false,
 }: {
   branch: WheelBranchDef;
   color: string;
@@ -694,6 +769,7 @@ function WheelBranch({
   layout: "circle" | "grid";
   delayMs?: number;
   size?: string;
+  highlight?: boolean;
 }) {
   const ariaLabel = `${branch.label} — ${branch.latin}`;
 
@@ -706,7 +782,7 @@ function WheelBranch({
 
   if (layout === "grid") {
     const cls =
-      "group flex flex-col items-center gap-2 rounded-2xl bg-[var(--card-primary)] px-4 py-4 text-center shadow-sm transition hover:bg-[var(--card-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
+      `group flex flex-col items-center gap-2 rounded-2xl bg-[var(--card-primary)] px-4 py-4 text-center shadow-sm transition hover:bg-[var(--card-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2${highlight ? " mw-node-current" : ""}`;
     const style: React.CSSProperties = { border: `2px solid ${color}` };
     return branch.kind === "action" ? (
       <button type="button" onClick={onOpenSettings} className={cls} style={style} aria-label={ariaLabel}>
@@ -721,14 +797,16 @@ function WheelBranch({
 
   const circleStyle: React.CSSProperties = { ...cssVars, width: size, height: size };
 
+  const circleCls = `mw-node${highlight ? " mw-node-current" : ""}`;
+
   return branch.kind === "action" ? (
-    <button type="button" onClick={onOpenSettings} className="mw-node" style={circleStyle} aria-label={ariaLabel}>
+    <button type="button" onClick={onOpenSettings} className={circleCls} style={circleStyle} aria-label={ariaLabel}>
       <span className="mw-node-card" style={{ borderColor: color }}>
         {face}
       </span>
     </button>
   ) : (
-    <Link href={branch.href ?? "/"} className="mw-node" style={circleStyle} aria-label={ariaLabel}>
+    <Link href={branch.href ?? "/"} className={circleCls} style={circleStyle} aria-label={ariaLabel}>
       <span className="mw-node-card" style={{ borderColor: color }}>
         {face}
       </span>

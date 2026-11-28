@@ -129,7 +129,25 @@ export async function POST(req: Request) {
 
     void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
 
-    return NextResponse.json({ questions });
+    // 🧾 إثبات سيرفري (D-M-04): بنسجّل المحاولة بأسئلتها — التصحيح بعدها
+    // بيحصل في /api/lesson-quiz/submit على السيرفر، ومكافأة
+    // lesson_quiz_passed مرجعها attempt id (فرع داخل award_coins — db/118).
+    // فشل التسجيل ما يكسرش الاختبار — الكوينز إضافة مش شرط.
+    let attemptId: string | null = null;
+    try {
+      // المحاولة بتتنتهي بعد ساعتين (partial index على status='pending')
+      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      const { data: attempt, error: attemptError } = await supabase
+        .from("lesson_quiz_attempts")
+        .insert({ user_id: user.id, questions, total: questions.length, status: "pending", expires_at: expiresAt })
+        .select("id")
+        .single();
+      if (!attemptError && attempt) attemptId = (attempt as { id: string }).id;
+    } catch (e) {
+      console.warn("lesson-quiz attempt insert failed (متجاهَل):", e);
+    }
+
+    return NextResponse.json({ questions, attemptId });
   } catch (error) {
     console.error("lesson-quiz error:", error);
     return NextResponse.json({ error: { message: "حصل خطأ غير متوقع أثناء توليد الاختبار." } }, { status: 500 });

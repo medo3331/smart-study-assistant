@@ -1,16 +1,20 @@
 /**
  * اقتصاد الكوينز — والدوريات.
  *
- * ⚠️ **الكوينز بتتكسب بالمذاكرة بس، ومفيش شرا بفلوس حقيقية إطلاقاً.**
- * مفيش دالة هنا بتزوّد الرصيد من غير مصدر مذاكرة، والداتابيز بتفرض ده
- * كمان (`db/shop.sql`: الإضافة بتمر من دالة `SECURITY DEFINER` بتقبل
- * مصادر معروفة بس). القاعدة دي مش قابلة للتفاوض.
+ * ⚠️ **مسار الكسب واحد: award_coins** (db/113 — النسخة الموحّدة). مفيش
+ * دالة هنا بتزوّد الرصيد من غير مصدر معروف، والداتابيز بتفرض ده كمان
+ * (حارس db/114: أي كتابة كسب من غير app.coin_bypass بترفض).
+ *
+ * **عملات مش مكتسبة بالمذاكرة** (شراء بالفلوس / إعلانات / إداري —
+ * قرارات D-M-01/D-M-05): بتدخل من المسار الداخلي `add_coins_grant`
+ * (service_role فقط) بـ source_class منفصل — للطالب رصيد واحد زي ما هو.
+ * التفعيل مع DEV-M4.
  *
  * Phase A Architecture — فصل العملات (Currency Separation):
  *   XP   → Progression فقط — profiles.xp — اشتقاق Level/League عبر levelFromXp/leagueFromXp
  *   COINS → Store فقط — coin_ledger + coin_balance() — مصدر الحقيقة coin_source_rules
- *   AI_CREDITS / ENTITLEMENT / SUBSCRIPTION → NOT IMPLEMENTED (Future only)
- * القاعدة: XP ≠ Coins ≠ AI Credits ≠ Entitlements ≠ Subscription
+ *   AI_CREDITS (Magic Credits) / ENTITLEMENT / SUBSCRIPTION → أنظمة مستقلة
+ * القاعدة: XP ≠ Coins ≠ Magic Credits ≠ Entitlements ≠ Subscription
  */
 
 /** ثابت المستويات — نفس القيمة المستخدمة في app/dashboard/achievements */
@@ -43,6 +47,10 @@ export const STUDY_DAY_XP_REWARD = 150;
  * اللي متوصّل فعلاً دلوقتي معلّم بـ `live: true` — واللي لأ موجود عشان
  * المبالغ تبقى متوازنة من الأول مش مرتجلة وقت التوصيل.
  */
+export type CoinSourceKind = "earn" | "oneTime" | "internal";
+/** تصنيف مصدر العملة للتقارير المالية — مرآة source_class في db/113 */
+export type CoinSourceClass = "study" | "games" | "activity";
+
 export type CoinSource = {
   id: string;
   label: string;
@@ -50,6 +58,10 @@ export type CoinSource = {
   live: boolean;
   /** سقف يومي — `null` معناها مفيش سقف (الأحداث اللي بطبيعتها مرة واحدة) */
   dailyCap: number | null;
+  /** kind: earn = كسب يومي مسقوف · oneTime = مرة/عمر · internal = مسار داخلي
+   *  (المبلغ بيتحدد في السيرفر، مش من القاعدة) */
+  kind?: CoinSourceKind;
+  sourceClass?: CoinSourceClass;
   /**
    * محطة سلسلة: مش كسب يومي عادي — بتتصرف يوم المحطة بس (٣/٧/٣٠).
    *
@@ -69,6 +81,8 @@ export const COIN_SOURCES = {
     amount: 20,
     live: true,
     dailyCap: 1,
+    kind: "oneTime",
+    sourceClass: "study",
   },
   daily_login: {
     id: "daily_login",
@@ -76,6 +90,7 @@ export const COIN_SOURCES = {
     amount: 10,
     live: true,
     dailyCap: 1,
+    sourceClass: "study",
   },
   // ── Study & Activity ────────────────────────────────────────────────
   day_done: {
@@ -84,6 +99,7 @@ export const COIN_SOURCES = {
     amount: 25,
     live: true,
     dailyCap: 3,
+    sourceClass: "study",
   },
   goal_done: {
     id: "goal_done",
@@ -91,6 +107,7 @@ export const COIN_SOURCES = {
     amount: 10,
     live: true,
     dailyCap: 5,
+    sourceClass: "study",
   },
   streak_day: {
     id: "streak_day",
@@ -98,6 +115,7 @@ export const COIN_SOURCES = {
     amount: 8,
     live: true,
     dailyCap: 1,
+    sourceClass: "study",
   },
   /* ⚠️ السقف مش تجميلي. مصدر شغّال بسقف `null` = حنفية كوينز مفتوحة:
      `while(true) rpc('award_coins',{p_source:'badge'})` من الكونسول كان
@@ -110,6 +128,7 @@ export const COIN_SOURCES = {
     amount: 40,
     live: true,
     dailyCap: 3,
+    sourceClass: "study",
   },
   perfect_week: {
     id: "perfect_week",
@@ -117,6 +136,7 @@ export const COIN_SOURCES = {
     amount: 120,
     live: true,
     dailyCap: 1,
+    sourceClass: "study",
   },
   // ── Phase 2 — محطات السلسلة (Retention) ──────────────────────────────
   /* بتتصرف من `_streak_apply` لما الطالب يوصل اليوم ٣/٣٠ بالظبط — مش كل
@@ -129,6 +149,7 @@ export const COIN_SOURCES = {
     live: true,
     dailyCap: 1,
     streakTier: true,
+    sourceClass: "study",
   },
   streak_tier_30: {
     id: "streak_tier_30",
@@ -137,21 +158,121 @@ export const COIN_SOURCES = {
     live: true,
     dailyCap: 1,
     streakTier: true,
+    sourceClass: "study",
   },
-  // ⇩ مصادر لسه ما اتبنتش — المبلغ محسوب، والتوصيل بعدين
+  // ── ألعاب البريك — G0-B: مصادر معتمدة بإثبات سيرفري (db/62 + db/113) ──
+  /* قبل db/113 كانت المصادر دي بتنادى award_coins من غير فرع ولا قاعدة
+     (F1/F3/F5 في docs/PHASE_0_ECONOMY_TRUTH_PLAN.md). escape_room = ٢٥
+     (قرار D-1 — مش ٦٠). */
+  break_riddle: {
+    id: "break_riddle",
+    label: "فزورة البريك",
+    amount: 15,
+    live: true,
+    dailyCap: 1,
+    sourceClass: "games",
+  },
+  break_riddle_fast: {
+    id: "break_riddle_fast",
+    label: "فزورة بريك سريعة (≤٥ د)",
+    amount: 20,
+    live: true,
+    dailyCap: 1,
+    sourceClass: "games",
+  },
+  break_game: {
+    id: "break_game",
+    label: "لعبة بريك",
+    amount: 5,
+    live: true,
+    dailyCap: 2,
+    sourceClass: "games",
+  },
   escape_room: {
     id: "escape_room",
     label: "غرفة الهروب",
-    amount: 60,
-    live: false,
+    amount: 25,
+    live: true,
     dailyCap: 1,
+    sourceClass: "games",
   },
+  daily_mission: {
+    id: "daily_mission",
+    label: "مهمة يومية",
+    amount: 5,
+    live: true,
+    dailyCap: 4,
+    sourceClass: "games",
+  },
+  weekly_mission: {
+    id: "weekly_mission",
+    label: "مهمة أسبوعية",
+    amount: 150,
+    live: true,
+    dailyCap: 1,
+    sourceClass: "games",
+  },
+  // ── مصادر داخلية — المبلغ بيتحدد في السيرفر (db/113 _award_coins_variable) ──
   wheel: {
     id: "wheel",
     label: "عجلة الحظ",
-    amount: 30,
+    /* amount = أغلى جائزة (w.120) — الحد الأعلى الصارم في _award_coins_variable. */
+    amount: 120,
+    live: true,
+    dailyCap: 1,
+    kind: "internal",
+    sourceClass: "games",
+  },
+  achievement: {
+    id: "achievement",
+    label: "إنجاز",
+    /* amount = أغلى إنجاز (first-course=300) — الحد الأعلى الصارم في
+       _award_coins_variable. dailyCap=5/يوم هو السقف الأصلي من الإنتاج
+       (db/45) — الإنجازات مرة/حياة لكن ممكن تتفتح مجموعة في نفس اليوم. */
+    amount: 300,
+    live: true,
+    dailyCap: 5,
+    kind: "internal",
+    sourceClass: "study",
+  },
+  box_refund: {
+    id: "box_refund",
+    label: "تعويض صندوق مكرر",
+    /* amount = أغلى تعويض (mythic=1000) — الحد الأعلى الصارم. */
+    amount: 1000,
+    live: true,
+    dailyCap: null,
+    kind: "internal",
+    sourceClass: "study",
+  },
+  // ⇩ مصادر DEV-M1 — المبلغ محسوب من التصميم المعتمد، والتوصيل لما يكون
+  //   فيه إثبات سيرفري للحدث (نمط G0 proof). امتحان شامل = نطاق محمي
+  //   (D-DEV-02) — الربط قرار فريق الامتحانات.
+  lesson_quiz_passed: {
+    id: "lesson_quiz_passed",
+    label: "اختبار الدرس",
+    amount: 5,
+    // db/118: التفعيل بعد مسار التصحيح السيرفري (/api/lesson-quiz/submit
+    // + جدول lesson_quiz_attempts) — الإثبات فرع داخل award_coins.
+    live: true,
+    dailyCap: 5,
+    sourceClass: "study",
+  },
+  review_done: {
+    id: "review_done",
+    label: "مراجعة مكتملة",
+    amount: 10,
     live: false,
     dailyCap: 1,
+    sourceClass: "study",
+  },
+  exam_passed: {
+    id: "exam_passed",
+    label: "اختبار شامل",
+    amount: 20,
+    live: false,
+    dailyCap: 1,
+    sourceClass: "study",
   },
   league_promo: {
     id: "league_promo",
@@ -171,6 +292,7 @@ export const COIN_SOURCES = {
     amount: 3,
     live: true,
     dailyCap: 5,
+    sourceClass: "activity",
   },
   worship_quran: {
     id: "worship_quran",
@@ -178,6 +300,7 @@ export const COIN_SOURCES = {
     amount: 5,
     live: true,
     dailyCap: 1,
+    sourceClass: "activity",
   },
   worship_adhkar: {
     id: "worship_adhkar",
@@ -185,8 +308,19 @@ export const COIN_SOURCES = {
     amount: 3,
     live: true,
     dailyCap: 3,
+    sourceClass: "activity",
   },
 } as const satisfies Record<string, CoinSource>;
+
+/**
+ * مصادر المنح — عملات مش مكتسبة بالمذاكرة (D-M-01 / D-M-05).
+ * بتكتب من المسار الداخلي `add_coins_grant` (service_role فقط — db/113 §5)،
+ * وsource_class بتاعها purchase/ads/admin. مش جزء من COIN_SOURCES عشان
+ * ماتدخلش في حسابات الكسب اليومي ولا في سييد المتجر.
+ * التفعيل الفعلي: DEV-M4 (شراء بالفلوس / إعلانات SSV).
+ */
+export const COIN_GRANT_SOURCES = ["purchase", "ad_reward", "admin_grant", "champion_weekly"] as const;
+export type CoinGrantSourceId = (typeof COIN_GRANT_SOURCES)[number];
 
 export type CoinSourceId = keyof typeof COIN_SOURCES;
 
@@ -204,7 +338,14 @@ export function isCoinSource(v: string): v is CoinSourceId {
 export function maxDailyCoins(): number {
   return Object.values(COIN_SOURCES)
     // محطات السلسلة متقطّعة (يوم ٣/٧/٣٠) — مش كسب يومي، فمش داخلة في الأساس.
-    .filter((s) => s.live && !("streakTier" in s && s.streakTier))
+    // oneTime (signup) وinternal (wheel/achievement/box_refund) مش كسب يومي
+    // كمان — تصحيح F6 من Phase 0 (كان بتحسب signup يوميًا وبتستبعد ٦ مصادر).
+    .filter(
+      (s) =>
+        s.live &&
+        !("streakTier" in s && s.streakTier) &&
+        !("kind" in s && (s.kind === "oneTime" || s.kind === "internal")),
+    )
     .reduce((sum, s) => sum + s.amount * (s.dailyCap ?? 1), 0);
 }
 
@@ -271,9 +412,11 @@ export type AnyCurrency = EconomyCurrency | FutureCurrency;
 export const CURRENCY_META = {
   XP: { purpose: "Progression", storage: "profiles.xp", status: "LIVE" as const },
   COINS: { purpose: "Store economy", storage: "coin_ledger (via coin_balance())", status: "LIVE" as const },
-  AI_CREDITS: { purpose: "AI usage", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
-  ENTITLEMENT: { purpose: "Model/feature unlock", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
-  SUBSCRIPTION: { purpose: "Paid plan -> Entitlement", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+  // D-DEV-001 (تصحيح دين 2026-11-28): الرصيد والتخزين موجودان فعلاً —
+  // Magic Credits (واجهة) / AI Credits (كود) عبر ai_credit_ledger + credit_grants.
+  AI_CREDITS: { purpose: "AI usage", storage: "ai_credit_ledger (via ai_credit_balance())", status: "LIVE" as const },
+  ENTITLEMENT: { purpose: "Model/feature unlock", storage: "entitlements (من متجر Useful/Learning)", status: "LIVE" as const },
+  SUBSCRIPTION: { purpose: "Paid plan -> Entitlement", storage: "subscriptions (admin_activate_subscription)", status: "LIVE" as const },
 } as const;
 export interface EconomyContext { userId: string; xp: number; level: number; league: League; streak: number; coins: number; badgeCount: number; sessions: number; }
 export function createEconomyContext(args: { userId: string; xp: number; streak: number; coins: number; badgeCount: number; sessions: number; }): EconomyContext { return { userId: args.userId, xp: args.xp, level: levelFromXp(args.xp), league: leagueFromXp(args.xp), streak: args.streak, coins: args.coins, badgeCount: args.badgeCount, sessions: args.sessions }; }
@@ -345,9 +488,9 @@ export type AiCreditLedgerEntry = {
   createdAt: string;
 };
 
-// CURRENCY_META يبقى كما هو — AI_CREDITS / ENTITLEMENT ما زالتا FUTURE
-// التخزين الفعلي الآن موجود (entitlements, ai_credit_ledger) لكن غير موصول
-// بالـ Store أو AI Router حتى Phase E/G. هذا مقصود.
+// CURRENCY_META محدّث (D-DEV-001 — الدين اتصفّى 2026-11-28): كل العملات LIVE
+// والمخازن الفعلية مكتوبة فوق. التخزين كان موجود من Phase D/E لكن الميتا
+// كانت بتقول FUTURE — كده كانت بتضلّل قارئ الكود.
 
 // ---------------------------------------------------------------------------
 // Phase 4.0 — Economy Foundation: Signup + Daily Login + Study Rewards

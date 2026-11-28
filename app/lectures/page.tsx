@@ -32,6 +32,8 @@ import { McqQuiz } from "@/components/lectures/McqQuiz";
 import { LectureTranscriptEditor } from "@/components/lectures/LectureTranscriptEditor";
 import { LectureTranscriptViewer } from "@/components/lectures/LectureTranscriptViewer";
 import { LectureIntensive } from "@/components/lectures/LectureIntensive";
+import { LectureAudioPlayer } from "@/components/lectures/LectureAudioPlayer";
+import { LectureDeepLinkOpener } from "@/components/lectures/LectureDeepLinkOpener";
 import { LectureCitationProvider } from "@/components/lectures/lecture-citation-context";
 import { extractSegments, planParts, reconcileExplanation } from "@/lib/ai/lecture-intensive";
 import { INTENSIVE_CHUNK_CHARS } from "@/lib/ai/lecture-intensive-prompts";
@@ -85,6 +87,8 @@ type LectureListItem = {
   status: string;
   created_at: string;
   duration_seconds: number | null;
+  /** 🎧 مسار الصوت في باكيت lecture-uploads — موجود ⇒ نظهر مشغّل الاستوديو. */
+  storage_path: string | null;
   transcript_text: string | null;
   review_status: string | null;
   transcript_reviewed_text: string | null;
@@ -126,7 +130,7 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
   const lecturesQuery = supabase
     .from("lectures")
     .select(
-      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, review_status, transcript_reviewed_text, summary, explanation, flashcards, mcqs, intensive_explanation, transcript_data",
+      "id, title, original_filename, source_type, status, created_at, duration_seconds, transcript_text, storage_path, review_status, transcript_reviewed_text, summary, explanation, flashcards, mcqs, intensive_explanation, transcript_data",
     )
     .eq("user_id", user.id);
   if (subjectFilter) lecturesQuery.eq("subject_id", subjectFilter);
@@ -158,6 +162,8 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
       lede="تسجيلاتك الصوتية (اللي بيتفريغ نصها) وملفاتك (PDF و PowerPoint) — كلهم في مكانين واضحين."
     >
       <FeatureGuide {...guides.lectures} storageKey="guide:lectures" />
+      {/* 🔗 لينكات المساعد العميقة — تفتح كارت التسجيل المقصود تلقائيًا. */}
+      <LectureDeepLinkOpener />
 
       {/* 🔀 التبويبات — عشان «المحاضرات» ما تبقاش كلمة واحدة بتشيل كل حاجة.
           *  تبويب 1: تسجيلات صوتية (MP3/MP4) · تبويب 2: مستندات (PDF/PPTX/Word).
@@ -279,7 +285,7 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                «الشرح المكثف» (في قسم) بـ «التفريغ» (في قسم تاني).
                من غيره مفيش طريقة الـ chips تعرف تفتح قسم وتبرز مقطع. */
             <LectureCitationProvider key={lecture.id}>
-            <article key={lecture.id} className="card-interactive rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm">
+            <article key={lecture.id} id={`lec-${lecture.id}`} className="card-interactive scroll-mt-24 rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm">
               <details>
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -306,7 +312,28 @@ export default async function MyLecturesPage({ searchParams }: { searchParams: P
                       </>
                     )}
                   </p>
+
+                  {/* 🏛️ مدخل مساحة الدرس الموحدة — كل أدوات المحاضرة في مكان واحد. */}
+                  <div className="mt-2">
+                    <Link
+                      href={`/workspace/lesson/${lecture.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--rule)] px-2.5 py-1 text-xs font-bold text-ink-soft transition hover:text-ink"
+                    >
+                      🚀 افتح مساحة الدرس
+                    </Link>
+                  </div>
                 </summary>
+
+                {/* 🎧 استوديو المحاضرة — صوت متزامن مع التفريغ والشرح. */}
+                {lecture.storage_path && (
+                  <div className="mt-3">
+                    <LectureAudioPlayer
+                      lectureId={lecture.id}
+                      durationSeconds={lecture.duration_seconds}
+                      segments={segments}
+                    />
+                  </div>
+                )}
 
                 {/* 🎓 مساحة المذاكرة: كل قسم في بلوك قابل للطي.
                     الافتراضي: الملخص مفتوح لو موجود، والباقي مقفول. */}

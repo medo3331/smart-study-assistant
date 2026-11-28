@@ -60,13 +60,13 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
   return (
     <GlassCard glow className="p-6 relative overflow-hidden">
       {/* Background subtle pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#7C5CFF]/5 via-transparent to-[#2DD4BF]/5" aria-hidden />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#10B981]/5 via-transparent to-[#34D399]/5" aria-hidden />
       
       <div className="relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <IconBadge icon={Moon} color="text-[#7C5CFF]" bg="bg-[#7C5CFF]/15" size={44} />
+            <IconBadge icon={Moon} color="text-[#10B981]" bg="bg-[#10B981]/15" size={44} />
             <div>
               <p className="text-sm text-[#9AA0C0]">الصلاة القادمة</p>
               <p className="text-lg font-bold text-white">{prayer.arabicName}</p>
@@ -74,7 +74,7 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
           </div>
           <div className="text-left">
             <p className="text-xs text-[#9AA0C0]">{location}</p>
-            <p className="text-xs text-[#7C5CFF] font-medium">متبقي {timeRemaining}</p>
+            <p className="text-xs text-[#10B981] font-medium">متبقي {timeRemaining}</p>
           </div>
         </div>
 
@@ -86,7 +86,7 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
               pct={dayProgress}
               size={140}
               stroke={10}
-              color="#7C5CFF"
+              color="#10B981"
               centerLabel={prayer.time}
               className="relative"
             />
@@ -95,15 +95,15 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
           {/* Details */}
           <div className="flex-1 min-w-0 space-y-4">
             <div className="flex items-center gap-3 text-[#C7CBE6]">
-              <IconBadge icon={Clock} color="text-[#B69CFF]" bg="bg-[#7C5CFF]/10" size={36} />
+              <IconBadge icon={Clock} color="text-[#6EE7B7]" bg="bg-[#10B981]/10" size={36} />
               <div>
                 <p className="text-sm font-medium text-white">وقت الصلاة</p>
-                <p className="text-lg font-mono font-bold text-[#B69CFF]">{prayer.time}</p>
+                <p className="text-lg font-mono font-bold text-[#6EE7B7]">{prayer.time}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3 text-[#C7CBE6]">
-              <IconBadge icon={MapPin} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/10" size={36} />
+              <IconBadge icon={MapPin} color="text-[#34D399]" bg="bg-[#34D399]/10" size={36} />
               <div>
                 <p className="text-sm font-medium text-white">الموقع</p>
                 <p className="text-sm text-[#9AA0C0] truncate">{location}</p>
@@ -119,7 +119,7 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
               </div>
               <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-[#7C5CFF] to-[#2DD4BF] rounded-full"
+                  className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${dayProgress}%` }}
                   transition={{ duration: 1.5, ease: "easeOut" }}

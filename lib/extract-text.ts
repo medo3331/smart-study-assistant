@@ -442,6 +442,52 @@ async function extractPptxSlides(
   return slides;
 }
 
+/* ════════════════════════════ DOCX HTML → نص ═══════════════════════════ */
+
+/** فكّ الـ HTML entities اللي mammoth بيسيبها في المخرج (`&amp;` … إلخ). */
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    // ⚠️ `&amp;` آخر واحدة — عشان `&amp;lt;` تطلع `&lt;` مش `<`.
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * بيبوّض HTML مخرج `mammoth.convertToHtml` لنص خام — **والعناوين بتتشاور
+ * بعلامة `#`** (Markdown) عشان التقسيم الوعي بالعناوين
+ * (`isHeadingLine` في `lib/text-structure.ts`) يقدر يقصّ عندها.
+ *
+ * ⚠️ **ليه `convertToHtml` مش `extractRawText`**: الـ raw text بيضيّع بنية
+ * العناوين خالص — ملف Word فيه «الفصل الأول / الفصل الثاني» بيرجع كتلة نص
+ * واحدة، والتقسيم بيتحول لتخمين. الـ HTML بيدينا العناوين الحقيقية من
+ * الملف نفسه (أنماط Heading 1-6 في Word) بدل التخمين بالكلمات المفتاحية.
+ *
+ * ⚠️ **صافية وقابلة للاختبار** — مافيش mammoth هنا، HTML نص بس.
+ */
+export function docxHtmlToText(html: string): string {
+  const blocks: string[] = [];
+  const pattern = /<(h[1-6])[^>]*>([\s\S]*?)<\/\1>|<p[^>]*>([\s\S]*?)<\/p>/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null) {
+    const raw = match[2] ?? match[3] ?? '';
+    // mammoth بيغلّف النص الغليظ في `<strong>`/`<em>` — بنشيل أي تاج
+    // باقي بعد إمساك الفقرات والعناوين.
+    const text = decodeHtmlEntities(raw.replace(/<[^>]+>/g, '')).trim();
+    if (text === '') continue;
+    blocks.push(match[1] ? `# ${text}` : text);
+  }
+
+  return blocks.join('\n\n');
+}
+
 /* ═══════════════════════════ استخراج المستند ═══════════════════════════ */
 
 /**
@@ -452,6 +498,10 @@ async function extractPptxSlides(
  *    راوت الديمو، مرفقات الشات، صفحة الـ workspace). تغيير الـ return
  *    type = كسر ٤ مواضع. ⇒ `extractTextFromFile` بقى غلاف رقيق على
  *    `extractDocument` فسلوكه ما بيتغيرش **حرفياً**.
+ *
+ * ⚠️ **الاستثناء الوحيد (متعمّد، DOCX بس)**: نص DOCX بيرجع بعناوينه
+ *    متشارة بـ `#` — تحسين لجودة التقسيم، مش تغيير للعقد: نفس التوقيع،
+ *    نفس الحدود، ونفس بنية الفقرات. ملفات PDF/PPTX/صور/نصوص مابتتلمسش.
  */
 export async function extractDocument(
   file: File,
@@ -636,8 +686,11 @@ export async function extractDocument(
     text = pages.map((p) => p.text).join('\n\n');
   } else if (kind === 'docx') {
     try {
-      const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-      text = result.value;
+      // ⚠️ `convertToHtml` مش `extractRawText` — التفاصيل فوق عند
+      //    `docxHtmlToText`: العناوين الحقيقية من أنماط Word بتفضل موجودة
+      //    متشارة بـ `#` بدل ما تضيع في كتلة نص واحدة.
+      const result = await mammoth.convertToHtml({ buffer: Buffer.from(buffer) });
+      text = docxHtmlToText(result.value);
     } catch (err) {
       console.error('DOCX parse failed:', err);
       throw new ExtractError('مقدرتش أفتح ملف الـ Word ده. جرّب تحفظه تاني.', 422, 'DOCX_PARSE_FAILED');

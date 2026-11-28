@@ -10,6 +10,51 @@
      signal    → إجراء محتاج حالة الداشبورد نفسها (مودال)
    ========================================================================== */
 
+import {
+  AlertTriangle,
+  BookMarked,
+  BookOpen,
+  Bot,
+  BrainCircuit,
+  Briefcase,
+  CalendarDays,
+  ChartNoAxesColumn,
+  ClipboardList,
+  Coffee,
+  Coins,
+  CreditCard,
+  FileText,
+  Files,
+  FolderOpen,
+  Gift,
+  GraduationCap,
+  Headphones,
+  Layers,
+  LayoutDashboard,
+  LifeBuoy,
+  ListChecks,
+  Medal,
+  MessageCircle,
+  Mic,
+  Moon,
+  NotebookPen,
+  Package,
+  Presentation,
+  Puzzle,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Trophy,
+  User,
+  Users,
+  Wallet,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
+
 /* ⚠️ الليستة دي هي المرجع لـ `isNavSignal` تحت. أي إشارة جديدة تتزوّد هنا
    وبس — التحقق من النية المحفوظة بيتولّد منها، فمافيش مكان تاني تنساه. */
 export const NAV_SIGNALS = [
@@ -69,6 +114,7 @@ export type NavIconName =
   | "career"
   | "report"
   | "support"
+  | "messages"
   | "admin";
 
 export interface NavItemDef {
@@ -99,7 +145,7 @@ export interface NavGroupDef {
 // اتشالت، بس اتوزّعت على المجموعات التسعة.
 //
 // 🗓️ ٨ أغسطس: الشريط العلوي في الداشبورد اتشال بالكامل (طلب المستخدم:
-// «قايمة واحدة بس اللي على الشمال فيها كل حاجة»). بنوده اتوزّعوا هنا —
+// «قايمة واحدة بس اللي على الشمال فيها كل حاجة»). بنونه اتوزّعوا هنا —
 // الطوارئ في «التخطيط»، والمتصدرين واصرف نقاطك في «التقدّم»، وتقرير
 // المتابعة في «الحساب».
 export const NAV_GROUPS: NavGroupDef[] = [
@@ -140,7 +186,6 @@ export const NAV_GROUPS: NavGroupDef[] = [
     icon: "aiMentor",
     items: [
       { id: "ai_chat", icon: "aiMentor", label: "المعلم الشخصي", latin: "AI Mentor", href: "/chat" },
-      { id: "agents", icon: "agents", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "ai", icon: "assistant", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "create", icon: "create", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
     ],
@@ -154,13 +199,10 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "planner", icon: "planner", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "calendar", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "missions", icon: "missions", label: "المهام اليومية", latin: "Daily Missions", href: "/missions" },
-      { id: "notes", icon: "notes", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 📓 دفتر الملاحظات — صفحة كاملة (/notes)، مش قسم في الداشبورد.
-      // الاتنين مقصودين: «الملاحظات» بتوديك لكارت الملاحظات المختصر جوه
-      // الداشبورد، و«دفتر الملاحظات» بتفتح المحرر نفسه بخط اليد.
-      { id: "notebook", icon: "notes", label: "دفتر الملاحظات", latin: "Notebook", href: "/notes" },
+      // 📓 النوتة — الصفحة الكاملة (/notes) لتحرير الملاحظات بخط اليد.
+      { id: "notebook", icon: "notes", label: "النوتة", latin: "Notes", href: "/notes" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
-      { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency", signal: "emergency", tone: "danger" },
+      { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency" },
       // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — البند ده بينزّل
       // على كارت القرآن في الداشبورد، والكارت فيه زرار للمكتبة الكاملة.
       // 🎧 التريكز: المكتبة الصوتية (موسيقى + صوتيات المستخدم) + مؤقّت
@@ -236,6 +278,15 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "admin", icon: "admin", label: "لوحة الأدمن", latin: "Admin", href: "/admin", ownerOnly: true },
     ],
   },
+  {
+    id: "messages",
+    title: "الرسائل",
+    latin: "Messages",
+    icon: "messages",
+    items: [
+      { id: "inbox", icon: "messages", label: "الرسائل", latin: "Inbox", href: "/inbox" },
+    ],
+  },
 ];
 
 export const NAV_ITEMS: NavItemDef[] = NAV_GROUPS.flatMap((g) => g.items);
@@ -250,9 +301,6 @@ export const NAV_ITEMS: NavItemDef[] = NAV_GROUPS.flatMap((g) => g.items);
    ⚠️ مجموعات الشريط العلوي مش نسخة جديدة من البيانات — هي **تحديد**
    للمجموعات الموجودة فوق. أي بند جديد بيتزاد في `NAV_GROUPS` بيظهر
    تلقائي: في الشريط لو مجموعته من `NAVBAR_GROUP_IDS`، أو في «المزيد» لو لا.
-
-   ⚠️ بند الأدمن (`ownerOnly`) بيختفي لغير صاحب المنصة. الفلترة نفسها
-   اللي في `NavRail` — مفيش fetch جديد، في `useIsOwner` واحدة مشتركة.
    -------------------------------------------------------------------------- */
 
 /** المجموعات اللي بتظهر كقوائم منسدلة جنب بعض في الشريط العلوي. */
@@ -263,13 +311,14 @@ export const NAVBAR_GROUP_IDS = [
   "progress",
   "community",
   "account",
+  "messages",
 ] as const;
 
 export const NAVBAR_GROUPS: NavGroupDef[] = NAV_GROUPS.filter((g) =>
   (NAVBAR_GROUP_IDS as readonly string[]).includes(g.id),
 );
 
-/**
+/** 
  * المجموعات اللي مش بتظهر في الشريط العلوي مباشرة — بتتجمّع في قائمة
  * «المزيد». أي مجموعة مش في `NAVBAR_GROUP_IDS` بتروح هنا.
  */
@@ -277,7 +326,7 @@ export const NAVBAR_MORE_GROUPS: NavGroupDef[] = NAV_GROUPS.filter(
   (g) => !(NAVBAR_GROUP_IDS as readonly string[]).includes(g.id) && g.id !== "main",
 );
 
-/**
+/** 
  * مسار البند لو كان صفحة كاملة — أو `null` لو مودال أو قسم.
  *
  * ليها دالة أصلاً؟ لأن `<Link>` بيتعامل مع المسار بس، والبند اللي
@@ -297,7 +346,7 @@ export function resolveNavHref(item: NavItemDef): string | null {
 
    الحل: نكتب النية في sessionStorage، ننقل، والداشبورد بتقراها بعد ما
    بياناتها تخلص تحميل. sessionStorage مش localStorage عن قصد — دي نية
-   لحظية، ماينفعش تفضل مستنية لبكرة.
+   لحظية، ماينفعش ت_feedback مستنية لبكرة.
    -------------------------------------------------------------------------- */
 
 export type NavIntent =
@@ -394,8 +443,8 @@ export function takeAiSeed(): AiSeed | null {
 /* --------------------------------------------------------------------------
    بذرة العرض التقديمي
 
-   من صفحة الدرس، «اعمل عرض من الشرح ده» لازم تفتح مولّد العروض والموضوع
-   والمحتوى محطوطين جواه. نفس منطق بذرة المحادثة بالظبط: تنقّل صفحة كامل
+   من صفحة الدرس، «اعمل عرض من الشرح ده» يجب أن تفتح مولّد العروض والموضوع
+   والمحتوى محطوطين جawah. نفس منطق بذرة المحادثة بالظبط: تنقّل صفحة كامل
    بين الاتنين، فالـ state مش بينفع و sessionStorage هو الحل.
 
    ليه نبعت الشرح مش الموضوع بس؟ عشان الشرائح تطلع من اللي الدرس قاله
@@ -469,15 +518,24 @@ export interface RailAccount {
   displayName: string;
   displayEmail: string;
   avatarInitial: string;
+  avatarUrl: string | null;
   isGuest: boolean;
 }
 
-/** الشكل اللي محتاجينه من مستخدم سوپابيز — مكتوب بإيدينا عشان الملف ده
+/** الشكل اللي محتاجينه من مستخدم سوپابيز — مكتوب بإيدنا عشان الملف ده
     يفضل من غير أي import، فيقدر يتقري من السيرفر والكلاينت على السوا. */
 interface AuthUserLike {
   email?: string | null;
   is_anonymous?: boolean;
-  user_metadata?: { full_name?: unknown } | null;
+  user_metadata?: { full_name?: unknown; avatar_url?: unknown; picture?: unknown } | null;
+}
+
+function accountAvatarUrl(user: AuthUserLike): string | null {
+  const candidates = [user.user_metadata?.avatar_url, user.user_metadata?.picture];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().startsWith("http")) return c.trim();
+  }
+  return null;
 }
 
 export function railAccountFromUser(user: AuthUserLike | null | undefined): RailAccount | null {
@@ -489,6 +547,7 @@ export function railAccountFromUser(user: AuthUserLike | null | undefined): Rail
     displayName,
     displayEmail: user.email || (isGuest ? "حساب زائر (غير مسجل)" : ""),
     avatarInitial: displayName.trim().charAt(0).toUpperCase() || "؟",
+    avatarUrl: accountAvatarUrl(user),
     isGuest,
   };
 }

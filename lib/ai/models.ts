@@ -109,10 +109,11 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
   /* NVIDIA Free Endpoint — مُتحقَّق منها حيًا (2026-08-26)               */
   /* ------------------------------------------------------------------ */
   /* التحقق عبر scripts/verify-nvidia-models.mjs ضد الحساب الفعلي:        */
-  /* /v1/models → 95 موديل. النتائج:                                     */
-  /*   nemotron-3.5-lightning ✓ · nemotron-3-embed-1b ✓ (dim=2048)       */
-  /*   nemotron-3-super-120b ✓ · nemotron-3-ultra-550b ✓                 */
-  /*   deepseek-v4-flash-0731 → 404 (مدرج في الكتالوج وغير مفعّل للحساب) */
+  /* 2026-11-06 → /v1/models = 30 موديل. النتائج:                                     */
+  /*   nemotron-3.5-lightning ✓ · nemotron-3-ultra-550b ✓ (بروب VALID)  */
+  /*   nemotron-3-super-120b ✗ اختفى · nemotron-3-embed-1b ✗ اختفى         */
+  /*   deepseek-v4-flash-0731 ✗ — والحساب فيه جيل embeds جديد:            */
+  /*   nemotron-3.5-embed-1b/8b + super-vl-120b + bolt-e4b (محتاجين بروب)  */
   /* ------------------------------------------------------------------ */
   {
     // chat/tutor/agent الأساسي عند NVIDIA — تم التحقق بطلب حي ناجح.
@@ -127,7 +128,8 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     enabled: true,
   },
   {
-    // PLANNING الأول حسب مصفوفة 3A (Super) — تم التحقق بطلب حي ناجح (~3.6s).
+    // تأكيد 2026-11-06: مش موجود في قائمة حساب NVIDIA (اختفت من /v1/models)
+    // — معطّل لحين رجوعه. البديل المتحقّق منه: nemotron-3-ultra-550b تحت.
     id: "nvidia/nemotron-3-super-120b-a12b",
     provider: "nvidia",
     displayName: "Nemotron 3 Super 120B A12B",
@@ -136,7 +138,7 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     tier: "unknown",
     fallbackPriority: 2,
     freeEndpoint: true,
-    enabled: true,
+    enabled: false,
   },
   {
     // احتياطي ثقيل للمهام المعقدة — تم التحقق بطلب حي ناجح (~9.3s، أبطأ).
@@ -153,6 +155,8 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
   {
     // مدرج في كتالوج الحساب لكنه يردّ 404 فعليًا (غير مفعّل للحساب حاليًا).
     // ممنوع تفعيله قبل إعادة التحقق — الراوتر يتخطاه ديناميكيًا وهو disabled.
+    // اتشال كمان من كل مصفوفات TASK_MODEL_PREFERENCE — التفضيلات للموديلات
+    // المفعّلة فقط (بعد إعادة التحقق يترجّع للمصفوفات يدويًا لو لزم).
     id: "deepseek-ai/deepseek-v4-flash-0731",
     provider: "nvidia",
     displayName: "DeepSeek V4 Flash (عبر NVIDIA)",
@@ -164,7 +168,8 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     enabled: false, // ← تحقق مرتين: HTTP 404 على هذا الحساب
   },
   {
-    // موديل الـ embeddings لأساس الـ RAG — تم التحقق بطلب حي ناجح (dim=2048).
+    // تأكيد 2026-11-06: مش موجود في قائمة الحساب (اختفت من /v1/models)
+    // — معطّل؛ استُبدل بالجيل nemotron-3.5-embed تحت.
     id: "nvidia/nemotron-3-embed-1b",
     provider: "nvidia",
     displayName: "Nemotron 3 Embed 1B",
@@ -173,7 +178,33 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     tier: "unknown",
     fallbackPriority: -1, // مش بديل لأي مهمة نصية أبدًا
     freeEndpoint: true,
-    enabled: true,
+    enabled: false,
+  },
+  {
+    // الجيل الجديد من embeds — متأكد وجوده في قائمة حساب NVIDIA (2026-11-06).
+    // ممنوع التفعيل قبل بروب ناجح على /v1/embeddings (D-REAL-008) — فحص
+    // embeddings مضاف في verify-nvidia-models.mjs.
+    id: "nvidia/nemotron-3.5-embed-1b",
+    provider: "nvidia",
+    displayName: "Nemotron 3.5 Embed 1B",
+    capabilities: ["embeddings"],
+    priority: 1,
+    tier: "unknown",
+    fallbackPriority: -1, // مش بديل لأي مهمة نصية أبدًا
+    freeEndpoint: true,
+    enabled: false,
+  },
+  {
+    // نفس الجيل الجديد بأبعاد أعلى (4096) — لنفس شرط البروب.
+    id: "nvidia/nemotron-3.5-embed-8b",
+    provider: "nvidia",
+    displayName: "Nemotron 3.5 Embed 8B",
+    capabilities: ["embeddings"],
+    priority: 2,
+    tier: "unknown",
+    fallbackPriority: -1,
+    freeEndpoint: true,
+    enabled: false,
   },
 
   /* ------------------------------------------------------------------ */
@@ -290,6 +321,60 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
     fallbackPriority: 1,
     freeEndpoint: true,
     enabled: false, // ← مش موجود في الكتالوج الحي (2026-11-06)
+  },
+  {
+    // مرشّح لمهام الاستدلال الثقيلة (الخطط/الشرح الطويل/المراجع) — 280B MoE / 14B active
+    // وسياق 1.02M مع structured_outputs. لسه محتاج بروب حي قبل التفعيل:
+    // شغّل scripts/verify-openrouter-models.mjs بعد إضافته للائحة البروب.
+    id: "baidu/ernie-5.5-flash-preview:free",
+    provider: "openrouter",
+    displayName: "ERNIE 5.5 Flash Preview (OpenRouter, Free)",
+    capabilities: ["text", "reasoning", "structured_output", "streaming"],
+    contextWindow: 1_024_000,
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: false, // ← ممنوع التفعيل قبل التحقق الحي (D-REAL-008)
+  },
+  {
+    // مرشّح للسياق الضخم + الرؤية — hybrid reasoning وحدّ 200 صورة/طلب.
+    // الـ contextWindow بالرقم مش مؤكد → اتساب فاضي لحد ما البروب الحي يأكده.
+    id: "inclusionai/ling-3.2-flash:free",
+    provider: "openrouter",
+    displayName: "Ling 3.2 Flash (OpenRouter, Free)",
+    capabilities: ["text", "vision", "reasoning", "streaming"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: false, // ← ممنوع التفعيل قبل التحقق الحي (D-REAL-008)
+  },
+  {
+    // مرشّح للكود Agentic — مبني على DeepSeek V4.1 Flash. متحقّق بروب حي ناجح
+    // (VALID ✓ 2026-11-06) بعد إزالة قيد max_tokens (commit 31f11d6).
+    id: "particle-ai/particle-1:free",
+    provider: "openrouter",
+    displayName: "Particle 1 (OpenRouter, Free)",
+    capabilities: ["text", "coding", "streaming"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: true, // متحقّق حيًّا 2026-11-06 — VALID ✓
+  },
+  {
+    // متحقّق بروب حي ناجح (VALID ✓ 2026-11-06) — موديل استدلال؛ سجّلنا بس
+    // القدرات اللي اتأكدنا منها (text/reasoning). مش في مصفوفات تفضيل حاليًا.
+    id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    provider: "openrouter",
+    displayName: "Nemotron 3 Nano Omni 30B A3B Reasoning (OpenRouter, Free)",
+    capabilities: ["text", "reasoning"],
+    priority: 3,
+    tier: "free",
+    fallbackPriority: 4,
+    freeEndpoint: true,
+    enabled: true,
   },
 ];
 

@@ -3,7 +3,7 @@
 /* ==========================================================================
    المتجر
 
-   ٩٣ عنصر (٩٠ تجميلي + ٣ مفيدة) في ٩ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
+   ١١٤ عنصر (١١١ تجميلي + ٣ مفيدة) في ١٠ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
    يلاقي حاجة في كومة زي دي. الحل تلات طبقات — قسم، وبحث، وترتيب — وكلهم
    بيشتغلوا مع بعض على نفس القايمة.
 
@@ -14,7 +14,8 @@
    ⚠️ متجر النهارده والعجلة بيبانوا في «الكل» وبدون بحث بس. في نتيجة
    مفلترة الاتنين بيبقوا ضوضاء بين المستخدم واللي بيدوّر عليه.
 
-   ⚠️ الكوينز بتتكسب بالمذاكرة **بس**. مفيش شرا بفلوس حقيقية في أي مكان.
+   ⚠️ الكوينز بتتكسب بالمذاكرة أساسًا، ومن db/115 فيه شحن بالفلوس (D-M-09)
+   وتبديل مع الكريدت (D-M-08) — القسمين بيخفوا لو جداول db/115 مش متطبقة.
 
    ⚠️ الصفحة تحت `/shop` مش `/dashboard/shop` عشان النقل من الداشبورد
    والمخزن يبقى `push` واحد، ونفس سابقة `/community`.
@@ -23,7 +24,7 @@
    ما تفضل بتحمّل.
    ========================================================================== */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
 import { Search, X, Zap } from "lucide-react";
@@ -37,6 +38,12 @@ import { BOXES, type BoxTier } from "@/lib/shop/boxes";
 import { useShop } from "@/lib/shop/use-shop";
 import { BoxPanel } from "@/components/shop/BoxPanel";
 import { BoxSheet } from "@/components/shop/BoxSheet";
+import { ChampionsPanel } from "@/components/shop/ChampionsPanel";
+import { CreditPacksPanel } from "@/components/shop/CreditPacksPanel";
+import { CoinPacksPanel } from "@/components/shop/CoinPacksPanel";
+import { ExchangeWidget } from "@/components/shop/ExchangeWidget";
+import { FreeRewardsPanel } from "@/components/shop/FreeRewardsPanel";
+import { PurchaseHistoryPanel } from "@/components/shop/PurchaseHistoryPanel";
 import { DailyStrip } from "@/components/shop/DailyStrip";
 import { ItemCard } from "@/components/shop/ItemCard";
 import { ItemSheet } from "@/components/shop/ItemSheet";
@@ -86,8 +93,21 @@ export default function ShopPage() {
   const [boxId, setBoxId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMsg | null>(null);
   const [justBought, setJustBought] = useState<string | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [personalization, setPersonalization] = useState<Personalization | null>(null);
   const [savingPersonalization, setSavingPersonalization] = useState(false);
+
+  const refreshCreditBalance = useCallback(() => {
+    if (!supabase) return;
+    void supabase.rpc("ai_credit_balance").then(({ data }) => {
+      if (typeof data === "number") setCreditBalance(data);
+    });
+  }, [supabase]);
+
+  useEffect(() => {
+    if (session.status !== "ready") return;
+    refreshCreditBalance();
+  }, [session.status, refreshCreditBalance]);
 
   // الزائر يرجع للداشبورد — هي اللي بتعمل جلسة الزائر، مش إحنا
   useEffect(() => {
@@ -263,7 +283,7 @@ export default function ShopPage() {
     <PageShell
       eyebrow="المتجر"
       title="اصرف كوينزك"
-      lede="الكوينز بتتكسب بالمذاكرة بس — مفيش شرا بفلوس هنا ولا هيبقى."
+      lede="الكوينز بتتكسب بالمذاكرة — وفيه كمان شحن بالفلوس وتبديل مع الكريدت."
       feedbackPage="shop"
       feedbackLabel="المتجر"
       action={
@@ -364,6 +384,26 @@ export default function ShopPage() {
           وهو بيكتب. */}
       {showExtras && (
         <>
+          {/* أقسام الفلوس والتبديل (D-M-02/08/09) — بيتخفوا لو جداول
+              db/115 مش متطبقة بعد */}
+          <CreditPacksPanel
+            supabase={supabase}
+            creditBalance={creditBalance}
+            onCreditsGranted={refreshCreditBalance}
+          />
+          <CoinPacksPanel
+            supabase={supabase}
+            coinBalance={state.balance}
+            onCoinsGranted={shop.reload}
+          />
+          <ExchangeWidget
+            supabase={supabase}
+            coinBalance={state.balance}
+            onChanged={shop.reload}
+          />
+          <PurchaseHistoryPanel supabase={supabase} />
+          <ChampionsPanel supabase={supabase} />
+          <FreeRewardsPanel />
           <DailyStrip
             offers={shop.daily}
             balance={state.balance}
@@ -534,6 +574,8 @@ export default function ShopPage() {
               const res = await shop.buy(open.id);
               say(res.message, res.ok);
               if (res.ok) {
+                // الهجين بيخصم كريدت كمان — نحدّث رصيده من السيرفر
+                if (open.creditsPrice) refreshCreditBalance();
                 setJustBought(open.id);
                 setOpenId(null);
                 setTimeout(() => setJustBought(null), 700);

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { dataUrlToBlob } from "@/lib/notes/blob";
+import { useSpeak } from "@/lib/speech";
 
 /**
  * The notebook's AI assistant — a floating side panel over the editor.
@@ -13,6 +14,54 @@ import { dataUrlToBlob } from "@/lib/notes/blob";
  */
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+
+/** 🖼️ SVG string → PNG dataURL (بدقة 2x) — الرسمة عشان تتخزن جوه الصفحة. */
+async function svgToPngDataUrl(svg: string, scale = 2): Promise<string | null> {
+  try {
+    const container = document.createElement("div");
+    container.innerHTML = svg;
+    const svgElement = container.querySelector("svg");
+    if (!svgElement) return null;
+    svgElement.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const viewBox = svgElement.getAttribute("viewBox") ?? "";
+    let width = Number(svgElement.getAttribute("width")?.replace(/[^\d.]/g, "")) || 0;
+    let height = Number(svgElement.getAttribute("height")?.replace(/[^\d.]/g, "")) || 0;
+    if ((!width || !height) && viewBox) {
+      const parts = viewBox.split(/[\\s,]+/).map(Number);
+      width = parts[2];
+      height = parts[3];
+    }
+    if (!width || !height) return null;
+    // خلفية بيضا — الرسمة جوه صفحة ورق.
+    svgElement.setAttribute("width", String(width));
+    svgElement.setAttribute("height", String(height));
+    const blob = new Blob([new XMLSerializer().serializeToString(svgElement)], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("svg load failed"));
+        image.src = url;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    return null;
+  }
+}
 
 const QUICK_ACTIONS: { label: string; prompt: string }[] = [
   { label: "لخّص", prompt: "لخّص المحتوى ده في نقط مختصرة أنا هحفظها:" },
@@ -27,6 +76,12 @@ export default function NotesAssistant({
   getCanvasSnapshot,
   /** بيبدأ مفتوح — وضع المذاكرة الجانبي. */
   defaultOpen = false,
+  /** ✍️ إدراج نص الـ AI على الصفحة — من المحرر. */
+  onInsertToPage,
+  /** 🎨 إدراج رسمة/مخطط AI على الصفحة — من المحرر. */
+  onInsertImage,
+  /** ✅ فتح Magic Write — اشرح واكتب على الصفحة بلوكات منظّمة. */
+  onOpenMagicWrite,
 }: {
   /** Current page context (title + typed texts). Called when sending. */
   getEditorContext: () => string;
@@ -36,12 +91,93 @@ export default function NotesAssistant({
   getCanvasSnapshot?: () => string | null;
   /** بيبدأ مفتوح — وضع المذاكرة الجانبي. */
   defaultOpen?: boolean;
+  /** ✍️ إدراج نص الـ AI على الصفحة. */
+  onInsertToPage?: (text: string) => void;
+  /** 🎨 إدراج رسمة AI على الصفحة. */
+  onInsertImage?: (dataUrl: string) => void;
+  /** ✅ فتح Magic Write. */
+  onOpenMagicWrite?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 🔊 قراءة بصوت — متصفح نفسه، بدون أي خدمة خارجية.
+  const speak = useSpeak();
+
+  // 🎨 أنواع الرسمات المتاحة في منتقي الرسمة.
+  const DIAGRAM_TYPES: { id: string; label: string }[] = [
+    { id: "mindmap", label: "🗺️ خريطة ذهنية" },
+    { id: "flowchart", label: "🔀 مخطط انسيابي" },
+    { id: "timeline", label: "📅 جدول زمني" },
+    { id: "classDiagram", label: "🗂️ تصنيف" },
+    { id: "pie", label: "🥧 نسب" },
+    { id: "graph", label: "📊 علاقات" },
+  ];
+  const [diagramMenuOpen, setDiagramMenuOpen] = useState(false);
+  const diagramSeqRef = useRef(0);
+  const [diagramBusy, setDiagramBusy] = useState(false);
+
+  /** آخر رد من الـ AI — لزر «اكتبها على النوته» و«اقرا». */
+  const lastAnswer = [...messages].reverse().find((message) => message.role === "assistant")?.content ?? "";
+
+  /** ✍️ يكتب آخر رد من الـ AI على الصفحة كبلوكات نص قابلة للتعديل. */
+  const writeToPage = () => {
+    if (!onInsertToPage) return;
+    const text = lastAnswer.trim();
+    if (!text) {
+      setError("مفيش رد من المساعد لسه — اسأل الأول وبعدها اكتبها.");
+      return;
+    }
+    onInsertToPage(text);
+  };
+
+  /** 🎨 مخطط/رسمة من الـ AI → SVG → PNG → على الصفحة. */
+  const generateDiagramOnPage = async (type: string) => {
+    if (!onInsertImage || diagramBusy) return;
+    setDiagramMenuOpen(false);
+    setDiagramBusy(true);
+    setError(null);
+    try {
+      // الموضوع: نص الصفحة لو فيه حاجة، وإلا آخر سؤال من الطالب.
+      const pageText = getEditorContext().slice(0, 300).trim();
+      const lastQuestion = [...messages]
+        .reverse()
+        .find((message) => message.role === "user")?.content ?? "";
+      const topic = pageText || lastQuestion.slice(0, 200).trim() || "موضوع المحاضرة";
+      const res = await fetch("/api/ai/diagram", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ topic, type, detail: "medium", language: "ar" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.mermaidCode) {
+        throw new Error(data?.error?.message ?? "فشل توليد الرسمة — جرّب تاني.");
+      }
+      const mermaid = (await import("mermaid")).default;
+      // ثيم فاتح لأن الصفحة ورق أبيض، و htmlLabels=false عشان الرسم يقدر
+      // يتحول PNG على الـ canvas (foreignObject مش بيتصور في بعض المتصفحات).
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "default",
+        securityLevel: "strict",
+        fontFamily: "Alexandria, Tahoma, sans-serif",
+        flowchart: { htmlLabels: false, curve: "basis" },
+      });
+      diagramSeqRef.current += 1;
+      const id = `notes-dg-${diagramSeqRef.current}`;
+      const { svg } = await mermaid.render(id, String(data.mermaidCode));
+      const dataUrl = await svgToPngDataUrl(svg);
+      if (!dataUrl) throw new Error("مقدرناش نجهز الرسمة للصفحة.");
+      onInsertImage(dataUrl);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "فشل توليد الرسمة.");
+    } finally {
+      setDiagramBusy(false);
+    }
+  };
   const [autoContext, setAutoContext] = useState(true);
   // ✂️ النص المحدد حالياً — بيتحدّث بيروديا عشان زر «اشرح المحدد» يبان مفعل.
   const [selectedText, setSelectedText] = useState<string | null>(null);
@@ -71,26 +207,28 @@ export default function NotesAssistant({
 
   // 🚦 طابور الطلبات — ضغط سريع على زر الإرسال مبيفقدش رسالة:
   // كل طلب بينتظر لما اللي قبله يخلص (حتى 3 طلبات في الانتظار).
-  const messagesRef = useRef(messages);
   const busyRef = useRef(false);
   const queueRef = useRef<string[]>([]);
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
 
-  const doSend = async (rawText: string) => {
+  /** إضافة رسالة للحالة. */
+  const pushMessage = (message: ChatMessage) => {
+    setMessages((previous) => [...previous, message]);
+  };
+
+  const doSend = async (rawText: string, baseHistory?: ChatMessage[]) => {
     const text = rawText.trim();
       if (!text) return;
 
       const context = autoContext ? getEditorContext() : "";
       const composed = context
-        ? `${text}\n\n[سياق من الدفتر]\n${context}`
+        ? `${text}\n\n[سياق من النوتة]\n${context}`
         : text;
 
-      const history = messagesRef.current;
+      // 🔑 التاريخ بيمر صراحةً للطلبات المُصفّرة — من غير ref.
+      const history = baseHistory ?? messages;
+      let conversationAfter: ChatMessage[] = history;
       const next = [...history, { role: "user" as const, content: composed }];
       setMessages(next);
-      messagesRef.current = next;
       setInput("");
       setBusy(true);
       busyRef.current = true;
@@ -101,12 +239,18 @@ export default function NotesAssistant({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: next.slice(-8).map((message) => ({
+            messages: next.slice(-12).map((message) => ({
               role: message.role,
               content: message.content,
             })),
             systemInstruction:
-              "انت مساعد داخل دفتر ملاحظات الطالب. إجاباتك مختصرة وعملية وبالعربي، وتناسب المذاكرة السريعة. لو الطالب بعت سياق من دفتره فاعمله أساس لردك.",
+              "انت مساعد مذاكرة شخصي جوه نوتة الطالب في Magicly. اشرح كأنك مدرس خصوصي شاطر بيفهم الطالب، مش ردود عابرة أو مختصرة زيادة عن اللزوم. \n" +
+              "قواعد الرد:\n" +
+              "• رد كامل ومفيد: غطي السؤال بالتفصيل المهم، مش سطر واحد.\n" +
+              "• نظّم الرد: عنوان قصير لو الموضوع كبير، وبعدين نقاط قصيرة (•) أو خطوات مرقمة، وكل نقطة جملة واضحة.\n" +
+              "• بالعربي المصري البسيط، والمصطلح العلمي بالإنجليزي بين قوسين أول مرة.\n" +
+              "• اربط الإجابة بسياق النوتة المرفق لو موجود، ولو الطالب سأل سؤال غامض خمن قصده من السياق وجاوب من غير ما تحرجله.\n" +
+              "• في الآخر لو فيه حاجة تستاهل، قول سؤال مراجعة صغير يساعده يثبت المعلومة.",
           }),
         });
         const data = await res.json().catch(() => null);
@@ -126,15 +270,18 @@ export default function NotesAssistant({
         const answer = typeof raw === "string" && raw.trim()
           ? raw
           : "المساعد رجع رد فاضي — حاول تاني.";
-        setMessages((previous) => [...previous, { role: "assistant", content: answer }]);
+        pushMessage({ role: "assistant", content: answer });
+        // التاريخ الكامل للرد ده — أساس أي طلب مُصفّر بعده.
+        conversationAfter = [...next, { role: "assistant" as const, content: answer }];
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "حصل خطأ غير متوقع.");
       } finally {
         setBusy(false);
         busyRef.current = false;
-        // 🚦 الطلبات اللي في الانتظار — الأول يخلص التاني يبدأ.
+        // 🚦 الطلبات اللي في الانتظار — الأول يخلص التاني يبدأ،
+        // وبياخد التاريخ الكامل اللي قبله.
         const pending = queueRef.current.shift();
-        if (pending) void doSend(pending);
+        if (pending) void doSend(pending, conversationAfter);
       }
   };
 
@@ -168,7 +315,7 @@ ${text}`);
   };
 
   /** 📸 صورة الصفحة — بيبعتها للـ AI كصورة عبر /api/ai/image-analysis. */
-  const analyzeSnapshot = useCallback(async () => {
+  const analyzeSnapshot = async () => {
     if (busy) return;
     if (!getCanvasSnapshot) {
       setError("مفيش دعم لقطة الصفحة هنا.");
@@ -180,15 +327,12 @@ ${text}`);
       return;
     }
     const question = input.trim();
-    setMessages((previous) => [
-      ...previous,
-      {
-        role: "user" as const,
-        content: question
-          ? `📸 صوّرت لك الصفحة — ${question}`
-          : "📸 صوّرت لك الصفحة — اشرح اللي فيها",
-      },
-    ]);
+    pushMessage({
+      role: "user",
+      content: question
+        ? `📸 صوّرت لك الصفحة — ${question}`
+        : "📸 صوّرت لك الصفحة — اشرح اللي فيها",
+    });
     setInput("");
     setBusy(true);
     setError(null);
@@ -204,7 +348,7 @@ ${text}`);
       form.append(
         "question",
         question ||
-          "دي صفحة من دفتر طالب بذاكر. اشرح اللي مكتوب فيها بالتفصيل بالعربي، ولو فيها أخطاء صححها.",
+          "دي صفحة من نوتة طالب بذاكر. اشرح اللي مكتوب فيها بالتفصيل بالعربي، ولو فيها أخطاء صححها.",
       );
       const res = await fetch("/api/ai/image-analysis", {
         method: "POST",
@@ -219,13 +363,13 @@ ${text}`);
       const answer = typeof data?.result === "string" && data.result.trim()
         ? data.result
         : "المساعد رجع رد فاضي — حاول تاني.";
-      setMessages((previous) => [...previous, { role: "assistant", content: answer }]);
+      pushMessage({ role: "assistant", content: answer });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "حصل خطأ غير متوقع.");
     } finally {
       setBusy(false);
     }
-  }, [busy, getCanvasSnapshot, input]);
+  };
 
   return (
     <>
@@ -313,6 +457,94 @@ ${text}`);
                 {action.label}
               </button>
             ))}
+          </div>
+
+          {/* 🤖 أفعال على الصفحة — الـ AI يكتب ويشرح ويرسم ويقرا. */}
+          <div className="notes-assistant-chips">
+            {onInsertToPage ? (
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                disabled={!lastAnswer}
+                onClick={writeToPage}
+                title="آخر رد من الـ AI يتكتب على الصفحة كبلوكات قابلة للتعديل"
+              >
+                ✍️ اكتبها على النوته
+              </button>
+            ) : null}
+            {onOpenMagicWrite ? (
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                data-tone="primary"
+                disabled={busy}
+                onClick={onOpenMagicWrite}
+                title="Magic يشرح ويكتب على الصفحة بمعاينة قبل الإدراج"
+              >
+                ✅ اشرح واكتب
+              </button>
+            ) : null}
+            {onInsertImage ? (
+              <span style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="notes-btn notes-btn-sm"
+                  disabled={diagramBusy || busy}
+                  onClick={() => setDiagramMenuOpen((value) => !value)}
+                  title="المساعد يرسم مخطط توضيحي ويلزقه على الصفحة"
+                >
+                  {diagramBusy ? "بيقزيم…" : "🎨 رسمة على النوته"}
+                </button>
+                {diagramMenuOpen ? (
+                  <span className="notes-diagram-menu">
+                    {DIAGRAM_TYPES.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        className="notes-btn notes-btn-sm"
+                        onClick={() => void generateDiagramOnPage(type.id)}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+            {speak.supported ? (
+              <>
+                <button
+                  type="button"
+                  className="notes-btn notes-btn-sm"
+                  disabled={!lastAnswer}
+                  data-active={speak.speaking}
+                  onClick={() => (speak.speaking ? speak.stop() : speak.speak(lastAnswer))}
+                  title={speak.speaking ? "وقفة" : "اقرا آخر رد من الـ AI بصوت عربي"}
+                >
+                  {speak.speaking ? "⏸ وقفة" : "🔊 اقرا الرد"}
+                </button>
+                <button
+                  type="button"
+                  className="notes-btn notes-btn-sm"
+                  data-active={speak.speaking}
+                  onClick={() => {
+                    if (speak.speaking) {
+                      speak.stop();
+                      return;
+                    }
+                    const pageText = getEditorContext().trim();
+                    if (!pageText) {
+                      setError("الصفحة مفيهاش نص مطبوع — اكتب حاجة الأول.");
+                      return;
+                    }
+                    speak.speak(pageText);
+                  }}
+                  title="يقرا نصوص الصفحة بصوت عربي"
+                >
+                  📖 اقرا الصفحة
+                </button>
+              </>
+            ) : null}
             <label className="notes-label notes-assistant-ctx">
               <input
                 type="checkbox"
