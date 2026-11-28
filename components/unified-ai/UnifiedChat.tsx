@@ -79,12 +79,16 @@ export function UnifiedChat({
   lesson,
   initialConversationId,
   initialDraft,
+  compact = false,
 }: {
   initialContext?: any;
   lesson?: LessonContext;
   initialConversationId?: string;
   /** رسالة جاهزة في خانة الكتابة — من ردود سريعة خارجية (?q=). */
   initialDraft?: string;
+  /** 🎛️ وضع اللوحة الجانبية (Lesson Studio TutorPanel): من غير شريط المحادثات
+      الجانبي وبارتفاع الحاوية — نفس منطق الشات مايتغيرش. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const { locale } = useLanguage();
@@ -97,8 +101,9 @@ export function UnifiedChat({
   const [conversations, setConversations] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useEffect(() => {
+    if (compact) return;
     if (typeof window !== "undefined" && window.innerWidth >= 768) setSidebarOpen(true);
-  }, []);
+  }, [compact]);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -592,11 +597,11 @@ export function UnifiedChat({
        ⚠️ `--nav-h` (3.5rem) = ارتفاع الشريط العلوي — معرّف في
        `app/globals.css`. الصفحتان اللي فيها الشات (`/chat` و
        `/lesson/[dayId]`) الاتنين عندهم الشريط فوقهم. */
-    <div className="flex h-[calc(100dvh_-_var(--nav-h))] max-h-[calc(100dvh_-_var(--nav-h))]">
+    <div className={compact ? "flex h-full min-h-0" : "flex h-[calc(100dvh_-_var(--nav-h))] max-h-[calc(100dvh_-_var(--nav-h))]"}>
       {/* ⚠️ الـ aside على الموبايل `fixed` — لازم يبدأ **تحت** الشريط
           العلوي (`--nav-h`) وإلا غطّاه. وعلى الديسكتوب `md:static` فيصير
           جوّه الـ flex عادي. */}
-      <aside className={`${sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-[var(--nav-h)] right-0 h-[calc(100%-var(--nav-h))] w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform flex flex-col`}>
+      <aside className={`${compact ? "hidden" : sidebarOpen ? "block translate-x-0" : "hidden -translate-x-full"} fixed md:static z-40 top-[var(--nav-h)] right-0 h-[calc(100%-var(--nav-h))] w-72 bg-[var(--card)] border-l border-[var(--border)] p-3 transition-transform flex flex-col`}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-sm">المحادثات المحفوظة</h2>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1" aria-label="إغلاق"><X size={14} /></button>
@@ -684,7 +689,7 @@ export function UnifiedChat({
         {/* منطقة الرسائل — هي اللي بتسكرول */}
         <div className="min-h-0 overflow-y-auto">
         <button onClick={() => setSidebarOpen((v) => !v)} className="m-2 px-2 py-1 border rounded" aria-label="إظهار/إخفاء المحادثات">☰</button>
-        <div className="max-w-3xl md:max-w-4xl xl:max-w-5xl mx-auto px-4 py-5" dir="rtl">
+        <div className={`mx-auto px-4 py-5 ${compact ? "max-w-none px-3 py-3" : "max-w-3xl md:max-w-4xl xl:max-w-5xl"}`} dir="rtl">
       {/* 📌 دليل الاستخدام — أول حاجة في العمود، قبل المحادثة نفسها.
           هنا بالذات محتاجه: أربع أوضاع (`Explain` / `Quiz` / `Summarize` /
           `Review`) مكتوبة بالإنجليزي ومن غير شرح، فالمستخدم الجديد
