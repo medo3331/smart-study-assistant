@@ -5,6 +5,7 @@
  * POST → إنشاء طلب جديد:
  *   { kind: "credits", packId: "<uuid>" }
  *   { kind: "plan", planKey: "pro" | "ultra", durationDays?: 30 }
+ *   { kind: "coins", packId: "<uuid من coin_packs>" }
  *
  * الحماية:
  *   - مصادقة إجبارية (الزوار يُوجَّهون لتسجيل الدخول).
@@ -85,6 +86,19 @@ export async function POST(req: Request) {
       .limit(1);
     if (dup && dup.length > 0) {
       return NextResponse.json({ ok: false, error: "عندك طلب اشتراك نشط لنفس الباقة بالفعل — أكد الدفع أو انتظر المراجعة.", code: "DUPLICATE_REQUEST" }, { status: 409 });
+    }
+  }
+  if (kind === "coins" && packId) {
+    const { data: dup } = await supabase
+      .from("purchase_requests")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("kind", "coins")
+      .eq("coin_pack_id", packId)
+      .in("status", [...activeStatuses])
+      .limit(1);
+    if (dup && dup.length > 0) {
+      return NextResponse.json({ ok: false, error: "عندك طلب نشط لنفس باقة الكوينز بالفعل — راجع طلباتك أو أكد الدفع.", code: "DUPLICATE_REQUEST" }, { status: 409 });
     }
   }
 
@@ -181,6 +195,45 @@ export async function POST(req: Request) {
       type: "warning",
     });
     return NextResponse.json({ ok: true, requestId: created.id, ticketId, status: "awaiting_payment" }, { status: 201 });
+  }
+
+  // ── باقات الكوينز: السعر والكوينز من القاعدة فقط (D-M-09) ──
+  if (kind === "coins") {
+    if (!packId) {
+      return NextResponse.json({ ok: false, error: "اختر باقة كوينز أولًا.", code: "PACK_REQUIRED" }, { status: 400 });
+    }
+    const { data: pack, error: packError } = await supabase
+      .from("coin_packs")
+      .select("id, title_ar, coins, price, currency")
+      .eq("id", packId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (packError || !pack) {
+      return NextResponse.json({ ok: false, error: "باقة الكوينز غير موجودة أو غير متاحة.", code: "PACK_NOT_FOUND" }, { status: 404 });
+    }
+    const row = pack as { id: string; title_ar: string; coins: number; price: number; currency: string };
+    const { data: created, error: insertError } = await supabase
+      .from("purchase_requests")
+      .insert({
+        user_id: user.id,
+        kind: "coins",
+        coin_pack_id: row.id,
+        coins: row.coins,
+        amount: row.price,
+        currency: row.currency,
+        status: "awaiting_payment",
+      })
+      .select("id")
+      .single();
+    if (insertError || !created) {
+      return NextResponse.json({ ok: false, error: "تعذر إنشاء الطلب. حاول مرة أخرى.", code: "INSERT_FAILED" }, { status: 500 });
+    }
+    void notifyAdmins({
+      title: "طلب شراء كوينز جديد",
+      message: `باقة «${row.title_ar}» (${row.coins} كوين — ${row.price} ${row.currency}) في انتظار الدفع. راجع /admin/purchase-requests`,
+      type: "warning",
+    });
+    return NextResponse.json({ ok: true, requestId: created.id, status: "awaiting_payment" }, { status: 201 });
   }
 
   return NextResponse.json({ ok: false, error: "نوع الطلب غير معروف.", code: "KIND_INVALID" }, { status: 400 });

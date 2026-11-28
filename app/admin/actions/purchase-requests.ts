@@ -33,13 +33,13 @@ async function loadRequest(requestId: string) {
   const db = createServiceClient();
   const { data, error } = await db
     .from("purchase_requests")
-    .select("id, user_id, kind, credits, plan_key, plan_duration_days, amount, currency, status, ticket_id")
+    .select("id, user_id, kind, credits, coins, plan_key, plan_duration_days, amount, currency, status, ticket_id")
     .eq("id", requestId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data as {
-    id: string; user_id: string; kind: "credits" | "plan";
-    credits: number | null; plan_key: string | null; plan_duration_days: number | null;
+    id: string; user_id: string; kind: "credits" | "plan" | "coins";
+    credits: number | null; coins: number | null; plan_key: string | null; plan_duration_days: number | null;
     amount: number | null; currency: string; status: string; ticket_id: string | null;
   } | null;
 }
@@ -138,6 +138,36 @@ export async function approvePurchaseRequest(requestId: string, adminNote?: stri
       return { ok: false, message: `فشل تفعيل الاشتراك: ${activationError?.message ?? "لا نتيجة"}`, error: "activation_failed" };
     }
     resultMessage = `تمت الموافقة وتفعيل اشتراك ${planKey} لمدة ${durationDays} يوم.`;
+  } else if (request.kind === "coins") {
+    // D-M-09: شحن كوينز بعد التحقق من إثبات الدفع — عبر المسار المركزي فقط.
+    const coins = Number(request.coins);
+    if (!Number.isInteger(coins) || coins <= 0) {
+      return { ok: false, message: "بيانات الكوينز في الطلب غير صالحة.", error: "invalid_coins" };
+    }
+    const { data: awarded, error: grantError } = await db.rpc("add_coins_grant", {
+      p_user_id: request.user_id,
+      p_source: "purchase",
+      p_source_class: "purchase",
+      p_ref_id: `pr:${request.id}`,
+      p_amount: coins,
+      p_metadata: { request_id: request.id, amount: request.amount, currency: request.currency },
+    });
+    if (grantError) {
+      await recordAuditLog({
+        actor: adminUserId, actor_email: actor.userEmail ?? null, action: "subscriptions.manage", resource_type: "purchase_request", resource_id: requestId,
+        details: { request_id: requestId, reason: grantError.message }, result: "FAIL",
+      });
+      return { ok: false, message: `فشل شحن الكوينز: ${grantError.message}`, error: "grant_failed" };
+    }
+    if (!awarded || Number(awarded) !== coins) {
+      // awarded=0 يعني رفض داخلي (مصدر مقفول/سقف) — نسيب الطلب في حالته للمراجعة.
+      await recordAuditLog({
+        actor: adminUserId, actor_email: actor.userEmail ?? null, action: "subscriptions.manage", resource_type: "purchase_request", resource_id: requestId,
+        details: { request_id: requestId, reason: "add_coins_grant returned 0", expected: coins, awarded: awarded ?? 0 }, result: "FAIL",
+      });
+      return { ok: false, message: "لم يتم شحن الكوينز (المصدر مقفول أو تجاوز سقف) — راجع إعدادات الاقتصاد.", error: "grant_rejected" };
+    }
+    resultMessage = `تمت الموافقة وإضافة ${coins} كوين للمستخدم.`;
   } else {
     return { ok: false, message: "نوع الطلب غير معروف.", error: "kind_invalid" };
   }
@@ -148,17 +178,24 @@ export async function approvePurchaseRequest(requestId: string, adminNote?: stri
   }
 
   const isPlan = request.kind === "plan";
+  const isCoins = request.kind === "coins";
   await notifyUser(
     request.user_id,
-    isPlan ? "تم قبول اشتراكك ✅" : "تم شحن الكريدت ✅",
+    isPlan ? "تم قبول اشتراكك ✅" : isCoins ? "تم شحن الكوينز ✅" : "تم شحن الكريدت ✅",
     isPlan
       ? `تمت الموافقة على اشتراك ${planLabel(request.plan_key)} وتفعيله.${note ? ` ملاحظة الإدارة: ${note}` : ""}`
-      : `تمت الموافقة على طلبك وإضافة ${request.credits} كريدت لرصيدك.${note ? ` ملاحظة الإدارة: ${note}` : ""}`
+      : isCoins
+        ? `تمت الموافقة على طلبك وإضافة ${request.coins} كوين لرصيدك.${note ? ` ملاحظة الإدارة: ${note}` : ""}`
+        : `تمت الموافقة على طلبك وإضافة ${request.credits} كريدت لرصيدك.${note ? ` ملاحظة الإدارة: ${note}` : ""}`
   );
   await appendTicketAdminReply(
     request.ticket_id,
     adminUserId,
-    `✅ تم قبول طلب الاشتراك وتفعيل باقة ${planLabel(request.plan_key)} لمدة ${request.plan_duration_days ?? 30} يوم.${note ? `\nملاحظة الإدارة: ${note}` : ""}`,
+    isPlan
+      ? `✅ تم قبول طلب الاشتراك وتفعيل باقة ${planLabel(request.plan_key)} لمدة ${request.plan_duration_days ?? 30} يوم.${note ? `\nملاحظة الإدارة: ${note}` : ""}`
+      : isCoins
+        ? `✅ تم قبول طلب شراء الكوينز وشحن ${request.coins} كوين لرصيدك.${note ? `\nملاحظة الإدارة: ${note}` : ""}`
+        : `✅ تم قبول طلب شراء الكريدت وشحن ${request.credits} كريدت لرصيدك.${note ? `\nملاحظة الإدارة: ${note}` : ""}`,
     true
   );
   await recordAuditLog({
@@ -198,7 +235,11 @@ export async function rejectPurchaseRequest(requestId: string, adminNote?: strin
 
   await notifyUser(
     request.user_id,
-    request.kind === "plan" ? "لم يتم قبول طلب الاشتراك ❌" : "لم يتم قبول طلب شراء الكريدت ❌",
+    request.kind === "plan"
+      ? "لم يتم قبول طلب الاشتراك ❌"
+      : request.kind === "coins"
+        ? "لم يتم قبول طلب شراء الكوينز ❌"
+        : "لم يتم قبول طلب شراء الكريدت ❌",
     `بعد مراجعة إثبات الدفع، لم يتم قبول الطلب.${note ? ` السبب: ${note}` : " تواصل مع الدعم للاستفسار."}`
   );
   await appendTicketAdminReply(

@@ -1,0 +1,486 @@
+{
+  "r113": true,
+  "r114": true,
+  "rules_before": [
+    {
+      "id": "achievement",
+      "amount": 300,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "ad_reward",
+      "amount": 5,
+      "daily_cap": 3,
+      "is_live": false
+    },
+    {
+      "id": "admin_grant",
+      "amount": 100,
+      "daily_cap": null,
+      "is_live": false
+    },
+    {
+      "id": "badge",
+      "amount": 40,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "box_refund",
+      "amount": 1000,
+      "daily_cap": null,
+      "is_live": true
+    },
+    {
+      "id": "break_game",
+      "amount": 5,
+      "daily_cap": 2,
+      "is_live": true
+    },
+    {
+      "id": "break_riddle",
+      "amount": 15,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "break_riddle_fast",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "daily_login",
+      "amount": 10,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "daily_mission",
+      "amount": 5,
+      "daily_cap": 4,
+      "is_live": true
+    },
+    {
+      "id": "day_done",
+      "amount": 25,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "escape_room",
+      "amount": 25,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "exam_passed",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "goal_done",
+      "amount": 10,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "league_promo",
+      "amount": 200,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "lesson_quiz_passed",
+      "amount": 5,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "perfect_week",
+      "amount": 120,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "purchase",
+      "amount": 100,
+      "daily_cap": 3,
+      "is_live": false
+    },
+    {
+      "id": "referral_reward",
+      "amount": 50,
+      "daily_cap": 10,
+      "is_live": false
+    },
+    {
+      "id": "review_done",
+      "amount": 10,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "signup_bonus",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_day",
+      "amount": 8,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_tier_3",
+      "amount": 15,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_tier_30",
+      "amount": 250,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "weekly_mission",
+      "amount": 150,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "wheel",
+      "amount": 120,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "worship_adhkar",
+      "amount": 3,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "worship_prayer",
+      "amount": 3,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "worship_quran",
+      "amount": 5,
+      "daily_cap": 1,
+      "is_live": true
+    }
+  ],
+  "guard_before": [
+    {
+      "tgname": "trg_coin_ledger_earn_guard"
+    }
+  ],
+  "ledger_sources": [
+    {
+      "source": "badge",
+      "source_type": "earn",
+      "c": "2"
+    },
+    {
+      "source": "break_game",
+      "source_type": "earn",
+      "c": "4"
+    },
+    {
+      "source": "break_riddle",
+      "source_type": "earn",
+      "c": "2"
+    },
+    {
+      "source": "daily_login",
+      "source_type": "earn",
+      "c": "285"
+    },
+    {
+      "source": "daily_mission",
+      "source_type": "earn",
+      "c": "3"
+    },
+    {
+      "source": "day_done",
+      "source_type": "earn",
+      "c": "56"
+    },
+    {
+      "source": "goal_done",
+      "source_type": "earn",
+      "c": "2"
+    },
+    {
+      "source": "premium_trial",
+      "source_type": "spend",
+      "c": "2"
+    },
+    {
+      "source": "purchase",
+      "source_type": "spend",
+      "c": "3"
+    },
+    {
+      "source": "signup_bonus",
+      "source_type": "earn",
+      "c": "96"
+    },
+    {
+      "source": "streak_day",
+      "source_type": "earn",
+      "c": "118"
+    },
+    {
+      "source": "wheel",
+      "source_type": "earn",
+      "c": "10"
+    },
+    {
+      "source": "worship_adhkar",
+      "source_type": "earn",
+      "c": "4"
+    },
+    {
+      "source": "worship_prayer",
+      "source_type": "earn",
+      "c": "7"
+    }
+  ],
+  "award_coins_after": {
+    "has_cairo_day": true,
+    "branches": [
+      "signup_bonus",
+      "daily_login",
+      "day_done",
+      "goal_done",
+      "badge",
+      "perfect_week",
+      "streak_day",
+      "break_riddle",
+      "break_riddle_fast",
+      "break_game",
+      "escape_room",
+      "daily_mission",
+      "weekly_mission",
+      "worship_prayer",
+      "worship_quran",
+      "worship_adhkar"
+    ],
+    "has_bypass": false,
+    "has_source_class": true
+  },
+  "rules_after": [
+    {
+      "id": "achievement",
+      "amount": 300,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "ad_reward",
+      "amount": 5,
+      "daily_cap": 3,
+      "is_live": false
+    },
+    {
+      "id": "admin_grant",
+      "amount": 100,
+      "daily_cap": null,
+      "is_live": false
+    },
+    {
+      "id": "badge",
+      "amount": 40,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "box_refund",
+      "amount": 1000,
+      "daily_cap": null,
+      "is_live": true
+    },
+    {
+      "id": "break_game",
+      "amount": 5,
+      "daily_cap": 2,
+      "is_live": true
+    },
+    {
+      "id": "break_riddle",
+      "amount": 15,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "break_riddle_fast",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "daily_login",
+      "amount": 10,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "daily_mission",
+      "amount": 5,
+      "daily_cap": 4,
+      "is_live": true
+    },
+    {
+      "id": "day_done",
+      "amount": 25,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "escape_room",
+      "amount": 25,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "exam_passed",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "goal_done",
+      "amount": 10,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "league_promo",
+      "amount": 200,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "lesson_quiz_passed",
+      "amount": 5,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "perfect_week",
+      "amount": 120,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "purchase",
+      "amount": 100,
+      "daily_cap": 3,
+      "is_live": false
+    },
+    {
+      "id": "referral_reward",
+      "amount": 50,
+      "daily_cap": 10,
+      "is_live": false
+    },
+    {
+      "id": "review_done",
+      "amount": 10,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "signup_bonus",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_day",
+      "amount": 8,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_tier_3",
+      "amount": 15,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_tier_30",
+      "amount": 250,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "weekly_mission",
+      "amount": 150,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "wheel",
+      "amount": 120,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "worship_adhkar",
+      "amount": 3,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "worship_prayer",
+      "amount": 3,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "worship_quran",
+      "amount": 5,
+      "daily_cap": 1,
+      "is_live": true
+    }
+  ],
+  "guard_after": [
+    {
+      "tgname": "trg_coin_ledger_earn_guard"
+    }
+  ],
+  "variable_fn": [
+    {
+      "ok": true
+    }
+  ],
+  "grant_fn": [
+    {
+      "ok": true
+    }
+  ],
+  "source_class_col": [
+    {
+      "column_name": "source_class"
+    }
+  ],
+  "view_ok": [
+    {
+      "rows": 594
+    }
+  ],
+  "funcs_single_award": [
+    {
+      "defs": 1
+    }
+  ]
+}

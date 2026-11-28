@@ -1,0 +1,538 @@
+{
+  "add_coins_grant_def": [
+    {
+      "def": "CREATE OR REPLACE FUNCTION public.add_coins_grant(p_user_id uuid, p_source text, p_source_class text, p_ref_id text, p_amount integer, p_metadata jsonb DEFAULT '{}'::jsonb)\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_catalog'\nAS $function$\r\ndeclare\r\n  v_cap     int;\r\n  v_live    boolean;\r\n  v_awarded int := 0;\r\nbegin\r\n  /* current_user = postgres (definer) يعني نداء داخلي من دالة definer —\r\n     مسموح. نداء مباشر من service_role كمان مسموح. مستخدم عادي ممنوع\r\n     بالـ REVOKE تحت. */\r\n  if current_user in ('authenticated', 'anon')\r\n     and coalesce((auth.jwt() ->> 'role'), '') not in ('service_role', 'postgres')\r\n  then\r\n    raise exception 'add_coins_grant: مسار داخلي (service_role) بس';\r\n  end if;\r\n  if p_source_class not in ('purchase', 'ads', 'admin') then\r\n    raise exception 'add_coins_grant: تصنيف غير مسموح: %', p_source_class;\r\n  end if;\r\n  if p_amount is null or p_amount <= 0 or p_amount > 10000 then\r\n    raise exception 'add_coins_grant: مبلغ غير صالح: %', p_amount;\r\n  end if;\r\n\r\n  select daily_cap, is_live into v_cap, v_live\r\n    from public.coin_source_rules where id = p_source;\r\n  if not found then\r\n    raise exception 'add_coins_grant: مصدر مش معروف: %', p_source;\r\n  end if;\r\n  if not v_live then\r\n    raise exception 'add_coins_grant: المصدر % مقفول', p_source;\r\n  end if;\r\n\r\n  if v_cap is not null then\r\n    if (select count(*) from public.coin_ledger\r\n         where user_id = p_user_id\r\n           and source = p_source\r\n           and source_type = 'earn'\r\n           and created_at >= (public.cairo_day()::timestamp\r\n                              at time zone 'Africa/Cairo')) >= v_cap then\r\n      return 0;\r\n    end if;\r\n  end if;\r\n\r\n  insert into public.coin_wallets (user_id) values (p_user_id)\r\n    on conflict (user_id) do nothing;\r\n\r\n  perform 1 from public.coin_wallets where user_id = p_user_id for update;\r\n\r\n  insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata, source_class)\r\n  values (p_user_id, p_source, p_amount, 'earn', p_ref_id, coalesce(p_metadata, '{}'::jsonb), p_source_class)\r\n  on conflict do nothing;\r\n\r\n  if found then\r\n    v_awarded := p_amount;\r\n  end if;\r\n\r\n  return v_awarded;\r\nend;\r\n$function$\n"
+    }
+  ],
+  "purchase_requests_cols": [
+    {
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "user_id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "kind",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "pack_id",
+      "data_type": "uuid",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "credits",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "plan_key",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "plan_duration_days",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "numeric",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "currency",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "payment_method",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "payment_reference",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "user_note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "admin_note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "reviewed_by",
+      "data_type": "uuid",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "reviewed_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "ticket_id",
+      "data_type": "uuid",
+      "is_nullable": "YES"
+    }
+  ],
+  "purchase_requests_checks": [
+    {
+      "conname": "purchase_requests_check",
+      "def": "CHECK ((((kind = 'credits'::text) AND (pack_id IS NOT NULL) AND (credits IS NOT NULL)) OR ((kind = 'plan'::text) AND (plan_key IS NOT NULL))))"
+    },
+    {
+      "conname": "purchase_requests_kind_check",
+      "def": "CHECK ((kind = ANY (ARRAY['credits'::text, 'plan'::text])))"
+    },
+    {
+      "conname": "purchase_requests_status_check",
+      "def": "CHECK ((status = ANY (ARRAY['awaiting_payment'::text, 'payment_submitted'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))"
+    }
+  ],
+  "purchase_requests_indexes": [
+    {
+      "indexname": "purchase_requests_pkey",
+      "indexdef": "CREATE UNIQUE INDEX purchase_requests_pkey ON public.purchase_requests USING btree (id)"
+    },
+    {
+      "indexname": "idx_purchase_requests_user",
+      "indexdef": "CREATE INDEX idx_purchase_requests_user ON public.purchase_requests USING btree (user_id, created_at DESC)"
+    },
+    {
+      "indexname": "idx_purchase_requests_status",
+      "indexdef": "CREATE INDEX idx_purchase_requests_status ON public.purchase_requests USING btree (status, created_at DESC)"
+    },
+    {
+      "indexname": "idx_purchase_requests_ticket",
+      "indexdef": "CREATE INDEX idx_purchase_requests_ticket ON public.purchase_requests USING btree (ticket_id)"
+    }
+  ],
+  "coin_ledger_cols": [
+    {
+      "column_name": "id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "user_id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "source",
+      "data_type": "text"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "source_type",
+      "data_type": "text"
+    },
+    {
+      "column_name": "ref_id",
+      "data_type": "text"
+    },
+    {
+      "column_name": "metadata",
+      "data_type": "jsonb"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "source_class",
+      "data_type": "text"
+    }
+  ],
+  "coin_ledger_uniques": [
+    {
+      "conname": "coin_ledger_pkey",
+      "def": "PRIMARY KEY (id)"
+    },
+    {
+      "conname": "coin_ledger_pkey",
+      "def": "CREATE UNIQUE INDEX coin_ledger_pkey ON public.coin_ledger USING btree (id)"
+    },
+    {
+      "conname": "coin_ledger_source_ref_once_idx",
+      "def": "CREATE UNIQUE INDEX coin_ledger_source_ref_once_idx ON public.coin_ledger USING btree (user_id, source, ref_id) WHERE ((ref_id IS NOT NULL) AND (source_type = 'earn'::text))"
+    }
+  ],
+  "coin_source_rules_cols": [
+    {
+      "column_name": "id"
+    },
+    {
+      "column_name": "amount"
+    },
+    {
+      "column_name": "daily_cap"
+    },
+    {
+      "column_name": "is_live"
+    },
+    {
+      "column_name": "is_variable"
+    }
+  ],
+  "rules_now": [
+    {
+      "id": "achievement",
+      "amount": 300,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "ad_reward",
+      "amount": 5,
+      "daily_cap": 3,
+      "is_live": false
+    },
+    {
+      "id": "admin_grant",
+      "amount": 100,
+      "daily_cap": null,
+      "is_live": false
+    },
+    {
+      "id": "badge",
+      "amount": 40,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "box_refund",
+      "amount": 1000,
+      "daily_cap": null,
+      "is_live": true
+    },
+    {
+      "id": "break_game",
+      "amount": 5,
+      "daily_cap": 2,
+      "is_live": true
+    },
+    {
+      "id": "break_riddle",
+      "amount": 15,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "break_riddle_fast",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "daily_login",
+      "amount": 10,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "daily_mission",
+      "amount": 5,
+      "daily_cap": 4,
+      "is_live": true
+    },
+    {
+      "id": "day_done",
+      "amount": 25,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "escape_room",
+      "amount": 25,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "exam_passed",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "goal_done",
+      "amount": 10,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "league_promo",
+      "amount": 200,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "lesson_quiz_passed",
+      "amount": 5,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "perfect_week",
+      "amount": 120,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "purchase",
+      "amount": 100,
+      "daily_cap": 3,
+      "is_live": false
+    },
+    {
+      "id": "referral_reward",
+      "amount": 50,
+      "daily_cap": 10,
+      "is_live": false
+    },
+    {
+      "id": "review_done",
+      "amount": 10,
+      "daily_cap": 1,
+      "is_live": false
+    },
+    {
+      "id": "signup_bonus",
+      "amount": 20,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_day",
+      "amount": 8,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_tier_3",
+      "amount": 15,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "streak_tier_30",
+      "amount": 250,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "weekly_mission",
+      "amount": 150,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "wheel",
+      "amount": 120,
+      "daily_cap": 1,
+      "is_live": true
+    },
+    {
+      "id": "worship_adhkar",
+      "amount": 3,
+      "daily_cap": 3,
+      "is_live": true
+    },
+    {
+      "id": "worship_prayer",
+      "amount": 3,
+      "daily_cap": 5,
+      "is_live": true
+    },
+    {
+      "id": "worship_quran",
+      "amount": 5,
+      "daily_cap": 1,
+      "is_live": true
+    }
+  ],
+  "credit_grants_cols": [
+    {
+      "column_name": "id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "user_id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "consumed",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "remaining",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "source",
+      "data_type": "text"
+    },
+    {
+      "column_name": "grant_ref",
+      "data_type": "text"
+    },
+    {
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "notes",
+      "data_type": "text"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    }
+  ],
+  "credit_grants_checks": [
+    {
+      "conname": "credit_grants_amount_check",
+      "def": "CHECK ((amount > 0))"
+    },
+    {
+      "conname": "credit_grants_check",
+      "def": "CHECK (((consumed >= 0) AND (consumed <= amount)))"
+    },
+    {
+      "conname": "credit_grants_source_check",
+      "def": "CHECK ((source = ANY (ARRAY['monthly'::text, 'manual'::text, 'trial'::text, 'bonus'::text, 'refund'::text])))"
+    }
+  ],
+  "credit_ledger_cols": [
+    {
+      "column_name": "id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "user_id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "delta",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "reason",
+      "data_type": "text"
+    },
+    {
+      "column_name": "ref_id",
+      "data_type": "text"
+    },
+    {
+      "column_name": "metadata",
+      "data_type": "jsonb"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    }
+  ],
+  "credit_ledger_uniques": [
+    {
+      "conname": "ai_credit_ledger_pkey",
+      "def": "PRIMARY KEY (id)"
+    },
+    {
+      "conname": "ai_credit_ledger_pkey",
+      "def": "CREATE UNIQUE INDEX ai_credit_ledger_pkey ON public.ai_credit_ledger USING btree (id)"
+    },
+    {
+      "conname": "ai_credit_ledger_user_reason_ref_unique",
+      "def": "CREATE UNIQUE INDEX ai_credit_ledger_user_reason_ref_unique ON public.ai_credit_ledger USING btree (user_id, reason, ref_id) WHERE (ref_id IS NOT NULL)"
+    }
+  ],
+  "cairo_day": [
+    {
+      "ok": true
+    }
+  ],
+  "coin_wallets": [
+    {
+      "column_name": "user_id"
+    },
+    {
+      "column_name": "created_at"
+    }
+  ],
+  "ledger_triggers": [
+    {
+      "tgname": "trg_coin_ledger_earn_guard",
+      "def": "CREATE TRIGGER trg_coin_ledger_earn_guard BEFORE INSERT OR DELETE OR UPDATE ON public.coin_ledger FOR EACH ROW EXECUTE FUNCTION guard_coin_ledger_earn()"
+    }
+  ],
+  "credit_packs_sample": [
+    {
+      "id": "fddf3069-fb3b-4abf-bca7-4ecf0a7abaaa",
+      "title_ar": "حزمة بداية",
+      "credits": 20,
+      "price": "30.00",
+      "currency": "EGP",
+      "is_active": true,
+      "sort_order": 1,
+      "created_at": "2026-11-28T02:41:34.783Z"
+    },
+    {
+      "id": "3fafb2f0-a39f-4072-88f6-b6f6b6698d55",
+      "title_ar": "حزمة مجتهد",
+      "credits": 50,
+      "price": "60.00",
+      "currency": "EGP",
+      "is_active": true,
+      "sort_order": 2,
+      "created_at": "2026-11-28T02:41:34.783Z"
+    },
+    {
+      "id": "12f3cf6f-00a2-45be-a65c-8978c1350ec6",
+      "title_ar": "حزمة عائلة",
+      "credits": 120,
+      "price": "120.00",
+      "currency": "EGP",
+      "is_active": true,
+      "sort_order": 3,
+      "created_at": "2026-11-28T02:41:34.783Z"
+    }
+  ],
+  "exchange_settings_exists": [
+    {
+      "t": null,
+      "p": null
+    }
+  ]
+}

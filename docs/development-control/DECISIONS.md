@@ -280,6 +280,33 @@
 **الحالة:** `مقفل` (الكود + الملفات) · `معلّق على تحقق تقني` — **تشغيل db/113 ثم db/114 في Supabase SQL Editor بإيد المالك + إعادة Preflight (Q1-Q10) للتحقق**
 **الدليل:** `db/113-economy-truth.sql` · `db/114-economy-route-writers.sql` · `lib/shop/economy.ts` (السجل الموحّد) · حراس `scripts/check-coin-ledger-writes.mjs` + `scripts/check-award-coins-single-source.mjs`.
 
+### D-M-08 — التبديل اليدوي بين العملتين (Coins ↔ Credits) — قرار المالك 2026-11-28
+**قرار:** المالك اعتمد **منتج تبديل** بين العملتين في الاتجاهين: شراء Credits بالـ Coins وشراء Coins بالـ Credits. التبديل **يدوي بمبادرة الطالب** (مش تحويل تلقائي — قرار التصميم "لا تحويل تلقائي" قصد المنح التلقائي، والتبديل اليدوي بقرار صريح من المالك بيتجاوزه). شروط:
+1. سعرين مختلفين بهامش فروق يمنع الـ arbitrage الدائري (بيع أرخص من شراء): `10 coins → 1 credit` مقابل `1 credit → 8 coins` (قابلة للتعديل من الإدارة).
+2. الخصم والإضافة **ذريان في معاملة واحدة** — لا يفشل أحدهما بعد نجاح الآخر.
+3. سقف يومي لكل اتجاه (افتراضي 3000 coins / 300 credits يوميًا) — من `economy_exchange_settings`.
+4. كل اتجاه له صف في `coin_ledger` (source=`exchange`, source_class=`exchange`) وصف في `ai_credit_ledger` (reason=`exchange`) — محاسبة كاملة على الجانبين.
+5. منح الكريدت من التبديل يمر عبر `credit_grants` (source=`exchange` — تعديل CHECK الجدول) مع نفس آلية الانتهاء (`expire_old_grants`).
+**الحالة:** `مقفل` (القرار) · التنفيذ في `db/115-market-money-exchange.sql`
+**الدليل:** `db/115-market-money-exchange.sql` · `lib/shop/exchange.ts`
+**المرجع:** طلب المالك مباشرة (2026-11-28).
+
+### D-M-09 — شراء الكوينز بالفلوس الحقيقية عبر مسار الدفع اليدوي الموجود — قرار المالك 2026-11-28
+**قرار:** إضافة `kind='coins'` إلى `purchase_requests` (نفس تدفق: طلب → دفع يدوي Visa/Vodafone Cash/InstaPay → إثبات → موافقة أدمن) مع جدول `coin_packs`. الموافقة تمنح الكوينز عبر `add_coins_grant` (source=`purchase`, source_class=`purchase`) — **مصدر `purchase` بيتفعّل رسميًا** (`is_live=true`) لأن المسار اليدوي بيراجعه أدمن، بديل مؤقت عن بوابة دفع آلية حتى DEV-M4 الكامل. الأسعار التجريبية من التصميم المعتمد (Starter 10ج/100 · Popular 50ج/550 · Value 100ج/1200 · Mega 200ج/2700) — قابلة للتعديل من الجدول بدون كود (D-M-06).
+**الحالة:** `مقفل`
+**الدليل:** `db/115-market-money-exchange.sql` · `app/api/store/purchase-requests/route.ts` · `app/admin/actions/purchase-requests.ts`
+**المرجع:** طلب المالك مباشرة (2026-11-28) + MAGICLY ECONOMY FINAL DESIGN §6.
+
+### D-M-10 — لا جداول مالية مكررة: سجل المشتريات على الموجود
+**قرار:** جداول التصميم §9 `coin_products` / `coin_orders` / `coin_inventory` **لا تُنشأ** — المتجر بيستخدم `shop_catalog` / `shop_inventory` الموجودين، وسجل المشتريات = `coin_ledger` (حركات الصرف) + `purchase_requests` (طلبات الفلوس) عبر view `shop_purchase_history` (security_invoker). نفس قاعدة D-M-07: ممنوع نظام مالي جديد جنب الموجود.
+**الحالة:** `مقفل`
+**الدليل:** `db/116-market-hybrid.sql` §4.
+
+### D-M-11 — التسعير المختلط عمود واحد + RPC واحدة
+**قرار:** المنتج الهجين (Coins + Credits) سعره في `shop_catalog` (`price` + `credits_price`)، والشرا عبر `purchase_item` نفسها — بتتحقق من الرصيدين **قبل** أي خصم وبتخصم الاتنين في نفس المعاملة (فشل أي جانب = rollback للكل). الخصم اليومي بيتطبق على جزء الكوينز بس.
+**الحالة:** `مقفل`
+**الدليل:** `db/116-market-hybrid.sql` §3.
+
 ---
 
 ## 5. قالب القرار الجديد

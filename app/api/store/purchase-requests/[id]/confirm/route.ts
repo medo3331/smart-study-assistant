@@ -65,7 +65,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   void notifyAdmins({
     title: "تأكيد دفع — بانتظار المراجعة",
-    message: `طلب ${owned.kind === "plan" ? "اشتراك" : "كريدت"} بمبلغ ${owned.amount} ${owned.currency} — المستخدم أكد الدفع (${method}${reference ? ` · مرجع: ${reference}` : ""}). راجع /admin/purchase-requests`,
+    message: `طلب ${owned.kind === "plan" ? "اشتراك" : owned.kind === "coins" ? "كوينز" : "كريدت"} بمبلغ ${owned.amount} ${owned.currency} — المستخدم أكد الدفع (${method}${reference ? ` · مرجع: ${reference}` : ""}). راجع /admin/purchase-requests`,
     type: "warning",
   });
 

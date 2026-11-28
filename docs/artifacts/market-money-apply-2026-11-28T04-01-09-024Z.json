@@ -1,0 +1,129 @@
+{
+  "applied": true,
+  "packs_before": [
+    {
+      "t": null
+    }
+  ],
+  "settings_before": [
+    {
+      "t": null
+    }
+  ],
+  "rules_before": [
+    {
+      "id": "purchase",
+      "is_live": false,
+      "daily_cap": 3
+    }
+  ],
+  "grant_check_before": [
+    {
+      "def": "CHECK ((source = ANY (ARRAY['monthly'::text, 'manual'::text, 'trial'::text, 'bonus'::text, 'refund'::text])))"
+    }
+  ],
+  "pr_checks_before": [
+    {
+      "conname": "purchase_requests_check"
+    },
+    {
+      "conname": "purchase_requests_kind_check"
+    },
+    {
+      "conname": "purchase_requests_status_check"
+    }
+  ],
+  "packs_after": [
+    {
+      "title_ar": "باقة البداية",
+      "coins": 100,
+      "price": "10.00",
+      "currency": "EGP",
+      "is_active": true
+    },
+    {
+      "title_ar": "الباقة الشهيرة",
+      "coins": 550,
+      "price": "50.00",
+      "currency": "EGP",
+      "is_active": true
+    },
+    {
+      "title_ar": "الباقة الموفرة",
+      "coins": 1200,
+      "price": "100.00",
+      "currency": "EGP",
+      "is_active": true
+    },
+    {
+      "title_ar": "الباقة الضخمة",
+      "coins": 2700,
+      "price": "200.00",
+      "currency": "EGP",
+      "is_active": true
+    }
+  ],
+  "settings_after": [
+    {
+      "id": 1,
+      "coins_to_credits_enabled": true,
+      "credits_to_coins_enabled": true,
+      "rate_coins_per_credit": 10,
+      "rate_coins_per_credit_out": 8,
+      "min_coins": 50,
+      "min_credits": 10,
+      "daily_cap_coins": 3000,
+      "daily_cap_credits": 300,
+      "updated_at": "2026-11-28T04:01:08.514Z"
+    }
+  ],
+  "rules_after": [
+    {
+      "id": "exchange",
+      "is_live": true,
+      "daily_cap": 300
+    },
+    {
+      "id": "purchase",
+      "is_live": true,
+      "daily_cap": null
+    }
+  ],
+  "grant_check_after": [
+    {
+      "def": "CHECK ((source = ANY (ARRAY['monthly'::text, 'manual'::text, 'trial'::text, 'bonus'::text, 'refund'::text, 'exchange'::text])))"
+    }
+  ],
+  "pr_checks_after": [
+    {
+      "conname": "purchase_requests_check",
+      "def": "CHECK ((((kind = 'credits'::text) AND (pack_id IS NOT NULL) AND (credits IS NOT NULL)) OR ((kind = 'plan'::text) AND (plan_key IS NOT NULL)) OR ((kind = 'coins'::text) AND (coin_pack_id IS NOT NULL) AND (coins IS NOT NULL))))"
+    },
+    {
+      "conname": "purchase_requests_kind_check",
+      "def": "CHECK ((kind = ANY (ARRAY['credits'::text, 'plan'::text, 'coins'::text])))"
+    },
+    {
+      "conname": "purchase_requests_status_check",
+      "def": "CHECK ((status = ANY (ARRAY['awaiting_payment'::text, 'payment_submitted'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))"
+    }
+  ],
+  "fn_xc2cr": [
+    {
+      "ok": true
+    }
+  ],
+  "fn_cr2xc": [
+    {
+      "ok": true
+    }
+  ],
+  "fn_grant": {
+    "has_exchange": true
+  },
+  "anon_grants": [
+    {
+      "n": 0
+    }
+  ]
+}

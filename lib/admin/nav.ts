@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy" | "ShieldAlert";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "Scale" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy" | "ShieldAlert";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -80,6 +80,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "إصدار مكافآت، سجل الفائزين، الأكثر نشاطًا",
     permission: "rewards.manage",
     icon: "Gift",
+  },
+  {
+    href: "/admin/economy",
+    label: "Economy Balancing",
+    description: "تعديل المكافآت والأسعار والتبديل من الجداول — بدون كود (D-M-06)",
+    permission: "rewards.manage",
+    icon: "Scale",
   },
   {
     href: "/admin/audit-log",

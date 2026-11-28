@@ -22,12 +22,12 @@ import { saveLastAccount } from "@/lib/auth/last-account";
  */
 
 function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/onboarding";
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/assessment";
   return raw;
 }
 
 /** قراءة next وقت الضغط — نفس نمط resolveNext في صفحة اللوجين. */
-function currentNext(fallback = "/onboarding"): string {
+function currentNext(fallback = "/assessment"): string {
   if (typeof window === "undefined") return fallback;
   return safeNext(new URLSearchParams(window.location.search).get("next"));
 }

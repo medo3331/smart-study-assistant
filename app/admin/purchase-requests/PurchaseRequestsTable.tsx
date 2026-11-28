@@ -143,11 +143,13 @@ export default function PurchaseRequestsTable({ requests }: { requests: Purchase
                         {r.user_code ? `${r.user_code} · ` : ""}{r.user_id.slice(0, 8)}…
                       </div>
                     </td>
-                    <td className="px-3 py-2">{r.kind === "plan" ? "اشتراك" : "كريدت"}</td>
+                    <td className="px-3 py-2">{r.kind === "plan" ? "اشتراك" : r.kind === "coins" ? "كوينز" : "كريدت"}</td>
                     <td className="px-3 py-2">
                       {r.kind === "plan"
                         ? `${r.plan_key === "pro" ? "احترافي" : r.plan_key === "ultra" ? "ألتميت" : r.plan_key} · ${r.plan_duration_days} يوم`
-                        : `${r.credits} كريدت`}
+                        : r.kind === "coins"
+                          ? `${r.coins} كوين`
+                          : `${r.credits} كريدت`}
                     </td>
                     <td className="px-3 py-2 font-mono" dir="ltr">{r.amount ?? 0} {r.currency}</td>
                     <td className="px-3 py-2">

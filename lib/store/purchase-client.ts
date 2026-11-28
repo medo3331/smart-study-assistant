@@ -4,8 +4,11 @@
 
 export type PurchaseRequestClientRow = {
   id: string;
-  kind: "credits" | "plan";
+  kind: "credits" | "plan" | "coins";
+  pack_id: string | null;
   credits: number | null;
+  coin_pack_id: string | null;
+  coins: number | null;
   plan_key: string | null;
   plan_duration_days: number | null;
   amount: number | null;
@@ -30,9 +33,12 @@ async function callApi<T>(res: Response): Promise<PurchaseApiResult<T>> {
   return { ok: true, data: body as T };
 }
 
-/** إنشاء طلب (كريدت أو باقة) — viaSupport يفتح محادثة دعم مرتبطة بالطلب. */
+/** إنشاء طلب (كريدت / باقة اشتراك / باقة كوينز) — viaSupport يفتح محادثة دعم مرتبطة بالطلب. */
 export async function createPurchaseRequest(
-  input: { kind: "credits"; packId: string } | { kind: "plan"; planKey: string; durationDays?: number; viaSupport?: boolean }
+  input:
+    | { kind: "credits"; packId: string }
+    | { kind: "plan"; planKey: string; durationDays?: number; viaSupport?: boolean }
+    | { kind: "coins"; packId: string }
 ): Promise<PurchaseApiResult<{ requestId: string; ticketId?: string | null; status: string }>> {
   const res = await fetch("/api/store/purchase-requests", {
     method: "POST",
