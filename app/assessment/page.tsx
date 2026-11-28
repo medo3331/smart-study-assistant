@@ -177,6 +177,7 @@ export default function AssessmentPage() {
   const [customUniversityName, setCustomUniversityName] = useState("");
   const [customFacultyName, setCustomFacultyName] = useState("");
   const [customDepartmentName, setCustomDepartmentName] = useState("");
+  const [uniSearch, setUniSearch] = useState("");
   const [levelsDB, setLevelsDB] = useState<{ id: string; name: string; order_index: number }[]>([]);
   const [semestersDB, setSemestersDB] = useState<{ id: string; name: string }[]>([]);
   const [universityId, setUniversityId] = useState<string | null>(null);
@@ -706,6 +707,36 @@ export default function AssessmentPage() {
       `}</style>
       {/* المرحلة التعليمية: تم حذف الواجهة بالكامل — المنطق مخفي بدون تأثير على الـ flow */}
       <div className="assessment-card w-full max-w-full md:max-w-lg lg:max-w-xl">
+        {/* إرشاد دايم: 3 خطوات بسيطة — الطالب عارف إنت فين في كل لحظة */}
+        <div className="flex items-center justify-center gap-2 mb-4" aria-hidden="true">
+          {(() => {
+            const order = step === "identity" ? 1 : step === "subject" ? 2 : 3;
+            const labels = locale === "ar"
+              ? ["بياناتك", "موادك", "خطتك"]
+              : ["Your info", "Subjects", "Your plan"];
+            return labels.map((label, i) => {
+              const num = i + 1;
+              const done = num < order;
+              const active = num === order;
+              return (
+                <React.Fragment key={label}>
+                  {i > 0 && <span className="w-6 h-px bg-rule" />}
+                  <span
+                    className={`mono text-[11px] px-2.5 py-1 rounded-full border ${
+                      active
+                        ? "bg-ink text-paper-2 border-ink font-bold"
+                        : done
+                          ? "border-ink-soft text-ink"
+                          : "border-rule text-ink-soft"
+                    }`}
+                  >
+                    {done ? "✓ " : ""}{num}. {label}
+                  </span>
+                </React.Fragment>
+              );
+            });
+          })()}
+        </div>
         <AnimatePresence mode="wait">
           {/* الخطوة 1: «ليه بتتعلم؟» قبل «إيه بتتعلم؟». الشخصية بتغيّر
               نبرة الخطة والموارد، والمستوى يظهر للطالب فقط. */}
@@ -721,6 +752,16 @@ export default function AssessmentPage() {
                 <p className="eyebrow eyebrow-flush mb-1.5">ابدأ خطتك</p>
                 <h1 className="h2" style={{ textWrap: "balance", overflowWrap: "break-word", fontSize: "clamp(1.15rem, 5vw, 2.1rem)" }}><span className="mark mark-tilt">خلّينا نعرفك الأول</span></h1>
                 <p className="text-sm text-ink-soft mt-2">اختيارات قليلة عشان الخطة تبقى مناسبة لاحتياجك، مش جدولًا عامًا.</p>
+
+              {/* إرشاد سريع: الطالب يفهم المنصة قبل ما يملا */}
+              <div className="bg-paper border border-dashed border-rule rounded-[var(--r-sm)] p-3">
+                <p className="mono text-xs font-bold mb-1.5">🧭 {locale === "ar" ? "إزاي المنصة بتشتغل؟" : "How the platform works?"}</p>
+                <ol className="text-xs text-ink-soft leading-relaxed space-y-1 list-decimal ps-4">
+                  <li>{locale === "ar" ? "جاوب على الأسئلة — اختار من القايمة، ولو اختيارك مش موجود اكتبه بنفسك." : "Answer the questions — pick from the list, or type your own if it's missing."}</li>
+                  <li>{locale === "ar" ? "موادك بتنزل تلقائي من قسمك وترمك — وتقدر تزوّد أو تشيل أي مادة." : "Your subjects load automatically from your department and semester — add or remove any."}</li>
+                  <li>{locale === "ar" ? "في الآخر نبني لك خطة مذاكرة، وكل الإجابات دي تقدر تعدلها بعدين من البروفايل." : "At the end we build your study plan — you can edit all of this later from your profile."}</li>
+                </ol>
+              </div>
               </div>
 
               <div>
@@ -852,8 +893,14 @@ export default function AssessmentPage() {
                     <div className="space-y-4">
                       <div>
                         <p className="field-label">{locale === "ar" ? "جامعتك؟" : "Your university?"}</p>
+                        <input
+                          value={uniSearch}
+                          onChange={(e) => setUniSearch(e.target.value)}
+                          placeholder={locale === "ar" ? "اكتب اسم جامعتك للبحث…" : "Search your university…"}
+                          className="field text-sm w-full h-[44px] rounded-[var(--r-sm)] border border-rule-strong bg-paper text-ink px-3 py-2 focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition mb-2"
+                        />
                         <div className="chip-row" role="list">
-                          {universitiesDB.map((u) => (
+                          {universitiesDB.filter((u) => !uniSearch.trim() || u.name.includes(uniSearch.trim())).map((u) => (
                             <button
                               key={u.id}
                               type="button"
