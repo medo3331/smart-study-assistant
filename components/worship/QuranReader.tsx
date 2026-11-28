@@ -1,13 +1,28 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import type {
+  FormEvent,
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+} from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { IconBadge } from "@/components/ui/IconBadge";
 import { Reveal } from "@/components/ui/Reveal";
 import { cn } from "@/lib/cn";
 import type { Surah, Ayah } from "@/lib/islamic/types";
-import { getAllSurahs, getAyahs, getAyahLocation } from "@/lib/islamic/quran";
+import {
+  MUSHAF_PAGE_COUNT,
+  clampMushafPage,
+  countMushafAyahsForward,
+  getAllSurahs,
+  getAyahLocation,
+  getAyahs,
+  getMushafPage,
+  mushafPageImageUrl,
+  type MushafPageVariant,
+} from "@/lib/islamic/quran";
 import {
   computeQuranWordProgress,
   isQuranWordUnit,
@@ -48,6 +63,12 @@ interface QuranReaderProps {
 }
 
 const BOOKMARKS_KEY = "magicly-quran-bookmarks";
+
+/** نمط عرض القرآن: صفحات مصحف كاملة (افتراضي) أو الآيات النصية. */
+type QuranViewMode = "mushaf" | "ayat";
+const VIEW_MODE_KEY = "magicly-quran-view-mode";
+/** ثيمات التطبيق الفاتحة — معاها بنعرض صور صفحات المصحف الفاتحة. */
+const LIGHT_THEMES = new Set(["indigo-light", "mono"]);
 
 /** تفسير واحد من الـ API الداخلي — نص مُنظَّف بدون HTML. */
 interface TafsirEntry {
@@ -94,6 +115,20 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const [resumeLocation, setResumeLocation] = useState<ResumeLocation | null>(null);
   const lastSavedPosition = useRef("");
 
+  /* ── وضع المصحف (صفحات صور كاملة — الافتراضي) ── */
+  const [viewMode, setViewMode] = useState<QuranViewMode>("mushaf");
+  const viewModeRef = useRef<QuranViewMode>("mushaf");
+  const [mushafPage, setMushafPage] = useState<number | null>(null);
+  const mushafPageRef = useRef<number | null>(null);
+  const [mushafImageStatus, setMushafImageStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [mushafImageAttempt, setMushafImageAttempt] = useState(0);
+  const [mushafZoomed, setMushafZoomed] = useState(false);
+  const [mushafJumpValue, setMushafJumpValue] = useState("");
+  const [dataTheme, setDataTheme] = useState<string | null>(null);
+  const mushafNavSeq = useRef(0);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressTapClickRef = useRef(false);
+
   // Real audio integration
   const { state: audioState, currentSurahId, play, pause } = useQuranAudio();
   const { selectedReciter, isLoading: recitersLoading } = useReciters();
@@ -119,6 +154,31 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       setBookmarks([]);
     }
   }, []);
+
+  // تفضيل نمط العرض (المصحف افتراضيًا) — يُقرأ بعد التركيب لتوافق SSR.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VIEW_MODE_KEY);
+      if (stored === "mushaf" || stored === "ayat") {
+        viewModeRef.current = stored;
+        setViewMode(stored);
+      }
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
+  // نسخة صور المصحف تتبع ثيم التطبيق (فاتح/غامق — نفس التخطيط تمامًا).
+  useEffect(() => {
+    const root = document.documentElement;
+    const readTheme = () => setDataTheme(root.getAttribute("data-theme"));
+    readTheme();
+    const observer = new MutationObserver(readTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  const mushafVariant: MushafPageVariant =
+    dataTheme && LIGHT_THEMES.has(dataTheme) ? "light" : "dark";
 
   // مزامنة العلامات المرجعية مع الحساب (db/122) — الدمج اتحاد: المحلي ∪ السحابي.
   useEffect(() => {
@@ -237,13 +297,28 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         if (initial) {
           setSelectedSurah(initial);
           setShowSurahList(false);
-          await loadAyahs(initial.id, resume.updatedAt ? resume.ayahId : undefined);
-          if (!cancelled) {
-            setCloudPositionReadyFor(shared?.user && !shared.user.is_anonymous ? shared.user.id : "guest");
+          if (viewModeRef.current === "mushaf") {
+            // وضع المصحف: مفيش داعي لتحميل السورة كاملة — افتح صفحة الموضع المحفوظ مباشرة.
+            const location = resume.updatedAt
+              ? await getAyahLocation(resume.surahId, resume.ayahId)
+              : await getAyahLocation(initialSurahId, 1);
+            if (!cancelled) {
+              setCloudPositionReadyFor(shared?.user && !shared.user.is_anonymous ? shared.user.id : "guest");
+              void goToMushafPage(location?.pageNumber ?? 1);
+            }
+          } else {
+            await loadAyahs(initial.id, resume.updatedAt ? resume.ayahId : undefined);
+            if (!cancelled) {
+              setCloudPositionReadyFor(shared?.user && !shared.user.is_anonymous ? shared.user.id : "guest");
+            }
           }
         }
       } catch (error) {
         console.error("Failed to load surahs:", error);
+        // المصحف يشتغل حتى لو فشلت قائمة السور (الأسماء بس اللي هتنقص).
+        if (viewModeRef.current === "mushaf" && mushafPageRef.current == null) {
+          void goToMushafPage(1);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -304,6 +379,11 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       // نداء خفيف بآية واحدة لمعرفة رقم الصفحة بدون تحميل السورة كاملة.
       const location = await getAyahLocation(pos.surahId, pos.ayahId);
       if (cancelled) return;
+      // في وضع المصحف: لو الصفحة المفتوحة هي صفحة الموضع المحفوظ — مفيش «كمل من هنا».
+      if (viewModeRef.current === "mushaf" && mushafPageRef.current != null && mushafPageRef.current === location?.pageNumber) {
+        if (!cancelled) setResumeLocation(null);
+        return;
+      }
       setResumeLocation({
         surahId: pos.surahId,
         ayahId: pos.ayahId,
@@ -316,7 +396,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     };
   }, [surahs, readProgress.surahId, readProgress.ayahId, readProgress.updatedAt, selectedSurah?.id, currentAnchorAyah?.number]);
 
-  /** القفز للموضع المحفوظ — loadAyahs بتحسب صفحة الآية بنفسها. */
+  /** القفز للموضع المحفوظ — في المصحف يفتح صفحته، وفي الآيات يحسب صفحة الآية بنفسه. */
   const handleResumeReading = async () => {
     if (!resumeLocation) return;
     const surah = surahs.find((s) => s.id === resumeLocation.surahId);
@@ -324,6 +404,10 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     setSelectedSurah(surah);
     setShowSurahList(false);
     setSelectedAyah(null);
+    if (viewModeRef.current === "mushaf") {
+      void goToMushafPage(resumeLocation.pageNumber ?? 1);
+      return;
+    }
     await loadAyahs(surah.id, resumeLocation.ayahId);
   };
 
@@ -373,7 +457,13 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     setSelectedSurah(surah);
     setShowSurahList(false);
     setSelectedAyah(null);
-    await loadAyahs(surah.id);
+    if (viewModeRef.current === "mushaf") {
+      // في وضع المصحف: اختيار سورة يفتح أول صفحة ليها (فتح مش قراءة — بلا عدّ).
+      const location = await getAyahLocation(surah.id, 1);
+      void goToMushafPage(location?.pageNumber ?? 1);
+    } else {
+      await loadAyahs(surah.id);
+    }
     onProgressUpdate?.(surah.id, 1);
     updatePosition(surah.id, 1, readProgress.dailyCount);
   };
@@ -408,6 +498,171 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     },
     [pages, pageIndex, selectedSurah, onProgressUpdate, updatePosition, readProgress.dailyCount],
   );
+
+  /* ─────────── وضع المصحف: صفحات صور كاملة (العرض الافتراضي) ─────────── */
+
+  /** تثبيت موضع القراءة على أول آية في صفحة المصحف + عدّ ورد اليوم عند التقليب للأمام. */
+  const applyMushafAnchor = useCallback(
+    async (page: number, prevPage: number, countForward: boolean) => {
+      const seq = ++mushafNavSeq.current;
+      const ref = await getMushafPage(page);
+      if (seq !== mushafNavSeq.current) return; // تقليب أسرع من الشبكة — نتجاهل النتيجة القديمة
+      if (!ref) return;
+      // مرجع بلا نص: في وضع المصحف الموضع يُستخدم للعلامات والمزامنة فقط —
+      // نص الآيات كامل موجود في وضع «الآيات».
+      const anchor: Ayah = {
+        number: ref.firstAyah.ayahNumber,
+        text: "",
+        surahId: ref.firstAyah.surahId,
+        juzNumber: 0,
+        pageNumber: page,
+      };
+      setCurrentAnchorAyah(anchor);
+      const anchorSurah = surahs.find((s) => s.id === ref.firstAyah.surahId) ?? null;
+      if (anchorSurah) setSelectedSurah(anchorSurah);
+      // التقليب للأمام يحسب آيات تقريبية زي ما كان goToPage بيعمل — والخلف لا يُنقص.
+      const counted = countForward ? countMushafAyahsForward(prevPage, page) : 0;
+      onProgressUpdate?.(ref.firstAyah.surahId, ref.firstAyah.ayahNumber);
+      updatePosition(
+        ref.firstAyah.surahId,
+        ref.firstAyah.ayahNumber,
+        progressRef.current.dailyCount + counted,
+      );
+    },
+    [surahs, onProgressUpdate, updatePosition],
+  );
+
+  /**
+   * القفز إلى صفحة مصحف. countForward يُمرَّر فقط عند تقليب فعلي (أزرار/سحب/ضغط) —
+   * القفز المباشر والاستئناف وفتح سورة لا يُعدّون آيات.
+   */
+  const goToMushafPage = useCallback(
+    (target: number, options?: { countForward?: boolean }) => {
+      const page = clampMushafPage(target);
+      const prev = mushafPageRef.current ?? page;
+      mushafPageRef.current = page;
+      setMushafPage(page);
+      setMushafZoomed(false);
+      setMushafImageStatus("loading");
+      setSelectedAyah(null);
+      void applyMushafAnchor(page, prev, options?.countForward === true);
+    },
+    [applyMushafAnchor],
+  );
+
+  /** تبديل نمط العرض: المصحف (افتراضي) / الآيات — مع حفظ التفضيل ومزامنة الموضع بين الوضعين. */
+  const applyViewMode = useCallback(
+    (mode: QuranViewMode) => {
+      if (viewModeRef.current === mode) return;
+      viewModeRef.current = mode;
+      setViewMode(mode);
+      setMushafZoomed(false);
+      setSelectedAyah(null);
+      setTafsirStatus("idle");
+      setTafsirEntries([]);
+      try {
+        localStorage.setItem(VIEW_MODE_KEY, mode);
+      } catch {
+        /* localStorage unavailable */
+      }
+      if (mode === "ayat") {
+        // افتح وضع الآيات عند موضع القراءة الحالي (سورة الموضع + الآية).
+        const surahId = currentAnchorAyah?.surahId ?? selectedSurah?.id;
+        if (surahId) void loadAyahs(surahId, currentAnchorAyah?.number ?? undefined);
+      } else {
+        // افتح المصحف عند صفحة الموضع الحالي.
+        if (currentAnchorAyah) {
+          void getAyahLocation(currentAnchorAyah.surahId, currentAnchorAyah.number).then((location) => {
+            void goToMushafPage(location?.pageNumber ?? mushafPageRef.current ?? 1);
+          });
+        } else if (mushafPageRef.current == null) {
+          mushafPageRef.current = 1;
+          setMushafPage(1);
+        }
+      }
+    },
+    // loadAyahs دالة عادية داخل الكومبوننت — استدعاؤها بقيم الحالة الحالية مقصود.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentAnchorAyah, selectedSurah, goToMushafPage],
+  );
+
+  /* تسخين الصفحتين المجاورتين (صورة + مرجع آيات) — عشان التقليب يبقى فوري. */
+  useEffect(() => {
+    if (mushafPage == null || typeof window === "undefined") return;
+    for (const neighbor of [mushafPage - 1, mushafPage + 1]) {
+      if (neighbor < 1 || neighbor > MUSHAF_PAGE_COUNT) continue;
+      const img = new window.Image();
+      img.src = mushafPageImageUrl(neighbor, mushafVariant);
+      void getMushafPage(neighbor);
+    }
+  }, [mushafPage, mushafVariant]);
+
+  /** منطقة الضغط داخل صفحة المصحف — RTL: الثلث الأيمن = السابقة، الأيسر = التالية. */
+  const mushafTapZone = (clientX: number, element: HTMLElement): "prev" | "next" | "center" => {
+    const rect = element.getBoundingClientRect();
+    const ratio = (clientX - rect.left) / rect.width;
+    if (ratio >= 2 / 3) return "prev";
+    if (ratio <= 1 / 3) return "next";
+    return "center";
+  };
+
+  const handleMushafTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    touchStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    suppressTapClickRef.current = false; // لمسة جديدة = ضغطة جديدة
+  };
+
+  const handleMushafTouchEnd = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || mushafPage == null || mushafZoomed) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    // سحب أفقي واضح فقط — التمرير الرأسي والـ pinch يفضلوا شغالين طبيعي.
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    // RTL: سحب لليمين يكشف الصفحة التالية (اللي على الشمال) — نفس اتجاه مناطق الضغط.
+    suppressTapClickRef.current = true;
+    void goToMushafPage(dx > 0 ? mushafPage + 1 : mushafPage - 1, {
+      countForward: dx > 0,
+    });
+  };
+
+  const handleMushafClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (suppressTapClickRef.current) {
+      suppressTapClickRef.current = false; // الـ click اللي بعد السحب مش ضغطة تقليب
+      return;
+    }
+    if (mushafZoomed || mushafPage == null) return;
+    const zone = mushafTapZone(event.clientX, event.currentTarget);
+    if (zone === "prev" && mushafPage > 1) {
+      void goToMushafPage(mushafPage - 1);
+    } else if (zone === "next" && mushafPage < MUSHAF_PAGE_COUNT) {
+      void goToMushafPage(mushafPage + 1, { countForward: true });
+    }
+  };
+
+  const handleMushafDoubleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    // زوم بسيط بالنقر المزدوج على منطقة الوسط — الـ pinch خارج النطاق (موثّق في التقرير).
+    if (mushafTapZone(event.clientX, event.currentTarget) !== "center") return;
+    setMushafZoomed((zoomed) => !zoomed);
+  };
+
+  const retryMushafImage = () => {
+    setMushafImageStatus("loading");
+    setMushafImageAttempt((attempt) => attempt + 1);
+  };
+
+  /** صندوق القفز المباشر لرقم صفحة. */
+  const handleMushafJump = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = Number.parseInt(mushafJumpValue, 10);
+    if (!Number.isFinite(value)) return;
+    void goToMushafPage(value);
+    setMushafJumpValue("");
+    event.currentTarget.querySelector("input")?.blur();
+  };
 
   const goToNextSurah = () => {
     if (selectedSurah && selectedSurah.id < 114) {
@@ -478,23 +733,58 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header — شريط علوي مضغوط (موبايل أولاً) */}
       <Reveal index={0}>
-        <div className="flex items-center justify-between mb-6 gap-4">
+        <div className="flex items-center justify-between mb-4 gap-2 sm:gap-4">
           <Button
             variant="ghost"
             icon={ChevronRight}
             iconPosition="start"
             onClick={() => setShowSurahList(true)}
-            className="gap-1"
+            className="gap-1 flex-shrink-0"
           >
             السور
           </Button>
 
+          {/* مبدّل العرض: المصحف 📖 (افتراضي) | الآيات ✍️ — التفضيل يُحفظ في localStorage */}
+          <div
+            className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] p-1 flex-shrink-0"
+            role="tablist"
+            aria-label="نمط عرض القرآن"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "mushaf"}
+              onClick={() => applyViewMode("mushaf")}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap",
+                viewMode === "mushaf"
+                  ? "bg-[#10B981] text-white"
+                  : "text-[#9AA0C0] hover:text-white",
+              )}
+            >
+              المصحف 📖
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "ayat"}
+              onClick={() => applyViewMode("ayat")}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap",
+                viewMode === "ayat"
+                  ? "bg-[#10B981] text-white"
+                  : "text-[#9AA0C0] hover:text-white",
+              )}
+            >
+              الآيات ✍️
+            </button>
+          </div>
+
           {selectedSurah && (
-            <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
-              <IconBadge icon={BookOpen} color="text-[#10B981]" bg="bg-[#10B981]/15" size={40} />
-              <div className="text-center min-w-0">
+            <div className="flex-1 flex items-center justify-end sm:justify-center gap-2 min-w-0">
+              <div className="text-right sm:text-center min-w-0">
                 <p className="text-sm text-[#9AA0C0]">سورة</p>
                 <p className="text-lg font-bold text-white truncate">
                   {selectedSurah.arabicName}
@@ -509,7 +799,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
               icon={isBookmarked ? BookmarkCheck : Bookmark}
               aria-label={isBookmarked ? "إزالة العلامة المرجعية" : "حفظ علامة مرجعية"}
               onClick={toggleBookmark}
-              disabled={!currentPage}
+              disabled={!currentAnchorAyah}
             >
               <span className="sr-only">{isBookmarked ? "إزالة العلامة المرجعية" : "حفظ علامة مرجعية"}</span>
             </Button>
@@ -590,8 +880,8 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         </div>
       )}
 
-      {/* Full-Surah Reading View */}
-      {!showSurahList && selectedSurah && (
+      {/* Reading View — وضع المصحف (افتراضي) أو وضع الآيات */}
+      {!showSurahList && (selectedSurah || (viewMode === "mushaf" && mushafPage != null)) && (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Resume banner — «أنا واقف فين»: الموضع المحفوظ + زرار كمل من هنا */}
           {resumeLocation && (
@@ -648,7 +938,186 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
             </div>
           </Reveal>
 
-          {/* Surah Header */}
+          {/* ── وضع المصحف: صفحة مصحف كاملة كصورة (العرض الأساسي) ── */}
+          {viewMode === "mushaf" && (
+            <Reveal index={1}>
+              <GlassCard className="p-3 sm:p-5 mb-4">
+                {/* سطر السورة الحالية + فتح قائمة السور */}
+                {selectedSurah && (
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <p className="text-sm text-[#9AA0C0] truncate">
+                      سورة{" "}
+                      <span className="font-bold text-white">{selectedSurah.arabicName}</span>
+                    </p>
+                    <Button
+                      variant="ghost"
+                      icon={Menu}
+                      onClick={() => setShowSurahList(true)}
+                      aria-label="قائمة السور"
+                      className="flex-shrink-0"
+                    >
+                      <span className="sr-only">قائمة السور</span>
+                    </Button>
+                  </div>
+                )}
+
+                {/* مؤشر الصفحة + صندوق القفز المباشر — شريط مضغوط للموبايل */}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="px-3 py-1 rounded-full text-xs bg-[#10B981]/10 text-[#6EE7B7] font-mono whitespace-nowrap">
+                    صفحة <bdi>{mushafPage ?? "…"}</bdi> من <bdi>{MUSHAF_PAGE_COUNT}</bdi>
+                  </span>
+                  <form onSubmit={handleMushafJump} className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={MUSHAF_PAGE_COUNT}
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder="رقم الصفحة"
+                      aria-label="الذهاب إلى صفحة"
+                      value={mushafJumpValue}
+                      onChange={(e) => setMushafJumpValue(e.target.value)}
+                      className="w-24 h-9 px-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white text-sm text-center placeholder-[#9AA0C0]/70 focus:outline-none focus:border-[#10B981]/50"
+                    />
+                    <Button variant="ghost" type="submit" className="px-3" aria-label="اذهب إلى الصفحة">
+                      اذهب
+                    </Button>
+                  </form>
+                </div>
+
+                {/* صفحة المصحف: سحب باللمس + مناطق ضغط (يمين سابق/يسار تالي) + زوم بالنقر المزدوج */}
+                <div
+                  className={cn(
+                    "relative rounded-2xl bg-[#0B0E24] ring-1 ring-white/[0.08] shadow-2xl shadow-black/50",
+                    mushafZoomed
+                      ? "overflow-x-auto cursor-zoom-out"
+                      : "overflow-hidden cursor-pointer",
+                    mushafImageStatus !== "ready" && "aspect-[2/3]",
+                  )}
+                  onTouchStart={handleMushafTouchStart}
+                  onTouchEnd={handleMushafTouchEnd}
+                  onClick={handleMushafClick}
+                  onDoubleClick={handleMushafDoubleClick}
+                >
+                  {mushafPage != null && (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- صورة مصحف من CDN خارجي بلا أبعاد معروفة مسبقًا */}
+                      <img
+                        key={`mushaf-${mushafPage}-${mushafVariant}-${mushafImageAttempt}`}
+                        src={mushafPageImageUrl(mushafPage, mushafVariant)}
+                        alt={`صفحة ${mushafPage} من مصحف المدينة`}
+                        draggable={false}
+                        onLoad={() => setMushafImageStatus("ready")}
+                        onError={() => setMushafImageStatus("error")}
+                        className={cn(
+                          "block w-full select-none transition-opacity duration-300",
+                          mushafZoomed && "w-[200%] max-w-none",
+                          mushafImageStatus === "ready" ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      {/* تحميل تدريجي أنيق + رسالة إعادة محاولة عند الفشل */}
+                      {mushafImageStatus !== "ready" && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-[#9AA0C0]">
+                          {mushafImageStatus === "loading" ? (
+                            <>
+                              <div className="absolute inset-0 bg-white/[0.03] animate-pulse" aria-hidden />
+                              <Loader2 size={22} className="animate-spin relative" />
+                              <p className="text-sm relative">جاري تحميل صفحة المصحف...</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm">تعذّر تحميل صفحة المصحف — اتأكد من اتصالك.</p>
+                              <Button
+                                variant="ghost"
+                                icon={RotateCcw}
+                                iconPosition="start"
+                                onClick={retryMushafImage}
+                              >
+                                إعادة المحاولة
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                <p className="mt-2 text-center text-[11px] text-[#9AA0C0]/70">
+                  اسحب بإصبعك للتقليب • الثلث الأيمن = السابقة والأيسر = التالية • نقرة مزدوجة على الوسط للتكبير
+                </p>
+
+                {/* أزرار تنقّل كبيرة — إصبع واحد */}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <Button
+                    variant="ghost"
+                    icon={ChevronRight}
+                    iconPosition="start"
+                    onClick={() => mushafPage != null && void goToMushafPage(mushafPage - 1)}
+                    disabled={mushafPage == null || mushafPage <= 1}
+                    className="flex-1 justify-center"
+                  >
+                    الصفحة السابقة
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    icon={ChevronLeft}
+                    iconPosition="end"
+                    onClick={() =>
+                      mushafPage != null && void goToMushafPage(mushafPage + 1, { countForward: true })
+                    }
+                    disabled={mushafPage == null || mushafPage >= MUSHAF_PAGE_COUNT}
+                    className="flex-1 justify-center"
+                  >
+                    الصفحة التالية
+                  </Button>
+                </div>
+
+                {/* تلاوة السورة الحالية + حالة مزامنة الموضع — زي ما هي */}
+                <div className="flex flex-col items-center gap-3 mt-4 pt-4 border-t border-white/[0.06]">
+                  <div className="w-full max-w-xs">
+                    <ReciterSelector />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {isLoadingAudio && (
+                      <Loader2 size={22} className="animate-spin text-[#10B981]" aria-label="جاري التحميل" />
+                    )}
+                    {!recitersLoading && selectedReciter && selectedSurah && (
+                      <Button
+                        variant={isThisSurahPlaying ? "success" : "primary"}
+                        icon={isThisSurahPlaying ? Pause : Play}
+                        iconPosition="start"
+                        onClick={handlePlayPause}
+                        disabled={!selectedSurah}
+                        className="px-6"
+                        aria-label={isThisSurahPlaying ? "إيقاف التشغيل" : "تشغيل التلاوة"}
+                      >
+                        {isThisSurahPlaying ? "إيقاف" : `استماع لسورة ${selectedSurah.arabicName}`}
+                      </Button>
+                    )}
+                  </div>
+                  {selectedReciter && selectedSurah && (
+                    <p className="text-xs text-[#9AA0C0]">
+                      {selectedReciter.arabicName} • {selectedReciter.rewaya}
+                    </p>
+                  )}
+                  {shared?.user && !shared.user.is_anonymous && (
+                    <p className="text-xs text-[#9AA0C0]" role="status">
+                      {positionSync === "saving"
+                        ? "جاري مزامنة موضع القراءة..."
+                        : positionSync === "saved"
+                          ? "تمت مزامنة موضع القراءة مع حسابك"
+                          : positionSync === "error"
+                            ? "تم الحفظ على هذا الجهاز؛ تعذرت المزامنة السحابية"
+                            : "يُحفظ موضع القراءة على هذا الجهاز"}
+                    </p>
+                  )}
+                </div>
+              </GlassCard>
+            </Reveal>
+          )}
+
+          {/* Surah Header (وضع الآيات فقط) */}
+          {viewMode === "ayat" && selectedSurah && (
           <Reveal index={1}>
             <GlassCard className="p-4 mb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -691,8 +1160,10 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
               </div>
             </GlassCard>
           </Reveal>
+          )}
 
-          {/* Ayah Pages Display */}
+          {/* Ayah Pages Display (وضع الآيات فقط) */}
+          {viewMode === "ayat" && selectedSurah && (
           <Reveal index={2}>
             <div className="flex-1 overflow-y-auto pr-2">
               {loading || (!currentPage && ayahs.length === 0) ? (
@@ -914,6 +1385,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
               </div>
             </div>
           </Reveal>
+          )}
         </div>
       )}
     </div>

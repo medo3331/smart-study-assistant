@@ -73,6 +73,14 @@ interface ActiveQuiz {
   asked: number;
 }
 
+/* اقتراحات سريعة تظهر لما الشات فاضي — ضغطة واحدة تبعت السؤال. */
+const QUICK_SUGGESTIONS = [
+  "ما فضل قراءة القرآن؟",
+  "كيف أحافظ على ورد القرآن يوميًا؟",
+  "أذكار الصباح والمساء — ما أهميتها؟",
+  "اذكر لي حديثًا عن الصدقة",
+];
+
 export function ReligiousChat({
   supabase,
   signedIn,
@@ -332,6 +340,22 @@ export function ReligiousChat({
                 (آيات بأسماء السور وأرقامها، وأحاديث من الصحيحين والكتب الستة).
                 ولو حابب تتحدى نفسك، دوس «اختبرني».
               </p>
+
+              {/* اقتراحات سريعة — ضغطة واحدة تبعت السؤال */}
+              <div className="mt-1 flex flex-wrap justify-center gap-2">
+                {QUICK_SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => {
+                      setInput(suggestion);
+                    }}
+                    className="rounded-full border border-[#10B981]/30 bg-[#10B981]/[0.08] px-4 py-2 text-xs text-[#6EE7B7] transition-colors hover:bg-[#10B981]/[0.18] hover:text-white"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
