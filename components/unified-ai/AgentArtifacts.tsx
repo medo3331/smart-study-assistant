@@ -6,12 +6,14 @@
 //   web_results → مصادر البحث بالروابط
 //   diagram     → مخطط Mermaid مرسوم
 //   image       → صورة مولّدة
-//   file        → زر تحميل (MD/PDF/DOCX/PPTX)
-//   quiz        → اختبار تفاعلي (اختيار من متعدد + تصحيح فوري)
+//   file        → زر تحميل (MD/PDF/DOCX/PPTX) + «افتح في النوته»
+//   quiz        → اختبار تفاعلي ملون بشريط تقدم وشاشة نتيجة + «افتح في النوته»
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MermaidViewer } from "@/components/ui/MermaidViewer";
-import type { AgentArtifact, QuizArtifact } from "@/lib/agent/actions";
+import { importArtifactToNotes } from "@/lib/notes/agent-import";
+import type { AgentArtifact, FileArtifact, QuizArtifact } from "@/lib/agent/actions";
 
 const FORMAT_LABELS: Record<string, string> = {
   md: "Markdown",
@@ -20,16 +22,56 @@ const FORMAT_LABELS: Record<string, string> = {
   pptx: "PowerPoint",
 };
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, accent, children }: { title: string; accent?: string; children: React.ReactNode }) {
   return (
-    <div className="my-2 rounded-xl border border-rule bg-paper overflow-hidden">
-      <div className="px-3 py-2 text-xs font-bold bg-paper-3 text-ink-soft border-b border-rule">🛠️ {title}</div>
+    <div className="my-2 rounded-xl border border-rule bg-paper overflow-hidden shadow-sm">
+      <div
+        className="px-3 py-2 text-xs font-bold text-white border-b border-rule"
+        style={{ background: accent || "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+      >
+        🛠️ {title}
+      </div>
       <div className="p-3">{children}</div>
     </div>
   );
 }
 
-function DownloadButton({ artifact }: { artifact: Extract<AgentArtifact, { kind: "file" }> }) {
+/* -------------------------------------------------------------------------- */
+/* 📓 زر «افتح في النوته» — يحفظ المحتوى كنوتة ويفتحها                          */
+/* -------------------------------------------------------------------------- */
+
+function OpenInNotesButton({ title, blocks }: { title: string; blocks: { heading: string; body: string }[] }) {
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+
+  async function open() {
+    if (blocks.length === 0) return;
+    setState("saving");
+    try {
+      const notebookId = await importArtifactToNotes(title, blocks);
+      router.push(`/notes/${notebookId}`);
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void open()}
+      disabled={state === "saving" || blocks.length === 0}
+      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border border-rule bg-paper text-ink-soft hover:bg-paper-3 transition disabled:opacity-50"
+    >
+      {state === "saving" ? "⏳ بيتحفظ..." : state === "error" ? "⚠️ فشل — جرب تاني" : "📓 افتح في النوته"}
+    </button>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* 📄 الملفات                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function DownloadButton({ artifact }: { artifact: FileArtifact }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   function getHref(): string {
@@ -50,86 +92,201 @@ function DownloadButton({ artifact }: { artifact: Extract<AgentArtifact, { kind:
   const href = getHref();
   if (!href) return <p className="text-xs text-ink-soft">الملف فاضي.</p>;
   return (
-    <a
-      href={href}
-      download={artifact.filename || `${artifact.title}.${artifact.format}`}
-      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-[var(--accent)] text-[var(--on-marker)] hover:opacity-90 transition"
-    >
-      ⬇️ تحميل {FORMAT_LABELS[artifact.format] || artifact.format}
-      {typeof artifact.size === "number" && artifact.size > 0 && (
-        <span className="opacity-80">({Math.round(artifact.size / 1024)} KB)</span>
+    <div className="flex flex-wrap items-center gap-2">
+      <a
+        href={href}
+        download={artifact.filename || `${artifact.title}.${artifact.format}`}
+        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full text-white hover:opacity-90 transition"
+        style={{ background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+      >
+        ⬇️ تحميل {FORMAT_LABELS[artifact.format] || artifact.format}
+        {typeof artifact.size === "number" && artifact.size > 0 && (
+          <span className="opacity-80">({Math.round(artifact.size / 1024)} KB)</span>
+        )}
+      </a>
+      {artifact.sections && artifact.sections.length > 0 && (
+        <OpenInNotesButton title={artifact.title} blocks={artifact.sections} />
       )}
-    </a>
+    </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* 📝 الاختبار التفاعلي — منظم وملون                                           */
+/* -------------------------------------------------------------------------- */
+
+const OPTION_LETTERS = ["أ", "ب", "ج", "د", "هـ", "و"];
 
 function QuizCard({ artifact }: { artifact: QuizArtifact }) {
   const [picked, setPicked] = useState<Record<number, number>>({});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
-  const answeredCount = Object.keys(revealed).length;
+  const [finished, setFinished] = useState(false);
+
+  const total = artifact.questions.length;
+  const answered = Object.keys(revealed).length;
   const correctCount = artifact.questions.reduce(
     (acc, q, i) => acc + (revealed[i] && picked[i] === q.answerIndex ? 1 : 0),
     0,
   );
+  const progress = Math.round((answered / total) * 100);
+
+  const grade = useMemo(() => {
+    const pct = total > 0 ? (correctCount / total) * 100 : 0;
+    if (pct === 100) return { emoji: "🏆", text: "علامة كاملة — انت جبار!", color: "#059669" };
+    if (pct >= 80) return { emoji: "🌟", text: "ممتاز جدًا! كمل كده.", color: "#059669" };
+    if (pct >= 60) return { emoji: "👍", text: "كويس — راجع اللي فاتك وهتتوحّد.", color: "#D97706" };
+    if (pct >= 40) return { emoji: "💪", text: "محتاج مراجعة — متقلقش، مع بعض هنوصل.", color: "#D97706" };
+    return { emoji: "📚", text: "يبقى نرجع للمحتوى تاني — عايزين شوية تركيز.", color: "#DC2626" };
+  }, [correctCount, total]);
+
+  function restart() {
+    setPicked({});
+    setRevealed({});
+    setFinished(false);
+  }
+
+  const notesBlocks = useMemo(
+    () => [
+      {
+        heading: "الأسئلة والإجابات",
+        body: artifact.questions
+          .map(
+            (q, i) =>
+              `${i + 1}) ${q.question}\n` +
+              q.options.map((o, oi) => `${OPTION_LETTERS[oi] || oi + 1}. ${o}`).join("\n") +
+              `\n✔ الإجابة: ${q.options[q.answerIndex]}${q.explanation ? `\n💡 ${q.explanation}` : ""}`,
+          )
+          .join("\n\n"),
+      },
+    ],
+    [artifact.questions],
+  );
+
+  if (finished) {
+    return (
+      <div className="text-center py-4 space-y-2">
+        <p className="text-4xl">{grade.emoji}</p>
+        <p className="text-2xl font-black" style={{ color: grade.color }}>
+          {correctCount}/{total}
+        </p>
+        <p className="text-sm text-ink-soft">{grade.text}</p>
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={restart}
+            className="text-xs font-bold px-3 py-1.5 rounded-full text-white hover:opacity-90 transition"
+            style={{ background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+          >
+            🔄 حاول تاني
+          </button>
+          <OpenInNotesButton title={artifact.title} blocks={notesBlocks} />
+        </div>
+      </div>
+    );
+  }
+
+  const currentIdx = artifact.questions.findIndex((_, i) => !revealed[i]);
 
   return (
     <div className="space-y-3">
+      {/* شريط التقدم */}
+      <div>
+        <div className="flex items-center justify-between text-[11px] font-bold text-ink-soft mb-1">
+          <span>
+            سؤال {Math.min(answered + 1, total)} من {total}
+          </span>
+          <span>
+            ✅ {correctCount} صح
+          </span>
+        </div>
+        <div className="h-2 rounded-full bg-paper-3 overflow-hidden" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{ width: `${progress}%`, background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+          />
+        </div>
+      </div>
+
       {artifact.questions.map((q, qi) => {
         const isRevealed = Boolean(revealed[qi]);
+        if (!isRevealed && qi !== currentIdx) return null; // سؤال واحد قدامك في كل مرة
         const choice = picked[qi];
         return (
-          <div key={qi} className="rounded-lg border border-rule p-3 bg-paper">
+          <div
+            key={qi}
+            className="rounded-xl border-2 p-3 bg-paper transition"
+            style={{ borderColor: isRevealed ? (choice === q.answerIndex ? "#059669" : "#DC2626") : "#E2E8F0" }}
+          >
             <p className="text-sm font-bold mb-2">
-              {qi + 1}. {q.question}
+              <span
+                className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-[11px] font-black me-1.5"
+                style={{ background: "linear-gradient(135deg, #7C3AED, #4F46E5)" }}
+              >
+                {qi + 1}
+              </span>
+              {q.question}
             </p>
             <div className="grid gap-1.5">
               {q.options.map((opt, oi) => {
                 const isPicked = choice === oi;
                 const isCorrect = q.answerIndex === oi;
                 let cls = "border-rule hover:bg-paper-3";
-                if (isRevealed && isCorrect) cls = "border-emerald-500 bg-emerald-500/10";
-                else if (isRevealed && isPicked && !isCorrect) cls = "border-rose-500 bg-rose-500/10";
-                else if (isPicked) cls = "border-[var(--accent)] bg-[var(--accent)]/10";
+                if (isRevealed && isCorrect) cls = "border-emerald-600 bg-emerald-500/10";
+                else if (isRevealed && isPicked && !isCorrect) cls = "border-rose-600 bg-rose-500/10";
+                else if (isPicked) cls = "border-indigo-600 bg-indigo-500/10";
                 return (
                   <button
                     key={oi}
                     type="button"
                     disabled={isRevealed}
                     onClick={() => setPicked((p) => ({ ...p, [qi]: oi }))}
-                    className={`text-right text-xs px-3 py-1.5 rounded-lg border transition disabled:cursor-default ${cls}`}
+                    className={`text-right text-xs px-3 py-2 rounded-lg border-2 transition disabled:cursor-default font-medium ${cls}`}
                   >
-                    {["أ", "ب", "ج", "د", "هـ", "و"][oi] || oi + 1}. {opt}
+                    <span className="font-black">{OPTION_LETTERS[oi] || oi + 1}.</span> {opt}
                     {isRevealed && isCorrect && " ✓"}
+                    {isRevealed && isPicked && !isCorrect && " ✗"}
                   </button>
                 );
               })}
             </div>
-            {!isRevealed ? (
+            {isRevealed ? (
+              <div className="mt-2 space-y-1">
+                <p className={`text-xs font-bold ${choice === q.answerIndex ? "text-emerald-700" : "text-rose-700"}`}>
+                  {choice === q.answerIndex ? "✅ صح! برافو" : `❌ الصح: ${q.options[q.answerIndex]}`}
+                </p>
+                {q.explanation && <p className="text-[11px] text-ink-soft">💡 {q.explanation}</p>}
+                {qi === total - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setFinished(true)}
+                    className="mt-1 text-xs font-bold px-4 py-1.5 rounded-full text-white hover:opacity-90 transition"
+                    style={{ background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+                  >
+                    شوف نتيجتك 🎯
+                  </button>
+                )}
+              </div>
+            ) : (
               <button
                 type="button"
                 disabled={typeof choice !== "number"}
                 onClick={() => setRevealed((r) => ({ ...r, [qi]: true }))}
-                className="mt-2 text-[11px] font-bold px-3 py-1 rounded-full bg-[var(--accent)] text-[var(--on-marker)] disabled:opacity-40"
+                className="mt-2 text-[11px] font-bold px-3 py-1 rounded-full text-white disabled:opacity-40 hover:opacity-90 transition"
+                style={{ background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
               >
                 صحّح الإجابة
               </button>
-            ) : (
-              picked[qi] !== q.answerIndex && q.explanation && (
-                <p className="mt-2 text-[11px] text-ink-soft">💡 {q.explanation}</p>
-              )
             )}
           </div>
         );
       })}
-      {answeredCount > 0 && (
-        <p className="text-xs font-bold text-ink-soft">
-          النتيجة: {correctCount}/{artifact.questions.length}
-          {correctCount === artifact.questions.length && " — ممتاز! 🎉"}
-        </p>
-      )}
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* العرض الرئيسي                                                               */
+/* -------------------------------------------------------------------------- */
 
 export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
   if (!artifacts || artifacts.length === 0) return null;
@@ -138,7 +295,7 @@ export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
       {artifacts.map((a, i) => {
         if (a.kind === "web_results") {
           return (
-            <Card key={i} title={a.title}>
+            <Card key={i} title={a.title} accent="linear-gradient(90deg, #0EA5E9, #6366F1)">
               {a.answer && <p className="text-xs mb-2 leading-relaxed">{a.answer}</p>}
               {a.results.length === 0 && !a.answer && (
                 <p className="text-xs text-ink-soft">خدمة البحث غير متاحة حاليًا.</p>
@@ -158,7 +315,7 @@ export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
         }
         if (a.kind === "diagram") {
           return (
-            <Card key={i} title={a.title}>
+            <Card key={i} title={a.title} accent="linear-gradient(90deg, #059669, #0EA5E9)">
               {a.error || !a.mermaidCode ? (
                 <p className="text-xs text-rose-600">⚠️ {a.error || "تعذّر توليد المخطط."}</p>
               ) : (
@@ -169,7 +326,7 @@ export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
         }
         if (a.kind === "image") {
           return (
-            <Card key={i} title={a.title}>
+            <Card key={i} title={a.title} accent="linear-gradient(90deg, #D97706, #DC2626)">
               {a.error || !a.url ? (
                 <p className="text-xs text-rose-600">⚠️ {a.error || "تعذّر توليد الصورة."}</p>
               ) : (
@@ -187,7 +344,7 @@ export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
           );
         }
         return (
-          <Card key={i} title={a.subject ? `${a.title} — ${a.subject}` : a.title}>
+          <Card key={i} title={a.subject ? `${a.title} — ${a.subject}` : a.title} accent="linear-gradient(90deg, #7C3AED, #DB2777)">
             <QuizCard artifact={a} />
           </Card>
         );

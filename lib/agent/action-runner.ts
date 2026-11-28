@@ -99,7 +99,7 @@ function sectionsToMarkdown(title: string, sections: FileAction["sections"]): st
 }
 
 async function runFile(action: FileAction): Promise<AgentArtifact> {
-  const base = { kind: "file" as const, title: action.title, format: action.format };
+  const base = { kind: "file" as const, title: action.title, format: action.format, sections: action.sections };
   try {
     if (action.format === "md") {
       const content = sectionsToMarkdown(action.title, action.sections);

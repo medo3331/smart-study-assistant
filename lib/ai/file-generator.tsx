@@ -122,10 +122,35 @@ const ensurePdfFont = registerPdfFont;
 function buildPdfStyles(fontFamily: string) {
   return StyleSheet.create({
     page: { padding: 40, fontFamily, direction: "rtl" },
+    banner: {
+      backgroundColor: "#7C3AED",
+      padding: 18,
+      borderRadius: 10,
+      marginBottom: 20,
+      alignItems: "center",
+    },
+    bannerTitle: { fontSize: 22, fontWeight: "bold", color: "#FFFFFF", textAlign: "center" },
+    bannerSubtitle: { fontSize: 11, color: "#E9D5FF", textAlign: "center", marginTop: 4 },
     title: { fontSize: 22, fontWeight: "bold", marginBottom: 20, color: "#6B21A8", textAlign: "right" },
     subtitle: { fontSize: 14, color: "#64748B", marginBottom: 15, textAlign: "right" },
-    section: { marginBottom: 15 },
-    heading: { fontSize: 16, fontWeight: "bold", color: "#1E293B", marginBottom: 8, textAlign: "right" },
+    section: {
+      marginBottom: 15,
+      backgroundColor: "#FAF5FF",
+      borderLeftWidth: 4,
+      borderLeftColor: "#7C3AED",
+      padding: 10,
+      borderRadius: 6,
+    },
+    heading: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: "#6D28D9",
+      marginBottom: 8,
+      textAlign: "right",
+      backgroundColor: "#EDE9FE",
+      padding: 6,
+      borderRadius: 4,
+    },
     text: { fontSize: 12, lineHeight: 1.8, color: "#334155", textAlign: "right" },
     bullet: { fontSize: 12, lineHeight: 1.8, color: "#334155", marginRight: 10, textAlign: "right" },
     table: { width: "100%", borderStyle: "solid", borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 12 },
@@ -153,7 +178,7 @@ type PdfProps = {
   styles: ReturnType<typeof buildPdfStyles>;
 };
 
-function SummaryPDF({ data, title, studentName, styles }: PdfProps) {
+function SummaryPDF({ data, title, studentName, subject, styles }: PdfProps) {
   const keyPoints = asStringArray(data.key_points);
   const concepts = asRecordArray(data.concepts);
   const sections = asRecordArray(data.sections);
@@ -161,10 +186,15 @@ function SummaryPDF({ data, title, studentName, styles }: PdfProps) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
-        {studentName && (
-          <Text style={styles.subtitle}>إعداد: {studentName} | ماجيكلي 🧙‍♂️</Text>
-        )}
+        {/* 🎨 بانر علوي ملون */}
+        <View style={styles.banner}>
+          <Text style={styles.bannerTitle}>{title}</Text>
+          <Text style={styles.bannerSubtitle}>
+            {[subject ? `المادة: ${subject}` : "", studentName ? `إعداد: ${studentName}` : "", "Magic Agent 🤖 — magiclly.com"]
+              .filter(Boolean)
+              .join("  •  ")}
+          </Text>
+        </View>
 
         {keyPoints.length > 0 && (
           <View style={styles.section}>
