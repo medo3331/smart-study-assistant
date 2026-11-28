@@ -5,6 +5,20 @@
 
 import { NextResponse } from "next/server";
 
+type ProfileSearchRow = {
+  profile_id: string;
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  university: string | null;
+  faculty: string | null;
+  specialization: string | null;
+  year: number | null;
+  interests: string[] | null;
+  bio: string | null;
+  is_visible: boolean;
+};
+
 /**
  * GET /api/users/search
  *
@@ -63,7 +77,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
-      profiles: results.map((p: any) => ({
+      profiles: results.map((p: ProfileSearchRow) => ({
         profile_id: p.profile_id,
         display_name: p.display_name,
         avatar_url: p.avatar_url,
