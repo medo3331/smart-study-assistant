@@ -21,7 +21,7 @@ do $$ begin
   alter table public.community_posts
     add constraint community_posts_status_check
     check (status in ('pending','approved','rejected'));
-exception when duplicate_object or 42710 then null;
+exception when duplicate_object then null;
 end $$;
 
 create index if not exists idx_community_posts_status
