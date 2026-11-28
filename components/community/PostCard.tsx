@@ -596,6 +596,19 @@ export default function PostCard({
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
+          {/* ردود سريعة — ضغطة واحدة تضيف الإيموجي للتعليق */}
+          <div className="flex gap-1" aria-label="ردود سريعة">
+            {["❤️", "👍", "🎉", "😂", "🤯", "💯"].map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => setDraft((d) => (d ? `${d} ${emoji}` : emoji))}
+                className="rounded-full px-1.5 py-0.5 text-sm transition hover:bg-paper-2"
+                aria-label={`أضف ${emoji} للتعليق`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </article>

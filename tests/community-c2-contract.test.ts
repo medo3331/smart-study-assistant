@@ -17,6 +17,7 @@ const userPostsRoute = read("app/api/community/users/[id]/posts/route.ts");
 const hashtagRoute = read("app/api/community/hashtags/[tag]/route.ts");
 const uploadRoute = read("app/api/community/upload/route.ts");
 const hubPage = read("app/community/page.tsx");
+const composer = read("components/community/CommunityComposer.tsx");
 const postCard = read("components/community/PostCard.tsx");
 
 // ---------------------------------------------------------------------------
@@ -147,11 +148,12 @@ describe("Community C2 UI contract", () => {
   it("community hub has a feed tab wired to the C2 APIs", () => {
     expect(hubPage).toContain('id: "feed"');
     expect(hubPage).toContain('useState<Tab>("feed")');
-    expect(hubPage).toContain('"/api/community/posts"');
+    // الكومبوزر بقى مكوّن مستقل (C7) — النشر والرفع هناك
+    expect(composer).toContain('fetch("/api/community/posts"');
     expect(hubPage).toContain('"/api/community/saved-posts"');
-    expect(hubPage).toContain('"/api/community/upload"');
+    expect(composer).toContain('fetch("/api/community/upload"');
     // الخصوصية اختيار المستخدم لكل منشور
-    expect(hubPage).toContain('"friends"');
+    expect(composer).toContain('"friends"');
   });
 
   it("post card renders hashtags/mentions as links with optimistic like", () => {

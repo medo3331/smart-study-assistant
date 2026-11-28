@@ -9,10 +9,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle, Rss, Bookmark, ImagePlus, Loader2, Hash, BarChart3, Crown, Flame } from "lucide-react";
+import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, MessageCircle, Rss, Bookmark, Hash, Crown, Flame } from "lucide-react";
 import type { SocialProfileSummary, CommunityPostRow } from "@/lib/community/types";
-import { relationErrorAr, postErrorAr, POST_KIND_AR } from "@/lib/community/types";
+import { relationErrorAr } from "@/lib/community/types";
 import PostCard from "@/components/community/PostCard";
+import CommunityComposer from "@/components/community/CommunityComposer";
 import ModerationStatus from "@/components/community/ModerationStatus";
 
 type LeaderRow = {
@@ -85,15 +86,7 @@ export default function CommunityHubPage() {
   const [feedLoading, setFeedLoading] = useState(true);
   const [feedBefore, setFeedBefore] = useState<string | null>(null);
   const [feedDone, setFeedDone] = useState(false);
-  // composer
-  const [postKind, setPostKind] = useState("text");
-  const [postVisibility, setPostVisibility] = useState("public");
-  const [postBody, setPostBody] = useState("");
-  const [postImage, setPostImage] = useState<string | null>(null);
-  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
-  const [uploading, setUploading] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
+  // الكومبوزر في مكوّن مستقل CommunityComposer (C7 + Magic AI)
 
   // leaderboard + trending
   const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
@@ -239,54 +232,6 @@ export default function CommunityHubPage() {
     void loadLeaderboard();
     void loadTrending();
   }, [loadLeaderboard, loadTrending]);
-
-  const uploadImage = async (file: File) => {
-    setUploading(true);
-    setPublishError(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/community/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (data.success) setPostImage(data.url);
-      else setPublishError(data.error || "تعذّر رفع الصورة.");
-    } catch {
-      setPublishError("مشكلة شبكة أثناء رفع الصورة.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const publish = async () => {
-    const body = postBody.trim();
-    if (!body || publishing) return;
-    setPublishing(true);
-    setPublishError(null);
-    try {
-      const options = postKind === "poll" ? pollOptions.map((o) => o.trim()).filter(Boolean) : undefined;
-      const res = await fetch("/api/community/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: postKind, body, visibility: postVisibility, imageUrl: postImage, options }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPostBody("");
-        setPostImage(null);
-        setPostKind("text");
-        setPollOptions(["", ""]);
-        setFeedDone(false);
-        await loadFeed(null, false);
-        void loadTrending();
-      } else {
-        setPublishError(postErrorAr(data.code, data.error || "تعذّر النشر."));
-      }
-    } catch {
-      setPublishError("مشكلة شبكة — حاول تاني.");
-    } finally {
-      setPublishing(false);
-    }
-  };
 
   useEffect(() => {
     void loadRelations();
@@ -546,96 +491,15 @@ export default function CommunityHubPage() {
             </div>
           )}
 
-          {/* الكومبوزر */}
-          <div className="rounded-2xl border border-rule bg-paper-2 p-4">
-            <textarea
-              value={postBody}
-              onChange={(e) => setPostBody(e.target.value)}
-              placeholder="ايه اللي في بالك؟ شارك إنجازك، اسأل سؤال، أو اكتب معلومة تفيد زمايلك... (#هاشتاج و@MAG-XXX-XXXX مدعومين)"
-              className={`${inputCls} min-h-24 resize-y`}
-              maxLength={2000}
-              aria-label="منشور جديد"
-            />
-            {postImage && (
-              <div className="relative mt-3 inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={postImage} alt="" className="max-h-40 rounded-xl" />
-                <button
-                  onClick={() => setPostImage(null)}
-                  aria-label="إزالة الصورة"
-                  className="absolute left-1 top-1 rounded-full bg-black/60 p-1 text-white"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-            {postKind === "poll" && (
-              <div className="mt-3 space-y-2 rounded-xl bg-paper p-3" role="group" aria-label="خيارات الاستطلاع">
-                {pollOptions.map((opt, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-5 text-xs font-bold text-ink-soft">{i + 1}.</span>
-                    <input
-                      value={opt}
-                      onChange={(e) => setPollOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))}
-                      placeholder={`الخيار ${i + 1}`}
-                      className={inputCls}
-                      maxLength={100}
-                      aria-label={`الخيار ${i + 1}`}
-                    />
-                    {pollOptions.length > 2 && (
-                      <button
-                        onClick={() => setPollOptions((prev) => prev.filter((_, j) => j !== i))}
-                        aria-label="حذف الخيار"
-                        className="text-ink-soft hover:text-red-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {pollOptions.length < 4 && (
-                  <button
-                    onClick={() => setPollOptions((prev) => [...prev, ""])}
-                    className="text-xs font-semibold text-marker hover:underline"
-                  >
-                    + خيار تاني
-                  </button>
-                )}
-              </div>
-            )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <select value={postKind} onChange={(e) => setPostKind(e.target.value)} className={`${inputCls} w-auto`} aria-label="نوع المنشور">
-                {Object.entries(POST_KIND_AR)
-                  .filter(([k]) => k !== "repost")
-                  .map(([k, label]) => (
-                    <option key={k} value={k}>{k === "poll" ? "📊 استطلاع رأي" : label}</option>
-                  ))}
-              </select>
-              <select value={postVisibility} onChange={(e) => setPostVisibility(e.target.value)} className={`${inputCls} w-auto`} aria-label="من يشوف المنشور">
-                <option value="public">🌍 عام</option>
-                <option value="friends">👥 الأصدقاء فقط</option>
-                <option value="private">🔒 خاص بي</option>
-              </select>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rule px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-paper-2">
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                صورة
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void uploadImage(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              <button onClick={() => void publish()} disabled={publishing || !postBody.trim()} className={primaryBtn}>
-                {publishing ? "جارٍ النشر..." : "نشر"}
-              </button>
-            </div>
-            {publishError && <p className="mt-2 text-xs text-red-600">{publishError}</p>}
-          </div>
+          {/* الكومبوزر (C7 — مطوّر + Magic AI) */}
+          <CommunityComposer
+            displayName={profile?.display_name}
+            onPublished={() => {
+              setFeedDone(false);
+              void loadFeed(null, false);
+              void loadTrending();
+            }}
+          />
 
           {/* المنشورات */}
           {feedLoading && feed.length === 0 ? (

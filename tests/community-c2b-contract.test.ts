@@ -12,6 +12,7 @@ const pollRoute = read("app/api/community/posts/[id]/poll/route.ts");
 const repostRoute = read("app/api/community/posts/[id]/repost/route.ts");
 const postsRoute = read("app/api/community/posts/route.ts");
 const hubPage = read("app/community/page.tsx");
+const composer = read("components/community/CommunityComposer.tsx");
 const postCard = read("components/community/PostCard.tsx");
 const types = read("lib/community/types.ts");
 
@@ -106,8 +107,9 @@ describe("Community C2b UI contract", () => {
   });
 
   it("composer supports polls with 2-4 option inputs", () => {
-    expect(hubPage).toContain('pollOptions');
-    expect(hubPage).toContain('postKind === "poll"');
+    // الكومبوزر بقى مكوّن مستقل (C7)
+    expect(composer).toContain("pollOptions");
+    expect(composer).toContain('kind === "poll"');
   });
 
   it("post card renders polls, embedded originals, repost and quote actions", () => {
