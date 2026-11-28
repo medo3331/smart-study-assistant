@@ -34,9 +34,13 @@ const SQL_PATH = join(root, "db", "shop.sql");
  */
 function loadFromTs() {
   const out = mkdtempSync(join(tmpdir(), "shopseed-"));
+  // ويندوز: spawnSync('npx') بيفشل (ENOENT) و Node 24 بيمنع .cmd من غير
+  // shell (EINVAL) — فبننده node مباشرة على tsc (نفس المسار اللي npx
+  // بيوصّل له).
+  const tscBin = join(root, "node_modules", "typescript", "bin", "tsc");
   execFileSync(
-    "npx",
-    ["tsc", "lib/shop/catalog.ts", "lib/shop/economy.ts",
+    process.execPath,
+    [tscBin, "lib/shop/catalog.ts", "lib/shop/economy.ts",
      "lib/shop/boxes.ts", "lib/shop/wheel.ts",
      "--outDir", out, "--module", "es2022", "--target", "es2022",
      "--moduleResolution", "bundler", "--skipLibCheck"],

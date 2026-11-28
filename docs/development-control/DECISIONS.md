@@ -241,6 +241,47 @@
 
 ---
 
+## 3.5 قرارات مالك اقتصاد Magicly — 2026-11-28 (Market Rebuild)
+
+المرجع: `docs/STORE_GAMES_REBUILD_PROPOSAL.md` + MAGICLY ECONOMY FINAL DESIGN. **7/7 معتمدة من المالك (2026-11-28).**
+
+### D-M-01 — الكوينز تُشترى بالمال الحقيقي (تعديل القاعدة الحاكمة)
+**قرار:** شراء Coins بالفلوس معتمد (Buy Magic Coins) — بيعدّل قاعدة `db/shop.sql` «مذاكرة فقط».
+**الحالة:** `مقفل`
+**القيود الملزمة:** الدخول من مسار داخلي واحد `add_coins_grant` (service_role — db/113 §5) بـ`source_class='purchase'` · حماية «الكلاينت مابيقولش المبلغ» تفضل قائمة · التفعيل الفعلي DEV-M4.
+**الدليل:** `db/113-economy-truth.sql` §2/§5.
+
+### D-M-02 — متجر واحد: `/shop` = Magicly Market، `/store` يندمج (حسم D-DEV-008)
+**قرار:** `app/store/page.tsx` (stub باقات Credits) يندمج داخل `/shop` كقسم Magic Credits، و`/store` redirect.
+**الحالة:** `مقفل` · `معلّق التنفيذ` (DEV-M2)
+
+### D-M-03 — الشراء المختلط ذرّي (Coins + Credits معًا أو لا شيء)
+**قرار:** منتجات Hybrid تُخصم بـ RPC واحدة — ممنوع خصم منفصل، وممنوع خصم Credits للفتح/المعاينة.
+**الحالة:** `مقفل` · `معلّق التنفيذ` (DEV-M2)
+**الدليل:** التصميم §9 ق.5 · `docs/STORE_GAMES_REBUILD_PROPOSAL.md` C-3.
+
+### D-M-04 — مكافآت الدراسة مربوطة بإكمال حقيقي وقابلة للتخصيص
+**قرار:** المكافآت تُربط بإنجاز فعلي (درس/اختبار/مراجعة) بـ`source_id` يمنع التكرار، وقابلة للتخصيص حسب نوع النشاط (ملف/محاضرة/مساحة عمل).
+**الحالة:** `مقفل` · `معلّق التنفيذ` (DEV-M1/DEV-M3)
+**الدليل:** `db/113-economy-truth.sql` (مصادر lesson_quiz_passed/review_done/exam_passed — is_live=false لحد إثبات سيرفري) · نطاق الامتحانات محمي (D-DEV-02).
+
+### D-M-05 — الإعلانات: 5 كوينز/إعلان، سقف 3/يوم، بدون تفعيل شبكة قبل SSV
+**قرار:** سقف 3 إعلانات/يوم معتمد. مصدر `ad_reward` يفضل مقفول لحد ما شبكة إعلانات بتدعم Server-side Verification تتكامل.
+**الحالة:** `مقفل` (السقف) · `معلّق التنفيذ` (DEV-M3/DEV-M4)
+**الدليل:** `db/113-economy-truth.sql` ('ad_reward', 5, 3, false).
+
+### D-M-06 — الأسعار والمكافآت جداول إدارية (Economy Balancing) مش كود
+**قرار:** `coin_source_rules` هي السلطة على المبالغ، وتعديل الأسعار/المكافآت من لوحة الإدارة مع Audit Log — بدون تعديل كود.
+**الحالة:** `مقفل` · `معلّق التنفيذ` (DEV-M5)
+**الدليل:** `db/113-economy-truth.sql` §2 + `lib/admin/economy-overview.ts` (قاعدة التوسيع).
+
+### D-M-07 — P0-B (Economy Truth) شرط مسبق لمرحلة السوق
+**قرار:** تنفيذ P0-B/C/G أولاً — توحيد `award_coins` (كانت 5 نسخ — F1) + سجل المصادر الكامل + `source_class` + حارس الكتابة + revoke anon.
+**الحالة:** `مقفل` (الكود + الملفات) · `معلّق على تحقق تقني` — **تشغيل db/113 ثم db/114 في Supabase SQL Editor بإيد المالك + إعادة Preflight (Q1-Q10) للتحقق**
+**الدليل:** `db/113-economy-truth.sql` · `db/114-economy-route-writers.sql` · `lib/shop/economy.ts` (السجل الموحّد) · حراس `scripts/check-coin-ledger-writes.mjs` + `scripts/check-award-coins-single-source.mjs`.
+
+---
+
 ## 5. قالب القرار الجديد
 
 ```markdown

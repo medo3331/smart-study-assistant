@@ -9,7 +9,7 @@ import SupportInbox from "../support/SupportInbox";
  *
  * This component wraps SupportInbox so it can be embedded within /inbox.
  */
-export default function SupportSection() {
+export default function SupportSection({ initialTicketId = null }: { initialTicketId?: string | null } = {}) {
   return (
     <Suspense fallback={
       <div className="flex flex-col items-center justify-center p-8 text-center text-ink-soft">
@@ -17,7 +17,7 @@ export default function SupportSection() {
         <p className="text-sm text-ink-soft">جارٍ تحميل مركز الدعم…</p>
       </div>
     }>
-      <SupportInbox mode="student" />
+      <SupportInbox mode="student" initialTicketId={initialTicketId} />
     </Suspense>
   );
 }

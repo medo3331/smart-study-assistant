@@ -117,10 +117,14 @@ export default function InboxClient() {
     void loadRequests();
   }, [loadConversations, loadRequests]);
 
-  // روابط قديمة بتوصل بـ ?category=support (ردود الدعم و/support) — نفتح تاب الدعم مباشرة
+  // روابط قديمة بتوصل بـ ?category=support (ردود الدعم و/support) — نفتح تاب الدعم مباشرة،
+  // ولو فيه ?ticket=<id> بنفتح التذكرة نفسها (Deep-link من الإشعارات).
+  const [supportTicketId, setSupportTicketId] = useState<string | null>(null);
   useEffect(() => {
-    const cat = new URLSearchParams(window.location.search).get("category");
-    if (cat === "support") setTab("support");
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("category") === "support") setTab("support");
+    const ticket = sp.get("ticket");
+    if (ticket) { setSupportTicketId(ticket); setTab("support"); }
   }, []);
 
   // تحديث دوري: المحادثات كل 10 ثواني، الرسايل المفتوحة كل 5
@@ -428,7 +432,7 @@ export default function InboxClient() {
 
           {tab === "support" && (
             <div className="p-3">
-              <SupportSection />
+              <SupportSection initialTicketId={supportTicketId} />
             </div>
           )}
         </div>

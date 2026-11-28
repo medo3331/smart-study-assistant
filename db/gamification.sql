@@ -1,3 +1,4 @@
+-- ⚠️ DEPRECATED بعد db/113 + db/114 (ECONOMY TRUTH — 2026-11-28): النسخ الوحيدة الصالحة من award_coins / _award_coins_variable / add_coins_grant في db/113-economy-truth.sql، وتحويلات الكتابات في db/114-economy-route-writers.sql. **ماتشغّلش الملف ده تاني بعد 113/114** — آخر تعريف بيكتب على النسخة الموحّدة والحارس هيوقف كتاباته المباشرة.
 -- ============================================================================
 -- Gamification 2.0 + Escape Room. شغّل بعد db/shop.sql وdb/break-zone.sql.
 -- المكافآت كلها تتحقق داخل الدوال، ولا يمكن تمرير Coins أو XP من المتصفح.
