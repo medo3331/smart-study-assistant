@@ -285,7 +285,8 @@ export const COIN_SOURCES = {
   },
   /* ⇩ مصادر العبادة — شغّالة عبر award_coins نفسها بعد توسعة التحقق في
      db/worship.sql. المبالغ دي مرايا لـ coin_source_rules (مصدر الحقيقة) —
-     أي تعديل يتعمل في الاتنين معًا. سقف اليوم الكلي للعبادة = ٢٩ كوين. */
+     أي تعديل يتعمل في الاتنين معًا. سقف اليوم الكلي للعبادة = ٤٩ كوين
+     (٢٩ من prayer/quran/adhkar + ٢٠ من الأسئلة الدينية db/120). */
   worship_prayer: {
     id: "worship_prayer",
     label: "صلاة مفروضة",
@@ -308,6 +309,15 @@ export const COIN_SOURCES = {
     amount: 3,
     live: true,
     dailyCap: 3,
+    sourceClass: "activity",
+  },
+  worship_quiz: {
+    id: "worship_quiz",
+    label: "أسئلة دينية مكتملة",
+    // db/120: جلسة ١٠ أسئلة مكتملة (تصحيح سيرفري) — الفرع والإثبات في db/121.
+    amount: 10,
+    live: true,
+    dailyCap: 2,
     sourceClass: "activity",
   },
 } as const satisfies Record<string, CoinSource>;
