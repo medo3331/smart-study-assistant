@@ -16,19 +16,43 @@ export default function Hero() {
      في /assessment اللي بيجمّع بياناته وهدفه ومذكرته ويبنيله الخطة. */
   const startHref = '/welcome?next=/assessment';
 
-  /* الدخول السريع: حساب حقيقي عنده جلسة شغّالة → زر «متابعة كـ …» يدخّله
-     على طول /onboarding (وبيحوّله للداشبورد لو خلّص الأونبوردنج). */
-  const [quickName, setQuickName] = useState<string | null>(null);
+  /* الدخول السريع: حساب حقيقي عنده جلسة شغّالة → زر بصورة البروفايل يدخّله
+     على طول /dashboard من غير ما يعدّي على /assessment تاني. */
+  const [quick, setQuick] = useState<{ name: string; initial: string; avatarSrc: string | null; avatarEmoji: string | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const { data } = await createClient().auth.getUser();
+        const supabase = createClient();
+        const { data } = await supabase.auth.getUser();
         const user = data.user;
         if (cancelled || !user || user.is_anonymous) return;
         const metaName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
-        setQuickName(metaName || user.email || null);
+        const name = metaName || user.email || 'صاحبي';
+        let avatarSrc: string | null = null;
+        let avatarEmoji: string | null = null;
+        try {
+          const localAvatar = window.localStorage.getItem('magicly_avatar');
+          if (localAvatar && localAvatar.startsWith('data:image')) avatarSrc = localAvatar;
+          else if (localAvatar) avatarEmoji = localAvatar;
+        } catch {}
+        if (!avatarSrc) {
+          const metaAvatar = typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : '';
+          if (metaAvatar) avatarSrc = metaAvatar;
+        }
+        if (!avatarSrc) {
+          const { data: row } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (!cancelled && row && typeof row.avatar_url === 'string' && row.avatar_url) {
+            avatarSrc = row.avatar_url;
+          }
+        }
+        if (cancelled) return;
+        setQuick({ name, initial: name.trim().charAt(0) || 'ص', avatarSrc, avatarEmoji });
       } catch {}
     })();
     return () => {
@@ -68,13 +92,24 @@ export default function Hero() {
           <Link href={startHref} className={`${styles.btnPrimary} ${styles.navStart}`}>
             {t.nav_start}
           </Link>
-          {quickName ? (
-            <Link href="/onboarding" className={`${styles.btnGhost} ${styles.navSignin}`}>
-              {t.landing_continue_as} {quickName}
-            </Link>
-          ) : (
-            <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
-              {t.nav_login}
+          <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
+            {t.nav_login}
+          </Link>
+          {quick && (
+            <Link href="/dashboard" className={`${styles.btnGhost} ${styles.quickUser}`}>
+              <span className={styles.quickAvatar} aria-hidden="true">
+                {quick.avatarSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- صورة البروفايل من جهاز المستخدم أو مزوّد تسجيل الدخول
+                  <img src={quick.avatarSrc} alt="" className={styles.quickAvatarImg} />
+                ) : quick.avatarEmoji ? (
+                  <span className={styles.quickAvatarEmoji}>{quick.avatarEmoji}</span>
+                ) : (
+                  <span className={styles.quickAvatarInitial}>{quick.initial}</span>
+                )}
+              </span>
+              <span className={styles.quickName}>
+                {t.landing_continue_as} {quick.name}
+              </span>
             </Link>
           )}
           <TopControls />
