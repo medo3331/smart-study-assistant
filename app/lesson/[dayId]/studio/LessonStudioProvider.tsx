@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { VideoCandidate } from "@/lib/lesson/video-server";
+import type { VideoCandidate, SavedLessonVideo } from "@/lib/lesson/video-server";
 import type { OutlineSection } from "@/lib/lesson/outline";
 import { EXPLANATION_MODE_LABELS, type ExplanationMode } from "@/lib/lesson/explanations";
 
@@ -81,6 +81,9 @@ type LessonStudioContextValue = {
   ensureVideoLoaded: () => void;
   /** «مش مناسب» — إخفاء ترشيح في الجلسة الحالية بس (P2 مطلب 3). */
   dismissVideoCandidate: (id: string) => void;
+  /** الفيديو المختار المحفوظ في الداتابيز (P3) — لو موجود، البحث بيتوفر. */
+  savedVideo: SavedLessonVideo | null;
+  setSavedVideo: (video: SavedLessonVideo | null) => void;
   // ── النوتة ──
   notebook: {
     open: boolean;
@@ -152,10 +155,59 @@ export function LessonStudioProvider({
     });
   }, []);
 
-  /** بحث الفيديو lazy — نفس payload الصفحة القديمة، بس أول طلب للفيديو بس. */
+  // ── الفيديو المحفوظ (P3): «ولّد مرة وخزّن» — البحث بيتوفر لو الفيديو متخزّن ──
+  const [savedVideo, setSavedVideo] = useState<SavedLessonVideo | null>(null);
+  // Ref مزامن — ensureVideoLoaded بيقرا آخر قيمة بدون ما يتغير معرف الدالة.
+  const savedVideoRef = useRef<SavedLessonVideo | null>(null);
+  useEffect(() => {
+    savedVideoRef.current = savedVideo;
+  }, [savedVideo]);
+
+  /** حفظ الفيديو المختار عند أول تشغيل — fire-and-forget (الفشل ما يكسرش التشغيل). */
+  const persistVideo = useCallback(
+    (candidate: VideoCandidate) => {
+      const payload: SavedLessonVideo = {
+        videoId: candidate.id,
+        title: candidate.title || "فيديو الدرس",
+        channel: candidate.channel ?? null,
+        embedUrl: candidate.embedUrl,
+        watchUrl: candidate.watchUrl,
+        thumbnail: candidate.thumbnail ?? null,
+        pickedAt: new Date().toISOString(),
+      };
+      setSavedVideo(payload);
+      void fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, action: "set_video", video: payload }),
+      }).catch(() => {
+        /* الحفظ best-effort — التشغيل أهم */
+      });
+    },
+    [dayId]
+  );
+
+  /** بحث الفيديو lazy — نفس payload الصفحة القديمة، بس أول طلب للفيديو بس.
+   *  P3: لو فيه فيديو محفوظ للدرس — نعرضه فورًا من غير أي بحث (وفّر النداء). */
   const ensureVideoLoaded = useCallback(() => {
     if (videoFetchRef.current.started) return;
     videoFetchRef.current.started = true;
+    // الفيديو المحفوظ موجود ⇒ skip البحث تمامًا (محفوظ من جلسة سابقة).
+    if (savedVideoRef.current) {
+      const saved: VideoCandidate = {
+        id: savedVideoRef.current.videoId,
+        title: savedVideoRef.current.title,
+        channel: savedVideoRef.current.channel ?? undefined,
+        reason: "محفوظ من جلسة سابقة",
+        embedUrl: savedVideoRef.current.embedUrl,
+        watchUrl: savedVideoRef.current.watchUrl,
+        thumbnail: savedVideoRef.current.thumbnail ?? undefined,
+        relevanceScore: 1,
+      };
+      setVideoCandidates([saved]);
+      setVideoActive(saved);
+      return;
+    }
     setVideoLoading(true);
     const payload = {
       subject: lesson.subject || lesson.topic || "",
@@ -202,11 +254,15 @@ export function LessonStudioProvider({
   const openVideo = useCallback(
     (candidate?: VideoCandidate) => {
       ensureVideoLoaded();
-      if (candidate) setVideoActive(candidate);
+      if (candidate) {
+        setVideoActive(candidate);
+        // P3: أول تشغيل بيتخزّن — الجلسات الجاية من غير بحث.
+        persistVideo(candidate);
+      }
       setVideoOpen(true);
       setLastTimestamp(null); // بدون enablejsapi — التوقيت عبر &t= فقط (قرار مقفول)
     },
-    [ensureVideoLoaded]
+    [ensureVideoLoaded, persistVideo]
   );
 
   const closeVideo = useCallback(() => {
@@ -400,6 +456,8 @@ export function LessonStudioProvider({
       closeVideo,
       ensureVideoLoaded,
       dismissVideoCandidate,
+      savedVideo,
+      setSavedVideo,
       notebook: { open: notebookOpen, pendingDraft, lastAppended },
       openNotebook,
       closeNotebook,
@@ -420,7 +478,7 @@ export function LessonStudioProvider({
     [
       lesson, activeTab, setActiveTab, navigatorOpen, toggleNavigator, outline, currentSectionId,
       videoOpen, videoActive, videoCandidates, videoLoading, miniPlayerOn, lastTimestamp, dismissedVideoIds,
-      openVideo, closeVideo, ensureVideoLoaded, dismissVideoCandidate, notebookOpen, pendingDraft, lastAppended,
+      openVideo, closeVideo, ensureVideoLoaded, dismissVideoCandidate, savedVideo, notebookOpen, pendingDraft, lastAppended,
       openNotebook, closeNotebook, queueNotebookDraft, approvePendingDraft, dismissPendingDraft,
       undoLastAppend, explanationLevel, explanationMode, explanationSnapshot, progress, saveResume, tutorContext,
     ]

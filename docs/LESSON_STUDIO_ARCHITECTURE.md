@@ -371,6 +371,20 @@ alter table public.lesson_content
 >    الـ heuristic النصّي كافي ومتاختبر في `lib/lesson/__tests__/video-relevance.test.ts`.
 > 4. **شفافية:** كل ترشيح عليه «ليه اتيرشح» (نص `reason` المولّد من البوابة) +
 >    زر «مش مناسب» بيشيل الترشيح من العرض في الجلسة الحالية.
+>
+> **⚠️ محدَّث في P3 — YouTube Intelligence:**
+> 5. **حفظ الفيديو المختار:** أول تشغيل لأي فيديو ⇒ `POST /api/lesson-content`
+>    بـ `action: "set_video"` يخزّنه في `lesson_content.video` (jsonb — migration
+>    مجمّعة واحدة `db/50-lesson-studio.sql`، الرقم اتحرّك من 48 لأنه متاخد).
+>    `ensureVideoLoaded` لو لقى فيديو محفوظ ⇒ **skip البحث تمامًا** — والطالب
+>    يقدر يدوّر يدويًا في أي وقت (البحث اليدوي بيحفظ برضه عند التشغيل).
+> 6. **محاذاة الأقسام بتوقيت الفيديو:** GET `/api/lesson-content` بيرجّع
+>    `videoTByHeading` — كل عنوان قسم من الشرح بيتطابق مع مقاطع التفريغ
+>    (`alignHeadingsToTranscript` في `lib/lesson/video-align.ts`، عتبة 0.5 بعد
+>    التطبيع العربي). اللي مالوش تطابق كافي بيرجع `null` بصدق.
+> 7. **تنقل قسم↔فيديو (بدون enablejsapi):** من الـ Navigator زر ⏱ بجانب القسم
+>    المتحاذى بيفتح `watchUrl + &t=<seconds>` في تاب جديد؛ ومن مركز الفيديو
+>    قفزة من الفيديو للقسم في تاب الشرح (scroll للـ anchor).
 
 | البند | العقد |
 |---|---|

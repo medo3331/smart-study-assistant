@@ -27,7 +27,16 @@ export default function VideoCenter({
   lesson: string;
   learningStyle: string;
 }) {
-  const { video, openVideo, ensureVideoLoaded, dismissVideoCandidate, activeTab } = useLessonStudio();
+  const { video, openVideo, ensureVideoLoaded, dismissVideoCandidate, activeTab, outline, setActiveTab, setCurrentSectionId } = useLessonStudio();
+
+  /** ⏱️ من الفيديو للشرح (P3): قفز للقسم المرتبط في تاب الشرح. */
+  const jumpToSection = (sectionId: string) => {
+    setCurrentSectionId(sectionId);
+    setActiveTab("learn");
+    setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 350);
+  };
 
   // أول فتح لتاب الفيديو ⇒ ابدأ البحث (مرة واحدة — guard جوه الـ provider).
   useEffect(() => {
@@ -143,6 +152,25 @@ export default function VideoCenter({
           onSelect={(c) => openVideo(c)}
           onDismiss={(id) => dismissVideoCandidate(id)}
         />
+
+        {/* ─── ⏱️ من الفيديو للشرح (P3): أقسام الدرس — قفز للقسم في تاب الشرح ─── */}
+        {outline.length > 0 && (
+          <div className="rounded-xl border border-rule bg-paper-2 p-3 space-y-2">
+            <p className="text-[11px] font-bold text-ink-soft">أقسام الدرس — من الفيديو للشرح</p>
+            <div className="flex flex-wrap gap-1.5">
+              {outline.map((section) => (
+                <button
+                  key={section.id}
+                  onClick={() => jumpToSection(section.id)}
+                  className="btn btn-quiet text-[10.5px] px-2 py-1"
+                  title="افتح القسم ده في تاب الشرح"
+                >
+                  {section.heading}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* iframe واحد ظاهر في المرة — بيتقفل لما التاب يبانى (الميني بلاير بياخد الدور) */}
         {isTabActive ? (

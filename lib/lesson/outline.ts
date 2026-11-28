@@ -20,6 +20,8 @@ export type OutlineSection = {
   heading: string;
   /** مصدر القسم — للتتبع فقط. */
   source: "cited" | "markdown";
+  /** توقيت الفيديو (ثوانٍ) من محاذاة التفريغ (P3) — null = مفيش محاذاة موثوقة. */
+  videoT?: number | null;
 };
 
 /** slug عربي-آمن: أرقام وحروف (أي لغة) وشرطات — ثابت لنفس العنوان. */

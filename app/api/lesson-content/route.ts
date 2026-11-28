@@ -24,6 +24,9 @@ import {
   readCitedVersions,
 } from "@/lib/lesson/cited-derive";
 import { subjectMatches } from "@/lib/academics/subject-match";
+import { extractOutline } from "@/lib/lesson/outline";
+import { alignHeadingsToTranscript } from "@/lib/lesson/video-align";
+import type { SavedLessonVideo } from "@/lib/lesson/video-server";
 import {
   isExplanationMode,
   withExplanationVersion,
@@ -379,6 +382,29 @@ function storedVersionOf(rawExplanation: Record<string, unknown> | null, mode: C
   return versions.length + (hasCurrent ? 1 : 0);
 }
 
+/* ═════════════════ الفيديو المحفوظ (P3) ═════════════════ */
+
+/** قراءة الفيديو المحفوظ — best-effort: أي شكل تالف أو رابط بره يوتيوب ⇒ null. */
+function readSavedVideo(raw: unknown): SavedLessonVideo | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const videoId = typeof record.videoId === "string" ? record.videoId.trim() : "";
+  const embedUrl = typeof record.embedUrl === "string" ? record.embedUrl : "";
+  const watchUrl = typeof record.watchUrl === "string" ? record.watchUrl : "";
+  if (!videoId || !embedUrl.startsWith("https://www.youtube-nocookie.com/embed/")) return null;
+  if (!/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{5,25}$/.test(watchUrl)) return null;
+  const thumbnail = typeof record.thumbnail === "string" && record.thumbnail.startsWith("https://") ? record.thumbnail : null;
+  return {
+    videoId: videoId.slice(0, 32),
+    title: typeof record.title === "string" && record.title.trim() ? record.title.trim().slice(0, 300) : "فيديو الدرس",
+    channel: typeof record.channel === "string" && record.channel.trim() ? record.channel.trim().slice(0, 120) : null,
+    embedUrl,
+    watchUrl,
+    thumbnail,
+    pickedAt: typeof record.pickedAt === "string" ? record.pickedAt : "",
+  };
+}
+
 /* ═════════════════════════ الراوت ═════════════════════════ */
 
 type LessonContentBody = {
@@ -388,6 +414,7 @@ type LessonContentBody = {
   edu?: unknown;
   action?: unknown;
   lectureId?: unknown;
+  video?: unknown;
 };
 
 function badRequest(message: string, code: string) {
@@ -429,6 +456,15 @@ export async function GET(req: Request) {
     const storedContent = readStoredContent(row);
     // مصادر الدرس (P2): ملفات مساحة العمل المرتبطة بمادة الدرس.
     const workspaceFiles = await loadWorkspaceFiles(supabase, user.id, subjectName);
+    // الفيديو المختار المحفوظ (P3) — يوفّر البحث في الجلسات الجاية.
+    const savedVideo = readSavedVideo(row?.video);
+    // محاذاة الأقسام بتوقيت التفريغ (P3): headings من الشرح المخزّن + مقاطع transcript
+    // ⇒ videoT لكل قسم (لروابط &t= — بدون enablejsapi). مفيش تفريغ ⇒ كل القيم null.
+    const transcriptSegments = row?.transcript ? extractSegments(row.transcript) : [];
+    const outlineSections = extractOutline({ cited: storedContent.cited, modes: storedContent.modes });
+    const videoTByHeading = transcriptSegments.length
+      ? alignHeadingsToTranscript(outlineSections.map((s) => s.heading), transcriptSegments)
+      : {};
     // الأوضاع الم citied فوق التفريغ (general/detailed) — كائنات جوّه explanation jsonb.
     const citedModes =
       storedContent.rawExplanation
@@ -443,6 +479,8 @@ export async function GET(req: Request) {
       content: storedContent,
       citedModes,
       workspaceFiles,
+      savedVideo,
+      videoTByHeading,
       // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
       explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
       // إصدارات الأوضاع الم citied — بتترجع كنص للمعاينة.
@@ -565,6 +603,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...linkState });
     }
 
+    /* ── حفظ الفيديو المختار (P3 — «ولّد مرة وخزّن»: يوفّر البحث في الجلسات الجاية) ── */
+    if (body.action === "set_video") {
+      const limited = await checkRateLimit(`lesson-content-video:${user.id}`, 30, 60_000, "message");
+      if (limited) return limited;
+
+      const saved = readSavedVideo(body.video);
+      if (!saved) {
+        return badRequest("بيانات الفيديو غير صالحة (لازم رابط يوتيوب صحيح).", "BAD_VIDEO");
+      }
+      const { error: saveError } = await supabase
+        .from("lesson_content")
+        .upsert(
+          {
+            user_id: user.id,
+            day_id: dayId,
+            video: saved,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,day_id" }
+        );
+      if (saveError) {
+        console.warn("lesson-content: حفظ الفيديو فشل (migration ناقصة؟):", saveError.message);
+        return NextResponse.json(
+          { error: { message: "مقدرنش نحفظ الفيديو. جرّب تاني.", code: "SAVE_FAILED" } },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({ ok: true, savedVideo: saved });
+    }
+
     /* ── التوليد (كاش → توليد → حفظ) ── */
     const limited = await checkRateLimit(`lesson-content:${user.id}`, 20, 60_000, "message");
     if (limited) return limited;
@@ -577,7 +645,7 @@ export async function POST(req: Request) {
 
     const { data: row } = await supabase
       .from("lesson_content")
-      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at")
+      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at, video, resume, notes, summaries")
       .eq("user_id", user.id)
       .eq("day_id", dayId)
       .maybeSingle();

@@ -41,6 +41,17 @@ export interface VideoCandidate {
   relevanceScore: number;
 }
 
+/** الفيديو المختار المحفوظ في `lesson_content.video` (P3 — يوفّر البحث). */
+export type SavedLessonVideo = {
+  videoId: string;
+  title: string;
+  channel: string | null;
+  embedUrl: string;
+  watchUrl: string;
+  thumbnail: string | null;
+  pickedAt: string;
+};
+
 // Cache
 const CACHE_KEY_VERSION = "v3";
 const CACHE = new Map<string, { candidates: VideoCandidate[]; ts: number }>();

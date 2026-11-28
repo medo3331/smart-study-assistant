@@ -23,7 +23,7 @@ export default function StudyNavigator({
 }: {
   planProgress: { completed: number; total: number } | null;
 }) {
-  const { lesson, outline, currentSectionId, setCurrentSectionId, setActiveTab, progress } = useLessonStudio();
+  const { lesson, outline, currentSectionId, setCurrentSectionId, setActiveTab, progress, savedVideo } = useLessonStudio();
 
   const overallPercent =
     planProgress && planProgress.total > 0
@@ -49,6 +49,12 @@ export default function StudyNavigator({
     setTimeout(() => {
       document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 350);
+  };
+
+  /** ⏱️ من القسم للفيديو (P3): فتح الفيديو عند توقيت القسم — رابط &t= بدون enablejsapi. */
+  const watchSectionInVideo = (videoT: number) => {
+    if (!savedVideo) return;
+    window.open(`${savedVideo.watchUrl}&t=${videoT}s`, "_blank", "noopener,noreferrer");
   };
 
   const hasResume = Boolean(progress.updatedAt && (progress.lastTab || progress.lastSectionId));
@@ -113,6 +119,19 @@ export default function StudyNavigator({
                       className={`h-1.5 w-1.5 rounded-full shrink-0 ${current ? "bg-[var(--accent)]" : "bg-[var(--border)]"}`}
                     />
                     <span className="truncate">{section.heading}</span>
+                    {/* ⏱️ من القسم للفيديو (P3) — لو القسم متحاذى مع توقيت في الفيديو المحفوظ */}
+                    {savedVideo && typeof section.videoT === "number" && section.videoT != null && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          watchSectionInVideo(section.videoT as number);
+                        }}
+                        title="افتح الفيديو عند بداية القسم ده"
+                        className="ms-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded-[5px] border border-[var(--border)] text-ink-soft hover:text-ink transition tnum"
+                      >
+                        ⏱ {Math.floor(section.videoT / 60)}:{String(section.videoT % 60).padStart(2, "0")}
+                      </button>
+                    )}
                   </button>
                 </li>
               );

@@ -161,6 +161,8 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   // 📚 مصادر الدرس (P2): ملفات مساحة العمل المرتبطة بمادة الدرس — من GET.
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileOption[]>([]);
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
+  // 🎯 محاذاة الأقسام بتوقيت التفريغ (P3): heading → ثوانٍ الفيديو (null = مفيش محاذاة).
+  const [videoTByHeading, setVideoTByHeading] = useState<Record<string, number | null>>({});
 
   /** تطبيق حالة الربط من رد الراوت (GET أو فعل الربط/الفصل). */
   const applyLinkState = (data: any) => {
@@ -431,6 +433,11 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
         applyLinkState(data);
         // مصادر الدرس — ملفات مساحة العمل المرتبطة بالمادة (best-effort).
         if (Array.isArray(data.workspaceFiles)) setWorkspaceFiles(data.workspaceFiles as WorkspaceFileOption[]);
+        // محاذاة الأقسام بتوقيت التفريغ (P3) + الفيديو المحفوظ.
+        if (data.videoTByHeading && typeof data.videoTByHeading === "object") {
+          setVideoTByHeading(data.videoTByHeading as Record<string, number | null>);
+        }
+        if (data.savedVideo) studio.setSavedVideo(data.savedVideo);
         // إصدارات الأوضاع الثلاثة من الصف المخزّن (best-effort).
         if (data.explanationVersions && typeof data.explanationVersions === "object") {
           setAllVersions(data.explanationVersions as Partial<Record<ExplanationMode, ExplanationVersion[]>>);
@@ -509,11 +516,16 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
       : null
     : content;
 
-  // 🗺️ P1-4 — تغذية الـ Navigator: الأقسام من الشرح المخزّن (cited أو markdown).
+  // 🗺️ P1-4 — تغذية الـ Navigator: الأقسام من الشرح المخزّن (cited أو markdown)
+  // + توقيت الفيديو المحاذاة من التفريغ (P3).
   useEffect(() => {
-    studio.setOutline(extractOutline({ cited: displayCited, modes: modeContent }));
+    const sections = extractOutline({ cited: displayCited, modes: modeContent }).map((section) => ({
+      ...section,
+      videoT: videoTByHeading[section.heading] ?? null,
+    }));
+    studio.setOutline(sections);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- بنحدّث الـ outline لما المحتوى نفسه يتغير بس.
-  }, [displayCited, modeContent]);
+  }, [displayCited, modeContent, videoTByHeading]);
 
   // 🧭 تتبّع القسم الحالي — أعلى heading ظاهر في الشرح (للـ Navigator والـ Resume).
   const sectionTrackRef = useRef<HTMLDivElement | null>(null);  useEffect(() => {
