@@ -846,7 +846,7 @@ begin
     'faculty', case when v_show_academic then v_row.faculty end,
     'major', case when v_show_academic then v_row.major end,
     'year', case when v_show_academic then v_row.year end,
-    'interests', case when v_show_academic then to_jsonb(v_row.interests) end::text[],
+    'interests', case when v_show_academic then v_row.interests end,
     'account_privacy', coalesce(v_row.account_privacy, 'public'),
     'allow_messages', coalesce(v_row.allow_messages, true),
     'allow_friend_requests', coalesce(v_row.allow_friend_requests, true),
