@@ -8,9 +8,12 @@
  *   - recordAuditLog بعد كل تغيير (PASS/FAIL).
  */
 
+import { revalidatePath } from "next/cache";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdminActor } from "@/lib/admin/action-guard";
 import { recordAuditLog } from "@/lib/admin/audit-log-record";
 import { pgQuery } from "@/lib/admin/pg";
+import { isUuid } from "@/lib/credits/grants";
 
 export interface BalancingActionResult {
   ok: boolean;
@@ -40,7 +43,7 @@ export async function updateCoinSourceRule(input: {
   }
 
   const id = (input.id ?? "").trim();
-  if (!/^[a-z_]{2,40}$/.test(id)) return { ok: false, message: "معرّف المصدر غير صالح." };
+  if (!/^[a-z0-9_]{2,40}$/.test(id)) return { ok: false, message: "معرّف المصدر غير صالح." };
 
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -73,6 +76,7 @@ export async function updateCoinSourceRule(input: {
       resource_type: "coin_source_rule", resource_id: id,
       details: { changes: { amount: input.amount, daily_cap: input.dailyCap, is_live: input.isLive } }, result: "PASS",
     });
+    revalidatePath("/admin/economy");
     return { ok: true, message: `تم تحديث قاعدة «${id}».` };
   } catch (e) {
     await recordAuditLog({
@@ -149,6 +153,7 @@ export async function updateExchangeSettings(input: {
       resource_type: "economy_exchange_settings", resource_id: "1",
       details: { input, effective: next }, result: "PASS",
     });
+    revalidatePath("/admin/economy");
     return { ok: true, message: "تم تحديث إعدادات التبديل." };
   } catch (e) {
     await recordAuditLog({
@@ -202,6 +207,7 @@ export async function updatePackPrice(input: {
       resource_type: table, resource_id: input.packId,
       details: { changes: { price: input.price, is_active: input.isActive } }, result: "PASS",
     });
+    revalidatePath("/admin/economy");
     return { ok: true, message: "تم تحديث الحزمة." };
   } catch (e) {
     await recordAuditLog({
@@ -210,5 +216,86 @@ export async function updatePackPrice(input: {
       details: { reason: e instanceof Error ? e.message : "unknown" }, result: "FAIL",
     });
     return { ok: false, message: "فشل التحديث — راجع سجل العمليات." };
+  }
+}
+
+/** إضافة رصيد يدوي لمستخدم (Coins أو Credits) من /admin/economy.
+ *  Coins → add_coins_grant (المسار المركزي الوحيد، source_class='admin').
+ *  Credits → grant_credits (service-only، p_source='bonus').
+ *  كل محاولة بتتسجل في admin_audit_log. */
+export async function grantUserBalance(input: {
+  userId: string;
+  kind: "coins" | "credits";
+  amount: number;
+  note?: string;
+}): Promise<BalancingActionResult> {
+  let actor;
+  try {
+    ({ actor } = await requireAdminActor("rewards.manage"));
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "غير مصرح" };
+  }
+
+  const userId = (input.userId ?? "").trim();
+  if (!isUuid(userId)) return { ok: false, message: "معرّف المستخدم غير صالح (لازم UUID)." };
+  if (input.kind !== "coins" && input.kind !== "credits") {
+    return { ok: false, message: "نوع الرصيد غير معروف." };
+  }
+  if (!isPositiveInt(input.amount) || input.amount > MAX_AMOUNT) {
+    return { ok: false, message: `المبلغ لازم رقم من 1 إلى ${MAX_AMOUNT}.` };
+  }
+  const note = (input.note ?? "").trim().slice(0, 200);
+  const refId = `admin:${actor.userId}:${crypto.randomUUID()}`;
+
+  const db = createServiceClient();
+  try {
+    if (input.kind === "coins") {
+      const { data: awarded, error } = await db.rpc("add_coins_grant", {
+        p_user_id: userId,
+        p_source: "admin_grant",
+        p_source_class: "admin",
+        p_ref_id: refId,
+        p_amount: input.amount,
+        p_metadata: { by: actor.userEmail ?? actor.userId, note: note || null },
+      });
+      if (error) throw error;
+      if (!awarded || Number(awarded) !== input.amount) {
+        await recordAuditLog({
+          actor: actor.userId, actor_email: actor.userEmail ?? null, action: "rewards.manage",
+          resource_type: "coin_grant", resource_id: userId,
+          details: { reason: "add_coins_grant rejected (closed source or cap)", amount: input.amount }, result: "FAIL",
+        });
+        return { ok: false, message: "لم تُضف الكوينز (المصدر مقفول أو تجاوز السقف اليومي) — راجع قواعد المصادر." };
+      }
+    } else {
+      const { error } = await db.rpc("grant_credits", {
+        p_user_id: userId,
+        p_amount: input.amount,
+        p_expires_at: null,
+        p_source: "bonus",
+        p_notes: note || `منح إداري من ${actor.userEmail ?? actor.userId}`,
+      });
+      if (error) throw error;
+    }
+
+    await recordAuditLog({
+      actor: actor.userId, actor_email: actor.userEmail ?? null, action: "rewards.manage",
+      resource_type: input.kind === "coins" ? "coin_grant" : "credit_grant", resource_id: userId,
+      details: { amount: input.amount, kind: input.kind, ref_id: refId, note: note || null }, result: "PASS",
+    });
+    revalidatePath("/admin/economy");
+    return {
+      ok: true,
+      message: input.kind === "coins"
+        ? `تمت إضافة ${input.amount} كوين للمستخدم.`
+        : `تمت إضافة ${input.amount} كريدت للمستخدم.`,
+    };
+  } catch (e) {
+    await recordAuditLog({
+      actor: actor.userId, actor_email: actor.userEmail ?? null, action: "rewards.manage",
+      resource_type: "balance_grant", resource_id: userId,
+      details: { kind: input.kind, amount: input.amount, reason: e instanceof Error ? e.message : "unknown" }, result: "FAIL",
+    });
+    return { ok: false, message: e instanceof Error ? `فشل المنح: ${e.message}` : "فشل المنح — راجع سجل العمليات." };
   }
 }

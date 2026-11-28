@@ -30,6 +30,7 @@
 
 - **الجزء ١ — توسعة المتجر + مكافأة الكويز + الأبطال (✅ 2026-11-28):** `db/118` مطبّقة على الإنتاج — 14 عنصر جديد (8 صور رمزية + 4 ألقاب + رفيقين) · مكافأة اختبار الدرس (+5 كوينز) شغّالة بإثبات سيرفري كامل (D-M-04): تصحيح في `/api/lesson-quiz/submit` فوق جدول `lesson_quiz_attempts` + فرع إثبات داخل `award_coins` · Magicly Weekly Champions: جوائز 200/150/100 أسبوعية على مكافآت الدراسة (مش الشرا) عبر cron `/api/cron/weekly-champions` + لوحة «أبطال الأسبوع» في `/shop`.
 - التفاصيل: `phases/dev-m3-store-expansion-rewards.md`.
+- **الجزء ٢ — أدوات الإدارة المالية (✅ 2026-11-28):** `db/119` على الإنتاج — إصلاح حفظ Economy Balancing (regex معرّفات بأرقام + revalidatePath) · قبول/رفض طلبات الشراء في كل الحالات النشطة (زي الاشتراكات) · «إضافة رصيد» لمستخدم (Coins عبر `add_coins_grant` / Credits عبر `grant_credits`) في `/admin/economy` · صفحة جديدة `/admin/store-items` لإضافة وحذف عناصر متجر مخصصة (صور/ألقاب/رفقاء) بتظهر في `/shop` و`/inventory` فورًا. التفاصيل: `phases/dev-m3-part2-admin-tools.md`.
 
 ## 2. نطاق DEV-M2 (من `docs/STORE_GAMES_REBUILD_PROPOSAL.md`)
 
@@ -57,3 +58,4 @@
 | 2026-11-28 | DEV-M2 جزء ٣: Bundles ذرية + قسم Bundles & Offers + Economy Balancing — db/117 على الإنتاج (D-M-03/D-M-06) |
 | 2026-11-28 | إغلاق DEV-M2 — فتح DEV-M3 |
 | 2026-11-28 | DEV-M3 جزء ١: توسعة المتجر (14 عنصر) + مكافأة الكويز بإثبات سيرفري (D-M-04) + Weekly Champions cron — db/118 على الإنتاج |
+| 2026-11-28 | DEV-M3 جزء ٢: أدوات الإدارة — إصلاح حفظ Economy Balancing + قبول/رفض طلبات الشراء + إضافة رصيد من اللوحة + عناصر متجر مخصصة (/admin/store-items) — db/119 على الإنتاج |

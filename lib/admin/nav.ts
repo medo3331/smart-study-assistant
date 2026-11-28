@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "Scale" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy" | "ShieldAlert";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "Scale" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy" | "ShieldAlert" | "Store";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -87,6 +87,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "تعديل المكافآت والأسعار والتبديل من الجداول — بدون كود (D-M-06)",
     permission: "rewards.manage",
     icon: "Scale",
+  },
+  {
+    href: "/admin/store-items",
+    label: "عناصر المتجر",
+    description: "إضافة وحذف عناصر مخصصة في المتجر: صور رمزية، ألقاب، رفقاء — بدون كود",
+    permission: "rewards.manage",
+    icon: "Store",
   },
   {
     href: "/admin/audit-log",

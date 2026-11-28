@@ -44,7 +44,10 @@ async function loadRequest(requestId: string) {
   } | null;
 }
 
-/** تحديث ذرّي: ينجح مرة واحدة فقط من حالة payment_submitted. */
+/** تحديث ذرّي: ينجح مرة واحدة فقط من حالة نشطة (بانتظار الدفع أو دفع مؤكد) —
+ *  الأدمن يقدر يقبّل/يرفض قبل ما المستخدم يؤكد الدفع لو الدفع حصل يدويًا. */
+const ACTIVE_STATUSES = ["payment_submitted", "awaiting_payment"] as const;
+
 async function transitionStatus(
   requestId: string,
   to: "approved" | "rejected",
@@ -56,7 +59,7 @@ async function transitionStatus(
     .from("purchase_requests")
     .update({ status: to, reviewed_by: reviewedBy, reviewed_at: new Date().toISOString(), admin_note: adminNote })
     .eq("id", requestId)
-    .eq("status", "payment_submitted")
+    .in("status", [...ACTIVE_STATUSES])
     .select("id")
     .maybeSingle();
   return !error && !!data;
@@ -81,8 +84,8 @@ export async function approvePurchaseRequest(requestId: string, adminNote?: stri
   if (!request) {
     return { ok: false, message: "الطلب غير موجود.", error: "not_found" };
   }
-  if (request.status !== "payment_submitted") {
-    return { ok: false, message: "لا يمكن الموافقة قبل تأكيد المستخدم للدفع.", error: "status_invalid" };
+  if (!(ACTIVE_STATUSES as readonly string[]).includes(request.status)) {
+    return { ok: false, message: "الطلب اتراجع أو اتلغى بالفعل — حدّث القائمة.", error: "status_invalid" };
   }
 
   let resultMessage = "";
@@ -224,8 +227,8 @@ export async function rejectPurchaseRequest(requestId: string, adminNote?: strin
   if (!request) {
     return { ok: false, message: "الطلب غير موجود.", error: "not_found" };
   }
-  if (request.status !== "payment_submitted") {
-    return { ok: false, message: "لا يمكن الرفض إلا بعد تأكيد المستخدم للدفع.", error: "status_invalid" };
+  if (!(ACTIVE_STATUSES as readonly string[]).includes(request.status)) {
+    return { ok: false, message: "الطلب اتراجع أو اتلغى بالفعل — حدّث القائمة.", error: "status_invalid" };
   }
 
   const transitioned = await transitionStatus(requestId, "rejected", adminUserId, note || null);

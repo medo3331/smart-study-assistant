@@ -133,7 +133,8 @@ export default function PurchaseRequestsTable({ requests }: { requests: Purchase
               </tr>
             ) : (
               rows.map((r) => {
-                const isPendingReview = r.status === "payment_submitted";
+                const isPendingReview = r.status === "payment_submitted" || r.status === "awaiting_payment";
+                const needsPaymentProof = r.status === "awaiting_payment";
                 const busy = isPending && pendingId === r.id;
                 return (
                   <tr key={r.id} className={`border-t border-slate-700/70 ${isPendingReview ? "bg-amber-500/5" : ""}`}>
@@ -169,7 +170,19 @@ export default function PurchaseRequestsTable({ requests }: { requests: Purchase
                     <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.created_at)}</td>
                     <td className="px-3 py-2">
                       {isPendingReview ? (
-                        noteFor === r.id ? (
+                        needsPaymentProof && noteFor !== r.id ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] text-slate-400">المستخدم لسه مؤكدش الدفع</span>
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => { setNoteFor(r.id); setNote(""); }}
+                              className="rounded bg-amber-600 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
+                            >
+                              مراجعة يدوية
+                            </button>
+                          </div>
+                        ) : noteFor === r.id ? (
                           <div className="flex flex-col gap-1 min-w-44">
                             <input
                               value={note}
