@@ -19,7 +19,10 @@ export interface VideoSearchResult {
   error?: "missing_api_key" | "api_error" | "quota_exceeded" | "no_results" | "no_videos_found" | "apify_fallback_failed";
 }
 
-/** Build a concise YouTube search query from education context. */
+/** Build a concise YouTube search query from education context.
+ *  P2 (مطلب 3): الاستعلام لازم يشمل **المادة والموضوع الاتنين** — الموضوع
+ *  لوحده كان بيرجع فيديوهات عامة ملهاش علاقة بالمادة اللي الطالب بيدرسها.
+ */
 export function buildYouTubeQuery(ctx: {
   country?: string;
   stage?: string;
@@ -32,11 +35,11 @@ export function buildYouTubeQuery(ctx: {
   language?: string;
 }): string {
   const parts: string[] = [];
+  // المادة + الموضوع معًا (مش واحدة بدل التانية — ده كان مصدر الاقتراحات العامة).
   if (ctx.subject) parts.push(ctx.subject);
-  if (ctx.lesson && ctx.lesson !== ctx.subject) parts.push(ctx.lesson);
-  else if (ctx.topic && ctx.topic !== ctx.subject) parts.push(ctx.topic);
+  if (ctx.topic && ctx.topic !== ctx.subject) parts.push(ctx.topic);
+  if (ctx.lesson && ctx.lesson !== ctx.topic && ctx.lesson !== ctx.subject) parts.push(ctx.lesson);
   if (ctx.track) parts.push(ctx.track);
-  if (ctx.faculty) parts.push(ctx.faculty);
   if (ctx.stage && ctx.stage !== "university") {
     const stageMap: Record<string, string> = {
       PRIMARY: "ابتدائي", PREPARATORY: "إعدادي",

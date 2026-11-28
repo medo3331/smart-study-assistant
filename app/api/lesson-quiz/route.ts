@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { aiRouter } from "@/lib/ai/router";
 import { AiProviderError } from "@/lib/ai/types";
 import { recordAiOperation } from "@/lib/ai/operations";
@@ -22,6 +23,19 @@ const SYSTEM_PROMPT = `أنت مولّد اختبارات تعليمية. مهم
 - correctIndex رقم من 0 إلى 3.
 - لا تختلق معلومات غير موجودة في سياق الدرس.
 - لا تضف أي شرح أو تعليق خارج JSON.`;
+
+/** G7 — إصدار الـ prompt: أي تغيير في صياغة التوليد ⇒ مفتاح كاش جديد. */
+const PROMPT_VERSION = "v1";
+const QUIZ_LANGUAGE = "ar";
+
+/**
+ * G7 (P1-8) — بصمة المحتوى: sha256(topic|subject|description|count|prompt_version).
+ * نفس المعاملات ⇒ نفس الأسئلة ⇒ الرد من `lesson_quiz_cache` من غير حجز
+ * كريدت ولا صف جديد في `ai_operations`.
+ */
+function buildContentHash(topic: string, subject: string, description: string, count: number): string {
+  return createHash("sha256").update(`${topic}|${subject}|${description}|${count}|${PROMPT_VERSION}`).digest("hex");
+}
 
 function extractJsonArray(raw: string): unknown {
   if (!raw) return null;
@@ -62,6 +76,81 @@ function validateQuestions(parsed: unknown): LessonQuizQuestion[] | null {
   return out;
 }
 
+/** إثبات سيرفري (D-M-04): attempt جديد **دايمًا** لما الطالب يبدأ اختبار —
+ *  الكاش بيوفر التوليد بس، مش التسجيل. فشل التسجيل ما يكسرش الاختبار. */
+async function createAttempt(
+  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
+  userId: string,
+  questions: LessonQuizQuestion[]
+): Promise<string | null> {
+  try {
+    // المحاولة بتنتهي بعد ساعتين (partial index على status='pending')
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const { data: attempt, error: attemptError } = await supabase
+      .from("lesson_quiz_attempts")
+      .insert({ user_id: userId, questions, total: questions.length, status: "pending", expires_at: expiresAt })
+      .select("id")
+      .single();
+    if (!attemptError && attempt) return (attempt as { id: string }).id;
+  } catch (e) {
+    console.warn("lesson-quiz attempt insert failed (متجاهَل):", e);
+  }
+  return null;
+}
+
+/** مسار التوليد الأصلي (miss / كلاينت بدون dayId) — زي ما كان بالضبط. */
+async function generateAndRespond(
+  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
+  userId: string,
+  userPrompt: string
+): Promise<Response> {
+  const candidates = routeCandidates("chat");
+  const hasEnt = async (k: string, v: string) => {
+    const { data } = await supabase.rpc("has_entitlement", { p_user_id: userId, p_kind: k, p_value: v });
+    return Boolean(data);
+  };
+  const accessible = await filterAccessibleModels(candidates, hasEnt);
+  if (accessible.length === 0 && candidates.length > 0) {
+    return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
+  }
+  const guard = await guardAiAccessAndReserve(supabase, userId, accessible[0]?.model ?? "openai/gpt-oss-120b");
+  if (!guard.ok) return guard.response;
+
+  let completion;
+  try {
+    completion = await aiRouter.completeChat("chat", {
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.4,
+    });
+  } catch (error) {
+    await refundAiCreditIfNeeded(supabase, userId, guard.refId);
+    if (!(error instanceof AiProviderError)) throw error;
+    const status = error.status === 429 ? 429 : error.status === 503 ? 503 : 502;
+    return NextResponse.json(
+      { error: { message: status === 429 ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء توليد الاختبار. حاول تاني.", code: status === 429 ? "PROVIDER_RATE_LIMIT" : status === 503 ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR" } },
+      { status }
+    );
+  }
+
+  const parsed = extractJsonArray(completion.content);
+  const questions = validateQuestions(parsed);
+  if (!questions) {
+    await refundAiCreditIfNeeded(supabase, userId, guard.refId);
+    return NextResponse.json(
+      { error: { message: "تعذّر تحليل أسئلة الاختبار. حاول تاني.", code: "INVALID_OUTPUT" } },
+      { status: 502 }
+    );
+  }
+
+  void recordAiOperation(supabase, { userId, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
+
+  const attemptId = await createAttempt(supabase, userId, questions);
+  return NextResponse.json({ questions, attemptId });
+}
+
 export async function POST(req: Request) {
   try {
     const { user, supabase, response: authError } = await requireUser("message");
@@ -78,6 +167,7 @@ export async function POST(req: Request) {
     const topic = typeof (body as { topic?: unknown }).topic === "string" ? (body as { topic: string }).topic.trim() : "";
     const subject = typeof (body as { subject?: unknown }).subject === "string" ? (body as { subject: string }).subject.trim() : "";
     const description = typeof (body as { description?: unknown }).description === "string" ? (body as { description: string }).description.trim() : "";
+    const dayId = typeof (body as { dayId?: unknown }).dayId === "string" ? (body as { dayId: string }).dayId.trim() : "";
     const count = Math.min(Math.max(Number((body as { count?: unknown }).count ?? 4) || 4, 1), 10);
 
     if (!topic) {
@@ -86,68 +176,63 @@ export async function POST(req: Request) {
 
     const userPrompt = "موضوع الدرس: \"" + topic + "\"" + (subject ? " (مادة: " + subject + ")" : "") + (description ? " — وصف: " + description : "") + ".\nأنتج " + count + " أسئلة اختيار من متعدد (4 خيارات لكل سؤال) لاختبار فهم الطالب. أرجع JSON فقط.";
 
-    const candidates = routeCandidates("chat");
-    const hasEnt = async (k: string, v: string) => {
-      const { data } = await supabase.rpc("has_entitlement", { p_user_id: user.id, p_kind: k, p_value: v });
-      return Boolean(data);
-    };
-    const accessible = await filterAccessibleModels(candidates, hasEnt);
-    if (accessible.length === 0 && candidates.length > 0) {
-      return NextResponse.json({ error: { message: "هذه المهمة تتطلب صلاحية.", code: "MODEL_ACCESS_REQUIRED" } }, { status: 403 });
-    }
-    const guard = await guardAiAccessAndReserve(supabase, user.id, accessible[0]?.model ?? "openai/gpt-oss-120b");
-    if (!guard.ok) return guard.response;
+    // ── G7: قراية الكاش الأول (لو فينا day_id — مفتاح الكاش الفريد بيحتاجه) ──
+    if (dayId) {
+      const contentHash = buildContentHash(topic, subject, description, count);
+      try {
+        const { data: cached } = await supabase
+          .from("lesson_quiz_cache")
+          .select("questions")
+          .match({
+            user_id: user.id,
+            day_id: dayId,
+            content_hash: contentHash,
+            prompt_version: PROMPT_VERSION,
+            language: QUIZ_LANGUAGE,
+            question_count: count,
+          })
+          .maybeSingle();
+        const cachedQuestions = validateQuestions((cached as { questions?: unknown } | null)?.questions);
+        if (cachedQuestions) {
+          // hit: الرد من الكاش — من غير حجز كريدت ولا نداء AI ولا صف في ai_operations.
+          const attemptId = await createAttempt(supabase, user.id, cachedQuestions);
+          return NextResponse.json({ questions: cachedQuestions, attemptId, cached: true });
+        }
+      } catch (e) {
+        // فشل قراية الكاش ⇒ تكملة التوليد العادي زي ما هي.
+        console.warn("lesson-quiz cache read failed (متجاهَل):", e);
+      }
 
-    let completion;
-    try {
-      completion = await aiRouter.completeChat("chat", {
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.4,
-      });
-    } catch (error) {
-      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-      if (!(error instanceof AiProviderError)) throw error;
-      const status = error.status === 429 ? 429 : error.status === 503 ? 503 : 502;
-      return NextResponse.json(
-        { error: { message: status === 429 ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء توليد الاختبار. حاول تاني.", code: status === 429 ? "PROVIDER_RATE_LIMIT" : status === 503 ? "PROVIDER_UNAVAILABLE" : "PROVIDER_ERROR" } },
-        { status }
-      );
-    }
+      const response = await generateAndRespond(supabase, user.id, userPrompt);
 
-    const parsed = extractJsonArray(completion.content);
-    const questions = validateQuestions(parsed);
-    if (!questions) {
-      await refundAiCreditIfNeeded(supabase, user.id, guard.refId);
-      return NextResponse.json(
-        { error: { message: "تعذّر تحليل أسئلة الاختبار. حاول تاني.", code: "INVALID_OUTPUT" } },
-        { status: 502 }
-      );
-    }
+      // كتابة الكاش best-effort بعد توليد ناجح — فشلها ما يكسر الرد.
+      if (response.status === 200) {
+        const payload = (await response.clone().json().catch(() => null)) as { questions?: LessonQuizQuestion[] } | null;
+        if (payload?.questions) {
+          try {
+            await supabase.from("lesson_quiz_cache").upsert(
+              {
+                user_id: user.id,
+                day_id: dayId,
+                content_hash: contentHash,
+                prompt_version: PROMPT_VERSION,
+                language: QUIZ_LANGUAGE,
+                question_count: count,
+                questions: payload.questions,
+              },
+              { onConflict: "user_id, day_id, content_hash, prompt_version, language, question_count" }
+            );
+          } catch (e) {
+            console.warn("lesson-quiz cache write failed (متجاهَل):", e);
+          }
+        }
+      }
 
-    void recordAiOperation(supabase, { userId: user.id, provider: completion.provider, model: completion.model, taskType: "chat", status: "completed", usage: completion.usage, contentLength: completion.content.length });
-
-    // 🧾 إثبات سيرفري (D-M-04): بنسجّل المحاولة بأسئلتها — التصحيح بعدها
-    // بيحصل في /api/lesson-quiz/submit على السيرفر، ومكافأة
-    // lesson_quiz_passed مرجعها attempt id (فرع داخل award_coins — db/118).
-    // فشل التسجيل ما يكسرش الاختبار — الكوينز إضافة مش شرط.
-    let attemptId: string | null = null;
-    try {
-      // المحاولة بتتنتهي بعد ساعتين (partial index على status='pending')
-      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-      const { data: attempt, error: attemptError } = await supabase
-        .from("lesson_quiz_attempts")
-        .insert({ user_id: user.id, questions, total: questions.length, status: "pending", expires_at: expiresAt })
-        .select("id")
-        .single();
-      if (!attemptError && attempt) attemptId = (attempt as { id: string }).id;
-    } catch (e) {
-      console.warn("lesson-quiz attempt insert failed (متجاهَل):", e);
+      return response;
     }
 
-    return NextResponse.json({ questions, attemptId });
+    // ── بدون dayId: المسار القديم زي ما هو (كلاينت قديم) ──
+    return generateAndRespond(supabase, user.id, userPrompt);
   } catch (error) {
     console.error("lesson-quiz error:", error);
     return NextResponse.json({ error: { message: "حصل خطأ غير متوقع أثناء توليد الاختبار." } }, { status: 500 });

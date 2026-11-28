@@ -18,8 +18,9 @@
 
 import type { ReactNode } from "react";
 
-/** Identifier of a domain specialization. The 3 systems Wave 1 reserves slots for. */
-export type SpecializationId = "language" | "programming" | "medical";
+/** Identifier of a domain specialization. The 3 systems Wave 1 reserves slots for
+ *  + "quantitative" (P6 — مختبر حل المشكلات للمواد الحسابية/البرمجية). */
+export type SpecializationId = "language" | "programming" | "medical" | "quantitative";
 
 /**
  * Per-lesson context handed to a specialization's tool panel.
@@ -88,6 +89,19 @@ export const SpecializationRegistry = {
 export type ActiveSpecialization = LessonSpecialization | null;
 
 /**
+ * isQuantitativeSubject — مواد الحسابيات (رياضيات/فيزياء/إحصاء…) اللي
+ * مختبر حل المشكلات بيظهر لها (P6). مصفّاة بعناية: الكلمات دي واضحة
+ * في سياق مواد، ومفيش منها بيتعارض مع الفحص الطبي (اللي بييجي قبله).
+ */
+export function isQuantitativeSubject(subject: string): boolean {
+  if (!subject.trim()) return false;
+  return (
+    /\b(math|mathematics|calculus|algebra|statistics|physics|mechanics|chemistry)\b/i.test(subject) ||
+    /رياضي|حساب|جبر|تفاضل|تكامل|إحصاء|احصاء|فيزياء|ميكانيكا|كيمياء|مصفوفات|هندسة رياضية/i.test(subject)
+  );
+}
+
+/**
  * Resolve active specialization based on lesson subject (not student profile).
  *
  * Wave 1: the registry was empty, so resolution always yielded null.
@@ -152,7 +166,14 @@ export function resolveActiveSpecialization(context?: SpecializationContext): Ac
   // 3. Programming lesson check
   const isProgramming = /\b(programming|coding|javascript|typescript|python|c\+\+|software|web)\b/i.test(subject) || /برمجة|كود|تطوير/i.test(subject);
   if (isProgramming) {
-    return SpecializationRegistry.get("programming") ?? null;
+    // P6: الـ programming specialization نفسه لسه مش متسجَّل — لو اتسجل يكسب،
+    // وإلا مختبر حل المشكلات (quantitative) بيغطي البرمجة كمان.
+    return SpecializationRegistry.get("programming") ?? SpecializationRegistry.get("quantitative") ?? null;
+  }
+
+  // 3.5 Quantitative (math/physics/statistics) → Problem-Solving Lab (P6)
+  if (isQuantitativeSubject(subject)) {
+    return SpecializationRegistry.get("quantitative") ?? null;
   }
 
   // 4. Subject matches no specialization domain.

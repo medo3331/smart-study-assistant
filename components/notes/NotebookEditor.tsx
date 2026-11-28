@@ -1651,6 +1651,52 @@ export default function NotebookEditor({
     textDraftRef.current = null;
   }, []);
 
+  // ---- Lesson Studio: حقن نوتة من صفحة الدرس (postMessage) ----
+  // ⚠️ اللمسة الوحيدة المسموحة في ملفات notes في P1 (قرار مستخدم مقفول):
+  // listener معزول — يستقبل `magicly:append-note` من **نفس الأوريجين فقط**
+  // (iframe صفحة الدرس) + حدث undo — ويتجاهل أي رسالة تانية تمامًا.
+  const studioAppendedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: unknown; payload?: unknown } | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "magicly:undo-append") {
+        const appendedId = studioAppendedIdRef.current;
+        if (!appendedId || !canWrite) return;
+        const content = contentRef.current;
+        if (!content.texts.some((text) => text.id === appendedId)) return;
+        setContent({ ...content, texts: content.texts.filter((text) => text.id !== appendedId) });
+        studioAppendedIdRef.current = null;
+        commitHistory();
+        return;
+      }
+      if (data.type !== "magicly:append-note" || !canWrite) return;
+      const payload = data.payload as { title?: unknown; body?: unknown } | null;
+      const title = typeof payload?.title === "string" ? payload.title.trim().slice(0, 300) : "";
+      const body = typeof payload?.body === "string" ? payload.body.slice(0, 20_000) : "";
+      if (!body.trim()) return;
+      const content = contentRef.current;
+      // موضع حر تحت آخر عنصر نصي في الصفحة الحالية.
+      const maxY = content.texts.reduce((max, text) => Math.max(max, text.y + text.text.split("\n").length * (text.size ?? 28) * 1.5), 0);
+      const element: NoteText = {
+        id: newId(),
+        kind: "text",
+        text: title ? `${title}\n${body}` : body,
+        x: 40,
+        y: content.texts.length > 0 ? maxY + 48 : 60,
+        size: textSize,
+        color,
+        font: textFont,
+      };
+      studioAppendedIdRef.current = element.id;
+      setContent({ ...content, texts: [...content.texts, element] });
+      commitHistory();
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [canWrite, setContent, commitHistory, color, textFont, textSize]);
+
   // ---- Pointer handling ----
 
   const toPagePoint = useCallback((clientX: number, clientY: number): [number, number] => {
