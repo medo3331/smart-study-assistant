@@ -8,10 +8,10 @@
 // 🔒 الجدول مفروض عليه RLS بملكية المستخدم؛ الكتابة من السيرفر فقط.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isValidPersona, type AiPersonaId } from "./personas";
+import { isMagicPersonaId, type MagicPersonaId } from "./personas";
 
 export interface PersonaSessionRecord {
-  persona: AiPersonaId;
+  persona: MagicPersonaId;
   routingReason: string | null;
 }
 
@@ -28,7 +28,7 @@ export async function loadPersonaSession(
     .maybeSingle();
 
   if (error || !data) return null;
-  if (!isValidPersona(data.persona_id)) return null;
+  if (!isMagicPersonaId(data.persona_id)) return null;
   return {
     persona: data.persona_id,
     routingReason: typeof data.routing_reason === "string" ? data.routing_reason : null,
@@ -39,7 +39,7 @@ export async function savePersonaSession(
   supabase: SupabaseClient,
   userId: string,
   conversationId: string,
-  persona: AiPersonaId,
+  persona: MagicPersonaId,
   routingReason: string
 ): Promise<void> {
   const { error } = await supabase.from("ai_persona_sessions").upsert(

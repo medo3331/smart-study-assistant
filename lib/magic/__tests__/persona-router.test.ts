@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { selectPersona } from "@/lib/magic/persona-router";
-import { buildPersonaIdentityPrompt, AI_PERSONA_IDS, isValidPersona } from "@/lib/magic/personas";
+import { buildPersonaIdentityPrompt, isMagicPersonaId } from "@/lib/magic/personas";
 
 describe("selectPersona — سيناريوهات التوجيه المعتمدة", () => {
   it("Dashboard + «إزاي أرفع محاضرة؟» ← Magic", () => {
@@ -141,7 +141,8 @@ describe("buildPersonaIdentityPrompt", () => {
   });
 
   it("كل هوية تحتوي الممنوعات الأساسية", () => {
-    for (const id of AI_PERSONA_IDS) {
+    for (const id of ["magic", "tutor", "play", "coach"] as const) {
+      expect(isMagicPersonaId(id)).toBe(true);
       expect(buildPersonaIdentityPrompt(id, {})).toContain("لا تخترع معلومات");
     }
   });
@@ -149,8 +150,7 @@ describe("buildPersonaIdentityPrompt", () => {
 
 describe("سجل الشخصيات", () => {
   it("يحتوي الشخصيات الأربعة الرسمية", () => {
-    expect(AI_PERSONA_IDS).toEqual(["magic", "tutor", "play", "coach"]);
-    expect(isValidPersona("magic")).toBe(true);
-    expect(isValidPersona("nope")).toBe(false);
+    expect(isMagicPersonaId("magic")).toBe(true);
+    expect(isMagicPersonaId("nope")).toBe(false);
   });
 });

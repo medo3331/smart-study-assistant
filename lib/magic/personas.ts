@@ -6,6 +6,7 @@
 // لا يخصم هذا الملف أي Credits ولا يمس قاعدة البيانات — إخراجه نص تعليمات فقط.
 
 import type { ChatIntent } from "@/lib/ai/chat-intent";
+import { buildMagicSystemPrompt, type MagicPersonaContext } from "./persona-prompt";
 
 export type MagicPersonaId = "magic" | "tutor" | "play" | "coach";
 
@@ -234,14 +235,14 @@ export function selectMagicPersona(input: PersonaSelectionInput): PersonaSelecti
 /* بناء تعليمات الشخصية — تُضاف فوق نظام Magic الموحد (مش بداله)               */
 /* -------------------------------------------------------------------------- */
 
-interface PersonaPromptContextInternal {
+interface PersonaPromptContextDir {
   subject?: string | null;
   lesson?: string | null;
   stage?: string | null;
   grade?: string | null;
 }
 
-function personaScopeLine(ctx: PersonaPromptContextInternal): string {
+function personaScopeLine(ctx: PersonaPromptContextDir): string {
   const rows: string[] = [];
   if (ctx.subject && ctx.subject.trim()) rows.push(`- المادة الحالية: ${ctx.subject.trim()}`);
   if (ctx.lesson && ctx.lesson.trim()) rows.push(`- الدرس الحالي: ${ctx.lesson.trim()}`);
@@ -252,7 +253,7 @@ function personaScopeLine(ctx: PersonaPromptContextInternal): string {
 
 export function buildPersonaDirective(
   persona: MagicPersonaId,
-  ctx: PersonaPromptContextInternal = {},
+  ctx: PersonaPromptContextDir = {},
 ): string {
   if (persona === "magic") return "";
 
@@ -345,34 +346,6 @@ export function buildPersonaDirective(
 }
 
 
-/* -------------------------------------------------------------------------- */
-/* 🧩 طبقة توافق — المستهلكون المدموجون (magicly-ai / unified-ai / persona-*)   */
-/* كتبوا على API أقدم؛ السطح القديم فوق النسخة الجديدة.                          */
-/* -------------------------------------------------------------------------- */
-
-import { buildMagicSystemPrompt, type MagicPersonaContext } from "./persona-prompt";
-
-export const AI_PERSONA_IDS = ["magic", "tutor", "play", "coach"] as const;
-export type AiPersonaId = (typeof AI_PERSONA_IDS)[number];
-
-export interface PersonaDefinition {
-  id: AiPersonaId;
-  name: string;
-  emoji: string;
-  tagline: string;
-}
-
-export const PERSONAS: Record<AiPersonaId, PersonaDefinition> = {
-  magic: { id: "magic", name: "Magic", emoji: "⚡", tagline: "صاحبك ومرشدك في Magicly" },
-  tutor: { id: "tutor", name: "Tutor", emoji: "📚", tagline: "معلمك للمحتوى العلمي" },
-  play: { id: "play", name: "Play", emoji: "🎮", tagline: "رفيقك للترفيه والتحديات" },
-  coach: { id: "coach", name: "Coach", emoji: "🎯", tagline: "مخططك الأكاديمي" },
-};
-
-export function isValidPersona(value: unknown): value is AiPersonaId {
-  return typeof value === "string" && (AI_PERSONA_IDS as readonly string[]).includes(value);
-}
-
 export interface PersonaPromptContext extends MagicPersonaContext {}
 
 const ORCHESTRATION_RULES = [
@@ -422,7 +395,7 @@ function stageDirective(stage?: string | null): string {
 }
 
 export function buildPersonaIdentityPrompt(
-  persona: AiPersonaId,
+  persona: MagicPersonaId,
   ctx: PersonaPromptContext = {}
 ): string {
   if (persona === "magic") {
@@ -430,7 +403,7 @@ export function buildPersonaIdentityPrompt(
   }
 
   const directive = persona === "tutor" ? TUTOR_DIRECTIVE : persona === "play" ? PLAY_DIRECTIVE : COACH_DIRECTIVE;
-  const def = PERSONAS[persona];
+  const def = MAGIC_PERSONAS[persona];
 
   const contextRows: string[] = [];
   if (ctx.subject && ctx.subject.trim()) contextRows.push(`- المادة الحالية: ${ctx.subject.trim()}`);
@@ -439,7 +412,7 @@ export function buildPersonaIdentityPrompt(
   const stageLine = stageDirective(ctx.stage);
 
   return [
-    `أنت ${def.name} (${def.emoji})، شخصية ${def.tagline} داخل مساعد Magicly الموحد.`,
+    `أنت ${def.latin} (${def.emoji}) — «${def.name}»، شخصية ${def.tagline} داخل مساعد Magicly الموحد.`,
     "تحدث باللهجة المصرية الطبيعية في المحادثات العادية، واستخدم English للمصطلحات الأكاديمية والتقنية عند الحاجة.",
     ORCHESTRATION_RULES,
     directive,

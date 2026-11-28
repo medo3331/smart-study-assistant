@@ -8,22 +8,27 @@
 //   3. سياق الصفحة — صفحة الدرس تعطي أولوية لـ Tutor، صفحة الألعاب لـ Play.
 //   4. الافتراضي — Magic.
 
-import { isValidPersona, type AiPersonaId } from "./personas";
+import { isMagicPersonaId, type MagicPersonaId } from "./personas";
 
 export interface PersonaRouterInput {
   explicitPersona?: string | null;
   page?: string | null;
   message: string;
   mode?: string | null;
+  /** نية الطلب من classifyChatIntent — بحث الملفات/التسجيلات يبقى لماجيك دائمًا. */
+  intent?: string | null;
   hasLessonContext?: boolean;
   /** شخصية المحادثة النشطة (آخر رد) — سياق متابعة نفس الموضوع، أولويته بعد المحتوى. */
   lastPersona?: string | null;
 }
 
 export interface PersonaSelection {
-  persona: AiPersonaId;
+  persona: MagicPersonaId;
   reason: string;
 }
+
+/** نيات البحث في محتوى الطالب — شخصية ماجيك هي الواجهة دائمًا. */
+const PLATFORM_INTENTS = new Set(["WORKSPACE_SEARCH", "RECORDED_LECTURES_SEARCH"]);
 
 const PLAY_KEYWORDS = [
   "لعبة",
@@ -120,8 +125,13 @@ const TEACHING_MODES = new Set(["explain", "quiz", "summarize", "review", "file"
 export function selectPersona(input: PersonaRouterInput): PersonaSelection {
   const message = (input.message || "").trim();
 
-  if (isValidPersona(input.explicitPersona) && input.explicitPersona !== "magic") {
+  if (isMagicPersonaId(input.explicitPersona) && input.explicitPersona !== "magic") {
     return { persona: input.explicitPersona, reason: "user_selected" };
+  }
+
+  // بحث محتوى الطالب (ملفات/تسجيلات) → ماجيك — نفس قاعدة workspace_intent في selectMagicPersona.
+  if (input.intent && PLATFORM_INTENTS.has(input.intent.toUpperCase())) {
+    return { persona: "magic", reason: "workspace_intent" };
   }
 
   if (matchesAny(message, PLAY_KEYWORDS)) {
@@ -141,7 +151,7 @@ export function selectPersona(input: PersonaRouterInput): PersonaSelection {
   }
 
   // سياق المحادثة: لو نفس الموضوع شغّال مع Tutor/Play/Coach والرسالة محايدة، نفس الشخصية تكمّل.
-  if (isValidPersona(input.lastPersona) && input.lastPersona !== "magic") {
+  if (isMagicPersonaId(input.lastPersona) && input.lastPersona !== "magic") {
     return { persona: input.lastPersona, reason: "conversation_context" };
   }
 

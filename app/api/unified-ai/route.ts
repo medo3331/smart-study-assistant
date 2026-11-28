@@ -33,7 +33,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
 import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
-import { buildPersonaDirective, selectMagicPersona, type MagicPersonaId } from "@/lib/magic/personas";
+import { buildPersonaDirective, type MagicPersonaId } from "@/lib/magic/personas";
 
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import { getCreditCost } from "@/lib/ai/credit-pricing";
@@ -779,10 +779,13 @@ export async function POST(req: Request) {
       page: typeof rawPage === "string" ? rawPage : null,
       message: prompt,
       mode: typeof rawMode === "string" ? rawMode : null,
+      intent: intentResult.intent,
       hasLessonContext: Boolean(ctxInput?.lesson || ctxInput?.subject),
       lastPersona,
     });
     console.log("[UNIFIED-AI DEBUG]", { persona: personaSelection.persona, personaReason: personaSelection.reason });
+    selectedPersonaId = personaSelection.persona;
+    personaRoutingReason = personaSelection.reason;
     if (userId && supabase && !isAnonymous && incomingConversationId) {
       void savePersonaSession(supabase, userId, incomingConversationId, personaSelection.persona, personaSelection.reason).catch((e) => {
         console.warn("[unified-ai] persona session save failed (non-blocking):", e);
@@ -803,25 +806,6 @@ export async function POST(req: Request) {
         const studentContext = await getStudentContext(supabase, userId, ctxInput);
         const selectedMode = parseMode(rawMode, prompt, intentResult.intent);
 
-        // 🎭 Persona Orchestrator — اختيار الشخصية في الخلفية: اختيار صريح ← محتوى الرسالة ← سياق الصفحة ← افتراضي ماجيك.
-        const rawPersona = typeof context.persona === "string" ? context.persona : null;
-        const rawPage = typeof context.page === "string" ? context.page : null;
-        const personaSelection = selectMagicPersona({
-          prompt,
-          intent: intentResult.intent,
-          page: rawPage,
-          explicitPersona: rawPersona,
-        });
-        selectedPersonaId = personaSelection.persona;
-        personaRoutingReason = personaSelection.reason;
-        if (input.usage) {
-          input.usage.diagnostics = {
-            ...(input.usage.diagnostics ?? {}),
-            persona_id: personaSelection.persona,
-            routing_reason: personaSelection.reason,
-          };
-        }
-        console.log("[UNIFIED-AI DEBUG] persona:", personaSelection.persona, "reason:", personaSelection.reason, personaSelection.matchedKeyword ?? "");
         const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
         let workspaceDigest: string | null = null;
         try {
@@ -837,7 +821,7 @@ export async function POST(req: Request) {
         } catch (e) {
           console.error("[UNIFIED-AI DEBUG] recent questions failed:", e);
         }
-        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest, recentQuestions, personaSelection.persona);
+        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest, recentQuestions);
         let personaPrompt = "";
         try {
           personaPrompt = await buildSystemPrompt(userId);

@@ -20,7 +20,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
-import { PERSONAS, isValidPersona, type AiPersonaId } from "@/lib/magic/personas";
+import { MAGIC_PERSONAS, isMagicPersonaId, type MagicPersonaId } from "@/lib/magic/personas";
 import { extractPlanDraft, stripPlanFence } from "@/lib/agent/plan-draft";
 import { buildChatWelcomeGreeting } from "@/lib/magic/greeting";
 import { PlanApproveCard } from "./PlanApproveCard";
@@ -153,7 +153,7 @@ export function UnifiedChat({
   // 🌐 بحث في الإنترنت — زر صريح زي ChatGPT: الطالب يتحكم بدل تخمين الكلام.
   const [webSearchOn, setWebSearchOn] = useState(false);
   // 🎭 اختيار الشخصية — "auto" = الـ Orchestrator يختار في الخلفية (الافتراضي).
-  const [personaChoice, setPersonaChoice] = useState<"auto" | AiPersonaId>("auto");
+  const [personaChoice, setPersonaChoice] = useState<"auto" | MagicPersonaId>("auto");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -538,7 +538,7 @@ export function UnifiedChat({
           role: "assistant",
           content: assistantText,
           ...(typeof data?.creditsUsed === "number" ? { creditsUsed: data.creditsUsed } : {}),
-          ...(isValidPersona(data?.metadata?.persona) ? { persona: data.metadata.persona } : {}),
+          ...(isMagicPersonaId(data?.metadata?.persona) ? { persona: data.metadata.persona } : {}),
           ...(typeof data?.sourceTitle === "string" && data.sourceTitle ? { sourceTitle: data.sourceTitle } : {}),
           ...(replyActions ? { actions: replyActions } : {}),
         },
@@ -736,9 +736,9 @@ export function UnifiedChat({
               )}
               {(msg.sourceTitle || typeof msg.creditsUsed === "number" || (msg.persona && msg.persona !== "magic")) && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
-                  {msg.persona && msg.persona !== "magic" && isValidPersona(msg.persona) && (
+                  {msg.persona && msg.persona !== "magic" && isMagicPersonaId(msg.persona) && (
                     <span className="rounded-full bg-black/5 px-2 py-0.5">
-                      {PERSONAS[msg.persona].emoji} {PERSONAS[msg.persona].name}
+                      {MAGIC_PERSONAS[msg.persona].emoji} {MAGIC_PERSONAS[msg.persona].name}
                     </span>
                   )}
                   {msg.sourceTitle && (
@@ -878,7 +878,7 @@ export function UnifiedChat({
                   : "border-rule bg-paper text-ink-soft hover:bg-paper-3"
               }`}
             >
-              {id === "auto" ? "⚡ Auto" : `${PERSONAS[id].emoji} ${PERSONAS[id].name}`}
+              {id === "auto" ? "⚡ Auto" : `${MAGIC_PERSONAS[id].emoji} ${MAGIC_PERSONAS[id].name}`}
             </button>
           );
         })}
