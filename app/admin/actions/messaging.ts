@@ -9,7 +9,7 @@ export async function sendAdminMessage(input: {
   body: string;
   targetUserId?: string | null;
   sendEmail?: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; recipients?: number }> {
   const ctx = await requireAdminPermission("announcements.manage");
   const user = ctx.user;
   const supabase = ctx.supabase;
@@ -43,8 +43,13 @@ export async function sendAdminMessage(input: {
   if (input.targetUserId) {
     recipientIds = [input.targetUserId];
   } else {
-    const { data: profiles } = await service.from("profiles").select("id").limit(1000);
-    recipientIds = (profiles || []).map((p: any) => p.id);
+    // كل المستخدمين — بلا حد 1000 (ترقيم صفحات auth)
+    for (let page = 1; page <= 20; page++) {
+      const { data: profiles } = await service.from("profiles").select("id").range((page - 1) * 1000, page * 1000 - 1);
+      const rows = profiles || [];
+      recipientIds.push(...rows.map((p: { id: string }) => p.id));
+      if (rows.length < 1000) break;
+    }
   }
 
   // insert inbox rows
@@ -58,52 +63,49 @@ export async function sendAdminMessage(input: {
     await service.from("user_inbox").insert(inboxRows);
   }
 
-  // email via Resend if configured and requested
+  // email via Resend if requested — نفس مسار حملات إعلانات البريد (المُرسل: الإعدادات ← app_settings)
   if (input.sendEmail) {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESEND_FROM_EMAIL || "noreply@example.com";
-    if (!apiKey) {
-      // record not_configured
-      await service.from("email_deliveries").insert(
-        recipientIds.map((uid) => ({
-          announcement_id: ann.id,
-          user_id: uid,
-          status: "not_configured",
-          error: "RESEND_API_KEY missing",
-        }))
-      );
-    } else {
-      // fetch emails
-      const { data: usersData } = await service.auth.admin.listUsers();
-      const emailMap = new Map((usersData?.users || []).map((u: any) => [u.id, u.email]));
-      for (const uid of recipientIds) {
-        const to = emailMap.get(uid);
-        if (!to) continue;
-        try {
-          const res = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ from, to, subject, text: body }),
-          });
-          const json = await res.json().catch(() => ({}));
-          await service.from("email_deliveries").insert({
-            announcement_id: ann.id,
-            user_id: uid,
-            status: res.ok ? "sent" : "failed",
-            provider_message_id: json?.id || null,
-            error: res.ok ? null : JSON.stringify(json),
-            attempts: 1,
-          });
-        } catch (e: any) {
-          await service.from("email_deliveries").insert({
-            announcement_id: ann.id,
-            user_id: uid,
-            status: "failed",
-            error: e?.message || "unknown",
-            attempts: 1,
-          });
-        }
+    let settingsSender: string | null = null;
+    try {
+      const { data: setting } = await service
+        .from("app_settings")
+        .select("value")
+        .eq("key", "email_sender_address")
+        .maybeSingle();
+      const value = (setting as { value?: string } | null)?.value;
+      settingsSender = typeof value === "string" && value.includes("@") ? value.trim() : null;
+    } catch {
+      settingsSender = null;
+    }
+    // رسائل داخل المنصة دائمًا؛ البريد حسب الطلب. sendResendEmail تسجل الخطأ الواضح لو الإعدادات ناقصة.
+    const { sendResendEmail } = await import("@/lib/email/resend");
+    // fetch emails (دفعة واحدة بدل listUsers لكل مستخدم)
+    const emailMap = new Map<string, string>();
+    for (let page = 1; page <= 20; page++) {
+      const { data: usersData } = await service.auth.admin.listUsers({ page, perPage: 1000 });
+      for (const u of usersData?.users || []) {
+        if (u.email) emailMap.set(u.id, u.email);
       }
+      if ((usersData?.users || []).length < 1000) break;
+    }
+    for (const uid of recipientIds) {
+      const to = emailMap.get(uid);
+      if (!to) continue;
+      const result = await sendResendEmail({
+        to,
+        subject,
+        html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8;">${body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</div>`,
+        text: body,
+        from: settingsSender,
+      });
+      await service.from("email_deliveries").insert({
+        announcement_id: ann.id,
+        user_id: uid,
+        status: result.ok ? "sent" : "failed",
+        provider_message_id: result.id,
+        error: result.ok ? null : result.error,
+        attempts: 1,
+      });
     }
   }
 
@@ -117,5 +119,5 @@ export async function sendAdminMessage(input: {
     details: { recipients: recipientIds.length, sendEmail: !!input.sendEmail },
   });
 
-  return { ok: true };
+  return { ok: true, recipients: recipientIds.length };
 }
