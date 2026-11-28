@@ -61,15 +61,23 @@ export async function POST() {
       return NextResponse.json({ success: true, tracked: true, rewarded: false });
     }
 
-    const { data: refProfile } = await service
-      .from("profiles")
-      .select("credits")
-      .eq("id", referral.referrer_id)
-      .maybeSingle();
-    const newCredits = (refProfile?.credits ?? 0) + 100;
-    await service.from("profiles").update({ credits: newCredits }).eq("id", referral.referrer_id);
+    // 🎁 مكافأة الداعي: كريدت حقيقي في نظام المنح (credit_grants + ledger)
+    // عبر grant_credits — مش تحديث مباشر لعمود قديم. انتهاء بعد 90 يومًا،
+    // وتاريخ صريح مُمرّر (نسخ قديمة من الدالة بتفشل مع null — المرحلة 25ط).
+    const { error: grantError } = await service.rpc("grant_credits", {
+      p_user_id: referral.referrer_id,
+      p_amount: 100,
+      p_expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+      p_source: "bonus",
+      p_notes: "مكافأة دعوة صديق — أول تسجيل",
+    });
+    if (grantError) {
+      // الإحالة نفسها اتسجلت (rewarded) — الفشل في المكافأة يُسجّل بس مش بيفشل الطلب،
+      // عشان الدعوة متضيعش بسبب خطأ لحظي في المنح.
+      console.error("[referrals/entry] grant_credits failed:", grantError.message);
+    }
 
-    return NextResponse.json({ success: true, tracked: true, rewarded: true });
+    return NextResponse.json({ success: true, tracked: true, rewarded: !grantError });
   } catch (error) {
     console.error("[referrals/entry] unexpected:", error);
     return NextResponse.json({ success: false, error: "حصل خطأ غير متوقع." }, { status: 500 });
