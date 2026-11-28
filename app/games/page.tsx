@@ -26,7 +26,6 @@ import {
  */
 
 const UPCOMING = [
-  { emoji: "🏃‍♂️", title: "Magicly Run", desc: "اللعبة الرئيسية — ٣ حارات وشخصيات Magicly" },
   { emoji: "⚽", title: "Magicly Football", desc: "مباريات Mini Football سريعة" },
   { emoji: "🧱", title: "Magic Blocks", desc: "ترتيب وتفجير بلوكات" },
   { emoji: "🎫", title: "Magic Battle Pass", desc: "مسار مكافآت موسمي بمستويات وجوائز" },
@@ -65,7 +64,7 @@ export default function GamesPage() {
 
   // مكافآت ألعاب البريك — نفس عقد claim_break_game (سقف ٢/يوم + شرط المذاكرة)
   const claimBreakGame = useCallback(
-    async (game: "reaction" | "penalty") => {
+    async (game: "reaction" | "penalty" | "memory") => {
       if (!supabase) return;
       const { data, error } = await supabase.rpc("claim_break_game", { p_game: game });
       const row = Array.isArray(data) ? data[0] : data;
@@ -133,10 +132,23 @@ export default function GamesPage() {
         <p className="text-xs text-ink-soft">أول فوز في اليوم = 5 🪙 · كل إنجاز مرة واحدة · المكافآت من السيرفر مباشرة</p>
       </section>
 
-      {/* اللعبة المميزة — الشطرنج */}
-      <Link href="/games/chess" className="block">
+      {/* اللعبة المميزة — Magicly Run */}
+      <Link href="/games/run" className="block">
         <section className="sheet-card flex flex-col gap-3 border-marker/50 bg-gradient-to-l from-marker/10 to-transparent p-6 transition hover:border-marker">
-          <span className="tag w-fit">اللعبة المميزة</span>
+          <span className="tag w-fit">اللعبة المميزة — جديدة</span>
+          <div className="flex items-center gap-4">
+            <span className="text-5xl">🏃‍♂️</span>
+            <div>
+              <h2 className="h2 font-extrabold">Magicly Run</h2>
+              <p className="text-sm text-ink-soft">اجرى في عالم Magicly — ٣ حارات · نط وانزلاق · كوينز وPower-ups</p>
+            </div>
+          </div>
+        </section>
+      </Link>
+
+      {/* ♟️ الشطرنج */}
+      <Link href="/games/chess" className="block">
+        <section className="sheet-card flex flex-col gap-3 p-6 transition hover:border-marker">
           <div className="flex items-center gap-4">
             <span className="text-5xl">♟️</span>
             <div>
@@ -165,8 +177,8 @@ export default function GamesPage() {
         <div className="grid gap-4">
           <section className="sheet-card space-y-3 p-5">
             <h2 className="h3">🧠 Memory Match الذكية</h2>
-            <p className="text-sm text-ink-soft">لعبة مطابقة المصطلحات المُولّدة بالذكاء الاصطناعي خصيصاً لمادتك.</p>
-            <MemoryGame lessonText="أنظمة التشغيل وإدارة العمليات والذاكرة وحل المشكلات البرمجية" />
+            <p className="text-sm text-ink-soft">لعبة مطابقة المصطلحات المُولّدة بالذكاء الاصطناعي خصيصاً لمادتك — ٤ أزواج فقط.</p>
+            <MemoryGame lessonText="أنظمة التشغيل وإدارة العمليات والذاكرة وحل المشكلات البرمجية" onWin={() => claimBreakGame("memory")} />
           </section>
           <DailyRiddle />
         </div>

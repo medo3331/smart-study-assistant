@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageShell, DataNotice } from "@/app/dashboard/components/PageShell";
 import { useAuthUser } from "@/app/dashboard/components/use-page-data";
 import {
-  initialGame, legalMoves, makeMove, status, glyphOf, sqName,
+  initialGame, legalMoves, makeMove, status, glyphOf, sqName, findKing,
   type GameState, type Move, type Piece,
 } from "@/lib/games/chess/engine";
 import { chooseAiMove, type Difficulty } from "@/lib/games/chess/ai";
@@ -19,9 +19,20 @@ import { chooseAiMove, type Difficulty } from "@/lib/games/chess/ai";
 
 type SubmitResult = { xp: number; level: number; best: number; is_record: boolean; coins: number; achievements: string[]; message: string };
 
-const GLYPH_COLOR: Record<"w" | "b", string> = {
-  w: "text-ink drop-shadow-[0_1px_0_rgba(255,255,255,0.6)]",
-  b: "text-[#3a3a3a] drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]",
+/** القطع الممتلئة (solid) — الاتنين نفس الجليف والفرق بالتلوين والحدود */
+function pieceStyle(c: "w" | "b"): React.CSSProperties {
+  return c === "w"
+    ? { color: "#fdfdfb", WebkitTextStroke: "1.5px #3f3f46", textShadow: "0 2px 3px rgba(0,0,0,0.35)" }
+    : { color: "#27272a", WebkitTextStroke: "1px #d6d3d1", textShadow: "0 2px 3px rgba(0,0,0,0.25)" };
+}
+
+const PIECE_NAMES: Record<string, string> = {
+  p: "البيدق — لقّدّة واحدة (أو اتنين من بدايته) ويأكل بالتجاوز",
+  n: "الفرس — حركة حرف L ويقدر ينط فوق القطع",
+  b: "الفيل — قطرية بس وبملون واحد",
+  r: "الرخ — مستقيم طولي وعرضي",
+  q: "الملكة — مستقيم وقطرية (أقوى قطعة)",
+  k: "الملك — مربع واحد في أي اتجاه، لو اتحاصر = خسارة",
 };
 
 export default function ChessPage() {
@@ -33,6 +44,9 @@ export default function ChessPage() {
   const [note, setNote] = useState("");
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [finished, setFinished] = useState(false);
+  const [lastMove, setLastMove] = useState<{ from: number; to: number } | null>(null);
+  const [captured, setCaptured] = useState<{ w: string[]; b: string[] }>({ w: [], b: [] });
+  const [history, setHistory] = useState<string[]>([]);
   const submitted = useRef(false);
 
   const moves = useMemo(() => legalMoves(game), [game]);
@@ -40,6 +54,11 @@ export default function ChessPage() {
   const targets = useMemo(
     () => (selected === null ? [] : moves.filter((m) => m.from === selected)),
     [moves, selected],
+  );
+  // مربع الملك المهدد — إبراز الكش
+  const checkedKing = useMemo(
+    () => (st === "check" || st === "checkmate" ? findKing(game.board, game.turn) : -1),
+    [st, game],
   );
 
   // تسجيل النتيجة مرة واحدة عند نهاية المباراة — السيرفر بيحسب المكافآت
@@ -76,11 +95,19 @@ export default function ChessPage() {
     window.setTimeout(() => {
       setGame((current) => {
         const move = chooseAiMove(current, difficulty);
-        if (move) return makeMove(current, move);
+        if (move) {
+          setLastMove({ from: move.from, to: move.to });
+          setCaptured((cap) => {
+            const p = current.board[move.to];
+            return p ? { ...cap, w: [...cap.w, p.t] } : cap;
+          });
+          setHistory((h) => [...h.slice(-6), `${sqName(move.from)}→${sqName(move.to)}`]);
+          return makeMove(current, move);
+        }
         return current;
       });
       setThinking(false);
-    }, 350);
+    }, 250);
   }, [difficulty]);
 
   const onSquare = (sq: number) => {
@@ -92,6 +119,12 @@ export default function ChessPage() {
         // الترقية — الواجهة بتختار الملكة (أعلى قيمة)
         const promo = move.promo ? { ...move, promo: "q" as const } : move;
         const next = makeMove(game, promo);
+        setLastMove({ from: move.from, to: move.to });
+        setCaptured((cap) => {
+          const p = game.board[move.to];
+          return p ? { ...cap, b: [...cap.b, p.t] } : cap;
+        });
+        setHistory((h) => [...h.slice(-6), `${sqName(move.from)}→${sqName(move.to)}`]);
         setSelected(null);
         setGame(next);
         if (status(next) === "playing") aiTurn();
@@ -108,6 +141,9 @@ export default function ChessPage() {
     setResult(null);
     setFinished(false);
     setNote("");
+    setLastMove(null);
+    setCaptured({ w: [], b: [] });
+    setHistory([]);
   };
 
   const lastRow = 8 - 1;
@@ -139,6 +175,7 @@ export default function ChessPage() {
             : st === "check" ? (game.turn === "w" ? "⚠️ ملكك في كش!" : "كش على الكمبيوتر")
             : game.turn === "w" ? "دورك — أنت الأبيض" : thinking ? "الكمبيوتر بيفكر…" : "دور الكمبيوتر"}
         </span>
+        {lastMove && <span className="mono text-xs text-ink-soft" dir="ltr">{sqName(lastMove.from)} → {sqName(lastMove.to)}</span>}
       </div>
 
       {/* نتيجة المباراة */}
@@ -156,38 +193,101 @@ export default function ChessPage() {
         </section>
       )}
 
-      {/* اللوحة */}
-      <div className="mx-auto w-full max-w-md" dir="ltr">
-        <div className="grid aspect-square w-full grid-cols-8 overflow-hidden rounded-xl border-2 border-rule shadow-sm select-none">
-          {game.board.map((piece, sq) => {
-            const r = Math.floor(sq / 8), f = sq % 8;
-            const dark = (r + f) % 2 === 1;
-            const isTarget = targets.some((m) => m.to === sq);
-            const isSel = selected === sq;
-            const capture = isTarget && piece !== null;
-            return (
-              <button
-                key={sq}
-                onClick={() => onSquare(sq)}
-                className={`relative flex items-center justify-center text-3xl leading-none sm:text-4xl ${
-                  dark ? "bg-[#b58863]" : "bg-[#f0d9b5]"
-                } ${isSel ? "ring-2 ring-inset ring-marker" : ""}`}
-                aria-label={`${sqName(sq)}${piece ? ` ${piece.c === "w" ? "أبيض" : "أسود"}` : ""}`}
-              >
-                {piece && <span className={GLYPH_COLOR[piece.c]}>{glyphOf(piece)}</span>}
-                {isTarget && (
-                  <span className={`absolute ${capture ? "inset-1 rounded-full border-4 border-marker/70" : "h-3 w-3 rounded-full bg-marker/60"}`} />
-                )}
-                {f === 0 && <span className="absolute left-0.5 top-0 text-[9px] text-ink-soft/70">{8 - r}</span>}
-                {r === lastRow && <span className="absolute bottom-0 right-0.5 text-[9px] text-ink-soft/70">{"abcdefgh"[f]}</span>}
-              </button>
-            );
-          })}
+      <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+        {/* اللوحة */}
+        <div className="mx-auto w-full max-w-lg" dir="ltr">
+          <div className="overflow-hidden rounded-2xl border-4 border-[#5d4037] shadow-lg">
+            <div className="grid aspect-square w-full grid-cols-8 select-none">
+              {game.board.map((piece, sq) => {
+                const r = Math.floor(sq / 8), f = sq % 8;
+                const dark = (r + f) % 2 === 1;
+                const isTarget = targets.some((m) => m.to === sq);
+                const isSel = selected === sq;
+                const isLast = lastMove && (lastMove.from === sq || lastMove.to === sq);
+                const isCheck = checkedKing === sq;
+                const capture = isTarget && piece !== null;
+                const mine = piece && piece.c === "w" && !finished && game.turn === "w";
+                return (
+                  <button
+                    key={sq}
+                    onClick={() => onSquare(sq)}
+                    className={`relative flex items-center justify-center transition-colors duration-150 ${
+                      dark ? "bg-[#a97c5b]" : "bg-[#e8d0b0]"
+                    } ${isLast ? (dark ? "bg-[#bfae6a]" : "bg-[#e5d68e]") : ""} ${
+                      isSel ? "ring-[3px] ring-inset ring-marker" : ""
+                    } ${mine ? "cursor-pointer hover:brightness-110" : "cursor-default"}`}
+                    aria-label={`${sqName(sq)}${piece ? ` ${piece.c === "w" ? "أبيض" : "أسود"}` : ""}`}
+                  >
+                    {piece && (
+                      <span className={`text-4xl leading-none transition-transform duration-150 sm:text-5xl ${isSel ? "scale-110" : ""}`} style={pieceStyle(piece.c)}>
+                        {glyphOf(piece)}
+                      </span>
+                    )}
+                    {isCheck && (
+                      <span className="pointer-events-none absolute inset-0 rounded-full bg-red-600/35 ring-2 ring-inset ring-red-600/70" />
+                    )}
+                    {isTarget && !capture && (
+                      <span className="pointer-events-none absolute h-3.5 w-3.5 rounded-full bg-marker/70" />
+                    )}
+                    {capture && (
+                      <span className="pointer-events-none absolute inset-1 rounded-md border-[3px] border-marker/80" />
+                    )}
+                    {f === 0 && <span className="absolute left-0.5 top-0 text-[10px] font-bold text-ink/50">{8 - r}</span>}
+                    {r === lastRow && <span className="absolute bottom-0 right-1 text-[10px] font-bold text-ink/50">{"abcdefgh"[f]}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
+
+        {/* الجانب — الأكل + السجل */}
+        <aside className="space-y-3">
+          <section className="sheet-card space-y-2 p-4">
+            <h3 className="text-sm font-bold text-ink-soft">الأسرى</h3>
+            <p className="text-lg leading-relaxed" style={pieceStyle("b")}>
+              {captured.w.length ? captured.w.map((t) => glyphOf({ t: t as never, c: "b" })).join(" ") : "—"}
+            </p>
+            <p className="text-lg leading-relaxed" style={pieceStyle("w")}>
+              {captured.b.length ? captured.b.map((t) => glyphOf({ t: t as never, c: "w" })).join(" ") : "—"}
+            </p>
+          </section>
+          <section className="sheet-card space-y-1 p-4">
+            <h3 className="text-sm font-bold text-ink-soft">آخر النقلات</h3>
+            {history.length === 0 ? (
+              <p className="text-xs text-ink-soft">ابدأ بنقلة بيدق 👋</p>
+            ) : (
+              <ol className="mono space-y-0.5 text-xs text-ink" dir="ltr">
+                {history.map((h, i) => <li key={i}>{i + 1}. {h}</li>)}
+              </ol>
+            )}
+          </section>
+        </aside>
       </div>
 
+      {/* القوانين — شرح الحركات */}
+      <details className="sheet-card group p-5">
+        <summary className="cursor-pointer list-none text-sm font-bold text-ink-soft">
+          📖 قوانين الشطرنج — إزاي تلعب <span className="inline-block transition-transform group-open:rotate-90">▸</span>
+        </summary>
+        <div className="mt-3 space-y-2 text-sm text-ink">
+          {Object.entries(PIECE_NAMES).map(([k, v]) => (
+            <p key={k}>
+              <span className="mr-1 text-xl" style={pieceStyle("w")}>{glyphOf({ t: k as never, c: "w" })}</span>
+              {v}
+            </p>
+          ))}
+          <hr className="border-rule" />
+          <p>🏰 <strong>التبييت:</strong> الملك يتحرك مربعين ناحية الرخ لو ما تحركش قبل كده، والمربعات بينهم فاضية، وهو مش في كش.</p>
+          <p>⚔️ <strong>الأخذ بالتجاوز:</strong> بيدقك يقدر ياكل بيدق عدو نط نقلة مزدوجة جنبه — في نفس النقلة بس.</p>
+          <p>👑 <strong>الترقية:</strong> البيدق اللي يوصل آخر صف بيتحول ملكة (وهنا بنرقّيها ملكة على طول).</p>
+          <p>🏆 <strong>الكش مات:</strong> الملك مهدد ومفيش أي طريقة ينقذ نفسه = خسارة. لو مفيش حركات خالص ومفيش كش = تعادل بالحصر.</p>
+          <p className="text-xs text-ink-soft">في Magicly: كل مباراة بتكسبك XP — وأول فوز في اليوم = 5 🪙</p>
+        </div>
+      </details>
+
       <p className="text-xs text-ink-soft">
-        دوس على قطعة من قطعك الأبيض واختار المربع الأخضر — الدايرة الكبيرة معناها أكل. التبييت بيحصل لما تحرك الملك مربعين.
+        دوس على قطعة من قطعك الأبيض واختار المربع الأخضر — الإطار الكبير معناها أكل. المربع الأصفر = آخر نقلة، الدايرة الحمرا = كش.
       </p>
     </PageShell>
   );
