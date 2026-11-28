@@ -70,12 +70,13 @@ export async function POST(
     });
 
     // 4. Mark as read for all other participants
+    // ⚠️ .neq مش .eq("!=") — الصيغة القديمة كانت بترجع error بصمت
+    // فإشعارات "رسالة جديدة" عمرها ما كانت بتتبعت
     const { data: others } = await serverClient
       .from("conversation_participants")
       .select("participant_id")
       .eq("conversation_id", params.id)
-      .eq("participant_id", "!=", user.id)
-      .neq("participant_id", null);
+      .neq("participant_id", user.id);
 
     // إشعار المستلمين برسالة جديدة (service client داخليًا)
     const { socialNotify } = await import("@/lib/community/handlers");
@@ -85,21 +86,8 @@ export async function POST(
         p.participant_id,
         "رسالة جديدة",
         messageBody.trim().slice(0, 120),
-        `/inbox?category=conversations`,
+        `/inbox`,
       );
-    }
-
-    for (const p of others ?? []) {
-      await serverClient.from("message_state").upsert({
-        user_msg_state_id: p.participant_id + "-" + message.id,
-        message_id: message.id,
-        participant_id: p.participant_id,
-        is_archived: false,
-        is_deleted: false,
-        is_muted: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
     }
 
     // 5. Update last_read on current participant (self)

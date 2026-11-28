@@ -60,7 +60,9 @@ export async function POST(
     }
 
     // 2. Accept the request (atomic via RPC — returns jsonb {ok, status, conversation_id})
-    const { data, error: rpcError } = await serverClient.rpc("public.accept_message_request", {
+    // ⚠️ اسم الدالة بدون سكيما — supabase-js مبيسمحش بـ "public.fn" (كان ده سبب
+    // فشل القبول 100% من الوقت فمحدش يقدر يبدأ محادثة)
+    const { data, error: rpcError } = await serverClient.rpc("accept_message_request", {
       p_request_id: params.id,
       p_user_id: user.id,
     });
