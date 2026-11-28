@@ -201,6 +201,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "Megaphone",
   },
   {
+    href: "/admin/payments",
+    label: "الدفعات اليدوية",
+    description: "تسجيل الدفعات اليدوية وسجلها الكامل",
+    permission: "subscriptions.manage",
+    icon: "CreditCard",
+  },
+  {
     href: "/admin/community/moderation",
     label: "إشراف المجتمع",
     description: "تقارير المجتمع والعقوبات والاعتراضات والكلمات الممنوعة وفريق الإشراف",
