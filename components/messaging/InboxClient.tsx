@@ -18,7 +18,8 @@ import * as ui from "@/components/ui";
 import SupportSection from "@/components/communication/SupportSection";
 import {
   Search, MessageCircle, Send, X, Plus, Inbox, LifeBuoy,
-  UserPlus, Loader2, Check, ShieldAlert,
+  UserPlus, Loader2, Check, ShieldAlert, Paperclip, Mic, Square,
+  Pencil, Trash2, File as FileIcon,
 } from "lucide-react";
 
 type Conversation = {
@@ -36,7 +37,13 @@ type Msg = {
   body: string;
   is_deleted: boolean;
   created_at: string;
+  message_type?: "text" | "image" | "audio" | "file" | string;
+  media_url?: string | null;
+  edited_at?: string | null;
 };
+
+// مرفق جاهز للإرسال (اترفع على التخزين)
+type PendingMedia = { url: string; kind: "image" | "audio" | "file"; type: string; name?: string };
 
 type SearchResult = {
   profile_id: string;
@@ -52,9 +59,13 @@ type MsgRequest = {
   status: string;
   note: string | null;
   created_at: string;
+  direction?: "incoming" | "sent";
   sender_name: string | null;
   sender_handle: string | null;
   sender_avatar: string | null;
+  receiver_name?: string | null;
+  receiver_handle?: string | null;
+  receiver_avatar?: string | null;
 };
 
 type Tab = "chats" | "requests" | "support";
@@ -83,6 +94,17 @@ export default function InboxClient() {
   const [requestNote, setRequestNote] = useState<{ state: "sent" | "incoming" | "error"; text: string } | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
+
+  // ------------------------------------------------- وسائط + صوت + تعديل (C17)
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
 
   // ------------------------------------------------------------- تحميل
   const loadMe = useCallback(async () => {
@@ -160,6 +182,17 @@ export default function InboxClient() {
           });
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${selectedConv}` },
+        (payload: { new: Msg }) => {
+          const row = payload.new;
+          if (!row?.id) return;
+          // تعديل أو حذف ناعم — نطبّق نسخة السيرفر (الحذف بيخفي الوسائط)
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, ...row } : m)));
+          void loadConversations();
+        }
+      )
       .subscribe();
     return () => { void sb.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,18 +216,25 @@ export default function InboxClient() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedConv || sending) return;
     const body = draft.trim();
-    if (!body || !selectedConv || sending) return;
+    // رسالة وسائط من غير نص ولا مرفق = مفيش حاجة تتبعت
+    if (!body && !pendingMedia) return;
     setSending(true);
     try {
       const res = await fetch(`/api/conversations/${selectedConv}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify(
+          pendingMedia
+            ? { body: body || " ", message_type: pendingMedia.kind, media_url: pendingMedia.url }
+            : { body },
+        ),
       });
       const data = await res.json();
       if (data.success) {
         setDraft("");
+        setPendingMedia(null);
         await openConversation(selectedConv, true);
         void loadConversations();
         requestAnimationFrame(() => {
@@ -208,6 +248,113 @@ export default function InboxClient() {
     } finally {
       setSending(false);
     }
+  };
+
+  // ------------------------------------------------- رفع وسائط (C17)
+  const uploadFile = async (file: File) => {
+    if (uploadingMedia || recording) return;
+    setUploadingMedia(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/conversations/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.success) {
+        setPendingMedia({ url: data.url, kind: data.kind, type: data.type, name: file.name });
+      } else {
+        setError(data.error || "تعذّر رفع الملف.");
+      }
+    } catch {
+      setError("مشكلة شبكة أثناء رفع الملف.");
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  // ------------------------------------------------- تسجيل صوتي (C17)
+  const startRecording = async () => {
+    if (recording || sending) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      chunksRef.current = [];
+      mr.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (blob.size > 0) await uploadFile(new File([blob], `voice-${Date.now()}.webm`, { type: "audio/webm" }));
+      };
+      mr.start();
+      recorderRef.current = mr;
+      setRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+    } catch {
+      setError("مسموحش بالمايك — اسمح للموقع بالوصول للميكروفون.");
+    }
+  };
+
+  const stopRecording = (send: boolean) => {
+    const mr = recorderRef.current;
+    if (!mr || mr.state === "inactive") return;
+    if (!send) mr.onstop = null; // إلغاء — من غير رفع
+    mr.stop();
+    recorderRef.current = null;
+    setRecording(false);
+    if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+    setRecordSeconds(0);
+  };
+
+  // ------------------------------------------------- تعديل/حذف رسالة (C17)
+  const startEdit = (m: Msg) => { setEditingId(m.id); setEditDraft(m.body); };
+  const saveEdit = async () => {
+    if (!editingId || !selectedConv) return;
+    const body = editDraft.trim();
+    if (!body) return;
+    try {
+      const res = await fetch(`/api/conversations/${selectedConv}/messages/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = data.message as Msg;
+        setMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
+        setEditingId(null);
+        setEditDraft("");
+      } else {
+        setError(data.error || "تعذّر التعديل.");
+      }
+    } catch { setError("مشكلة شبكة."); }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!selectedConv) return;
+    try {
+      const res = await fetch(`/api/conversations/${selectedConv}/messages/${messageId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, is_deleted: true, body: "", media_url: null } : m)));
+        void loadConversations();
+      } else {
+        setError(data.error || "تعذّر الحذف.");
+      }
+    } catch { setError("مشكلة شبكة."); }
+  };
+
+  // إلغاء طلب مراسلة بعتّه (C17)
+  const cancelRequest = async (req: MsgRequest) => {
+    try {
+      const res = await fetch(`/api/messages/requests/${req.id}/cancel`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setRequests((prev) => prev.filter((r) => r.id !== req.id));
+      } else {
+        setError(data.error || "تعذّر إلغاء الطلب.");
+      }
+    } catch { setError("مشكلة شبكة."); }
   };
 
   // ------------------------------------------------------------- بحث المستخدمين
@@ -301,7 +448,7 @@ export default function InboxClient() {
   };
 
   // ------------------------------------------------------------- UI
-  const pendingRequests = requests.filter((r) => r.status === "pending");
+  const pendingRequests = requests.filter((r) => r.status === "pending" && r.direction === "incoming");
   const selectedConvMeta = conversations.find((c) => c.id === selectedConv) ?? null;
 
   const avatar = (url: string | null, name: string | null, cls: string) =>
@@ -397,7 +544,8 @@ export default function InboxClient() {
 
           {tab === "requests" && (
             <div className="p-3">
-              <h2 className="mb-3 text-sm font-bold text-ink">طلبات المراسلة الواصلة</h2>
+              <h2 className="mb-3 text-sm font-bold text-ink">طلبات المراسلة</h2>
+              <p className="mb-3 -mt-2 text-[11px] text-slate-400">الواصلة ليك تحت — واللي بعتّها تحتايهم بتقدر تلغيها.</p>
               {requestsLoading ? (
                 <ui.Skeleton className="h-20 w-full" />
               ) : pendingRequests.length === 0 ? (
@@ -438,15 +586,30 @@ export default function InboxClient() {
                   ))}
                 </ul>
               )}
-              {/* الطلبات اللي بعتها أنت — حالتها */}
-              {requests.some((r) => r.status !== "pending") && (
+              {/* الطلبات اللي بعتها أنت — معلقة (تنلغي) وماليها رد (C17) */}
+              {requests.some((r) => r.direction === "sent") && (
                 <div className="mt-4">
-                  <h3 className="mb-2 text-[11px] font-bold text-slate-400">طلبات سابقة</h3>
-                  <ul className="space-y-1">
-                    {requests.filter((r) => r.status !== "pending").slice(0, 10).map((r) => (
-                      <li key={r.id} className="flex items-center justify-between rounded-lg bg-paper-2/40 px-3 py-1.5 text-xs text-ink-soft">
-                        <span>{r.sender_name ?? "طالب"}</span>
-                        <span>{r.status === "accepted" ? "اتقبل ✓" : r.status === "rejected" ? "اترفض" : "انتهى"}</span>
+                  <h3 className="mb-2 text-[11px] font-bold text-slate-400">الطلبات اللي بعتّها</h3>
+                  <ul className="space-y-1.5">
+                    {requests.filter((r) => r.direction === "sent").slice(0, 15).map((r) => (
+                      <li key={r.id} className="flex items-center gap-2 rounded-lg bg-paper-2/40 px-3 py-2 text-xs">
+                        {avatar(r.receiver_avatar ?? null, r.receiver_name ?? null, "h-7 w-7 text-[10px]")}
+                        <span className="min-w-0 flex-1 truncate font-semibold text-ink">{r.receiver_name ?? "طالب"}</span>
+                        {r.status === "pending" ? (
+                          <>
+                            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">معلّق</span>
+                            <button
+                              onClick={() => void cancelRequest(r)}
+                              className="shrink-0 rounded-md bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100"
+                            >
+                              إلغاء
+                            </button>
+                          </>
+                        ) : (
+                          <span className="shrink-0 text-[10px] text-slate-400">
+                            {r.status === "accepted" ? "اتقبل ✓" : r.status === "rejected" ? "اترفض" : r.status === "canceled" ? "ألغيته" : "انتهى"}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -503,17 +666,81 @@ export default function InboxClient() {
               ) : (
                 messages.map((m) => {
                   const mine = m.sender_id === me;
+                  const deleted = m.is_deleted;
+                  const isEditing = editingId === m.id;
                   return (
-                    <div key={m.id} className={`flex ${mine ? "justify-start" : "justify-end"}`}>
+                    <div key={m.id} className={`group flex items-end gap-1.5 ${mine ? "justify-start" : "justify-end"}`}>
+                      {/* أدوات رسايلي: تعديل/حذف */}
+                      {mine && !deleted && !isEditing ? (
+                        <div className="flex shrink-0 gap-0.5 opacity-0 transition group-hover:opacity-100">
+                          {m.message_type === "text" || !m.message_type ? (
+                            <button
+                              onClick={() => startEdit(m)}
+                              className="rounded-md p-1 text-slate-400 hover:bg-paper-3 hover:text-ink"
+                              aria-label="تعديل الرسالة" title="تعديل"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => void deleteMessage(m.id)}
+                            className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                            aria-label="حذف الرسالة" title="حذف"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : null}
                       <div
                         className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
-                          mine ? "bg-marker text-white" : "border border-rule/50 bg-paper-2 text-ink"
+                          deleted
+                            ? "border border-dashed border-rule/60 bg-paper-2/50 italic text-slate-400"
+                            : mine ? "bg-marker text-white" : "border border-rule/50 bg-paper-2 text-ink"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                        <p className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-slate-400"}`}>
-                          {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
-                        </p>
+                        {deleted ? (
+                          <p>اتمسحت الرسالة 🗑️</p>
+                        ) : isEditing ? (
+                          <div className="w-64">
+                            <textarea
+                              autoFocus
+                              value={editDraft}
+                              onChange={(e) => setEditDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void saveEdit(); }
+                                if (e.key === "Escape") { setEditingId(null); setEditDraft(""); }
+                              }}
+                              rows={2}
+                              className="w-full resize-none rounded-lg border border-rule/50 bg-paper px-2 py-1.5 text-sm text-ink outline-none focus:border-marker"
+                            />
+                            <div className="mt-1.5 flex gap-1.5">
+                              <button onClick={() => void saveEdit()} className="rounded-md bg-marker px-2.5 py-1 text-xs font-bold text-white">حفظ</button>
+                              <button onClick={() => { setEditingId(null); setEditDraft(""); }} className="rounded-md bg-paper-3 px-2.5 py-1 text-xs text-ink-soft">إلغاء</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* الوسائط */}
+                            {m.message_type === "image" && m.media_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={m.media_url} alt="مرفق" className="mb-1.5 max-h-64 rounded-xl border border-white/20 object-cover" />
+                            ) : null}
+                            {m.message_type === "audio" && m.media_url ? (
+                              <audio controls src={m.media_url} className="mb-1.5 max-w-56" />
+                            ) : null}
+                            {m.message_type === "file" && m.media_url ? (
+                              <a href={m.media_url} target="_blank" rel="noopener noreferrer"
+                                className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-black/10 px-2.5 py-1.5 text-xs font-semibold underline">
+                                <FileIcon className="h-3.5 w-3.5" /> فتح المرفق
+                              </a>
+                            ) : null}
+                            {m.body && m.body !== " " ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
+                            <p className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-slate-400"}`}>
+                              {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+                              {m.edited_at ? " · عدّلت" : ""}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -527,26 +754,88 @@ export default function InboxClient() {
               </div>
             )}
 
-            <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-rule/40 bg-paper-2/40 p-3">
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(e); }
-                }}
-                rows={1}
-                placeholder="اكتب رسالتك… (Enter للإرسال)"
-                className="max-h-32 min-h-11 w-full flex-1 resize-none rounded-xl border border-rule/50 bg-paper px-3 py-2.5 text-sm text-ink outline-none placeholder:text-slate-400 focus:border-marker"
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim() || sending}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-marker text-white transition hover:opacity-90 disabled:opacity-40"
-                aria-label="إرسال"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </button>
-            </form>
+            {/* معاينة المرفق قبل الإرسال (C17) */}
+            {pendingMedia ? (
+              <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl border border-rule/50 bg-paper-2/70 p-2">
+                {pendingMedia.kind === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={pendingMedia.url} alt="مرفق" className="h-12 w-12 rounded-lg object-cover" />
+                ) : pendingMedia.kind === "audio" ? (
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-marker/10 text-marker"><Mic className="h-4 w-4" /></span>
+                ) : (
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-marker/10 text-marker"><FileIcon className="h-4 w-4" /></span>
+                )}
+                <span className="min-w-0 flex-1 truncate text-xs text-ink-soft">
+                  {pendingMedia.kind === "audio" ? "تسجيل صوتي جاهز" : pendingMedia.name || "مرفق جاهز"}
+                </span>
+                <button onClick={() => setPendingMedia(null)} className="rounded p-1 text-slate-400 hover:text-rose-600" aria-label="إزالة المرفق">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
+
+            {recording ? (
+              <div className="flex items-center gap-2 border-t border-rule/40 bg-paper-2/40 p-3">
+                <span className="flex h-3 w-3 shrink-0 animate-pulse rounded-full bg-rose-600" aria-hidden="true" />
+                <span className="flex-1 text-sm font-semibold text-ink">
+                  بيسجل… <span className="ltr-num tnum">{recordSeconds}</span> ثانية
+                </span>
+                <button onClick={() => stopRecording(false)} className="rounded-lg bg-paper px-3 py-2 text-xs font-medium text-ink-soft hover:bg-paper-3">إلغاء</button>
+                <button onClick={() => stopRecording(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-marker px-3.5 py-2 text-xs font-bold text-white hover:opacity-90">
+                  <Square className="h-3.5 w-3.5" /> إرسال التسجيل
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-rule/40 bg-paper-2/40 p-3">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf,text/plain,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadFile(f);
+                    e.target.value = "";
+                  }}
+                  id="chat-media-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("chat-media-input")?.click()}
+                  disabled={uploadingMedia || sending}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-rule/50 bg-paper text-ink-soft transition hover:text-marker disabled:opacity-40"
+                  aria-label="إرفاق صورة أو ملف" title="إرفاق"
+                >
+                  {uploadingMedia ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void startRecording()}
+                  disabled={uploadingMedia || sending}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-rule/50 bg-paper text-ink-soft transition hover:text-marker disabled:opacity-40"
+                  aria-label="تسجيل صوتي" title="رسالة صوتية"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(e); }
+                  }}
+                  rows={1}
+                  placeholder={pendingMedia ? "اكتب تعليق على المرفق (اختياري)…" : "اكتب رسالتك… (Enter للإرسال)"}
+                  className="max-h-32 min-h-11 w-full flex-1 resize-none rounded-xl border border-rule/50 bg-paper px-3 py-2.5 text-sm text-ink outline-none placeholder:text-slate-400 focus:border-marker"
+                />
+                <button
+                  type="submit"
+                  disabled={(!draft.trim() && !pendingMedia) || sending || uploadingMedia}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-marker text-white transition hover:opacity-90 disabled:opacity-40"
+                  aria-label="إرسال"
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </form>
+            )}
           </>
         )}
       </main>

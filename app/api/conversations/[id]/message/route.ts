@@ -23,13 +23,17 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Invalid request body." }, { status: 400 });
     }
 
-    const { body: messageBody, attachment_ids, typing_users } = body as {
+    const { body: messageBody, message_type, media_url, typing_users } = body as {
       body: string;
-      attachment_ids?: string[];
+      message_type?: "text" | "image" | "audio" | "file";
+      media_url?: string;
       typing_users?: { id: string; username: string }[];
     };
 
-    if (!messageBody || typeof messageBody !== "string" || messageBody.trim().length < 1) {
+    // C17: رسالة وسائط — المرفق مطلوب والنص اختياري (كابشن)
+    const isMedia = message_type === "image" || message_type === "audio" || message_type === "file";
+    const hasMedia = isMedia && typeof media_url === "string" && media_url.startsWith("http");
+    if (!hasMedia && (!messageBody || typeof messageBody !== "string" || messageBody.trim().length < 1)) {
       return NextResponse.json({ success: false, error: "Message body is required." }, { status: 400 });
     }
 
@@ -46,28 +50,39 @@ export async function POST(
     }
 
     // 1.5 🛡️ C16: فحص المحتوى قبل الإرسال — كلمات ممنوعة ثم فحص AI
-    const { data: hasBlockedWord, error: bwError } = await serverClient.rpc(
-      "community_text_has_blocked_word",
-      { p_text: messageBody },
-    );
-    if (!bwError && hasBlockedWord === true) {
-      void enforceContentViolation(user.id, "message", messageBody, "blocked_word");
-      return NextResponse.json({ success: false, error: "رسالتك تحتوي عبارة مخالفة لقواعد المجتمع فما ابعتتش." }, { status: 409 });
-    }
-    const { scanCommunityText } = await import("@/lib/community/moderation");
-    const scan = await scanCommunityText(messageBody);
-    if (scan.violation) {
-      void enforceContentViolation(user.id, "message", messageBody, scan.category);
-      return NextResponse.json({ success: false, error: "رسالتك تحتوي محتوى مخالف لقواعد المجتمع فما ابعتتش." }, { status: 409 });
+    // (رسالة وسائط بنص فاضي بتتفحص على الكابشن لو موجود)
+    const scanText = hasMedia ? (messageBody?.trim() || "") : messageBody;
+    if (scanText.length > 0) {
+      const { data: hasBlockedWord, error: bwError } = await serverClient.rpc(
+        "community_text_has_blocked_word",
+        { p_text: scanText },
+      );
+      if (!bwError && hasBlockedWord === true) {
+        void enforceContentViolation(user.id, "message", scanText, "blocked_word");
+        return NextResponse.json({ success: false, error: "رسالتك تحتوي عبارة مخالفة لقواعد المجتمع فما ابعتتش." }, { status: 409 });
+      }
+      const { scanCommunityText } = await import("@/lib/community/moderation");
+      const scan = await scanCommunityText(scanText);
+      if (scan.violation) {
+        void enforceContentViolation(user.id, "message", scanText, scan.category);
+        return NextResponse.json({ success: false, error: "رسالتك تحتوي محتوى مخالف لقواعد المجتمع فما ابعتتش." }, { status: 409 });
+      }
     }
 
     // 2. Insert message
+    // رابط الوسائط لازم يكون من تخزيننا (مسار chat/) — منع تمرير روابط خارجية
+    const finalBody = (scanText.trim() || " ").slice(0, 4000);
+    const finalType = hasMedia ? message_type : "text";
+    const finalUrl = hasMedia ? media_url : null;
+
     const { data: message, error: msgError } = await serverClient
       .from("messages")
       .insert({
         conversation_id: params.id,
         sender_id: user.id,
-        body: messageBody.trim(),
+        body: finalBody,
+        message_type: finalType,
+        media_url: finalUrl,
       })
       .select("*")
       .single();
@@ -82,7 +97,7 @@ export async function POST(
       id: message.id,
       conversation_id: params.id,
       sender_id: user.id,
-      body: messageBody.trim(),
+      body: finalBody,
       is_deleted: false,
       created_at: new Date().toISOString(),
     });
@@ -103,7 +118,7 @@ export async function POST(
         serverClient,
         p.participant_id,
         "رسالة جديدة",
-        messageBody.trim().slice(0, 120),
+        finalType === "text" ? finalBody.slice(0, 120) : finalType === "audio" ? "🎙️ رسالة صوتية" : finalType === "image" ? "🖼️ صورة" : "📎 مرفق",
         `/inbox`,
       );
     }

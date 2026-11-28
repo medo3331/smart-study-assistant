@@ -108,7 +108,8 @@ export async function POST(req: Request) {
 /**
  * GET /api/messages/requests
  *
- * List incoming message requests for the authenticated user.
+ * List incoming AND sent message requests for the authenticated user —
+ * كل طلب فيه direction: "incoming" | "sent" عشان الواجهة تعرض الطرفين.
  */
 export async function GET(req: Request) {
   try {
@@ -120,41 +121,51 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: "Authentication required." }, { status: 401 });
     }
 
-    // List incoming requests
+    // الوارد + المرسل — مع اتجاه كل طلب
     const { data, error } = await serverClient
       .from("message_requests")
-      .select("id, sender_id, status, note, created_at, responded_at, responded_by")
-      .eq("receiver_id", user.id)
-      .order("created_at", { ascending: false });
+      .select("id, sender_id, receiver_id, status, note, created_at, responded_at, responded_by")
+      .or(`receiver_id.eq.${user.id},sender_id.eq.${user.id}`)
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     if (error) {
       console.error("[message_requests] GET error:", error);
       return NextResponse.json({ success: false, error: "Failed to load requests." }, { status: 500 });
     }
 
-    // إثراء الطلبات باسم المُرسِل وصورته وhandle — بدل عرض "مرسل الطلب" المجهول
-    const rows = (data ?? []) as { sender_id: string }[];
-    let senderById = new Map<string, { display_name: string | null; handle: string | null; avatar_url: string | null }>();
-    const senderIds = [...new Set(rows.map((r) => r.sender_id))];
-    if (senderIds.length > 0) {
-      const { data: senders } = await serverClient
+    // إثراء الطلبات باسم الطرف التاني وصورته وhandle — بدل عرض مجهول
+    const rows = (data ?? []) as { sender_id: string; receiver_id: string }[];
+    let profileById = new Map<string, { display_name: string | null; handle: string | null; avatar_url: string | null }>();
+    const otherIds = [...new Set(rows.map((r) => (r.sender_id === user.id ? r.receiver_id : r.sender_id)))];
+    if (otherIds.length > 0) {
+      const { data: profiles } = await serverClient
         .from("social_profiles")
         .select("user_id, display_name, handle, avatar_url")
-        .in("user_id", senderIds);
-      senderById = new Map(
-        ((senders ?? []) as { user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null }[])
+        .in("user_id", otherIds);
+      profileById = new Map(
+        ((profiles ?? []) as { user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null }[])
           .map((s) => [s.user_id, { display_name: s.display_name, handle: s.handle, avatar_url: s.avatar_url }]),
       );
     }
 
     return NextResponse.json({
       success: true,
-      requests: rows.map((r) => ({
-        ...r,
-        sender_name: senderById.get(r.sender_id)?.display_name ?? null,
-        sender_handle: senderById.get(r.sender_id)?.handle ?? null,
-        sender_avatar: senderById.get(r.sender_id)?.avatar_url ?? null,
-      })),
+      requests: rows.map((r) => {
+        const incoming = r.sender_id !== user.id;
+        const otherId = incoming ? r.sender_id : r.receiver_id;
+        const other = profileById.get(otherId);
+        return {
+          ...r,
+          direction: incoming ? ("incoming" as const) : ("sent" as const),
+          sender_name: incoming ? (other?.display_name ?? null) : null,
+          sender_handle: incoming ? (other?.handle ?? null) : null,
+          sender_avatar: incoming ? (other?.avatar_url ?? null) : null,
+          receiver_name: incoming ? null : (other?.display_name ?? null),
+          receiver_handle: incoming ? null : (other?.handle ?? null),
+          receiver_avatar: incoming ? null : (other?.avatar_url ?? null),
+        };
+      }),
     });
   } catch (error) {
     console.error("[message_requests] GET unexpected error:", error);
