@@ -66,19 +66,32 @@ function search(state: GameState, depth: number, alpha: number, beta: number): n
   return best;
 }
 
-export type Difficulty = 1 | 2 | 3;
+export type Difficulty = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * ٥ مستويات = (عمق البحث + ضجيج):
+ *   مبتدئ · هاوي · متوسط · متقدم · محترف
+ * الضجيج بيخلي المستوى الواطي يغلط عمدًا، والمحترف بيقلب بحث أعمق.
+ */
+export const AI_LEVELS: Record<Difficulty, { depth: number; jitter: number; label: string }> = {
+  1: { depth: 1, jitter: 85, label: "مبتدئ" },
+  2: { depth: 1, jitter: 25, label: "هاوي" },
+  3: { depth: 2, jitter: 10, label: "متوسط" },
+  4: { depth: 2, jitter: 0, label: "متقدم" },
+  5: { depth: 3, jitter: 0, label: "محترف ♛" },
+};
 
 /** أحسن نقلة للأسود (الـ AI دايمًا بيلعب الأسود ضد اللاعب الأبيض) */
 export function chooseAiMove(state: GameState, difficulty: Difficulty): Move | null {
   const moves = legalMoves(state);
   if (moves.length === 0) return null;
 
-  const jitter = difficulty === 1 ? 60 : difficulty === 2 ? 12 : 0;
+  const { depth, jitter } = AI_LEVELS[difficulty];
   let best: Move | null = null;
   let bestValue = Infinity; // الأسود بيقلّل قيمة الأبيض
   for (const m of orderMoves(state, moves)) {
     const next = makeMove(state, m);
-    const value = search(next, difficulty - 1, -Infinity, Infinity)
+    const value = search(next, depth - 1, -Infinity, Infinity)
       + (jitter ? (Math.random() * 2 - 1) * jitter : 0);
     if (value < bestValue) {
       bestValue = value;
