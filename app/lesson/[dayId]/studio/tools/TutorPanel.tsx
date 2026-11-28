@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { UnifiedChat } from "@/components/unified-ai/UnifiedChat";
+import { EXPLANATION_MODES, EXPLANATION_MODE_LABELS } from "@/lib/lesson/explanations";
 import { useLessonStudio, useTutorContext } from "../LessonStudioProvider";
 
 /* ==========================================================================
@@ -13,10 +14,17 @@ import { useLessonStudio, useTutorContext } from "../LessonStudioProvider";
 
 /** حاوية الـ UnifiedChat الواحدة — بتتنقل بين سلوة التاب وسلوة الـ Panel. */
 export function TutorChatHost() {
-  const { activeTab } = useLessonStudio();
+  const { activeTab, setExplanationMode } = useLessonStudio();
   const tutorContext = useTutorContext();
   const holderRef = useRef<HTMLDivElement | null>(null);
   const inTab = activeTab === "tutor";
+
+  // ⚡ أزرار سريعة (P2): ضغطة واحدة = تحديد طريقة الشرح + سؤال الشات بنفس الوضع.
+  const quickPrompts = EXPLANATION_MODES.map((mode) => ({
+    label: EXPLANATION_MODE_LABELS[mode],
+    prompt: `اشرح لي درس «${tutorContext().lesson.title}» بـ${EXPLANATION_MODE_LABELS[mode]}.`,
+    onClick: () => setExplanationMode(mode),
+  }));
 
   useEffect(() => {
     const holder = holderRef.current;
@@ -36,6 +44,7 @@ export function TutorChatHost() {
       <div ref={holderRef} className="h-full">
         <UnifiedChat
           compact={!inTab}
+          quickPrompts={quickPrompts}
           initialContext={{
             language: "ar",
             preferences: { language: "ar", field: tc.lesson.subject || "study" },

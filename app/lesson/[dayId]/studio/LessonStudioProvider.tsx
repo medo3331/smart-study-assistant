@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { VideoCandidate } from "@/lib/lesson/video-server";
 import type { OutlineSection } from "@/lib/lesson/outline";
+import { EXPLANATION_MODE_LABELS, type ExplanationMode } from "@/lib/lesson/explanations";
 
 /* ==========================================================================
    LessonStudioProvider — Context الوحيد للـ Studio (§2.2 من التصميم).
@@ -78,6 +79,8 @@ type LessonStudioContextValue = {
   closeVideo: () => void;
   /** أول فتح لتاب الفيديو بس — الصفحة ما بتعملش بحث عند التحميل. */
   ensureVideoLoaded: () => void;
+  /** «مش مناسب» — إخفاء ترشيح في الجلسة الحالية بس (P2 مطلب 3). */
+  dismissVideoCandidate: (id: string) => void;
   // ── النوتة ──
   notebook: {
     open: boolean;
@@ -95,6 +98,12 @@ type LessonStudioContextValue = {
   // ── مستوى الشرح ──
   explanationLevel: ExplanationLevel;
   setExplanationLevel: (level: ExplanationLevel) => void;
+  // ── طريقة الشرح (P2): general / summary / detailed — مصدر واحد للمحرك ──
+  explanationMode: ExplanationMode;
+  setExplanationMode: (mode: ExplanationMode) => void;
+  /** نص الشرح المخزّن الحالي (لأوضاع الثلاثة) — الـ Tutor بيبقى واعي بيه. */
+  explanationSnapshot: string | null;
+  setExplanationSnapshot: (text: string | null) => void;
   // ── التقدم والـ Resume ──
   progress: ResumeState;
   saveResume: () => void;
@@ -131,7 +140,17 @@ export function LessonStudioProvider({
   const [videoLoading, setVideoLoading] = useState(false);
   const [miniPlayerOn, setMiniPlayerOn] = useState(false);
   const [lastTimestamp, setLastTimestamp] = useState<number | null>(null);
+  // «مش مناسب» — آيديهات مترشّحات متشالة من العرض في الجلسة الحالية بس.
+  const [dismissedVideoIds, setDismissedVideoIds] = useState<Set<string>>(new Set());
   const videoFetchRef = useRef<{ started: boolean; cancelled: boolean }>({ started: false, cancelled: false });
+
+  const dismissVideoCandidate = useCallback((id: string) => {
+    setDismissedVideoIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
 
   /** بحث الفيديو lazy — نفس payload الصفحة القديمة، بس أول طلب للفيديو بس. */
   const ensureVideoLoaded = useCallback(() => {
@@ -252,6 +271,10 @@ export function LessonStudioProvider({
   // ── مستوى الشرح ──
   const [explanationLevel, setExplanationLevel] = useState<ExplanationLevel>("standard");
 
+  // ── طريقة الشرح (P2): الوضع الافتراضي = شرح عام ──
+  const [explanationMode, setExplanationMode] = useState<ExplanationMode>("general");
+  const [explanationSnapshot, setExplanationSnapshot] = useState<string | null>(null);
+
   // ── Smart Resume — localStorage `lesson-resume:<dayId>` (عمود resume = P2) ──
   const [progress, setProgress] = useState<ResumeState>({ lastTab: null, lastSectionId: null, lastVideoId: null, updatedAt: null });
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -328,23 +351,30 @@ export function LessonStudioProvider({
 
   const toggleNavigator = useCallback(() => setNavigatorOpen((v) => !v), []);
 
-  /** سياق الـ Tutor — دالة مش قيمة: بتتقري لحظة الإرسال (§2.4). */
+  /** سياق الـ Tutor — دالة مش قيمة: بتتقري لحظة الإرسال (§2.4).
+   *  P2: واعي بطريقة الشرح المختارة (عام/تلخيصي/تفصيلي) والشرح المخزّن —
+   *  الطالب لما يسأل سؤال شرح، الرد بيكون على نفس الوضع وبناءً على الشرح المخزّن. */
   const tutorContext = useCallback((): TutorContextPayload => {
+    const snapshotExcerpt = explanationSnapshot?.trim().slice(0, 1500) ?? "";
     const lines = [
       currentSectionId ? `القسم الحالي في الشرح: ${currentSectionId.replace(/^sec-\d+-/, "")}` : null,
       `مستوى الشرح المختار: ${explanationLevel}`,
+      `طريقة الشرح المختارة: ${EXPLANATION_MODE_LABELS[explanationMode]} — لو الطالب طلب شرح، التزم بنفس الطريقة دي.`,
+      snapshotExcerpt
+        ? `مقتطف من الشرح المخزّن للدرس (ارجع له وخلي إجابتك متسقة معه):\n${snapshotExcerpt}`
+        : null,
       videoOpen && videoActive ? `الفيديو المفتوح: ${videoActive.title}${lastTimestamp ? ` عند التوقيت ${lastTimestamp} ثانية` : ""}` : null,
     ].filter(Boolean);
     return {
       lesson: {
         title: lesson.topic || lesson.title,
         subject: lesson.subject,
-        content: lesson.description,
+        content: snapshotExcerpt || lesson.description,
         description: lesson.description,
       },
       extraContext: lines.join("\n"),
     };
-  }, [currentSectionId, explanationLevel, videoOpen, videoActive, lastTimestamp, lesson]);
+  }, [currentSectionId, explanationLevel, explanationMode, explanationSnapshot, videoOpen, videoActive, lastTimestamp, lesson]);
 
   const value = useMemo<LessonStudioContextValue>(
     () => ({
@@ -360,7 +390,8 @@ export function LessonStudioProvider({
       video: {
         open: videoOpen,
         active: videoActive,
-        candidates: videoCandidates,
+        // المرشّحات المرفوضة («مش مناسب») متشالة من العرض في الجلسة الحالية.
+        candidates: videoCandidates.filter((c) => !dismissedVideoIds.has(c.id)),
         loading: videoLoading,
         miniPlayerOn,
         lastTimestamp,
@@ -368,6 +399,7 @@ export function LessonStudioProvider({
       openVideo,
       closeVideo,
       ensureVideoLoaded,
+      dismissVideoCandidate,
       notebook: { open: notebookOpen, pendingDraft, lastAppended },
       openNotebook,
       closeNotebook,
@@ -377,16 +409,20 @@ export function LessonStudioProvider({
       undoLastAppend,
       explanationLevel,
       setExplanationLevel,
+      explanationMode,
+      setExplanationMode,
+      explanationSnapshot,
+      setExplanationSnapshot,
       progress,
       saveResume,
       tutorContext,
     }),
     [
       lesson, activeTab, setActiveTab, navigatorOpen, toggleNavigator, outline, currentSectionId,
-      videoOpen, videoActive, videoCandidates, videoLoading, miniPlayerOn, lastTimestamp,
-      openVideo, closeVideo, ensureVideoLoaded, notebookOpen, pendingDraft, lastAppended,
+      videoOpen, videoActive, videoCandidates, videoLoading, miniPlayerOn, lastTimestamp, dismissedVideoIds,
+      openVideo, closeVideo, ensureVideoLoaded, dismissVideoCandidate, notebookOpen, pendingDraft, lastAppended,
       openNotebook, closeNotebook, queueNotebookDraft, approvePendingDraft, dismissPendingDraft,
-      undoLastAppend, explanationLevel, progress, saveResume, tutorContext,
+      undoLastAppend, explanationLevel, explanationMode, explanationSnapshot, progress, saveResume, tutorContext,
     ]
   );
 
@@ -421,8 +457,14 @@ export function useNotebook() {
 }
 
 export function useStudioVideo() {
-  const { video, openVideo, closeVideo, ensureVideoLoaded } = useLessonStudio();
-  return { video, openVideo, closeVideo, ensureVideoLoaded };
+  const { video, openVideo, closeVideo, ensureVideoLoaded, dismissVideoCandidate } = useLessonStudio();
+  return { video, openVideo, closeVideo, ensureVideoLoaded, dismissVideoCandidate };
+}
+
+/** طريقة الشرح (P2): الوضع المختار + الشرح المخزّن — مصدر واحد لـ Learn والـ Tutor. */
+export function useStudioExplanation() {
+  const { explanationMode, setExplanationMode, explanationSnapshot, setExplanationSnapshot, explanationLevel, setExplanationLevel } = useLessonStudio();
+  return { explanationMode, setExplanationMode, explanationSnapshot, setExplanationSnapshot, explanationLevel, setExplanationLevel };
 }
 
 export function useStudioResume() {

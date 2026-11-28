@@ -80,6 +80,7 @@ export function UnifiedChat({
   initialConversationId,
   initialDraft,
   compact = false,
+  quickPrompts,
 }: {
   initialContext?: any;
   lesson?: LessonContext;
@@ -89,6 +90,10 @@ export function UnifiedChat({
   /** 🎛️ وضع اللوحة الجانبية (Lesson Studio TutorPanel): من غير شريط المحادثات
       الجانبي وبارتفاع الحاوية — نفس منطق الشات مايتغيرش. */
   compact?: boolean;
+  /** ⚡ أزرار سريعة فوق شريط الكتابة (Lesson Studio P2: شرح عام/تلخيصي/تفصيلي) —
+      الضغطة بتبعت البرومبت مباشرة عبر نفس مسار الإرسال، و`onClick` اختياري
+      لحالة جانبية (زي تحديث وضع الشرح في الـ provider). */
+  quickPrompts?: { label: string; prompt: string; onClick?: () => void }[];
 }) {
   const router = useRouter();
   const { locale } = useLanguage();
@@ -383,8 +388,8 @@ export function UnifiedChat({
     }
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (overrideText?: string) => {
+    const text = (typeof overrideText === "string" ? overrideText : input).trim();
     if (!text && !attachment) return;
 
     const userMsg: ChatMsg = { role: "user", content: text || "📎 مرفق", attachmentName: attachment?.file.name };
@@ -925,6 +930,23 @@ export function UnifiedChat({
         ))}
       </div>
 
+      {/* ⚡ أزرار سريعة (Lesson Studio P2) — الضغطة بتبعت نفس مسار الإرسال */}
+      {quickPrompts && quickPrompts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2 px-1">
+          {quickPrompts.map((q) => (
+            <button
+              key={q.label}
+              type="button"
+              onClick={() => { q.onClick?.(); void send(q.prompt); }}
+              disabled={loading || continuing}
+              className="text-[11px] font-bold px-3 py-1.5 rounded-full border border-rule bg-paper text-ink-soft hover:text-ink hover:bg-paper-3 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Input bar */}
       <div className="flex items-end gap-2 bg-paper border border-rule rounded-2xl px-3 py-2 shadow-sm">
         <button
@@ -994,7 +1016,7 @@ export function UnifiedChat({
           </button>
         )}
         <button
-          onClick={send}
+          onClick={() => void send()}
           disabled={loading || continuing || (!input.trim() && !attachment)}
            aria-label="Send message"
         >

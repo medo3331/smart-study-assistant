@@ -19,6 +19,13 @@ import OpenNotesBeside from "@/components/notes/OpenNotesBeside";
 import NotesSplitToggle from "@/components/notes/NotesSplitPanel";
 import AddToNotebookMenu from "../tools/AddToNotebookMenu";
 import { extractOutline, outlineSectionId } from "@/lib/lesson/outline";
+import {
+  EXPLANATION_MODES,
+  EXPLANATION_MODE_LABELS,
+  isExplanationMode,
+  type ExplanationMode,
+  type ExplanationVersion,
+} from "@/lib/lesson/explanations";
 import { useLessonStudio } from "../LessonStudioProvider";
 
 /**
@@ -118,6 +125,11 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   // (نفس الوضع بيتعاد عرضه فورًا من غير أي نداء).
   const [modeContent, setModeContent] = useState<Partial<Record<NonNullable<SmartViewMode>, string>>>({});
   const [contentError, setContentError] = useState<string | null>(null);
+  // 🏷️ شفافية المصدر (P2): آخر شرح معروض — من المخزّن ولا توليد جديد؟ + رقم الإصدار.
+  const [sourceMeta, setSourceMeta] = useState<{ cached: boolean | null; version: number | null }>({ cached: null, version: null });
+  // ♻️ الإصدارات السابقة للأوضاع الثلاثة — من GET (البداية) ومن POST (بعد إعادة التوليد).
+  const [allVersions, setAllVersions] = useState<Partial<Record<ExplanationMode, ExplanationVersion[]>>>({});
+  const [showVersions, setShowVersions] = useState(false);
   // حماية من تشغيل مزدوج (StrictMode في dev) — التوليد لازم يحصل مرة واحدة.
   const bootRef = useRef(false);
 
@@ -167,8 +179,10 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     };
   }, [link?.lectureId]);
 
-  /** جلب وضع واحد — السيرفر بيرجعه من الكاش أو بيولّده ويحفظه في lesson_content. */
-  const fetchContent = async (mode: NonNullable<SmartViewMode>) => {
+  /** جلب وضع واحد — السيرفر بيرجعه من الكاش أو بيولّده ويحفظه في lesson_content.
+   *  الأوضاع الثلاثة (P2): force=true = «أعد الشرح» — صياغة جديدة بإصدار جديد،
+   *  والقديم بيتحفظ في الإصدارات السابقة (مش بيتمسح). */
+  const fetchContent = async (mode: NonNullable<SmartViewMode>, opts?: { force?: boolean }) => {
     setActiveMode(mode);
     setContentError(null);
     setLoading(true);
@@ -176,7 +190,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
       const response = await fetch("/api/lesson-content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dayId, mode, edu }),
+        body: JSON.stringify({ dayId, mode, force: opts?.force === true, edu }),
       });
       const data = await response.json().catch(() => null);
       const text = typeof data?.content === "string" && data.content.trim() ? data.content : null;
@@ -184,6 +198,15 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
         throw new Error(data?.error?.message || "لم نتمكن من توليد المحتوى، حاول تاني.");
       }
       setModeContent((prev) => ({ ...prev, [mode]: text }));
+      // شفافية المصدر + الإصدارات (للأوضاع الثلاثة).
+      setSourceMeta({
+        cached: typeof data?.cached === "boolean" ? data.cached : null,
+        version: typeof data?.version === "number" ? data.version : null,
+      });
+      if (isExplanationMode(mode) && Array.isArray(data?.previousVersions)) {
+        setAllVersions((prev) => ({ ...prev, [mode]: data.previousVersions as ExplanationVersion[] }));
+        setShowVersions(false);
+      }
     } catch (error) {
       setContentError(error instanceof Error ? error.message : "حصل خطأ أثناء توليد المحتوى، حاول تاني.");
     } finally {
@@ -304,6 +327,10 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
         const data = await response.json().catch(() => null);
         if (!response.ok || !data?.ok) throw new Error("READ_FAILED");
         applyLinkState(data);
+        // إصدارات الأوضاع الثلاثة من الصف المخزّن (best-effort).
+        if (data.explanationVersions && typeof data.explanationVersions === "object") {
+          setAllVersions(data.explanationVersions as Partial<Record<ExplanationMode, ExplanationVersion[]>>);
+        }
         const stored = data.content ?? {};
         if (data.link) {
           if (stored.cited) {
@@ -312,11 +339,25 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           } else {
             void generateCited();
           }
-        } else if (typeof stored.modes?.simple === "string") {
-          setModeContent({ simple: stored.modes.simple });
-          setActiveMode("simple");
         } else {
-          void fetchContent("simple");
+          // نرصّ كل الأوضاع المخزّنة (القديمة + الثلاثة الجديدة) — التبديل فوري من غير نداء.
+          const storedModeKeys = ["simple", "academic", "visual", "practical", "general", "summary", "detailed"] as const;
+          const storedModes: Partial<Record<NonNullable<SmartViewMode>, string>> = {};
+          for (const key of storedModeKeys) {
+            const value = stored.modes?.[key];
+            if (typeof value === "string" && value.trim()) storedModes[key] = value;
+          }
+          if (storedModes.simple) {
+            setModeContent(storedModes);
+            setActiveMode("simple");
+            setSourceMeta({ cached: true, version: null });
+          } else if (storedModes.general) {
+            setModeContent(storedModes);
+            setActiveMode("general");
+            setSourceMeta({ cached: true, version: null });
+          } else {
+            void fetchContent("simple");
+          }
         }
       } catch {
         // فشل قراءة الحالة — نرجع لسلوك المحتوى العادي (كاش محلي/توليد).
@@ -335,8 +376,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   }, [cited, modeContent]);
 
   // 🧭 تتبّع القسم الحالي — أعلى heading ظاهر في الشرح (للـ Navigator والـ Resume).
-  const sectionTrackRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
+  const sectionTrackRef = useRef<HTMLDivElement | null>(null);  useEffect(() => {
     const root = sectionTrackRef.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
     const headings = Array.from(root.querySelectorAll<HTMLElement>("h4[id^='sec-']"));
@@ -360,12 +400,23 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     // eslint-disable-next-line react-hooks/exhaustive-deps -- إعادة الربط لما المحتوى يتغير بس.
   }, [content, cited]);
 
-  // 🎚️ مستوى الشرح — P1: mapping صادق من الأوضاع الأربعة الموجودة (P2 يضيف الباقي).
+  // 🎚️ مستوى الشرح + طريقة الشرح — P2: الأوضاع الثلاثة بتحدد الوضع ومستواه.
   useEffect(() => {
-    const level = activeMode === "simple" ? "simplified" : activeMode === "practical" ? "practical" : "standard";
-    studio.setExplanationLevel(level);
+    if (activeMode && isExplanationMode(activeMode)) {
+      studio.setExplanationMode(activeMode);
+      studio.setExplanationLevel(activeMode === "general" ? "simplified" : activeMode === "summary" ? "standard" : "deep_dive");
+    } else {
+      const level = activeMode === "simple" ? "simplified" : activeMode === "practical" ? "practical" : "standard";
+      studio.setExplanationLevel(level);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- التزامن مع الوضع النشط فقط.
   }, [activeMode]);
+
+  // 🧠 snapshot الشرح المخزّن — الـ Tutor بيبقى واعي بالشرح المعروض (مطلب P2).
+  useEffect(() => {
+    studio.setExplanationSnapshot(content);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- بنحدّث الـ snapshot لما المحتوى نفسه يتغير بس.
+  }, [content]);
 
   // أربع طرق لشرح نفس الحاجة — مش تسلسل، فمفيش أرقام ولا أيقونات، الاسم لوحده كفاية
   const tabs: { id: NonNullable<SmartViewMode>; label: string }[] = [
@@ -378,6 +429,11 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   const panelVisible = link
     ? Boolean(cited || contentError || loading)
     : Boolean(activeMode);
+
+  // ── P2: طريقة الشرح — الأوضاع الثلاثة مصدر واحد للمحرك (Learn والـ Tutor) ──
+  const activeIsExplanationMode = Boolean(activeMode && isExplanationMode(activeMode));
+  const activeVersions = activeMode && isExplanationMode(activeMode) ? allVersions[activeMode] ?? [] : [];
+  const sourceLabel = link ? "المحاضرة المرتبطة" : sourceMeta.cached === false ? "توليد جديد" : "الشرح المخزّن";
 
   return (
     <div dir="rtl">
@@ -423,8 +479,68 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           </div>
         </div>
       ) : (
-        /* التاب المفتوح بيتعلّم بالحبر: bg-ink — الأصفر مش لون "المختار" */
-        <div className="flex items-center gap-1.5">
+        <>
+        {/* 🎚️ طريقة الشرح (P2) — شرح عام / تلخيصي / تفصيلي: نفس المحرك اللي بيستدعيه الـ Tutor */}
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-ink-soft shrink-0">طريقة الشرح:</span>
+            {EXPLANATION_MODES.map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleModeClick(mode)}
+                aria-pressed={activeMode === mode}
+                className={`text-[11.5px] font-bold px-3 py-1.5 rounded-[6px] border transition ${
+                  activeMode === mode
+                    ? "bg-ink text-paper-2 border-ink"
+                    : "bg-paper border-rule text-ink-soft hover:text-ink hover:bg-paper-3"
+                }`}
+              >
+                {EXPLANATION_MODE_LABELS[mode]}
+              </button>
+            ))}
+            {activeIsExplanationMode && modeContent[activeMode as ExplanationMode] && (
+              <button
+                onClick={() => void fetchContent(activeMode as ExplanationMode, { force: true })}
+                disabled={loading}
+                className="btn btn-quiet text-[11px] px-2.5 py-1.5 shrink-0"
+                title="توليد صياغة جديدة — الإصدار القديم بيتحفظ في الإصدارات السابقة"
+              >
+                ♻️ أعد الشرح
+              </button>
+            )}
+          </div>
+          {/* 🏷️ شفافية المصدر — الطالب عارف الشرح جاي منين دايمًا */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="tag tag-quiet">المصدر: {sourceLabel}</span>
+            {activeIsExplanationMode && sourceMeta.version != null && (
+              <span className="tag tag-quiet">إصدار {sourceMeta.version}</span>
+            )}
+            {activeVersions.length > 0 && (
+              <button
+                onClick={() => setShowVersions((v) => !v)}
+                aria-expanded={showVersions}
+                className="btn btn-quiet text-[10.5px] px-2 py-1"
+              >
+                {showVersions ? "إخفاء الإصدارات السابقة" : `الإصدارات السابقة (${activeVersions.length})`}
+              </button>
+            )}
+          </div>
+          {activeIsExplanationMode && showVersions && activeVersions.length > 0 && (
+            <div className="space-y-1.5 rounded-xl border border-rule bg-paper-2 p-2.5">
+              <p className="text-[10.5px] text-ink-soft">صياغات سابقة لنفس الوضع — محفوظة، مش بتتمسح:</p>
+              {activeVersions.map((v, i) => (
+                <details key={i} className="rounded-lg border border-rule bg-paper px-2.5 py-1.5">
+                  <summary className="text-[11px] font-bold text-ink cursor-pointer">
+                    إصدار سابق{v.generatedAt ? ` — ${new Date(v.generatedAt).toLocaleDateString("ar-EG")}` : ""}
+                  </summary>
+                  <p className="mt-1.5 text-[11px] text-ink-soft leading-relaxed whitespace-pre-wrap line-clamp-8">{v.text}</p>
+                </details>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* التاب المفتوح بيتعلّم بالحبر: bg-ink — الأصفر مش لون "المختار" */}
+        <div className="flex items-center gap-1.5 mt-2">
           <div className="flex items-center gap-1 bg-paper border border-rule p-1 rounded-[var(--r-sm)] flex-1">
             {tabs.map((tab) => (
               <button
@@ -448,6 +564,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
             🔗 اربط بمحاضرة
           </button>
         </div>
+        </>
       )}
 
       <AnimatePresence mode="wait">
@@ -460,6 +577,10 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
             transition={{ duration: 0.2 }}
             className="mt-3 bg-paper border border-rule p-4 rounded-[var(--r-sm)]"
           >
+            {/* 🏷️ شفافية المصدر — كل شرح معروض عليه badge مصدره (مطلب P2) */}
+            <div className="mb-2.5">
+              <span className="tag tag-quiet">المصدر: {sourceLabel}</span>
+            </div>
             {loading ? (
               <div className="py-8 text-center flex flex-col items-center gap-2.5">
                 <span className="w-4 h-4 border-2 border-rule border-t-redpen rounded-full animate-spin" />
@@ -565,7 +686,8 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
 
 // --- Types المنقولة من page.tsx (تستخدمها المكوّنات هنا) ---
 export type LearningStyle = "practical" | "visual" | "academic";
-type SmartViewMode = "simple" | "academic" | "visual" | "practical" | null;
+/** الأوضاع الأربعة القديمة + أوضاع الشرح الثلاثة (P2: شرح عام/تلخيصي/تفصيلي) — نفس المحرك. */
+type SmartViewMode = "simple" | "academic" | "visual" | "practical" | ExplanationMode | null;
 
 interface ResourceLink {
   title: string;

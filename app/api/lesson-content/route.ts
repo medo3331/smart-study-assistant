@@ -14,6 +14,14 @@ import {
   type TimedSegment,
 } from "@/lib/lesson/citations";
 import { subjectMatches } from "@/lib/academics/subject-match";
+import {
+  isExplanationMode,
+  withExplanationVersion,
+  readExplanationVersions,
+  collectExplanationVersions,
+  EXPLANATION_MODE_LABELS,
+  type ExplanationMode,
+} from "@/lib/lesson/explanations";
 
 /* ==========================================================================
    محتوى الدرس — توليد مرة واحدة + Citations (Phase 1.2 + 1.3)
@@ -43,12 +51,21 @@ import { subjectMatches } from "@/lib/academics/subject-match";
 
 export const maxDuration = 60;
 
-/** أوضاع الشرح الأربعة — نفس تبويبات SmartContentViewer بالظبط. */
-const CONTENT_MODES = ["simple", "academic", "visual", "practical"] as const;
-type ContentMode = (typeof CONTENT_MODES)[number];
+/** أوضاع الشرح القديمة الأربعة — نفس تبويبات SmartContentViewer بالظبط (P1). */
+const LEGACY_CONTENT_MODES = ["simple", "academic", "visual", "practical"] as const;
+type LegacyContentMode = (typeof LEGACY_CONTENT_MODES)[number];
+
+/**
+ * أوضاع الشرح الثلاثة (P2 — مطلب «طريقة الشرح الجديدة»): شرح عام / تلخيصي /
+ * تفصيلي — نفس محرك التوليد المخزّن، مفاتيحها جوّه `explanation` jsonb.
+ */
+type ContentMode = LegacyContentMode | ExplanationMode;
 
 function isContentMode(value: unknown): value is ContentMode {
-  return typeof value === "string" && (CONTENT_MODES as readonly string[]).includes(value);
+  return (
+    (typeof value === "string" && (LEGACY_CONTENT_MODES as readonly string[]).includes(value)) ||
+    isExplanationMode(value)
+  );
 }
 
 /** شخصية الشرح — منقولة من الـ systemInstruction اللي كان بيبعته الكلاينت. */
@@ -94,6 +111,14 @@ const MODE_PROMPTS: Record<ContentMode, (topic: string, subject: string, eduLine
     `اشرح "${topic}" (جزء من مادة ${subject}) بأسلوب مرئي وتخيلي: استخدم تشبيهات من الحياة اليومية، وارسم بالكلمات مخططات نصية بسيطة (زي رسم موجة أو رسم بياني في شكل نصي) توضح الفكرة بصريًا. ${eduLine} اكتب بالعربي مع إبقاء المصطلحات التقنية بالإنجليزية.`,
   practical: (topic, subject, eduLine) =>
     `اديني مثال تطبيقي حقيقي أو تمرين محلول خطوة بخطوة على "${topic}" (جزء من مادة ${subject})، زي مسألة أو سيناريو عملي بيوضح إزاي المفهوم بيتطبق فعليًا. ${eduLine} اكتب بالعربي مع إبقاء المصطلحات والمعادلات بالإنجليزية.`,
+
+  /* ── أوضاع الشرح الثلاثة (P2): شرح عام / تلخيصي / تفصيلي ── */
+  general: (topic, subject, eduLine) =>
+    `اشرح "${topic}" (جزء من مادة ${subject}) شرحًا عامًا: فهم أساسي مختصر يجاوب "الموضوع ده إيه وليه مهم" في نقاط واضحة قليلة، من غير استرسال ولا تفاصيل جانبية. ${eduLine} اكتب بالعربي مع الإبقاء على المصطلحات التقنية بالإنجليزية.`,
+  summary: (topic, subject, eduLine) =>
+    `اعمل شرحًا تلخيصيًا لأهم النقاط في "${topic}" (جزء من مادة ${subject}) — مخصص للمراجعة السريعة: نقاط مركزة تغطي كل فكرة أساسية، كل نقطة سطر واحد واضح. ${eduLine} اكتب بالعربي مع الإبقاء على المصطلحات التقنية بالإنجليزية.`,
+  detailed: (topic, subject, eduLine) =>
+    `اشرح "${topic}" (جزء من مادة ${subject}) شرحًا تفصيليًا كاملًا بعمق: قسّم الشرح لعناوين فرعية (## )، عرّف كل مفهوم بدقة، اشرح ليه وفكّر خطوة بخطوة، اذكر أمثلة محلولة وأخطاء شائعة يقع فيها الطلبة، وختم بملخص للأفكار الأساسية. ${eduLine} اكتب بالعربي مع الإبقاء على المصطلحات التقنية والمعادلات بالإنجليزية.`,
 };
 
 /* ═════════════════════ مطابقة المواد (فلترة) ═════════════════════ */
@@ -263,7 +288,7 @@ async function buildLinkState(
   return { link, lectures, otherLectures, suggestion };
 }
 
-/** محتوى الصف المحفوظ — أوضاع markdown + الشرح الم citied + الملخص. */
+/** محتوى الصف المحفوظ — أوضاع markdown + الشرح الم citied + الملخص + الإصدارات. */
 function readStoredContent(row: {
   explanation?: unknown;
   cited_explanation?: unknown;
@@ -271,8 +296,13 @@ function readStoredContent(row: {
 } | null) {
   const modes: Record<string, string> = {};
   const explanation = row?.explanation;
-  if (explanation && typeof explanation === "object" && !Array.isArray(explanation)) {
-    for (const [key, value] of Object.entries(explanation as Record<string, unknown>)) {
+  const rawExplanation =
+    explanation && typeof explanation === "object" && !Array.isArray(explanation)
+      ? (explanation as Record<string, unknown>)
+      : null;
+  if (rawExplanation) {
+    // مفاتيح الأوضاع strings بس — قوائم الإصدارات (`<mode>__versions`) بتتقري منفصلة.
+    for (const [key, value] of Object.entries(rawExplanation)) {
       if (typeof value === "string" && value.trim()) modes[key] = value;
     }
   }
@@ -284,7 +314,16 @@ function readStoredContent(row: {
       ? (row.cited_explanation as LessonCitedExplanation)
       : null;
   const summary = typeof row?.summary === "string" && row.summary.trim() ? row.summary : null;
-  return { modes, cited, summary };
+  return { modes, cited, summary, rawExplanation };
+}
+
+/** رقم إصدار نص مخزّن لواحد من الأوضاع الثلاثة (١ = أول صياغة). */
+function storedVersionOf(rawExplanation: Record<string, unknown> | null, mode: ContentMode): number | null {
+  if (!isExplanationMode(mode) || !rawExplanation) return null;
+  const hasCurrent = typeof rawExplanation[mode] === "string" && (rawExplanation[mode] as string).trim().length > 0;
+  const versions = readExplanationVersions(rawExplanation, mode);
+  if (!hasCurrent && versions.length === 0) return null;
+  return versions.length + (hasCurrent ? 1 : 0);
 }
 
 /* ═════════════════════════ الراوت ═════════════════════════ */
@@ -334,10 +373,13 @@ export async function GET(req: Request) {
 
     const linkState = await buildLinkState(supabase, user.id, day, subjectName, linkedLectureId);
 
+    const storedContent = readStoredContent(row);
     return NextResponse.json({
       ok: true,
       ...linkState,
-      content: readStoredContent(row),
+      content: storedContent,
+      // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
+      explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
     });
   } catch (error) {
     console.error("lesson-content GET error:", error);
@@ -610,6 +652,15 @@ export async function POST(req: Request) {
         cached: true,
         saved: true,
         mode,
+        // الأوضاع الثلاثة: رقم الإصدار + الإصدارات السابقة (شفافية المصدر).
+        ...(isExplanationMode(mode)
+          ? {
+              explanationMode: mode,
+              modeLabel: EXPLANATION_MODE_LABELS[mode],
+              version: storedVersionOf(stored.rawExplanation, mode),
+              previousVersions: readExplanationVersions(stored.rawExplanation, mode),
+            }
+          : {}),
       });
     }
 
@@ -658,7 +709,21 @@ export async function POST(req: Request) {
       contentLength: answer.length,
     });
 
-    // الحفظ best-effort — merge للوضع جوه الكائن القديم (مش استبدال).
+    // الحفظ best-effort — merge جوه الكائن القديم (مش استبدال).
+    // الأوضاع الثلاثة: إعادة التوليد بتحفظ **إصدار جديد** — النص القديم بيتنفد
+    // لقائمة الإصدارات (`<mode>__versions`) مش بيتمسح (مطلب P2).
+    let explanationUpdate: Record<string, unknown>;
+    let newVersion: number | null = null;
+    if (isExplanationMode(mode)) {
+      const versioned = withExplanationVersion(stored.rawExplanation ?? {}, mode, answer, {
+        generatedAt: new Date().toISOString(),
+        model: completion.model ?? null,
+      });
+      explanationUpdate = versioned.modes;
+      newVersion = versioned.version;
+    } else {
+      explanationUpdate = { ...stored.modes, [mode]: answer };
+    }
     let saved = false;
     try {
       const now = new Date().toISOString();
@@ -666,7 +731,7 @@ export async function POST(req: Request) {
         {
           user_id: user.id,
           day_id: dayId,
-          explanation: { ...stored.modes, [mode]: answer },
+          explanation: explanationUpdate,
           status: "ready",
           model: completion.model ?? null,
           generated_at: now,
@@ -691,6 +756,14 @@ export async function POST(req: Request) {
       cached: false,
       saved,
       mode,
+      ...(isExplanationMode(mode)
+        ? {
+            explanationMode: mode,
+            modeLabel: EXPLANATION_MODE_LABELS[mode],
+            version: newVersion,
+            previousVersions: readExplanationVersions(explanationUpdate, mode),
+          }
+        : {}),
     });
   } catch (error) {
     console.error("lesson-content route error:", error);
