@@ -121,46 +121,52 @@ export async function POST(req: Request) {
       if (topic.length < 3) {
         return NextResponse.json({ success: false, error: "اكتب موضوع المسابقة أولًا." }, { status: 400 });
       }
-      const { completeChatWithProviderFallback } = await import("@/lib/ai/routing");
-      const aiResponse = await Promise.race([
-        completeChatWithProviderFallback({
-          messages: [
-            {
-              role: "system",
-              content: [
-                `أنت مساعد مجتمع Magicly الطلابي. مهمتك توليد ${count} سؤال اختيار من متعدد بالعربية عن: ${topic}.`,
-                `المستوى: ${level}. الأسئلة أكاديمية دقيقة ومحايدة وبدون أي محتوى مخالف.`,
-                "أجب بـ JSON فقط بدون أي شرح، بالشكل ده بالظبط:",
-                '{"questions": [{"q": "نص السؤال", "options": ["اختيار 1", "اختيار 2", "اختيار 3", "اختيار 4"], "correct": 0}]}',
-                '"correct" هو فهرس الإجابة الصحيحة (يبدأ من 0). كل سؤال له 4 اختيارات.',
-              ].join("\n"),
-            },
-            { role: "user", content: `ولّد ${count} أسئلة عن: ${topic}` },
-          ],
-          temperature: 0.4,
-          maxTokens: 2000,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("generate_timeout")), 25_000),
-        ),
-      ]);
-      const cleaned = (aiResponse.content ?? "").replace(/```(?:json)?/g, "").trim();
-      const start = cleaned.indexOf("{");
-      const end = cleaned.lastIndexOf("}");
-      if (start === -1 || end <= start) {
-        return NextResponse.json({ success: false, error: "المساعد مش متاح حاليًا — جرّب تاني." }, { status: 502 });
-      }
-      let parsed: { questions?: unknown };
       try {
-        parsed = JSON.parse(cleaned.slice(start, end + 1)) as { questions?: unknown };
-      } catch {
-        return NextResponse.json({ success: false, error: "المساعد رجّع صيغة مش مفهومة — جرّب تاني." }, { status: 502 });
+        const { completeChatWithProviderFallback } = await import("@/lib/ai/routing");
+        const aiResponse = await Promise.race([
+          completeChatWithProviderFallback({
+            messages: [
+              {
+                role: "system",
+                content: [
+                  `أنت مساعد مجتمع Magicly الطلابي. مهمتك توليد ${count} سؤال اختيار من متعدد بالعربية عن: ${topic}.`,
+                  `المستوى: ${level}. الأسئلة أكاديمية دقيقة ومحايدة وبدون أي محتوى مخالف.`,
+                  "أجب بـ JSON فقط بدون أي شرح، بالشكل ده بالظبط:",
+                  '{"questions": [{"q": "نص السؤال", "options": ["اختيار 1", "اختيار 2", "اختيار 3", "اختيار 4"], "correct": 0}]}',
+                  '"correct" هو فهرس الإجابة الصحيحة (يبدأ من 0). كل سؤال له 4 اختيارات.',
+                ].join("\n"),
+              },
+              { role: "user", content: `ولّد ${count} أسئلة عن: ${topic}` },
+            ],
+            temperature: 0.4,
+            maxTokens: 2000,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("generate_timeout")), 25_000),
+          ),
+        ]);
+        const cleaned = (aiResponse.content ?? "").replace(/```(?:json)?/g, "").trim();
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        if (start === -1 || end <= start) {
+          return NextResponse.json({ success: false, error: "المساعد مش متاح حاليًا — جرّب تاني." }, { status: 502 });
+        }
+        let parsed: { questions?: unknown };
+        try {
+          parsed = JSON.parse(cleaned.slice(start, end + 1)) as { questions?: unknown };
+        } catch {
+          return NextResponse.json({ success: false, error: "المساعد رجّع صيغة مش مفهومة — جرّب تاني." }, { status: 502 });
+        }
+        const questions = sanitizeQuestions(parsed.questions);
+        if (!questions) {
+          return NextResponse.json({ success: false, error: "المساعد رجّع أسئلة غير صالحة — جرّب تاني." }, { status: 502 });
+        }
+        return NextResponse.json({ success: true, questions });
+      } catch (e) {
+        // مهلة أو فشل مزوّد — ردّ JSON واضح بدل كراش الفانكشن (502)
+        console.error("[quiz-builder] generate failed:", e instanceof Error ? e.message : e);
+        return NextResponse.json({ success: false, error: "المساعد أخد وقت طويل — جرّب تاني بعد شوية." }, { status: 503 });
       }
-      const questions = sanitizeQuestions(parsed.questions);
-      if (!questions) {
-        return NextResponse.json({ success: false, error: "المساعد رجّع أسئلة غير صالحة — جرّب تاني." }, { status: 502 });
-      }
-      return NextResponse.json({ success: true, questions });
     }
 
     default:
