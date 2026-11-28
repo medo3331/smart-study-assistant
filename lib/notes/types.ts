@@ -105,9 +105,9 @@ export type StorageNotebook = {
   ownerId: string;
   title: string;
   pageIds: string[];
-  /** أسماء الصفحات الاختيارية (pageId → اسم) — غايبة في الدفاتر القديمة. */
+  /** أسماء الصفحات الاختيارية (pageId → اسم) — غايبة في النوتات القديمة. */
   pageNames?: Record<string, string>;
-  /** مقاس الصفحات — غايب في الدفاتر القديمة (بيُقرأ "a4"). */
+  /** مقاس الصفحات — غايب في النوتات القديمة (بيُقرأ "a4"). */
   pageFormat?: PageFormat;
   currentPageId: string | null;
   /**

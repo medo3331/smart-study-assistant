@@ -57,7 +57,7 @@ export interface NotebookWriteOptions {
   /** الموضوع المطلوب شرحه — نص مختار من الصفحة أو موضوع مكتوب. */
   topic: string;
   style: NotebookWriteStyle;
-  /** سياق الصفحة/الدفتر الحالي (نص مكتوب فقط). */
+  /** سياق الصفحة/النوتة الحالي (نص مكتوب فقط). */
   pageContext?: string;
   /** مستوى الطالب — اختياري. */
   level?: string;
@@ -218,7 +218,7 @@ export async function generateNotebookWrite(
     {
       role: "system",
       content:
-        "أنت Magic — مدرّس خاص شاطر بيكتب في دفتر طالب. رجّع JSON صالح فقط بلا أي نص إضافي أو code fences.",
+        "أنت Magic — مدرّس خاص شاطر بيكتب في نوتة طالب. رجّع JSON صالح فقط بلا أي نص إضافي أو code fences.",
     },
     { role: "user", content: buildNotebookWritePrompt(options) },
   ];

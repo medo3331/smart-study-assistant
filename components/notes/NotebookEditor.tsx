@@ -139,7 +139,7 @@ export default function NotebookEditor({
 
   // ---- Document state ----
   const [notebookId, setNotebookId] = useState<string | null>(null);
-  const [notebookTitle, setNotebookTitle] = useState("دفتر");
+  const [notebookTitle, setNotebookTitle] = useState("النوتة");
   const [pages, setPages] = useState<UiPage[]>([]);
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -160,7 +160,7 @@ export default function NotebookEditor({
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   /** Mirrors templateRef for rendering; the ref stays the paint-side truth. */
   const [template, setTemplateState] = useState<NotesTemplate>("lined");
-  /** مقاس الصفحة (دفتر كامل) — mirrors pageFormatRef; "a4" للدفاتر القديمة. */
+  /** مقاس الصفحة (نوتة كامل) — mirrors pageFormatRef; "a4" للنوتات القديمة. */
   const [pageFormat, setPageFormatState] = useState<PageFormat>("a4");
 
   // ---- View state ----
@@ -750,7 +750,7 @@ export default function NotebookEditor({
     };
   }, [getSaveCoordinator]);
 
-  // 🏷️ أسماء الصفحات (اختيارية) — بتتخزن في الدفتر وتظهر في الـ thumbnails.
+  // 🏷️ أسماء الصفحات (اختيارية) — بتتخزن في النوتة وتظهر في الـ thumbnails.
   const [pageNames, setPageNames] = useState<Record<string, string>>({});
   const pageNamesRef = useRef<Record<string, string>>({});
 
@@ -878,7 +878,7 @@ export default function NotebookEditor({
         if (boot.status === "missing") {
           setLoaded(true);
           setMessage(
-            "الدفتر ده مش موجود على الجهاز ده — دفاترك متخزنة محلياً في المتصفح، فالرابط لو اتفتح من جهاز أو متصفح تاني مش هيلاقي الدفتر. افتح «دفاتري» واختار دفترك من هناك.",
+            "النوتة ده مش موجود على الجهاز ده — نوتاتك متخزنة محلياً في المتصفح، فالرابط لو اتفتح من جهاز أو متصفح تاني مش هيلاقي النوتة. افتح «نوتاتي» واختار نوتتك من هناك.",
           );
           return;
         }
@@ -888,7 +888,7 @@ export default function NotebookEditor({
           setMessage(
             boot.reason === "no-pages"
               ? "مفيش صفحات محفوظة، والتبويب ده للقراءة فقط."
-              : "مفيش دفاتر محفوظة، والتبويب ده للقراءة فقط.",
+              : "مفيش نوتات محفوظة، والتبويب ده للقراءة فقط.",
           );
           return;
         }
@@ -909,11 +909,11 @@ export default function NotebookEditor({
 
         const active =
           uiPages.find((page) => page.id === boot.activePageId) ?? uiPages[0] ?? null;
-        // 🏷️ أسماء الصفحات المحفوظة في الدفتر.
+        // 🏷️ أسماء الصفحات المحفوظة في النوتة.
         const names = boot.notebook.pageNames ?? {};
         pageNamesRef.current = names;
         setPageNames(names);
-        // 📐 مقاس الصفحات المخزّن على مستوى الدفتر — الدفاتر القديمة من غير مقاس تقرأ A4 طولي.
+        // 📐 مقاس الصفحات المخزّن على مستوى النوتة — النوتات القديمة من غير مقاس تقرأ A4 طولي.
         pageFormatRef.current = boot.notebook.pageFormat ?? "a4";
         setPageFormatState(pageFormatRef.current);
         // 🎯 وصلنا من نتيجة بحث عالمي؟ (?page=<pageId>) — افتحها بدل اللي اتحفظ.
@@ -924,7 +924,7 @@ export default function NotebookEditor({
       } catch (error) {
         if (cancelled) return;
         console.error("[notes] bootstrap failed", classifyNotesError(error), error);
-        setMessage(`تعذّر تحميل الدفتر (${classifyNotesError(error)}).`);
+        setMessage(`تعذّر تحميل النوتة (${classifyNotesError(error)}).`);
         setLoaded(true);
       }
     })();
@@ -2155,7 +2155,7 @@ export default function NotebookEditor({
     applyView(fit, { x: (rect.width - pageW * fit) / 2, y: 24 });
   }, [applyView]);
 
-  /** 📐 تغيير مقاس الصفحة للدفتر كله — المحتوى يحتفظ بإحداثياته والورقة تكبر حواليه. */
+  /** 📐 تغيير مقاس الصفحة للنوتة كله — المحتوى يحتفظ بإحداثياته والورقة تكبر حواليه. */
   const changePageFormat = useCallback(
     (format: PageFormat) => {
       if (!repo.canWrite) return;
@@ -2362,7 +2362,7 @@ export default function NotebookEditor({
         chosen.flatMap((page) => page.content.images.map((image) => image.src)),
       );
       const { jsPDF } = await import("jspdf");
-      // 📐 مقاس ورقة الـ PDF يتبع مقاس الدفتر (طولي/عرضي/شاشة).
+      // 📐 مقاس ورقة الـ PDF يتبع مقاس النوتة (طولي/عرضي/شاشة).
       const { width: fmtW, height: fmtH } = pageDimensions(pageFormatRef.current);
       const pdf = new jsPDF({
         unit: "px",
@@ -2396,7 +2396,7 @@ export default function NotebookEditor({
     }
   }, [ensureImagesLoaded, notebookTitle, pages, pdfSelected, renderPageToCanvas]);
 
-  /** 📊 تصدير الدفتر كملف PowerPoint — كل صفحة سلايد بمقاس الورقة نفسها. */
+  /** 📊 تصدير النوتة كملف PowerPoint — كل صفحة سلايد بمقاس الورقة نفسها. */
   const exportPptx = useCallback(async () => {
     if (exportingPptx || pages.length === 0) return;
     setExportingPptx(true);
@@ -2456,13 +2456,14 @@ export default function NotebookEditor({
 
   // ---- PDF import ----
 
-  /** 📤 مشاركة الدفتر كلل قراءة — بيبنى snapshot خفيف وبيوجّه لينك عام. */
+  /** 📤 مشاركة النوتة كلل قراءة — بيبنى snapshot خفيف وبيوجّه لينك عام. */
   const createShareLink = useCallback(async () => {
     setShareBusy(true);
     setShareError(null);
     setShareLink(null);
     try {
       const payload = {
+        pageFormat: pageFormatRef.current,
         pages: pages.map((page) => ({
           id: page.id,
           template: page.template,
@@ -2486,7 +2487,7 @@ export default function NotebookEditor({
     } finally {
       setShareBusy(false);
     }
-  }, [notebookTitle, pages]);
+  }, [notebookTitle, pages, pageFormatRef]);
 
   /** يفتح ملف PDF (محلي أو من «ملفاتي») ويعرض اختيار النطاق. */
   const openPdfImport = useCallback(
@@ -2559,7 +2560,7 @@ export default function NotebookEditor({
     [openPdfImport],
   );
 
-  /** 📥 استيراد أي ملف من «ملفاتي» كصفحة جديدة في الدفتر الحالي:
+  /** 📥 استيراد أي ملف من «ملفاتي» كصفحة جديدة في النوتة الحالي:
    *  PDF → منتقي النطاق الموجود، صورة → خلفية صفحة، docx/نص → نص مطبوع. */
   const importLibraryEntry = useCallback(
     async (entry: { id: string; file_name: string; file_type: string }) => {
@@ -2973,7 +2974,7 @@ export default function NotebookEditor({
   const showTextControls = tool === "text" || selection?.kind === "text";
 
   /** What the assistant sees: notebook title + the page's typed texts. */
-  /** 🎴 نصوص المذاكرة: نصوص الصفحة الحالية — لو قليلة، بيجمع من الدفتر كله. */
+  /** 🎴 نصوص المذاكرة: نصوص الصفحة الحالية — لو قليلة، بيجمع من النوتة كله. */
   const getStudyTexts = useCallback(() => {
     const pageTexts = contentRef.current.texts
       .map((text) => text.text)
@@ -2999,10 +3000,10 @@ export default function NotebookEditor({
       .filter((line) => line.trim() !== "")
       .join("\n")
       .slice(0, 1800);
-    return `دفتر: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
+    return `نوتة: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
   }, [currentPageId, notebookTitle, pages]);
 
-  /** 🎴 تحميل/حفظ ديك المذاكرة في meta store للدفتر. */
+  /** 🎴 تحميل/حفظ ديك المذاكرة في meta store للنوتة. */
   const loadStudyDeck = useCallback(
     (key: string) => repo.getMeta(key) as Promise<never>,
     [repo],
@@ -3064,7 +3065,7 @@ export default function NotebookEditor({
       form.append("file", blob, "page.jpg");
       form.append(
         "question",
-        "دي صورة صفحة من دفتر طالب. اقرا خط اليد واكتب بالحرف كل اللي مكتوب فيه، سطر بسطر بنفس الترتيب، من غير أي تعليق أو ترقيم. رجّع النص فقط.",
+        "دي صورة صفحة من نوتة طالب. اقرا خط اليد واكتب بالحرف كل اللي مكتوب فيه، سطر بسطر بنفس الترتيب، من غير أي تعليق أو ترقيم. رجّع النص فقط.",
       );
       const res = await fetch("/api/ai/image-analysis", { method: "POST", body: form });
       const data = await res.json().catch(() => null);
@@ -3408,7 +3409,7 @@ export default function NotebookEditor({
           id: newId(),
           kind: "text",
           text: line,
-          x: Math.max(24, startX - line.length * 9),
+          x: startX,
           y: startY + index * lineHeight,
           size: 20,
           color: "#2563eb",
@@ -3487,7 +3488,7 @@ export default function NotebookEditor({
         {!besideMode ? (
           <>
             <Link href="/notes" className="notes-btn notes-btn-sm">
-              → دفاتري
+              → نوتاتي
             </Link>
             <h1 className="notes-title">{notebookTitle}</h1>
           </>
@@ -3499,7 +3500,7 @@ export default function NotebookEditor({
             href={`/notes/${notebookId}`}
             target="_blank"
             rel="noopener noreferrer"
-            title="افتح نفس الدفتر في تبويب جديد (البيانات من نفس الجهاز)"
+            title="افتح نفس النوتة في تبويب جديد (البيانات من نفس الجهاز)"
             className="notes-btn notes-btn-sm"
           >
             ↗ تبويب جديد
@@ -3986,7 +3987,7 @@ export default function NotebookEditor({
             onClick={() => void exportPptx()}
             disabled={pages.length === 0 || exportingPptx}
             className="notes-btn"
-            title="صدّر الدفتر كملف PowerPoint — كل صفحة سلايد بنفس مقاس الورقة"
+            title="صدّر النوتة كملف PowerPoint — كل صفحة سلايد بنفس مقاس الورقة"
           >
             {exportingPptx ? "جاري التصدير…" : "تصدير PowerPoint"}
           </button>
@@ -4005,7 +4006,7 @@ export default function NotebookEditor({
             onClick={() => setShareOpen(true)}
             disabled={pages.length === 0}
             className="notes-btn"
-            title="لينك للقراءة فقط — تبعته لأي حد يشوف دفترك"
+            title="لينك للقراءة فقط — تبعته لأي حد يشوف نوتتك"
           >
             🔗 مشاركة
           </button>
@@ -4250,8 +4251,8 @@ export default function NotebookEditor({
             autoFocus
             type="search"
             value={query}
-            placeholder="ابحث في نصوص الدفتر…"
-            aria-label="ابحث في نصوص الدفتر"
+            placeholder="ابحث في نصوص النوتة…"
+            aria-label="ابحث في نصوص النوتة"
             className="notes-input"
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -4330,12 +4331,12 @@ export default function NotebookEditor({
             className="notes-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="مشاركة الدفتر"
+            aria-label="مشاركة النوتة"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="notes-modal-title">🔗 مشاركة للقراءة فقط</h2>
             <p className="notes-modal-sub">
-              بيبعت نسخة حالية من الدفتر ({pages.length} صفحة) — اللي بيفتح اللينك
+              بيبعت نسخة حالية من النوتة ({pages.length} صفحة) — اللي بيفتح اللينك
               يشوف ويقلّع الصفحات بس، من غير تسجيل ولا أدوات تحرير. التعديلات
               اللي بتعملها بعد كده مش بتوصل لللينك القديم.
             </p>

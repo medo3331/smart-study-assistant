@@ -7,7 +7,7 @@ function validNotebook(overrides: Record<string, unknown> = {}): Record<string, 
   return {
     id: "nb-1",
     ownerId: "user:abc",
-    title: "دفتر",
+    title: "النوتة",
     pageIds: ["p1"],
     currentPageId: "p1",
     revision: 1,
@@ -18,7 +18,7 @@ function validNotebook(overrides: Record<string, unknown> = {}): Record<string, 
 }
 
 describe("pageDimensions", () => {
-  it("A4 الطولي هو مقاس الدفاتر القديمة الافتراضي", () => {
+  it("A4 الطولي هو مقاس النوتات القديمة الافتراضي", () => {
     expect(pageDimensions(undefined)).toEqual({ width: 794, height: 1123 });
     expect(pageDimensions("a4")).toEqual({ width: 794, height: 1123 });
   });
@@ -35,7 +35,7 @@ describe("pageDimensions", () => {
     expect(dims.width / dims.height).toBeCloseTo(16 / 9, 5);
   });
 
-  it("المقاس الافتراضي للدفاتر الجديدة هو A4 العرضي", () => {
+  it("المقاس الافتراضي للنوتات الجديدة هو A4 العرضي", () => {
     expect(DEFAULT_PAGE_FORMAT).toBe("wide");
     expect(Object.keys(PAGE_FORMAT_DIMENSIONS)).toEqual(["a4", "wide", "slide"]);
   });
@@ -44,7 +44,7 @@ describe("pageDimensions", () => {
 describe("validateNotebook — pageFormat", () => {
   const base = validNotebook() as unknown as StorageNotebook;
 
-  it("دفتر من غير pageFormat (قديم) بيتقبل", () => {
+  it("نوتة من غير pageFormat (قديم) بيتقبل", () => {
     expect(validateNotebook(base).valid).toBe(true);
   });
 

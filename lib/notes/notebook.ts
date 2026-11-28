@@ -46,11 +46,11 @@ export type EnsureNotebookOptions = {
   now: () => string;
   defaultTitle?: string;
   defaultTemplate?: NotesTemplate;
-  /** مقاس صفحات الدفتر الجديد — الافتراضي A4 عرضي (أكبر وأعرض). */
+  /** مقاس صفحات النوتة الجديد — الافتراضي A4 عرضي (أكبر وأعرض). */
   defaultPageFormat?: PageFormat;
 };
 
-const DEFAULT_TITLE = "دفتر";
+const DEFAULT_TITLE = "النوتة";
 const DEFAULT_TEMPLATE: NotesTemplate = "lined";
 
 /** Newest first. A notebook with an unparsable date sorts last, never first. */
@@ -229,11 +229,11 @@ export function buildNotebookSave(params: {
   existing: StorageNotebook | null;
   now: string;
   pageNames?: Record<string, string> | null;
-  /** مقاس الدفتر — لو مش مبعوت بيفضل المحفوظ، ولو مفيش محفوظ يختفي (دفاتر قديمة). */
+  /** مقاس النوتة — لو مش مبعوت بيفضل المحفوظ، ولو مفيش محفوظ يختفي (نوتات قديمة). */
   pageFormat?: PageFormat | null;
 }): StorageNotebook {
   const { existing } = params;
-  // الأسماء الفاضية مش بتتخزن — والدفاتر القديمة من غير أسماء زي ما هي.
+  // الأسماء الفاضية مش بتتخزن — والنوتات القديمة من غير أسماء زي ما هي.
   const pageNames =
     params.pageNames && Object.keys(params.pageNames).length > 0
       ? params.pageNames

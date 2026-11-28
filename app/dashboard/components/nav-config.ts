@@ -199,8 +199,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "planner", icon: "planner", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "calendar", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "missions", icon: "missions", label: "المهام اليومية", latin: "Daily Missions", href: "/missions" },
-      // 📓 دفتر الملاحظات — الصفحة الكاملة (/notes) لتحرير الملاحظات بخط اليد.
-      { id: "notebook", icon: "notes", label: "دفتر الملاحظات", latin: "Notebook", href: "/notes" },
+      // 📓 النوتة — الصفحة الكاملة (/notes) لتحرير الملاحظات بخط اليد.
+      { id: "notebook", icon: "notes", label: "النوتة", latin: "Notes", href: "/notes" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
       { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency" },
       // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — البند ده بينزّل

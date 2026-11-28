@@ -138,7 +138,7 @@ export function DocumentWorkspace({
         {/* 🗒️ Notebook */}
         {tab === "notebook" && (
           <div className="rounded-2xl border border-[var(--rule)] bg-[var(--card-primary)] p-5 shadow-sm">
-            <h2 className="text-sm font-extrabold text-ink">🗒️ دفتر الملاحظات</h2>
+            <h2 className="text-sm font-extrabold text-ink">🗒️ النوتة</h2>
             <p className="mt-1 text-xs leading-relaxed text-ink-soft">
               افتح النوت الجانبية وذاكر جنب المستند — ملاحظاتك بتتحفظ لوحدها.
             </p>

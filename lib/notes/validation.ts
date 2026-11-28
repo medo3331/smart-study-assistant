@@ -56,7 +56,7 @@ export function validateNotebook(record: unknown): ValidationResult {
   else if (!r.pageIds.every((id: unknown) => typeof id === "string")) {
     errors.push("pageIds must contain only strings");
   }
-  // pageNames اختياري (دفاتر قديمة مالوش) — لو موجود لازم خريطة نصوص.
+  // pageNames اختياري (نوتات قديمة مالوش) — لو موجود لازم خريطة نصوص.
   if (r.pageNames !== undefined && !isPlainObject(r.pageNames)) {
     errors.push("pageNames must be a plain object when present");
   } else if (isPlainObject(r.pageNames)) {
@@ -65,7 +65,7 @@ export function validateNotebook(record: unknown): ValidationResult {
       errors.push("pageNames values must be strings");
     }
   }
-  // pageFormat اختياري (دفاتر قديمة مالوش) — لو موجود لازم يكون مقاس معروف.
+  // pageFormat اختياري (نوتات قديمة مالوش) — لو موجود لازم يكون مقاس معروف.
   if (r.pageFormat !== undefined && !VALID_PAGE_FORMATS.includes(r.pageFormat as PageFormat)) {
     errors.push(`pageFormat must be one of: ${VALID_PAGE_FORMATS.join(", ")}`);
   }

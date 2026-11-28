@@ -70,7 +70,7 @@ export default function PageThumbs({
   activePageId: string | null;
   lookup: (src: string) => CanvasImageSource | null;
   onSelect: (pageId: string) => void;
-  /** 📐 أبعاد الصفحة حسب مقاس الدفتر — الافتراضي A4 طولي للدفاتر القديمة. */
+  /** 📐 أبعاد الصفحة حسب مقاس النوتة — الافتراضي A4 طولي للنوتات القديمة. */
   pageSize?: { width: number; height: number };
   /** 🏷️ أسماء الصفحات (pageId → اسم). */
   pageNames?: Record<string, string>;
@@ -86,7 +86,7 @@ export default function PageThumbs({
   if (pages.length === 0) return null;
 
   return (
-    <div className="notes-thumbs" role="tablist" aria-label="صفحات الدفتر">
+    <div className="notes-thumbs" role="tablist" aria-label="صفحات النوتة">
       {pages.map((page, index) => (
         <button
           key={page.id}
