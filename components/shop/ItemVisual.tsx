@@ -18,6 +18,7 @@
 
 import { Music, Sparkles } from "lucide-react";
 import type { ShopItem } from "@/lib/shop/types";
+import { RARITY } from "@/lib/shop/rarity";
 import { THEME_PACKS } from "@/lib/shop/theme-packs";
 import { companionStages } from "@/lib/shop/catalog";
 
@@ -103,6 +104,24 @@ export function ItemVisual({
           <span className="text-[10px] opacity-70 tracking-widest">
             {stages.slice(1).join(" ")}
           </span>
+        </div>
+      );
+    }
+
+    /* البوستر: اقتباس منمق على تدرّج لوني من لون الندرة — معاينة حقيقية
+       للمنتج النصي (البوسترز المرفوعة بصور هتتجاوز هنا لما تدعم الأصول) */
+    case "posters": {
+      const rar = RARITY[item.rarity];
+      return (
+        <div className="shop-thumb !p-0 overflow-hidden" aria-hidden>
+          <div
+            className="w-full h-full grid place-items-center text-center px-2"
+            style={{ background: `linear-gradient(140deg, ${rar.fill}1f, ${rar.fill}52)` }}
+          >
+            <span className="font-display font-extrabold text-[11px] leading-snug text-ink line-clamp-3">
+              {item.value}
+            </span>
+          </div>
         </div>
       );
     }

@@ -7,8 +7,8 @@ import type { Category, ShopItem } from "./types";
  *
  * بتتعمل في جدول `shop_catalog` (السيرفر هو اللي بيشتري منه — `purchase_item`
  * بيقرا السعر من الجدول) وبيانات العرض (الاسم/الوصف/القيمة) بتتعامل في
- * `metadata` تحت مفتاح `custom`. الأقسام المسموح بيها: avatar / title /
- * companion — قيمها إيموجي ونص فبتشتغل من غير CSS أو باكات جاهزة.
+ * `metadata` تحت مفتاح `custom`. الأنواع المدعومة: avatar / title /
+ * companion (إيموجي ونص) + posters (metadata.poster=true, slot=null).
  */
 
 export type CustomCatalogRow = {
@@ -20,6 +20,7 @@ export type CustomCatalogRow = {
   metadata: {
     custom?: boolean;
     active?: boolean;
+    poster?: boolean;
     name?: string;
     desc?: string;
     value?: string;
@@ -35,6 +36,22 @@ export function customRowToItem(row: CustomCatalogRow): ShopItem | null {
   const m = row.metadata ?? {};
   if (!m.custom || m.active === false) return null;
   if (!m.name || !m.value) return null;
+  // البوسترز: slot=null في الجدول — مقتنيات عرض مش بتتلبس
+  if (row.slot === null) {
+    if (m.poster !== true) return null;
+    return {
+      id: row.id,
+      category: "posters",
+      name: m.name,
+      desc: m.desc ?? "",
+      rarity: isRarity(row.rarity ?? undefined) ? (row.rarity as Rarity) : "common",
+      price: row.price,
+      creditsPrice: row.credits_price ?? undefined,
+      value: m.value,
+      unlock: null,
+      metadata: { custom: true, poster: true },
+    };
+  }
   if (!(row.slot === "avatar" || row.slot === "title" || row.slot === "companion")) return null;
   return {
     id: row.id,

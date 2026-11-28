@@ -80,8 +80,8 @@ describe("عناصر المتجر المخصصة — الأدمن يضيف بن�
     expect(storeActions).toContain("recordAuditLog");
   });
 
-  it("القسم مقيّد على avatar/title/companion بس", () => {
-    expect(storeActions).toContain('["avatar", "title", "companion"]');
+  it("القسم مقيّد على الأنواع المدعومة بس (بدون theme/sound/effect)", () => {
+    expect(storeActions).toContain('["avatar", "title", "companion", "posters"]');
   });
 
   it("الحذف ممنوع لعنصر مملوك", () => {

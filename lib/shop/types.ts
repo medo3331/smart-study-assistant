@@ -15,6 +15,7 @@ export const CATEGORIES = [
   "frame",
   "title",
   "companion",
+  "posters",
   "sound",
   "effect",
   "box",
@@ -87,6 +88,13 @@ export const CATEGORY: Record<Category, CategoryMeta> = {
     lede: "كائن على لوحتك بيتفاعل مع مذاكرتك",
     icon: "PawPrint",
     slot: "companion",
+  },
+  posters: {
+    id: "posters",
+    name: "البوسترات",
+    lede: "اقتباسات ومنتجات فنية تُعرض وتُجمع — ملهاش خانة تلبيس",
+    icon: "Image",
+    slot: null,
   },
   sound: {
     id: "sound",

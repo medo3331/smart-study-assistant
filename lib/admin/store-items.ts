@@ -33,9 +33,11 @@ export async function getCustomStoreItems(): Promise<CustomStoreItem[]> {
   );
   return rows.map((r) => {
     const m = (r.metadata ?? {}) as Record<string, unknown>;
+    const isPoster = m.poster === true;
     return {
       id: r.id,
-      slot: r.slot,
+      // البوسترز slot=null في الجدول — بنعرضها كقسم «posters»
+      slot: isPoster ? "posters" : r.slot,
       price: r.price,
       creditsPrice: r.credits_price,
       rarity: (r.rarity ?? (m.rarity as string | undefined)) ?? null,
