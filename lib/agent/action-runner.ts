@@ -109,7 +109,7 @@ async function runFile(action: FileAction): Promise<AgentArtifact> {
       type: action.format,
       content: "report",
       title: action.title,
-      data: { sections: action.sections },
+      data: { sections: action.sections, theme: action.theme },
     });
     if (result.size > MAGIC_ACTION_LIMITS.maxFileBytes) {
       return { ...base, error: "الملف اكبر من الحد المسموح — جرب تقسمه لأجزاء أصغر." };

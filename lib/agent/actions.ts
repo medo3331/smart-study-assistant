@@ -55,6 +55,18 @@ export interface ImageAction {
 
 export type FileActionFormat = "md" | "pdf" | "docx" | "pptx";
 
+/** ثيمات ألوان الـ PowerPoint — الوكيل بيسأل الطالب عنها قبل التوليد. */
+export type PptxThemeId = "royal" | "ocean" | "emerald" | "sunset" | "rose" | "classic";
+
+export const PPTX_THEME_OPTIONS: readonly { id: PptxThemeId; label: string }[] = [
+  { id: "royal", label: "بنفسجي ملكي 💜" },
+  { id: "ocean", label: "أزرق محيطي 💙" },
+  { id: "emerald", label: "أخضر زمردي 💚" },
+  { id: "sunset", label: "غروب دافي 🧡" },
+  { id: "rose", label: "وردي جريء 🩷" },
+  { id: "classic", label: "كلاسيك فاتح 🤍" },
+];
+
 export interface FileActionSection {
   heading: string;
   body: string;
@@ -64,6 +76,8 @@ export interface FileAction {
   tool: "file";
   title: string;
   format: FileActionFormat;
+  /** ثيم الألوان للـ PowerPoint — يُختار بسؤال من الطالب أو من ذوقه. */
+  theme?: PptxThemeId;
   sections: FileActionSection[];
 }
 
@@ -166,6 +180,7 @@ export function validateMagicAction(raw: unknown): MagicAction | null {
     const title = clampStr(data.title, MAGIC_ACTION_LIMITS.maxTitle);
     const format = FILE_FORMATS.find((f) => f === data.format);
     if (!title || !format) return null;
+    const theme = PPTX_THEME_OPTIONS.find((t) => t.id === data.theme)?.id;
     const rawSections = Array.isArray(data.sections) ? data.sections : [];
     const sections: FileActionSection[] = rawSections
       .map((s) => {
@@ -179,7 +194,7 @@ export function validateMagicAction(raw: unknown): MagicAction | null {
       .filter((s): s is FileActionSection => s !== null)
       .slice(0, MAGIC_ACTION_LIMITS.maxSections);
     if (sections.length === 0) return null;
-    return { tool, title, format, sections };
+    return { tool, title, format, theme, sections };
   }
 
   if (tool === "quiz") {
@@ -311,7 +326,9 @@ export const AGENT_ACTION_INSTRUCTIONS = [
   "- بحث في الإنترنت: {\"tool\":\"web_search\",\"query\":\"نص البحث\"} — استخدمه لأي معلومة ممكن تكون حديثة أو مش متأكد منها.",
   "- مخطط: {\"tool\":\"diagram\",\"topic\":\"الموضوع\",\"type\":\"mindmap|flowchart|timeline|classDiagram|sequence|pie|gantt|graph\",\"detail\":\"simple|medium|detailed\"} — خريطة ذهنية أو مخطط انسيابي أو جانت لخطة مذاكرة.",
   "- صورة: {\"tool\":\"image\",\"prompt\":\"وصف الصورة التعليمية بالإنجليزية\"} — لو الشرح بيحتاج رسمة توضيحية.",
-  "- ملف: {\"tool\":\"file\",\"title\":\"اسم الملف\",\"format\":\"md|pdf|docx|pptx\",\"sections\":[{\"heading\":\"عنوان\",\"body\":\"النص الكامل\"}]} — ملخصات وأبحاث وتقارير وعروض تقديمية (pptx = presentation). اكتب محتوى غني ومنظم: كل section = قسم واضح بعنوان وصورته ملونة في PDF، وكل section = شريحة في PowerPoint (خلي الـ body نقاط قصيرة سطر لكل نقطة).",
+  "- ملف: {\"tool\":\"file\",\"title\":\"اسم الملف\",\"format\":\"md|pdf|docx|pptx\",\"theme\":\"royal|ocean|emerald|sunset|rose|classic\",\"sections\":[{\"heading\":\"عنوان\",\"body\":\"النص الكامل\"}]} — ملخصات وأبحاث وتقارير وعروض تقديمية (pptx = presentation).",
+  "- 🎨 للـ presentation (pptx): لو الطالب محددش الألوان، اسأله الأول بسؤال واحد سريع («تحب ألوان إيه؟ بنفسجي ملكي 💜 / أزرق محيطي 💙 / أخضر زمردي 💚 / غروب دافي 🧡 / وردي جريء 🩷 / كلاسيك فاتح 🤍») — ولو حدد في طلبه استخدمه على طول في حقل theme.",
+  "- 📚 presentation غني: اعمل من 8 لـ 14 شريحة — كل section = شريحة. اكتب في كل شريحة 4 لـ 8 نقاط مفصّلة جمل كاملة (مش كلمتين): شرح، أمثلة، أرقام، مقارنات، ونقاط مهمة من المحتوى. الغنى في التفاصيل هو المطلوب — الطالب عايز عرض يشرحه فعلًا.",
   "- اختبار تفاعلي: {\"tool\":\"quiz\",\"title\":\"عنوان\",\"subject\":\"المادة\",\"questions\":[{\"question\":\"السؤال\",\"options\":[\"أ\",\"ب\",\"ج\",\"د\"],\"answerIndex\":0,\"explanation\":\"ليه\"}]} — اختبر الطالب داخل الشات فورًا. نوّع بين اختيار من متعدد وصح/غلط (options: [\"صح\",\"غلط\"]) ورتّب من السهل للصعب.",
   "قواعد صارمة:",
   "- اكتب في ردك جملة أو جملتين تشرح اللي عملته، وبعدها الكتلة — الكتلة مش بتنعرض كنص، بتتنفّذ وتظهر للطالب كاملة.",

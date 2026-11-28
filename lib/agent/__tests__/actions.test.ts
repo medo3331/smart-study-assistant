@@ -51,6 +51,30 @@ describe("validateMagicAction", () => {
     ).toBeNull();
   });
 
+  it("file بثيم معروف بيتقبل", () => {
+    const a = validateMagicAction({
+      tool: "file",
+      title: "عرض التمثيل الضوئي",
+      format: "pptx",
+      theme: "ocean",
+      sections: [{ heading: "مقدمة", body: "نقطة\nنقطة" }],
+    });
+    expect(a).not.toBeNull();
+    expect((a as { theme?: string }).theme).toBe("ocean");
+  });
+
+  it("file بثيم مجهول — الثيم بيتشال والباقي يتم", () => {
+    const a = validateMagicAction({
+      tool: "file",
+      title: "عرض",
+      format: "pptx",
+      theme: "neon-rainbow",
+      sections: [{ heading: "h", body: "b" }],
+    });
+    expect(a).not.toBeNull();
+    expect((a as { theme?: string }).theme).toBeUndefined();
+  });
+
   it("quiz بأسئلة صالحة", () => {
     const a = validateMagicAction({
       tool: "quiz",

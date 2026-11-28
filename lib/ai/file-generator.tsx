@@ -566,20 +566,32 @@ async function generatePPTX(options: GenerateFileOptions): Promise<FileResult> {
   const PptxGenJS = (await import("pptxgenjs")).default;
   const { title, data, studentName, subject } = options;
 
+  // 🎨 ثيمات الألوان — بيختارها Magic Agent بسؤال من الطالب (data.theme).
+  const PPTX_PALETTES: Record<string, { bg: string; accent: string; accentSoft: string; title: string; text: string; dark: boolean }> = {
+    royal: { bg: "0F172A", accent: "7C3AED", accentSoft: "C4B5FD", title: "F8FAFC", text: "E2E8F0", dark: true },
+    ocean: { bg: "0B1E3A", accent: "0EA5E9", accentSoft: "7DD3FC", title: "F8FAFC", text: "E0F2FE", dark: true },
+    emerald: { bg: "052E22", accent: "10B981", accentSoft: "6EE7B7", title: "F0FDF4", text: "D1FAE5", dark: true },
+    sunset: { bg: "2B120D", accent: "F97316", accentSoft: "FDBA74", title: "FFF7ED", text: "FFEDD5", dark: true },
+    rose: { bg: "2A0A18", accent: "EC4899", accentSoft: "F9A8D4", title: "FDF2F8", text: "FCE7F3", dark: true },
+    classic: { bg: "FFFFFF", accent: "4F46E5", accentSoft: "C7D2FE", title: "1E293B", text: "334155", dark: false },
+  };
+  const themeId = typeof data.theme === "string" && PPTX_PALETTES[data.theme] ? data.theme : "royal";
+  const palette = PPTX_PALETTES[themeId];
+
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
   pptx.rtlMode = true;
   pptx.title = title;
 
-  const DARK_BG = "0F172A";
-  const ACCENT = "7C3AED";
+  const { bg: DARK_BG, accent: ACCENT, accentSoft: ACCENT_SOFT, title: TITLE_COLOR, text: BODY_COLOR, dark: IS_DARK } = palette;
 
   // شريحة العنوان
   const titleSlide = pptx.addSlide();
   titleSlide.background = { color: DARK_BG };
+  titleSlide.addShape("rect", { x: 0, y: 3.9, w: 13.33, h: 0.12, fill: { color: ACCENT } });
   titleSlide.addText(title, {
-    x: 0.5, y: 2.2, w: 12.3, h: 1.6,
-    fontSize: 36, bold: true, color: "F8FAFC", align: "center",
+    x: 0.5, y: 2.0, w: 12.3, h: 1.6,
+    fontSize: 36, bold: true, color: TITLE_COLOR, align: "center",
     rtlMode: true, fontFace: "Arial",
   });
   titleSlide.addText(
@@ -587,28 +599,39 @@ async function generatePPTX(options: GenerateFileOptions): Promise<FileResult> {
       .filter(Boolean)
       .join("  •  "),
     {
-      x: 0.5, y: 4.0, w: 12.3, h: 0.8,
-      fontSize: 16, color: "C4B5FD", align: "center", rtlMode: true, fontFace: "Arial",
+      x: 0.5, y: 4.2, w: 12.3, h: 0.8,
+      fontSize: 16, color: ACCENT_SOFT, align: "center", rtlMode: true, fontFace: "Arial",
     }
   );
 
+  // 🔢 عدّاد الشرائح لأرقام الصفحات
+  let slideNumber = 1;
+
   const addBulletSlide = (heading: string, bullets: string[]) => {
     if (!bullets.length) return;
+    slideNumber += 1;
     const slide = pptx.addSlide();
     slide.background = { color: DARK_BG };
-    slide.addShape("rect", { x: 0, y: 0, w: 13.33, h: 1.1, fill: { color: ACCENT } });
+    slide.addShape("rect", { x: 0, y: 0, w: 13.33, h: 1.0, fill: { color: ACCENT } });
     slide.addText(heading, {
-      x: 0.4, y: 0.15, w: 12.5, h: 0.8,
-      fontSize: 24, bold: true, color: "FFFFFF", align: "right", rtlMode: true, fontFace: "Arial",
+      x: 0.4, y: 0.1, w: 12.5, h: 0.8,
+      fontSize: 23, bold: true, color: "FFFFFF", align: "right", rtlMode: true, fontFace: "Arial",
     });
     slide.addText(
-      bullets.map((b) => ({ text: b, options: { bullet: { code: "25CF" }, paraSpaceAfter: 12, rtlMode: true } })),
+      bullets.map((b) => ({ text: b, options: { bullet: { code: "25CF" }, paraSpaceAfter: 7, rtlMode: true } })),
       {
-        x: 0.6, y: 1.4, w: 12.1, h: 5.6,
-        fontSize: 18, color: "E2E8F0", align: "right", rtlMode: true, fontFace: "Arial",
+        x: 0.55, y: 1.25, w: 12.2, h: 5.6,
+        fontSize: 15, color: BODY_COLOR, align: "right", rtlMode: true, fontFace: "Arial",
         valign: "top",
+        lineSpacingMultiple: 1.15,
       }
     );
+    // 🔢 رقم الشريحة + شريط سفلي رفيع
+    slide.addShape("rect", { x: 0, y: 7.2, w: 13.33, h: 0.08, fill: { color: ACCENT } });
+    slide.addText(`${slideNumber}`, {
+      x: 0.25, y: 6.85, w: 0.9, h: 0.35,
+      fontSize: 11, bold: true, color: IS_DARK ? ACCENT_SOFT : ACCENT, align: "left", fontFace: "Arial",
+    });
   };
 
   const keyPoints = asStringArray(data.key_points);
@@ -625,13 +648,21 @@ async function generatePPTX(options: GenerateFileOptions): Promise<FileResult> {
   const sections = asRecordArray(data.sections);
   sections.forEach((section) => {
     const body = String(section.body ?? section.content ?? "");
-    // تقسيم النص لنقاط شرائح — سطر لكل نقطة (بدل نقطة واحدة ضخمة).
+    const heading = String(section.heading ?? section.title ?? "قسم");
+    // تقسيم النص لنقاط شرائح — سطر لكل نقطة، والتقسيم الطويل يتكمل على شرائح إضافية.
     const bullets = body
       .split(/\r?\n+/)
       .map((s) => s.trim().replace(/^[-•*]\s*/, ""))
-      .filter(Boolean)
-      .slice(0, 8);
-    addBulletSlide(String(section.heading ?? section.title ?? "قسم"), bullets.length ? bullets : [body]);
+      .filter(Boolean);
+    const MAX_BULLETS = 9;
+    if (bullets.length === 0) {
+      addBulletSlide(heading, [body]);
+      return;
+    }
+    for (let i = 0, part = 0; i < bullets.length; i += MAX_BULLETS, part += 1) {
+      const chunk = bullets.slice(i, i + MAX_BULLETS);
+      addBulletSlide(part === 0 ? heading : `${heading} (تكملة ${part + 1})`, chunk);
+    }
   });
 
   const questions = asRecordArray(data.questions);
