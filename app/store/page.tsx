@@ -1,17 +1,57 @@
+import { createClient } from "@/lib/supabase/server";
+import StoreClient, { type CreditPack } from "@/components/store/StoreClient";
 import Link from "next/link";
-import { AdminPageHeader } from "@/components/admin/ui";
 
-export default function StorePage() {
+/**
+ * /store — متجر الكريدت: حزم + طلب شراء + تأكيد دفع يدوي + «طلباتي».
+ * الأسعار من credit_packs (لا fallback)، وتعليمات الدفع من
+ * app_settings.billing_payment_instructions.
+ */
+export const dynamic = "force-dynamic";
+
+const INSTRUCTIONS_KEY = "billing_payment_instructions";
+
+export default async function StorePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAuthenticated = !!user && !user.is_anonymous;
+
+  let packs: CreditPack[] = [];
+  let instructions: string | null = null;
+
+  try {
+    const { data: packRows } = await supabase
+      .from("credit_packs")
+      .select("id, title_ar, credits, price, currency")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    packs = (packRows ?? []) as CreditPack[];
+  } catch {
+    packs = [];
+  }
+  try {
+    const { data: setting } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", INSTRUCTIONS_KEY)
+      .maybeSingle();
+    const value = (setting as { value?: string } | null)?.value;
+    instructions = typeof value === "string" && value.trim() ? value.trim() : null;
+  } catch {
+    instructions = null;
+  }
+
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold">حزم الرصيد (AI Credits)</h1>
-      <p className="text-sm text-muted-foreground">
-        هذه الصفحة قيد الإعداد. لشراء رصيد AI Credits أو ترقية الخطة، يرجى التواصل مع الدعم أو زيارة صفحة الأسعار.
-      </p>
-      <div className="flex gap-3">
-        <Link href="/pricing" className="underline">صفحة الأسعار</Link>
-        <Link href="/dashboard" className="underline">لوحة التحكم</Link>
+    <main dir="rtl" className="min-h-screen bg-[#0B0F1E] text-[#E7E9F5]">
+      <div className="max-w-3xl mx-auto px-4 py-10">
+        <Link href="/dashboard" className="text-sm text-[#9AA0C0] hover:text-white mb-6 inline-block">← العودة للوحة</Link>
+        <h1 className="text-3xl font-extrabold mb-2">المتجر</h1>
+        <p className="text-[#9AA0C0] mb-8">
+          اشترِ رصيد AI Credits: اطلب الحزمة، حوّل المبلغ، أكّد الدفع برقم العملية — وسيشحن الرصيد بعد مراجعة الإدارة.
+        </p>
+        <StoreClient packs={packs} instructions={instructions} isAuthenticated={isAuthenticated} />
+        <footer className="text-center text-xs text-[#7A8298] pt-6 mt-8 border-t border-[#2A3050]">Magiclly — دفع يدوي</footer>
       </div>
-    </div>
+    </main>
   );
 }
