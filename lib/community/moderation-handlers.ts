@@ -46,6 +46,38 @@ export async function reportHandler(req: Request) {
   if (!result.ok) {
     return NextResponse.json({ success: false, code: result.code, error: "Rejected." }, { status: 409 });
   }
+
+  // إشعار فريق الإشراف (owner/admin/moderator) ببلاغ جديد — عشان يوصلهم فورًا
+  // مع الوقت والسبب واسم المُبلَّغ عليه، وينتقلوا للوحة الإشراف مباشرة.
+  void (async () => {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const { socialNotify } = await import("@/lib/community/handlers");
+      const { REPORT_REASONS } = await import("@/lib/community/types");
+      const service = createServiceClient();
+      const { data: team } = await service.from("site_admins").select("user_id").limit(50);
+      const targets = (team ?? [])
+        .map((t) => t.user_id as string)
+        .filter((id) => id && id !== auth.user.id);
+      if (targets.length === 0) return;
+      const targetLabel = targetType === "post" ? "منشور" : targetType === "comment" ? "تعليق" : "حساب";
+      const reasonAr = REPORT_REASONS.find((r) => r.id === reason)?.label ?? (reason as string);
+      await Promise.allSettled(
+        targets.map((id) =>
+          socialNotify(
+            service,
+            id,
+            "🚩 بلاغ جديد في المجتمع",
+            `بلاغ ${targetLabel} — السبب: ${reasonAr}${details ? ` — «${details.slice(0, 120)}»` : ""}. راجع لوحة الإشراف.`,
+            "/community/moderation",
+          ),
+        ),
+      );
+    } catch (err) {
+      console.error("[community/report] moderator notify failed:", err);
+    }
+  })();
+
   return NextResponse.json({ success: true });
 }
 

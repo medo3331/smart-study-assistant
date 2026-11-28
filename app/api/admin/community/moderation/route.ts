@@ -206,11 +206,33 @@ export async function POST(req: Request) {
         const { data } = await g.service.from("profiles").select("id").eq("public_user_code", identifier.toUpperCase()).maybeSingle();
         targetId = (data?.id as string) ?? null;
       } else {
-        const { data } = await g.service.from("profiles").select("id").eq("email", identifier.toLowerCase()).maybeSingle();
-        targetId = (data?.id as string) ?? null;
+        // سلسلة بحث: إيميل البروفايل ← اسم العرض ← إيميل auth.users
+        // (37 من 109 بروفايل بس فيهم إيميل — فالبحث بالإيميل لوحده بيفشل كتير)
+        const lower = identifier.toLowerCase();
+        if (lower.includes("@")) {
+          const { data } = await g.service.from("profiles").select("id").eq("email", lower).maybeSingle();
+          targetId = (data?.id as string) ?? null;
+        }
+        if (!targetId) {
+          const { data } = await g.service.from("profiles").select("id").ilike("display_name", identifier).limit(2);
+          if ((data ?? []).length === 1) targetId = (data![0] as { id: string }).id;
+        }
+        if (!targetId && lower.includes("@")) {
+          // آخر احتياط: الإيميل مسجّل في الدخول بس مش متخزّن في profiles
+          for (let page = 1; page <= 5 && !targetId; page++) {
+            const { data: usersData, error: listErr } = await g.service.auth.admin.listUsers({ page, perPage: 500 });
+            if (listErr || !usersData?.users?.length) break;
+            const match = usersData.users.find((u) => (u.email ?? "").toLowerCase() === lower);
+            if (match) targetId = match.id;
+            if (usersData.users.length < 500) break;
+          }
+        }
       }
       if (!targetId) {
-        return NextResponse.json({ success: false, error: "مفيش حساب بالمعرّف ده." }, { status: 404 });
+        return NextResponse.json({
+          success: false,
+          error: "مفيش حساب بالمعرّف ده — جرّب كود MAG أو الإيميل المسجّل بيه الطالب أو اسمه بالظبط.",
+        }, { status: 404 });
       }
       // منع ترقية أدوار موجودة — المودريتور دور مستقل
       const { data: existing } = await g.service.from("site_admins").select("role").eq("user_id", targetId).maybeSingle();
@@ -225,7 +247,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
       }
       const { socialNotify } = await import("@/lib/community/handlers");
-      void socialNotify(g.service, targetId, "تم تعيينك مشرفًا في المجتمع", "دخول لوحة الإشراف: /admin/community/moderation", "/admin/community/moderation");
+      void socialNotify(g.service, targetId, "تم تعيينك مشرفًا في المجتمع", "دخول لوحة الإشراف: /community/moderation", "/community/moderation");
       return NextResponse.json({ success: true });
     }
     case "remove_moderator": {
