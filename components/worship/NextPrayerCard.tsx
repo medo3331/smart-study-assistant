@@ -22,24 +22,33 @@ interface NextPrayerCardProps {
  * by isolating the countdown state
  */
 export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
-  const [timeRemaining, setTimeRemaining] = useState("");
-  const [now] = useState(() => Date.now());
+  // لحظة "الآن" الحيّة — بتتحدّث كل ثانية وبتتعوض فورًا لما التبويب يرجع،
+  // فالعدّاد وتقدّم اليوم بيترسموا دايمًا من Date.now() الحالي (بدون drift تراكمي).
+  const [now, setNow] = useState(() => Date.now());
 
-  // Update countdown every second
+  // تحديث العدّاد كل ثانية — الحساب من التاريخ المطلق للصلاة في كل tick
+  // (مش إنقاص متغير) فحتى لو المؤقت اتقفل في الخلفية أول tick بعد الرجوع يظبط نفسه.
   useEffect(() => {
     if (!prayer) return;
 
-    const updateCountdown = () => {
-      setTimeRemaining(formatTimeRemaining(prayer.timestamp));
+    const updateNow = () => setNow(Date.now());
+
+    // تحديث فوري أول ما يتركّب أو تتغير الصلاة القادمة
+    updateNow();
+
+    // تعويض drift: لو التبويب كان مخفي والمؤقت متأخر، الرجوع بيحدّث فورًا
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") updateNow();
     };
+    document.addEventListener("visibilitychange", handleVisibility);
 
-    // Initial update
-    updateCountdown();
+    // تحديث كل ثانية
+    const interval = setInterval(updateNow, 1000);
 
-    // Update every second
-    const interval = setInterval(updateCountdown, 1000);
-
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [prayer]);
 
   if (!prayer) {
@@ -52,8 +61,12 @@ export function NextPrayerCard({ prayer, location }: NextPrayerCardProps) {
     );
   }
 
-  // Calculate progress through the day (0-100)
-  const dayStart = new Date().setHours(0, 0, 0, 0);
+  // المتبقي بيتحسب من اللحظة الحيّة — formatTimeRemaining بياخد التاريخ المطلق
+  // للصلاة فيحسب الفرق من now نفسه (تعويض drift) بدون حالة منفصلة قديمة.
+  const timeRemaining = formatTimeRemaining(prayer.timestamp);
+
+  // Calculate progress through the day (0-100) — من اللحظة الحيّة
+  const dayStart = new Date(now).setHours(0, 0, 0, 0);
   const dayEnd = dayStart + 24 * 60 * 60 * 1000;
   const dayProgress = Math.max(0, Math.min(100, ((now - dayStart) / (dayEnd - dayStart)) * 100));
 

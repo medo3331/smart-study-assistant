@@ -40,8 +40,8 @@ const CATEGORY_COLORS: Record<AdhkarCategory, { color: string; bg: string }> = {
   morning: { color: "text-[#FB923C]", bg: "bg-[#FB923C]/15" },
   evening: { color: "text-[#F97316]", bg: "bg-[#F97316]/15" },
   "after-prayer": { color: "text-[#2DD4BF]", bg: "bg-[#2DD4BF]/15" },
-  sleep: { color: "text-[#7C5CFF]", bg: "bg-[#7C5CFF]/15" },
-  general: { color: "text-[#B69CFF]", bg: "bg-[#7C5CFF]/15" },
+  sleep: { color: "text-[#2DD4BF]", bg: "bg-[#2DD4BF]/15" },
+  general: { color: "text-[#34D399]", bg: "bg-[#2DD4BF]/15" },
 };
 
 const CATEGORY_LABELS: Record<AdhkarCategory, string> = {
@@ -148,7 +148,7 @@ export function AdhkarReader({
           </div>
           <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-gradient-to-r from-[#7C5CFF] to-[#2DD4BF] rounded-full"
+              className="h-full bg-gradient-to-r from-[#10B981] to-[#2DD4BF] rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.8, ease: "easeOut" }}
@@ -235,9 +235,9 @@ export function AdhkarReader({
                   )}
 
                   {currentDhikr?.source && (
-                    <p className="mt-2 text-xs text-[#7C5CFF] text-center">
+                    <p className="mt-2 text-xs text-[#2DD4BF] text-center">
                       {currentDhikr.sourceUrl ? (
-                        <a href={currentDhikr.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-[#B69CFF]">
+                        <a href={currentDhikr.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-[#34D399]">
                           المصدر: {currentDhikr.source}
                         </a>
                       ) : (
@@ -280,7 +280,7 @@ export function AdhkarReader({
                         className={cn(
                           "h-2 w-2 rounded-full transition-all",
                           i === currentIndex
-                            ? "bg-[#7C5CFF] w-6"
+                            ? "bg-[#2DD4BF] w-6"
                             : completed[i]
                               ? "bg-[#2DD4BF]"
                               : "bg-white/[0.1] hover:bg-white/[0.2]"

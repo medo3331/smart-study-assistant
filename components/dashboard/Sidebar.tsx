@@ -27,7 +27,7 @@ export function Sidebar({ items, user, className, subtitle, footer }: SidebarPro
     >
       {/* Brand */}
       <div className="flex items-center gap-2 px-1">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7C5CFF] font-bold text-white">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#10B981] font-bold text-white">
           M
         </span>
         <span className="text-lg font-bold text-white">Magicly</span>
@@ -45,7 +45,7 @@ export function Sidebar({ items, user, className, subtitle, footer }: SidebarPro
               className={cn(
                 "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm font-medium transition-colors",
                 item.active
-                  ? "bg-[#7C5CFF]/15 text-[#B69CFF]"
+                  ? "bg-[#10B981]/15 text-[#6EE7B7]"
                   : "text-[#9AA0C0] hover:bg-white/[0.04] hover:text-[#E7E9F5]"
               )}
             >
@@ -61,7 +61,7 @@ export function Sidebar({ items, user, className, subtitle, footer }: SidebarPro
 
       {/* User chip at the bottom */}
       <div className="mt-auto flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7C5CFF]/20 font-bold text-[#B69CFF]">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#10B981]/20 font-bold text-[#6EE7B7]">
           {user.initials}
         </span>
         <div className="min-w-0">

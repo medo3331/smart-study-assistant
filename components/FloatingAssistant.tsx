@@ -19,7 +19,7 @@ export function FloatingAssistant() {
   // 🎴 على صفحات الدروس: نفس الزر بنسخة بنفسجية موحّدة مع نظام الداشبورد/الدرس الجديد
   const onLesson = pathname?.startsWith("/lesson/") ?? false;
   const fabCls = onLesson
-    ? "grid h-12 w-12 place-items-center rounded-full bg-[#7C5CFF] text-white shadow-[0_8px_26px_rgba(124,92,255,0.5)] transition hover:scale-105 hover:bg-[#8E72FF]"
+    ? "grid h-12 w-12 place-items-center rounded-full bg-[#10B981] text-white shadow-[0_8px_26px_rgba(16,185,129,0.5)] transition hover:scale-105 hover:bg-[#0EA56F]"
     : "grid h-12 w-12 place-items-center rounded-full bg-ink text-paper-2 shadow-lg transition hover:scale-105 motion-safe:animate-[pulse_4s_ease-in-out_infinite]";
 
   return <div className="fixed start-4 bottom-4 z-40 sm:start-6" dir="rtl">

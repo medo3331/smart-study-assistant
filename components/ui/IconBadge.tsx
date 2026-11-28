@@ -16,8 +16,8 @@ interface IconBadgeProps {
  */
 export function IconBadge({
   icon: Icon,
-  color = "text-[#B69CFF]",
-  bg = "bg-[#7C5CFF]/15",
+  color = "text-[#6EE7B7]",
+  bg = "bg-[#10B981]/15",
   size = 40,
   className,
 }: IconBadgeProps) {

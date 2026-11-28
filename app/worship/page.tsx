@@ -18,7 +18,7 @@ import {
   useWorshipReward,
 } from "@/components/worship/WorshipChrome";
 import { Reveal } from "@/components/ui/Reveal";
-import { useTodayPrayerTimes } from "@/hooks/usePrayerTimes";
+import { useLivePrayerTimes } from "@/hooks/useLivePrayerTimes";
 import { generateDailyProgressItems } from "@/lib/islamic/utils";
 import type { DailyProgressItem } from "@/lib/islamic/types";
 import type { Surah } from "@/lib/islamic/types";
@@ -67,13 +67,15 @@ function WorshipHome() {
   const settings = shared?.settings;
   const settingsLoaded = !!settings;
 
-  const { data: prayerTimes, isLoading, error } = useTodayPrayerTimes(
-    settings?.latitude,
-    settings?.longitude,
-    settings?.timezone,
-    settings?.calculationMethod,
-    settings?.madhab,
-  );
+  /* المواقيت الحيّة (useLivePrayerTimes): إعادة حساب كل دقيقة + تعويض
+     drift عند الرجوع للتبويب — نفس مصدر الإعدادات (الإحداثيات/التوقيت). */
+  const { data: prayerTimes, isLoading, error } = useLivePrayerTimes({
+    latitude: settings?.latitude,
+    longitude: settings?.longitude,
+    timezone: settings?.timezone,
+    calculationMethod: settings?.calculationMethod,
+    madhab: settings?.madhab,
+  });
 
   /* ── أحداث العبادة → مكافآت award_coins (مراجع يوم المستخدم المحلي) ──── */
 

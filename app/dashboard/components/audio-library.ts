@@ -12,6 +12,15 @@
 /** نوع المصدر. بيحدد سلوك المشغّل: الموسيقى بتتكرر، والقرآن لأ. */
 export type TrackKind = "quran" | "music" | "custom";
 
+/**
+ * أداء التلاوة:
+ *   - murattal: الأداء العادي (مرتل) — المناسب للمذاكرة والاستماع السريع.
+ *   - mujawwad: الأداء المُتقن بالتجويد — أبطأ وأطول بكتير.
+ * المصدر: mp3quran.net بيفصل كل أداء في مصحف (moshaf) بسيرفر مختلف،
+ * فالتبديل بينهم = تبديل مجلد السيرفر، مش تبديل القارئ.
+ */
+export type RecitationStyle = "murattal" | "mujawwad";
+
 export interface SoundTrack {
   id: string;
   name: string;
@@ -35,6 +44,12 @@ export interface Reciter {
   server: string;
   /** أرقام السور المتاحة عند القارئ ده. أغلبهم ١١٤ كاملة. */
   surahs: number[];
+  /**
+   * سيرفر نسخة المجوّد (بينتهي بـ /) — لو القارئ عنده أداء مجود.
+   * `null`/undefined = المجود مش متاح للقارئ ده. بييجي من رد
+   * mp3quran (مصحف اسمه فيه «مجود») وبيتطبع في الراوت.
+   */
+  mujawwadServer?: string | null;
 }
 
 export const SURAH_NAMES: string[] = [
@@ -69,12 +84,12 @@ export const POPULAR_SURAHS = [1, 36, 55, 67, 18, 56, 2, 112];
  */
 export const FALLBACK_RECITERS: Reciter[] = [
   { id: 123, name: "مشاري راشد العفاسي", server: "https://server8.mp3quran.net/afs/", surahs: allSurahs() },
-  { id: 30, name: "محمد صديق المنشاوي (المرتل)", server: "https://server10.mp3quran.net/minsh/", surahs: allSurahs() },
-  { id: 5, name: "عبد الباسط عبد الصمد (المرتل)", server: "https://server7.mp3quran.net/basit/", surahs: allSurahs() },
-  { id: 51, name: "ماهر المعيقلي", server: "https://server12.mp3quran.net/maher/", surahs: allSurahs() },
+  { id: 30, name: "محمد صديق المنشاوي (المرتل)", server: "https://server10.mp3quran.net/minsh/", surahs: allSurahs(), mujawwadServer: "https://cdn.mp3quran.net/audio/muhammad-minshawi/r2/" },
+  { id: 5, name: "عبد الباسط عبد الصمد (المرتل)", server: "https://server7.mp3quran.net/basit/", surahs: allSurahs(), mujawwadServer: "https://cdn.mp3quran.net/audio/abdulbasit-abdulsamad/r1/" },
+  { id: 51, name: "ماهر المعيقلي", server: "https://server12.mp3quran.net/maher/", surahs: allSurahs(), mujawwadServer: "https://cdn.mp3quran.net/audio/maher-muaiqly/r3/" },
   { id: 54, name: "عبد الرحمن السديس", server: "https://server11.mp3quran.net/sds/", surahs: allSurahs() },
   { id: 118, name: "ياسر الدوسري", server: "https://server11.mp3quran.net/yasser/", surahs: allSurahs() },
-  { id: 112, name: "محمود خليل الحصري (المرتل)", server: "https://server13.mp3quran.net/husr/", surahs: allSurahs() },
+  { id: 112, name: "محمود خليل الحصري (المرتل)", server: "https://server13.mp3quran.net/husr/", surahs: allSurahs(), mujawwadServer: "https://cdn.mp3quran.net/audio/mahmoud-husary/r2/" },
   { id: 102, name: "أحمد بن علي العجمي", server: "https://server10.mp3quran.net/ajm/", surahs: allSurahs() },
 ];
 
@@ -100,6 +115,86 @@ export function quranTrack(reciter: Reciter, surah: number): SoundTrack {
     // السورة ليها بداية ونهاية — تكرارها تلقائي مش سلوك متوقع
     loop: false,
   };
+}
+
+/* --------------------------------------------------------------------------
+   أداء التلاوة (مرتل / مجود) — منطق نقي بدون React وبدون شبكة.
+
+   عايش هنا مش في الراوت لسببين: نفس سبب التطبيع القديم (Next بيتحقق من
+   exports ملفات الراوت فمينفعش نصدّر منها حاجة نختبرها)، ولأن الاختبار
+   بيستوردها من هنا على طول.
+   -------------------------------------------------------------------------- */
+
+/**
+ * الـ server بيروح مباشرة لـ `<audio src>` في متصفح المستخدم — نفس منطق
+ * lib/quran.ts: https بس، والهوست لازم يكون من نطاق المصدر المعروف.
+ * الفحص على الـ hostname المفكوك مش على النص (startsWith بيعدّي
+ * `https://mp3quran.net.evil.com/`).
+ */
+export function isValidQuranServer(server: unknown): server is string {
+  if (typeof server !== "string") return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(server);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  return host === "mp3quran.net" || host.endsWith(".mp3quran.net");
+}
+
+/** سقف بسيط على عدد المصاحف المدقّقة لكل قارئ — رد عادي فيه ١٠ كحد أقصى. */
+const MAX_MOSHAFS = 50;
+
+/** عدد سور مصحف من رد mp3quran: `surah_list` نص مفصول بفواصل، أو `surah_total`. */
+function countMoshafSurahs(m: {
+  surah_list?: unknown;
+  surah_total?: unknown;
+}): number {
+  if (typeof m.surah_list === "string" && m.surah_list.trim()) {
+    return m.surah_list.split(",").filter((n) => n.trim()).length;
+  }
+  const total = Number(m.surah_total);
+  return Number.isFinite(total) && total > 0 ? total : 0;
+}
+
+/**
+ * استخراج رابط نسخة المجود من مصاحف قارئ واحد (شكل رد mp3quran v3:
+ * `reciters[].moshaf[]` وكل مصحف `name/server/surah_list/surah_total`).
+ *
+ * الاختيار: من المصاحف اللي اسمها فيه «مجود» وسيرفرها صالح، بنختار الأكمل
+ * (أكتر سور)، ولو اتساوا بنفضّل رواية حفص (الأشهر والمطابقة للمرتل).
+ * بيرجع الرابط متطبع بـ `/` في الآخر أو `null` لو مفيش نسخة مجودة.
+ */
+export function extractMujawwadServer(moshafs: unknown): string | null {
+  if (!Array.isArray(moshafs)) return null;
+
+  let best: { server: string; surahs: number; hafs: boolean } | null = null;
+
+  for (const m of moshafs.slice(0, MAX_MOSHAFS)) {
+    if (typeof m !== "object" || m === null) continue;
+    const entry = m as { name?: unknown; server?: unknown; surah_list?: unknown; surah_total?: unknown };
+    if (typeof entry.name !== "string" || !entry.name.includes("مجود")) continue;
+    if (!isValidQuranServer(entry.server)) continue;
+
+    // تطبيع الشرطة الأخيرة: روابط mp3quran بتيجي بـ / في الآخر عادة،
+    // وبنضمنها هنا عشان دمج اسم الملف يفضل `server + 002.mp3`.
+    const server = entry.server.endsWith("/") ? entry.server : `${entry.server}/`;
+    const surahs = countMoshafSurahs(entry);
+    if (surahs === 0) continue;
+
+    const hafs = entry.name.includes("حفص");
+    if (
+      !best ||
+      surahs > best.surahs ||
+      (surahs === best.surahs && hafs && !best.hafs)
+    ) {
+      best = { server, surahs, hafs };
+    }
+  }
+
+  return best ? best.server : null;
 }
 
 /* --------------------------------------------------------------------------

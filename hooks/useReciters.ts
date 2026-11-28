@@ -2,7 +2,10 @@
 /* eslint-disable react-hooks/set-state-in-effect -- Syncing with external system (Supabase/localStorage) is intentional; see TODO for future useEffectEvent refactor */
 
 import { useState, useEffect, useCallback } from "react";
-import { FALLBACK_RECITERS } from "@/app/dashboard/components/audio-library";
+import {
+  FALLBACK_RECITERS,
+  isValidQuranServer,
+} from "@/app/dashboard/components/audio-library";
 
 /**
  * Reciter shape — mirrors the /api/quran/reciters response +
@@ -13,6 +16,8 @@ export interface Reciter {
   name: string;
   arabicName: string;
   server: string;
+  /** سيرفر نسخة المجود (بينتهي بـ /) — null لو القارئ ماعندوش أداء مجود. */
+  mujawwadServer?: string | null;
   surahs: number[];
   rewaya: string;
   language: string;
@@ -31,21 +36,31 @@ const RECITER_STORAGE_KEY = "magicly-quran-reciter";
 const DEFAULT_RECITER_ID = 1; // Al-Afasy
 
 /**
- * الـ API بيرجع {id, name, server, surahs} بس (شوف lib/quran.ts).
+ * الـ API بيرجع {id, name, server, surahs, mujawwadServer} (شوف الراوت —
+ * مجود بيستخرج من المصاحف الخام في audio-library).
  * الواجهة بتعرض arabicName/rewaya — من غير التطبيع ده يبقوا undefined
  * وأي `.includes()` عليهم بيسقّط الصفحة.
  */
-function normalizeReciter(r: {
+/** exported للاختبار — التحقق من رابط المجود منطق نقي مش شغل React. */
+export function normalizeReciter(r: {
   id: number;
   name: string;
   server: string;
   surahs: number[];
+  mujawwadServer?: unknown;
 }): Reciter {
   return {
     id: r.id,
     name: r.name,
     arabicName: r.name,
     server: r.server,
+    // الرابط بيروح لـ <audio src> في متصفح المستخدم — نفس فحص النطاق
+    // اللي بيمرّ على سيرفر المرتل، وأي حاجة تانية تتبوظ لـ null.
+    mujawwadServer: isValidQuranServer(r.mujawwadServer)
+      ? r.mujawwadServer.endsWith("/")
+        ? r.mujawwadServer
+        : `${r.mujawwadServer}/`
+      : null,
     surahs: r.surahs ?? [],
     rewaya: "حفص عن عاصم — مرتل",
     language: "ar",

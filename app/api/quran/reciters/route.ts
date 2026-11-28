@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { FALLBACK_RECITERS } from "@/app/dashboard/components/audio-library";
+import {
+  FALLBACK_RECITERS,
+  extractMujawwadServer,
+} from "@/app/dashboard/components/audio-library";
 import { normalizeReciters } from "@/lib/quran";
 
 /* ==========================================================================
@@ -31,6 +34,30 @@ const UPSTREAM = "https://mp3quran.net/api/v3/reciters?language=ar";
 const UPSTREAM_TIMEOUT_MS = 8000;
 const CACHE_SECONDS = 86400; // يوم
 
+/**
+ * بناء خريطة قارئ → سيرفر نسخة المجود من نفس الرد الخام.
+ *
+ * `normalizeReciters` بتختار مصحف واحد لكل قارئ (بتفضّل المرتل) وبترمي
+ * الباقي — بما فيه نسخ المجود. فبنرجّع للرد الخام هنا ونطلّع سيرفر
+ * المجود لكل قارئ لوحده (المنطق النقي عايش في extractMujawwadServer —
+ * شوف app/dashboard/components/audio-library.ts).
+ */
+function buildMujawwadMap(payload: unknown): Map<number, string> {
+  const map = new Map<number, string>();
+  const list = (payload as { reciters?: unknown } | null)?.reciters;
+  if (!Array.isArray(list)) return map;
+
+  for (const entry of list.slice(0, 1000)) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { id, moshaf } = entry as { id?: unknown; moshaf?: unknown };
+    if (typeof id !== "number" || !Number.isInteger(id)) continue;
+    if (map.has(id)) continue;
+    const server = extractMujawwadServer(moshaf);
+    if (server) map.set(id, server);
+  }
+  return map;
+}
+
 export async function GET() {
   try {
     const res = await fetch(UPSTREAM, {
@@ -39,11 +66,20 @@ export async function GET() {
     });
     if (!res.ok) throw new Error(`upstream ${res.status}`);
 
-    const reciters = normalizeReciters(await res.json());
+    // الجسم بيتقري مرة واحدة — بنحتفظ بالخام عشان نستخرج نسخ المجود منه.
+    const raw: unknown = await res.json();
+    const reciters = normalizeReciters(raw);
     if (reciters.length === 0) throw new Error("empty list");
 
+    // إثراء القايمة برابط نسخة المجود (أو null لو القارئ ماعندوش).
+    const mujawwad = buildMujawwadMap(raw);
+    const withStyles = reciters.map((r) => ({
+      ...r,
+      mujawwadServer: mujawwad.get(r.id) ?? null,
+    }));
+
     return NextResponse.json(
-      { reciters, stale: false },
+      { reciters: withStyles, stale: false },
       {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=604800`,

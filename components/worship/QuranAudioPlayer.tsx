@@ -39,6 +39,7 @@ export function QuranAudioPlayer() {
     state: audioState,
     currentSurahId,
     currentReciterId,
+    currentStyle,
     currentTime,
     duration,
     progress,
@@ -50,6 +51,7 @@ export function QuranAudioPlayer() {
     prevSurah,
     seek,
     setVolume,
+    setStyle,
   } = useQuranAudio();
 
   const { reciters, selectedReciter } = useReciters();
@@ -96,6 +98,16 @@ export function QuranAudioPlayer() {
   const isLoading = audioState === "loading";
   const isError = audioState === "error";
   const isUnavailable = audioState === "unavailable";
+
+  // سطر الرواية حسب الأداء الحالي — المجود بياخد وصفه الخاص.
+  const rewayaLine =
+    currentStyle === "mujawwad"
+      ? "حفص عن عاصم — مجوّد"
+      : reciter?.rewaya || "";
+  // المجود متاح للقارئ الحالي؟ لو لأ، زرار التبديل بيتقفل مع توضيح.
+  const mujawwadAvailable = Boolean(reciter?.mujawwadServer);
+  const styleDisabled =
+    currentStyle === "murattal" && !mujawwadAvailable;
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -216,7 +228,7 @@ export function QuranAudioPlayer() {
                         </p>
                         <p className="text-sm text-[#9AA0C0] truncate">
                           {reciter?.arabicName || "مقصور"}
-                          {reciter?.rewaya && ` • ${reciter.rewaya}`}
+                          {rewayaLine && ` • ${rewayaLine}`}
                         </p>
                       </div>
                     </div>
@@ -228,6 +240,49 @@ export function QuranAudioPlayer() {
                     >
                       <ChevronUp size={20} />
                     </button>
+                  </div>
+
+                  {/* مبدّل الأداء السريع: مرتل / مجوّد — التبديل بيبدّل الملف
+                      ويبدأ من أول السورة (شوف setStyle في useQuranAudio). */}
+                  <div
+                    className="flex items-center gap-1 mx-auto w-fit rounded-xl bg-white/[0.04] border border-white/[0.08] p-1"
+                    role="radiogroup"
+                    aria-label="أداء التلاوة"
+                  >
+                    {(
+                      [
+                        ["murattal", "مرتل"],
+                        ["mujawwad", "مجوّد"],
+                      ] as Array<["murattal" | "mujawwad", string]>
+                    ).map(([style, label]) => {
+                      const active = currentStyle === style;
+                      const disabled =
+                        style === "mujawwad" && styleDisabled;
+                      return (
+                        <button
+                          key={style}
+                          role="radio"
+                          aria-checked={active}
+                          disabled={disabled}
+                          title={
+                            disabled
+                              ? "المجوّد مش متاح للقارئ ده"
+                              : undefined
+                          }
+                          onClick={() => setStyle(style)}
+                          className={cn(
+                            "rounded-lg px-4 py-1 text-xs font-medium transition-colors",
+                            active
+                              ? "bg-[#10B981]/20 text-[#6EE7B7]"
+                              : "text-[#9AA0C0] hover:text-white",
+                            disabled &&
+                              "opacity-40 cursor-not-allowed hover:text-[#9AA0C0]"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Progress bar */}
@@ -300,7 +355,7 @@ export function QuranAudioPlayer() {
                             "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
                             isPlaying
                               ? "bg-[#10B981]/15 text-[#6EE7B7]"
-                              : "bg-[#10B981] text-white hover:bg-[#8E72FF]"
+                              : "bg-[#10B981] text-white hover:bg-[#0EA56F]"
                           )}
                           aria-label={isPlaying ? "إيقاف" : "تشغيل"}
                         >

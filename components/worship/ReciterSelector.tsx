@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useReciters } from "@/hooks/useReciters";
+import { useQuranAudio } from "@/hooks/useQuranAudio";
+import type { RecitationStyle } from "@/app/dashboard/components/audio-library";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { IconBadge } from "@/components/ui/IconBadge";
 import { Check, ChevronDown, Loader2, Search, Sparkles } from "lucide-react";
@@ -14,10 +16,25 @@ import { Check, ChevronDown, Loader2, Search, Sparkles } from "lucide-react";
  * Uses real data from /api/quran/reciters (mp3quran.net).
  * Persists selection to localStorage via useReciters.
  * Respects prefers-reduced-motion.
+ *
+ * أداء التلاوة (مرتل/مجود): مبدّل فوق القايمة بيقرا ويكتب في حالة
+ * المشغّل نفسه (useQuranAudio.setStyle) — مش في الـ hook ده — عشان
+ * القرار يوصل للتشغيل بغض النظر عن مين اللي بيدوس play. لما المستخدم
+ * يختار «مجوّد» والقارئ الحالي ماعندوش نسخة مجودة، بنعرض القرّاء اللي
+ * عندهم مجود بس ونولّي على أول واحد فيهم (مع إرجاع القارئ القديم لو
+ * رجع للمرتل).
  */
+
+/** سطر الرواية المعروض حسب الأداء المختار. */
+function rewayaLabel(reciter: { rewaya: string } | null, style: RecitationStyle): string {
+  if (!reciter) return "";
+  return style === "mujawwad" ? "حفص عن عاصم — مجوّد" : reciter.rewaya;
+}
+
 export function ReciterSelector() {
   const { reciters, selectedReciter, isLoading, error, selectReciter } =
     useReciters();
+  const { currentStyle, setStyle } = useQuranAudio();
   // الهوك نفسه بيرجّع ليستة احتياطية بروابط حقيقية لو الـ API وقع —
   // الـ fallback الوهمي القديم (server: "mp3quran.net" من غير مسار)
   // كان بيختار قارئ بروابط مكسورة والصوت ميشتغلش.
@@ -25,8 +42,17 @@ export function ReciterSelector() {
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // القارئ اللي كان مختار على المرتل قبل التحول للمجود — بنرجّعه لو رجع.
+  const murattalReciterIdRef = useRef<number | null>(null);
 
-  const filtered = displayReciters.filter(
+  // القرّاء اللي عندهم نسخة مجودة فعلاً (سيرفر من المصدر المعروف).
+  const mujawwadReciters = displayReciters.filter((r) => r.mujawwadServer);
+
+  // في وضع المجود بنعرض القرّاء اللي عندهم نسخة مجودة بس.
+  const styleFiltered =
+    currentStyle === "mujawwad" ? mujawwadReciters : displayReciters;
+
+  const filtered = styleFiltered.filter(
     (r) =>
       (r.arabicName ?? "").includes(search) ||
       (r.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -34,6 +60,30 @@ export function ReciterSelector() {
   );
 
   const selected = selectedReciter ?? displayReciters[0] ?? null;
+  const noMujawwadAtAll = mujawwadReciters.length === 0;
+
+  const handleStyleChange = (style: RecitationStyle) => {
+    if (style === currentStyle) return;
+
+    if (style === "mujawwad") {
+      // القارئ الحالي ماعندوش نسخة مجودة؟ نحتفظ بيه ونولّي على أول
+      // قارئ عنده مجود — والقايمة أصلاً بتعرض القادرين على المجود بس.
+      if (selected && !selected.mujawwadServer) {
+        murattalReciterIdRef.current = selected.id;
+        const next = mujawwadReciters[0];
+        if (next) selectReciter(next.id);
+      }
+    } else if (
+      murattalReciterIdRef.current !== null &&
+      displayReciters.some((r) => r.id === murattalReciterIdRef.current)
+    ) {
+      // رجع للمرتل: نرجّع القارئ اللي كان مختاره قبل التحول للمجود.
+      selectReciter(murattalReciterIdRef.current);
+      murattalReciterIdRef.current = null;
+    }
+
+    setStyle(style);
+  };
 
   return (
     <div className="relative">
@@ -58,7 +108,7 @@ export function ReciterSelector() {
               {selected?.arabicName || "اختر القارئ"}
             </p>
             <p className="text-xs text-[#9AA0C0] truncate">
-              {selected?.rewaya || ""}
+              {rewayaLabel(selected, currentStyle) || ""}
             </p>
           </div>
         </div>
@@ -83,6 +133,53 @@ export function ReciterSelector() {
             className="absolute top-full left-0 right-0 mt-2 z-50"
           >
             <GlassCard className="p-2 w-full max-h-80">
+              {/* مبدّل الأداء: مرتل (الأداء العادي) / مجوّد (التجويد الكامل) */}
+              <div
+                className="flex items-center gap-1 mb-2 rounded-xl bg-white/[0.04] border border-white/[0.08] p-1"
+                role="radiogroup"
+                aria-label="أداء التلاوة"
+              >
+                {(
+                  [
+                    ["murattal", "مرتل"],
+                    ["mujawwad", "مجوّد"],
+                  ] as Array<[RecitationStyle, string]>
+                ).map(([style, label]) => {
+                  const active = currentStyle === style;
+                  const unavailable = style === "mujawwad" && noMujawwadAtAll;
+                  return (
+                    <button
+                      key={style}
+                      role="radio"
+                      aria-checked={active}
+                      disabled={unavailable}
+                      title={
+                        unavailable
+                          ? "المجوّد مش متاح — مفيش قارئ متاح عنده نسخة مجودة دلوقتي"
+                          : undefined
+                      }
+                      onClick={() => handleStyleChange(style)}
+                      className={cn(
+                        "flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors",
+                        active
+                          ? "bg-[#10B981]/20 text-[#6EE7B7]"
+                          : "text-[#9AA0C0] hover:text-white",
+                        unavailable && "opacity-40 cursor-not-allowed hover:text-[#9AA0C0]"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* القارئ الحالي ماعندوش مجود والمستخدم طلب مجود — إيضاح التحول التلقائي */}
+              {currentStyle === "mujawwad" && selected && !selected.mujawwadServer && (
+                <p className="px-2 pb-2 text-xs text-[#FB923C]">
+                  المجوّد مش متاح للقارئ ده — اتولّينا على أقرب قارئ عنده نسخة مجوّدة.
+                </p>
+              )}
+
               {/* Search */}
               <div className="relative mb-2">
                 <Search
@@ -166,7 +263,7 @@ export function ReciterSelector() {
                           <div className="text-right min-w-0 flex-1">
                             <p className="font-medium">{reciter.arabicName}</p>
                             <p className="text-xs text-[#9AA0C0]">
-                              {reciter.rewaya}
+                              {rewayaLabel(reciter, currentStyle)}
                             </p>
                           </div>
                           {isSelected && (

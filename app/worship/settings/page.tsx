@@ -47,10 +47,19 @@ export default function WorshipSettingsPage() {
   );
 }
 
+type LocationRequestState =
+  | { kind: "idle" }
+  | { kind: "locating" }
+  | { kind: "success"; latitude: number; longitude: number }
+  | { kind: "denied" }
+  | { kind: "unsupported" };
+
 function SettingsHome() {
   const shared = useSharedWorshipData();
   const settings = shared?.settings;
   const update = shared?.updateSettingsLocal;
+  // حالة زرار «استخدم موقعي» — رسائل لطيفة بدل صمت عند الرفض.
+  const [locationRequest, setLocationRequest] = useState<LocationRequestState>({ kind: "idle" });
 
   if (!shared || !settings || !update) {
     return (
@@ -93,12 +102,15 @@ function SettingsHome() {
     ajzaa: 30,
   };
 
-  // تحديد الموقع تلقائيًا بموافقة المستخدم — الرفض يرجّع الوضع اليدوي بدون إيقاف الصفحة.
+  // تحديد الموقع تلقائيًا بموافقة المستخدم — الرفض يرجّع الوضع اليدوي بدون إيقاف الصفحة:
+  // بنفضّل آخر موقع محفوظ (أو القاهرة افتراضيًا) ونوضح ده للمستخدم برسالة لطيفة.
   const requestCurrentLocation = () => {
     if (!navigator.geolocation) {
       shared.updateSettingsLocal({ locationMode: "manual" });
+      setLocationRequest({ kind: "unsupported" });
       return;
     }
+    setLocationRequest({ kind: "locating" });
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -111,8 +123,12 @@ function SettingsHome() {
           timezone,
         };
         update({ location: nextLocation, latitude: nextLocation.latitude, longitude: nextLocation.longitude, timezone, locationMode: "automatic" });
+        setLocationRequest({ kind: "success", latitude: nextLocation.latitude, longitude: nextLocation.longitude });
       },
-      () => shared.updateSettingsLocal({ locationMode: "manual" }),
+      () => {
+        shared.updateSettingsLocal({ locationMode: "manual" });
+        setLocationRequest({ kind: "denied" });
+      },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
   };
@@ -208,10 +224,35 @@ function SettingsHome() {
                 />
               </Field>
 
-              <button type="button" onClick={requestCurrentLocation} className="rounded-xl border border-[#10B981]/30 px-4 py-2 text-sm text-[#6EE7B7] hover:bg-[#10B981]/10">
-                استخدام موقعي الحالي بموافقتي
+              <button
+                type="button"
+                onClick={requestCurrentLocation}
+                disabled={locationRequest.kind === "locating"}
+                className="rounded-xl border border-[#10B981]/30 px-4 py-2 text-sm text-[#6EE7B7] hover:bg-[#10B981]/10 disabled:opacity-60"
+              >
+                {locationRequest.kind === "locating"
+                  ? "جاري تحديد موقعك…"
+                  : "استخدام موقعي الحالي بموافقتي"}
               </button>
               <p className="text-xs text-[#9AA0C0]">يمكنك رفض إذن الموقع والاستمرار بإدخال المدينة والإحداثيات يدويًا.</p>
+              {/* رسالة حالة الموقع — نجاح بالإحداثيات، رفض يرجّع لآخر موقع محفوظ بهدوء. */}
+              <p aria-live="polite" className="text-xs">
+                {locationRequest.kind === "success" && (
+                  <span className="text-[#34D399]">
+                    ✅ تم تحديث موقعك: {locationRequest.latitude.toFixed(4)}, {locationRequest.longitude.toFixed(4)} — المنطقة الزمنية اتظبطت تلقائيًا.
+                  </span>
+                )}
+                {locationRequest.kind === "denied" && (
+                  <span className="text-[#FB923C]">
+                    تم رفض إذن الموقع — بنكمل بآخر موقع محفوظ (أو القاهرة افتراضيًا). تقدر تجرب تاني أو تعدّل الإحداثيات يدويًا فوق.
+                  </span>
+                )}
+                {locationRequest.kind === "unsupported" && (
+                  <span className="text-[#FB923C]">
+                    المتصفح مش بيدعم تحديد الموقع — عدّل الإحداثيات يدويًا.
+                  </span>
+                )}
+              </p>
             </div>
           </GlassCard>
         </Reveal>

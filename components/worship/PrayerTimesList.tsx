@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { IconBadge } from "@/components/ui/IconBadge";
@@ -40,6 +40,25 @@ export function PrayerTimesList({
   onSettingsClick,
 }: PrayerTimesListProps) {
   const [showDetails, setShowDetails] = useState(false);
+
+  // نبضة كل دقيقة: نصوص «المتبقي» وأختام «القادمة/الآن» بتتحسب من Date.now()
+  // وقت الرسم — النبضة بتخلي القائمة تعيد رسم نفسها بالمعلومة المحدّثة،
+  // والرجوع للتبويب بيرفع النبضة فورًا (تعويض drift).
+  const [, setMinuteTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setMinuteTick((tick) => tick + 1), 60_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setMinuteTick((tick) => tick + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
 
   const prayerIcons: Record<string, any> = {
     Fajr: Sun,
