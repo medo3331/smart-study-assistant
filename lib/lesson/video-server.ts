@@ -10,6 +10,7 @@ import {
   getFilteredCandidates,
   type YouTubeVideo,
 } from "./youtube-search";
+import { filterRelevantVideos } from "./video-relevance";
 
 export interface LessonVideoContext {
   country?: string;
@@ -32,6 +33,8 @@ export interface VideoCandidate {
   channel?: string;
   duration?: string;
   reason: string;
+  /** وصف الفيديو — بيدخل في حساب الصلة (بوابة «مفيش فيديوهات ملهاش علاقة»). */
+  description?: string;
   embedUrl: string;
   watchUrl: string;
   thumbnail?: string;
@@ -57,10 +60,20 @@ function toVideoCandidate(video: YouTubeVideo, reason: string, score: number): V
   return {
     id: video.id, title: video.title, channel: video.channelTitle,
     duration: video.duration, reason,
+    description: video.description || undefined,
     embedUrl: toEmbedUrlDirect(video.id),
     watchUrl: toWatchUrlDirect(video.id),
     thumbnail: video.thumbnailUrl, relevanceScore: score,
   };
+}
+
+/**
+ * 🎯 بوابة الصلة (P2): لا candidate بيتعرض كترشيح من غير ما يعدّي
+ * `filterRelevantVideos` — المقارنة بعد التطبيع العربي بين (العنوان + الوصف)
+ * و(موضوع الدرس + المادة). اللي فشل بيتشال من العرض تمامًا (مش بس إعادة ترتيب).
+ */
+function gateRelevant(videos: YouTubeVideo[], ctx: LessonVideoContext): YouTubeVideo[] {
+  return filterRelevantVideos(videos, { topic: ctx.topic || ctx.lesson || "", subject: ctx.subject || "" });
 }
 
 /** Inline embed/watch URL generation (avoids importing from server module). */
@@ -115,8 +128,10 @@ export async function getLessonVideoCandidates(
 
   if (fullResults.candidates.length > 0) {
     const ranked = await getFilteredCandidates(fullResults.candidates, fullCtx);
-    if (ranked.length > 0) {
-      const candidates = videosToCandidates(ranked, "الأكثر ملاءمة للدرس", 10);
+    // 🎯 بوابة الصلة: اللي ملوش علة بموضوع الدرس/المادة بيتشال قبل العرض.
+    const relevant = gateRelevant(ranked, fullCtx);
+    if (relevant.length > 0) {
+      const candidates = videosToCandidates(relevant, "الأكثر ملاءمة للدرس", 10);
       CACHE.set(k, { candidates, ts: Date.now() });
       return { candidates };
     }
@@ -130,8 +145,9 @@ export async function getLessonVideoCandidates(
     const partialResults = await searchYouTubeVideos(partialQuery);
     if (partialResults.candidates.length > 0) {
       const ranked = await getFilteredCandidates(partialResults.candidates, partialCtx);
-      if (ranked.length > 0) {
-        const candidates = videosToCandidates(ranked, "مناسب للدرس", 8);
+      const relevant = gateRelevant(ranked, partialCtx);
+      if (relevant.length > 0) {
+        const candidates = videosToCandidates(relevant, "مناسب للدرس", 8);
         CACHE.set(k, { candidates, ts: Date.now() });
         return { candidates };
       }
@@ -153,8 +169,9 @@ export async function getLessonVideoCandidates(
     const subjectResults = await searchYouTubeVideos(subjectQuery);
     if (subjectResults.candidates.length > 0) {
       const ranked = await getFilteredCandidates(subjectResults.candidates, { subject });
-      if (ranked.length > 0) {
-        const candidates = videosToCandidates(ranked, "الأكثر صلة بالموضوع", 6);
+      const relevant = gateRelevant(ranked, subjectOnlyCtx);
+      if (relevant.length > 0) {
+        const candidates = videosToCandidates(relevant, "الأكثر صلة بالموضوع", 6);
         CACHE.set(k, { candidates, ts: Date.now() });
         return { candidates };
       }
@@ -169,25 +186,55 @@ export async function getLessonVideoCandidates(
     const eduResults = await searchYouTubeVideos(eduQuery);
     if (eduResults.candidates.length > 0) {
       const ranked = await getFilteredCandidates(eduResults.candidates, eduCtx);
-      if (ranked.length > 0) {
-        const candidates = videosToCandidates(ranked, "محتوى تعليمي", 5);
+      const relevant = gateRelevant(ranked, eduCtx);
+      if (relevant.length > 0) {
+        const candidates = videosToCandidates(relevant, "محتوى تعليمي", 5);
         CACHE.set(k, { candidates, ts: Date.now() });
         return { candidates };
       }
     }
   }
 
-  // LEVEL 5: hardcoded fallback
+  // LEVEL 5: hardcoded fallback — بيمر على نفس بوابة الصلة (مفيش استثناء معروض
+  // كترشيح؛ الفيديوهات العامة بتنفع بس لو فعلاً مطابقة للمادة/الموضوع).
   const hardcoded = getHardcodedFallback(ctx);
-  if (hardcoded.length > 0) {
-    CACHE.set(k, { candidates: hardcoded, ts: Date.now() });
-    return { candidates: hardcoded };
+  const relevantHardcoded = gateRelevant(hardcoded.map((c) => ({ id: c.id, title: c.title, channelTitle: c.channel ?? "", description: c.description ?? "", duration: c.duration ?? "", thumbnailUrl: c.thumbnail ?? "" })), ctx);
+  if (relevantHardcoded.length > 0) {
+    const candidates = relevantHardcoded.map((v, i) => toVideoCandidate(v, v.description || "محتوى تعليمي أساسي", 4 - i * 0.5));
+    CACHE.set(k, { candidates, ts: Date.now() });
+    return { candidates };
   }
 
-  // LEVEL 6: nothing found — short cache
+  // LEVEL 6: nothing relevant found — short cache (فاضي أفضل من فيديو ملوش علاقة)
   const empty: VideoCandidate[] = [];
   cacheFailure(ctx, empty);
   return { candidates: empty, error: "no_videos_found" };
+}
+
+/**
+ * 🔍 البحث اليدوي (P2 مطلب 3): الطالب كتب كلمات البحث بنفسه — الاستعلام
+ * بيتبعت كما هو، والفلترة ضد الفوضى (ترفيه/مدة) بس، **من غير بوابة الصلة**
+ * (كلام الطالب هو المرجع — مش بنحكم عليه بموضوع الدرس).
+ */
+export async function searchLessonVideosByQuery(
+  query: string,
+  ctx: LessonVideoContext
+): Promise<{ candidates: VideoCandidate[]; error?: string }> {
+  const trimmed = query.trim().slice(0, 120);
+  if (!trimmed) return { candidates: [] };
+  const results = await searchYouTubeVideos(trimmed, 12);
+  if (results.error && results.candidates.length === 0) {
+    return { candidates: [], error: results.error };
+  }
+  const ranked = await getFilteredCandidates(results.candidates, {
+    subject: ctx.subject,
+    language: ctx.language,
+  });
+  return {
+    candidates: ranked.map((v, i) =>
+      toVideoCandidate(v, `نتيجة بحثك: «${trimmed}»`, 10 - i * 0.5)
+    ),
+  };
 }
 
 /** Hardcoded verified fallback for known subjects. */

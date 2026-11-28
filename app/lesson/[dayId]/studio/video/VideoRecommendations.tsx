@@ -82,13 +82,24 @@ export default function VideoRecommendations({
   candidates,
   activeId,
   onSelect,
+  onDismiss,
 }: {
   candidates: VideoCandidate[];
   activeId?: string | null;
   onSelect: (candidate: VideoCandidate) => void;
+  /** «مش مناسب» — إخفاء الترشيح في الجلسة الحالية (P2 مطلب 3). */
+  onDismiss?: (id: string) => void;
 }) {
   const shelves = buildVideoShelves(candidates);
-  if (shelves.length === 0) return null;
+  if (shelves.length === 0) {
+    return (
+      <div className="rounded-xl border border-rule bg-paper-2 p-3.5 text-center" dir="rtl">
+        <p className="text-[11.5px] text-ink-soft leading-relaxed">
+          مفيش فيديوهات مقترحة مناسبة للدرس دلوقتي — استخدم البحث اليدوي فوق لتلاقي الفيديو المناسب بنفسك.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -100,22 +111,39 @@ export default function VideoRecommendations({
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {shelf.items.map((c) => (
-              <button
+              <div
                 key={shelf.id + c.id}
-                onClick={() => onSelect(c)}
-                aria-pressed={activeId === c.id}
                 className={`shrink-0 w-44 text-right rounded-xl border p-2.5 transition ${
                   activeId === c.id
                     ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]"
                     : "border-[var(--border)] bg-[var(--card-secondary)] hover:border-[var(--accent)]"
                 }`}
               >
-                <span className="block text-[11.5px] font-bold text-ink line-clamp-2 leading-snug">{c.title || "فيديو"}</span>
-                <span className="mt-1 flex items-center gap-1.5 text-[10px] text-ink-soft">
-                  {c.duration && <span className="ltr-num tnum">⏱ {c.duration}</span>}
-                  {c.channel && <span className="truncate max-w-[7rem]">{c.channel}</span>}
-                </span>
-              </button>
+                {/* 🎬 اختيار الفيديو */}
+                <button onClick={() => onSelect(c)} aria-pressed={activeId === c.id} className="block w-full text-right">
+                  <span className="block text-[11.5px] font-bold text-ink line-clamp-2 leading-snug">{c.title || "فيديو"}</span>
+                  <span className="mt-1 flex items-center gap-1.5 text-[10px] text-ink-soft">
+                    {c.duration && <span className="ltr-num tnum">⏱ {c.duration}</span>}
+                    {c.channel && <span className="truncate max-w-[7rem]">{c.channel}</span>}
+                  </span>
+                </button>
+                {/* «ليه اتيرشح» — سبب الترشيح ظاهر لكل فيديو (P2 مطلب 3) */}
+                {c.reason && (
+                  <p className="mt-1.5 text-[9.5px] leading-snug text-ink-soft" title={c.reason}>
+                    💡 {c.reason}
+                  </p>
+                )}
+                {onDismiss && (
+                  <button
+                    type="button"
+                    onClick={() => onDismiss(c.id)}
+                    className="mt-1.5 text-[9.5px] text-ink-soft hover:text-redpen transition"
+                    title="إخفاء الترشيح ده في الجلسة الحالية"
+                  >
+                    ✕ مش مناسب
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </div>
