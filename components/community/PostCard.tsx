@@ -11,7 +11,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Heart, MessageCircle, Bookmark, Trash2, Send, Loader2, Repeat2, Quote, Flag } from "lucide-react";
 import type { CommunityCommentRow, CommunityPostRow } from "@/lib/community/types";
-import { postErrorAr, modErrorAr, POST_KIND_AR, REPORT_REASONS } from "@/lib/community/types";
+import { postErrorAr, modErrorAr, POST_KIND_AR } from "@/lib/community/types";
+import ReportPanel from "@/components/community/ReportPanel";
 
 const KIND_BADGE: Record<string, string> = {
   text: "bg-paper-3 text-ink-soft",
@@ -185,34 +186,10 @@ export default function PostCard({
 
   const isMine = currentUserId !== null && post.author_id === currentUserId;
 
-  // 🛡️ C4: الإبلاغ عن المنشور
+  // 🛡️ C4: الإبلاغ عن المنشور أو أحد تعليقاته
   const [showReport, setShowReport] = useState(false);
-  const [reportReason, setReportReason] = useState("");
-  const [reportDetails, setReportDetails] = useState("");
-  const [reportBusy, setReportBusy] = useState(false);
   const [reportDone, setReportDone] = useState(false);
-  const submitReport = async () => {
-    if (!reportReason) return;
-    setReportBusy(true);
-    try {
-      const res = await fetch("/api/community/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetType: "post", targetId: post.post_id, reason: reportReason, details: reportDetails || null }),
-      });
-      const d = await res.json();
-      if (d.success) {
-        setReportDone(true);
-        setShowReport(false);
-      } else {
-        setError(modErrorAr(d.code, "تعذّر إرسال الإبلاغ."));
-      }
-    } catch {
-      setError("مشكلة شبكة — حاول تاني.");
-    } finally {
-      setReportBusy(false);
-    }
-  };
+  const [commentReport, setCommentReport] = useState<CommunityCommentRow | null>(null);
 
   const toggleLike = async () => {
     if (busy) return;
@@ -372,45 +349,12 @@ export default function PostCard({
 
       {/* 🛡️ لوحة الإبلاغ */}
       {showReport && !reportDone && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-          <p className="text-xs font-semibold text-amber-800">الإبلاغ عن المنشور — اختار السبب:</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {REPORT_REASONS.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => setReportReason(r.id)}
-                className={`rounded-full border px-2.5 py-1 text-xs transition ${
-                  reportReason === r.id
-                    ? "border-amber-500 bg-amber-500/10 font-semibold text-amber-800"
-                    : "border-slate-200 bg-white text-ink-soft hover:border-amber-300"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <textarea
-            value={reportDetails}
-            onChange={(e) => setReportDetails(e.target.value)}
-            placeholder="تفاصيل إضافية (اختياري، حتى 500 حرف)"
-            rows={2}
-            maxLength={500}
-            className="mt-2 w-full rounded border border-amber-200 bg-white p-2 text-xs"
-          />
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <button onClick={() => setShowReport(false)} className="rounded px-3 py-1 text-xs text-ink-soft hover:bg-amber-100">
-              إلغاء
-            </button>
-            <button
-              onClick={() => void submitReport()}
-              disabled={!reportReason || reportBusy}
-              className="inline-flex items-center gap-1 rounded bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-            >
-              {reportBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              إرسال الإبلاغ
-            </button>
-          </div>
-        </div>
+        <ReportPanel
+          targetType="post"
+          targetId={post.post_id}
+          onDone={() => { setReportDone(true); setShowReport(false); }}
+          onCancel={() => setShowReport(false)}
+        />
       )}
       {reportDone && (
         <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-700">
@@ -590,7 +534,17 @@ export default function PostCard({
                   currentUserId={currentUserId}
                   onReply={() => setReplyTo(c)}
                   onDelete={() => void deleteComment(c.comment_id)}
+                  onReport={() => setCommentReport(c)}
+                  reported={commentReport?.comment_id === c.comment_id}
                 />
+                {commentReport?.comment_id === c.comment_id && (
+                  <ReportPanel
+                    targetType="comment"
+                    targetId={c.comment_id}
+                    onDone={() => setCommentReport(null)}
+                    onCancel={() => setCommentReport(null)}
+                  />
+                )}
                 {repliesOf(c.comment_id).map((r) => (
                   <div key={r.comment_id} className="mr-6">
                     <CommentRow
@@ -598,7 +552,17 @@ export default function PostCard({
                       currentUserId={currentUserId}
                       onReply={() => setReplyTo(r)}
                       onDelete={() => void deleteComment(r.comment_id)}
+                      onReport={() => setCommentReport(r)}
+                      reported={commentReport?.comment_id === r.comment_id}
                     />
+                    {commentReport?.comment_id === r.comment_id && (
+                      <ReportPanel
+                        targetType="comment"
+                        targetId={r.comment_id}
+                        onDone={() => setCommentReport(null)}
+                        onCancel={() => setCommentReport(null)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -643,13 +607,18 @@ function CommentRow({
   currentUserId,
   onReply,
   onDelete,
+  onReport,
+  reported,
 }: {
   comment: CommunityCommentRow;
   currentUserId: string | null;
   onReply: () => void;
   onDelete: () => void;
+  onReport?: () => void;
+  reported?: boolean;
 }) {
-  const canDelete = comment.can_delete || (currentUserId !== null && comment.author_id === currentUserId);
+  const isMine = currentUserId !== null && comment.author_id === currentUserId;
+  const canDelete = comment.can_delete || isMine;
   return (
     <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1 rounded-xl bg-paper px-3 py-2">
@@ -665,6 +634,11 @@ function CommentRow({
           {canDelete && (
             <button onClick={onDelete} className="hover:text-red-600">
               حذف
+            </button>
+          )}
+          {!isMine && currentUserId !== null && onReport && (
+            <button onClick={onReport} className={`transition hover:text-amber-600 ${reported ? "font-semibold text-amber-600" : ""}`}>
+              {reported ? "تم الإبلاغ" : "إبلاغ"}
             </button>
           )}
         </div>

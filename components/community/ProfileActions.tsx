@@ -19,6 +19,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RelationState } from "@/lib/community/types";
 import { relationErrorAr } from "@/lib/community/types";
+import ReportPanel from "@/components/community/ReportPanel";
 
 type Props = {
   targetUserId: string;
@@ -41,6 +42,8 @@ export default function ProfileActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [reported, setReported] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/community/relation?target=${encodeURIComponent(targetUserId)}`);
@@ -130,6 +133,20 @@ export default function ProfileActions({
     );
   }
 
+  if (showReport) {
+    return (
+      <div className="w-full max-w-lg" dir="rtl">
+        <ReportPanel
+          targetType="user"
+          targetId={targetUserId}
+          onDone={() => { setReported(true); setShowReport(false); }}
+          onCancel={() => setShowReport(false)}
+        />
+        {reported && <span className="mt-2 block text-xs text-emerald-600">تم إرسال الإبلاغ — فريق الإشراف هيراجعه.</span>}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2" dir="rtl">
       {(state === "none" || state === "following") && canFriendRequest && (
@@ -191,6 +208,16 @@ export default function ProfileActions({
             حظر
           </button>
         )
+      )}
+
+      {!reported && (
+        <button
+          className={`${btn} text-ink-soft hover:text-amber-600`}
+          disabled={busy}
+          onClick={() => setShowReport(true)}
+        >
+          إبلاغ عن الحساب
+        </button>
       )}
 
       {note && <span className="text-xs text-emerald-600 w-full">{note}</span>}

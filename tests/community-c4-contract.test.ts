@@ -122,9 +122,16 @@ describe("Community C4 API contract", () => {
 
 describe("Community C4 UI contract", () => {
   it("PostCard has a report button with the full reason list for other users' posts", () => {
-    expect(postCard).toContain("REPORT_REASONS");
-    expect(postCard).toContain('targetType: "post"');
-    expect(postCard).toContain("/api/community/report");
+    expect(postCard).toContain("ReportPanel");
+    expect(postCard).toContain('targetType="post"');
+    expect(postCard).toContain('targetType="comment"');
+  });
+
+  it("comments and user profiles are reportable too (shared ReportPanel)", () => {
+    const panel = read("components/community/ReportPanel.tsx");
+    expect(panel).toContain("targetType: ReportTargetType;");
+    expect(panel).toContain("REPORT_REASONS");
+    expect(read("components/community/ProfileActions.tsx")).toContain('targetType="user"');
   });
 
   it("students see their moderation status and can appeal from the hub", () => {
