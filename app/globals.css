@@ -7127,9 +7127,7 @@ html {
   gap: 0.25rem;
   box-shadow: 0 4px 24px var(--shade), 0 0 18px color-mix(in srgb, var(--node-c, var(--accent)) 22%, transparent);
   transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
-  animation:
-    mw-pop-in 0.65s ease-out var(--mw-delay, 0ms) both,
-    mw-float 5s ease-in-out infinite calc(var(--mw-delay, 0ms) + 1.1s);
+  animation: mw-pop-in 0.65s ease-out var(--mw-delay, 0ms) both;
 }
 .mw-node:hover .mw-node-card {
   box-shadow: 0 8px 30px var(--shade-lift), 0 0 26px color-mix(in srgb, var(--node-c, var(--accent)) 40%, transparent);
@@ -7212,12 +7210,8 @@ html {
 }
 @keyframes mw-rotate-dot { to { transform: rotate(-360deg); } }
 @keyframes mw-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
-@keyframes mw-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.22); }
 }
 @keyframes mw-draw { to { stroke-dashoffset: 0; } }
 @keyframes mw-pop-in {
