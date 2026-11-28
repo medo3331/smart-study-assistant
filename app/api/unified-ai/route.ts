@@ -78,6 +78,7 @@ import {
   type ChatTurn,
 } from "@/lib/exam-request";
 import { userHasExamSources } from "@/lib/ai/exam-sources";
+import { todayISO } from "@/lib/exam-plans";
 import {
   formatStudentSnippets,
   getRecentQuestions,
@@ -91,6 +92,9 @@ import {
   rememberSessionContext,
   type MagiclyContextInput,
 } from "@/lib/magicly-ai";
+import { selectPersona } from "@/lib/magic/persona-router";
+import { buildPersonaIdentityPrompt } from "@/lib/magic/personas";
+import { loadPersonaSession, savePersonaSession } from "@/lib/magic/persona-session";
 
 // 🎨 أساليب الشرح — chips الواجهة تحقن تعليمات تعليمية في الـ system
 // (المفتاح هنا تعليم تعليمي مش نص حر — منع الحقن بأي شيء حر من الكلاينت).
@@ -758,6 +762,39 @@ export async function POST(req: Request) {
     }
     const intentResult = classifyChatIntent(prompt, ctxInput as any);
     console.log("[UNIFIED-AI DEBUG]", { intent: intentResult.intent, prompt: prompt.slice(0, 80) });
+    // 🧠 Persona Orchestrator — اختيار الشخصية في الخلفية (اختيار المستخدم > محتوى الرسالة > سياق المحادثة > الصفحة).
+    const rawPersona = (context as Record<string, unknown>)?.persona;
+    const rawPage = (context as Record<string, unknown>)?.page;
+    // سياق المحادثة (Phase 2): آخر شخصية اشتغلت على نفس الموضوع — best-effort وغير حاجب.
+    let lastPersona: string | null = null;
+    if (userId && supabase && !isAnonymous && incomingConversationId) {
+      try {
+        lastPersona = (await loadPersonaSession(supabase, userId, incomingConversationId))?.persona ?? null;
+      } catch (e) {
+        console.warn("[unified-ai] persona session load failed (non-blocking):", e);
+      }
+    }
+    const personaSelection = selectPersona({
+      explicitPersona: typeof rawPersona === "string" ? rawPersona : null,
+      page: typeof rawPage === "string" ? rawPage : null,
+      message: prompt,
+      mode: typeof rawMode === "string" ? rawMode : null,
+      hasLessonContext: Boolean(ctxInput?.lesson || ctxInput?.subject),
+      lastPersona,
+    });
+    console.log("[UNIFIED-AI DEBUG]", { persona: personaSelection.persona, personaReason: personaSelection.reason });
+    if (userId && supabase && !isAnonymous && incomingConversationId) {
+      void savePersonaSession(supabase, userId, incomingConversationId, personaSelection.persona, personaSelection.reason).catch((e) => {
+        console.warn("[unified-ai] persona session save failed (non-blocking):", e);
+      });
+    }
+    if (input.usage) {
+      input.usage.diagnostics = {
+        ...(input.usage.diagnostics ?? {}),
+        persona: personaSelection.persona,
+        personaReason: personaSelection.reason,
+      };
+    }
     // 🧠 ذاكرة المحادثة (أدوار سابقة من نفس المحادثة) — كانت بتتقري للكشف
     //    عن نية الامتحان بس ومكانتش بتوصل للموديل، فكان «بينسى» رسالة قبلها.
     let conversationTurns: ChatTurn[] = [];
@@ -800,7 +837,7 @@ export async function POST(req: Request) {
         } catch (e) {
           console.error("[UNIFIED-AI DEBUG] recent questions failed:", e);
         }
-        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest, recentQuestions);
+        let magiclySystem = buildMagiclySystemPrompt(studentContext, selectedMode, toolFacts, workspaceDigest, recentQuestions, personaSelection.persona);
         let personaPrompt = "";
         try {
           personaPrompt = await buildSystemPrompt(userId);
@@ -823,6 +860,11 @@ export async function POST(req: Request) {
         // 📝 قواعد طلب الامتحان — الطلب الناقص (ناقصه العدد مثلاً) بيعدّي
         //    للموديل، والقواعد بتقولله اسأل سؤالًا واحدًا محددًا مش سلسلة.
         input.system = `${input.system}\n\n--- قواعد طلب الامتحان ---\n${EXAM_REQUEST_PROMPT_RULES}`;
+        // 🎯 Academic Agent (Phase 3): Coach بيبني خطة قابلة للاعتماد — المسودة في كتلة ```plan
+        //    والطالب هو الوحيد اللي بينشئها فعليًا بزر «اعتمد الخطة» (حماية من الإنشاء التلقائي).
+        if (personaSelection.persona === "coach") {
+          input.system = `${input.system}\n\n--- أداة اعتماد الخطة ---\nتاريخ اليوم: ${todayISO()}\nلما تكون الخطة كاملة (عرفت المادة وتاريخ الامتحان ووزّعت الأيام) أضف في آخر ردك كتلة واحدة بالشكل ده:\n\`\`\`plan\n{"subject":"اسم المادة","examDate":"YYYY-MM-DD","days":[{"dayNumber":1,"kind":"content","title":"عنوان اليوم","description":"تفاصيل قصيرة"}]}\n\`\`\`\nقواعد صارمة:\n- examDate تاريخ حقيقي بصيغة YYYY-MM-DD وليس أقل من تاريخ اليوم — احسب التواريخ النسبية («بعد يومين») من تاريخ اليوم المذكور فوق.\n- kind محدود: content (محتوى جديد) أو review (مراجعة) أو quiz (اختبار) — اجعل آخر يوم quiz.\n- days من يوم واحد حتى ١٤ يوم كحد أقصى، وكل يوم عنوان واضح ووصف قصير.\n- لا تضيف الكتلة إلا إذا كانت الخطة كاملة — لو ناقصة معلومات اسأل الأول من غير كتلة.\n- الطالب هو اللي هيعتمدها بزر، فلا تدّعي أنها اتعملت في حسابه.`;
+        }
         // 📚 مقتطفات دائمة من ملفات الطالب — نفس نمط /api/chat: لما النية
         //    «بحث في ملفات» سيبها لمصدر الـ workspace الكامل (تحت) عشان ما
         //    يتزاحموش مرجعان على نفس الرمز.
@@ -851,6 +893,11 @@ export async function POST(req: Request) {
       } catch (e) {
         console.warn("[unified-ai] student context build failed, continuing without it:", e);
       }
+    } else {
+      // 🙋 الزوار — نفس توجيه الشخصية بدون سياق قاعدة البيانات.
+      input.system = buildPersonaIdentityPrompt(personaSelection.persona, {
+        mode: typeof rawMode === "string" ? rawMode : null,
+      });
     }
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
@@ -903,7 +950,7 @@ export async function POST(req: Request) {
               href: buildExamHref(examRequest, { topic: topicMode }),
             },
           ],
-          metadata: { modelUsed: modelToUse, resolvedVia },
+          metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
           conversationId: savedConversationId || incomingConversationId || undefined,
         });
       }
@@ -912,7 +959,7 @@ export async function POST(req: Request) {
         if (reserveRef) {
           try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
         }
-        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+        return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
       }
       // RECORDED_LECTURES_SEARCH now flows through WORKSPACE_SEARCH path below
       // (buildWorkspaceSourceContext supports lecture family — transcript_text)
@@ -946,7 +993,7 @@ export async function POST(req: Request) {
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
         } else if (ws.resolution.status === "not_found") {
           // 🤔 بدل «مش لاقي» — أسئلة توضيحية + رفع مباشر من الشات.
           // 🎧 قبل كل ده: ممكن المطلوب موجود تسجيل صوتي محفوظ باسم قريب — نقترحه أولاً.
@@ -975,7 +1022,7 @@ export async function POST(req: Request) {
               ok: true,
               answer: relatedAnswer,
               actions: [...relatedActions, { label: "📎 ارفع ملف/محاضرة", href: "#upload-file" }],
-              metadata: { modelUsed: modelToUse, resolvedVia },
+              metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
               conversationId: incomingConversationId || undefined,
             });
           }
@@ -989,7 +1036,7 @@ export async function POST(req: Request) {
             ok: true,
             answer,
             actions: [{ label: "📎 ارفع ملف/محاضرة", href: "#upload-file" }],
-            metadata: { modelUsed: modelToUse, resolvedVia },
+            metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
             conversationId: incomingConversationId || undefined,
           });
         } else if (ws.resolution.status === "empty_source") {
@@ -997,13 +1044,13 @@ export async function POST(req: Request) {
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
         } else if (ws.resolution.status === "error") {
           const answer = "تعذّر الوصول للمصدر تقنيًا. حاول مرة أخرى أو حدد الملف.";
           if (reserveRef) {
             try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
           }
-          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia }, conversationId: incomingConversationId || undefined });
+          return NextResponse.json({ ok: true, answer, metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason }, conversationId: incomingConversationId || undefined });
         }
       } catch (e) {
         console.warn("[unified-ai] workspace source resolution failed:", e);

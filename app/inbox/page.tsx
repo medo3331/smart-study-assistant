@@ -210,6 +210,15 @@ export default function InboxPage() {
     }
   };
 
+  // ريدايركت الدعم القديم (/support و/dashboard/support) بييجي بـ?category=support —
+  // فنفتح تاب الدعم مباشرة من الرابط (الصفحة client فمابتقدرش تقرا searchParams سيرفر سايد).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get("category");
+    const allowed: InboxCategory[] = ["inbox", "sent", "notifications", "conversations", "archived", "requests", "support"];
+    if (cat && allowed.includes(cat as InboxCategory)) setCategory(cat as InboxCategory);
+  }, []);
+
   useEffect(() => {
     loadConversations(searchQuery);
     loadMessageRequests();

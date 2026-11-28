@@ -302,13 +302,31 @@ export default function MentorPage() {
           ) : (
             <div className="space-y-2">
               {conversations.map((conv) => (
-                <button key={conv.id} onClick={() => handleSelectConversation(conv.id)} className={`flex items-center gap-3 px-3 py-2.5 rounded-[var(--r-md)] text-right transition ${activeConversationId === conv.id ? "bg-marker text-onmarker border border-marker" : "bg-paper text-ink-soft hover:bg-rule border border-transparent"}`}>
+                <div
+                  key={conv.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelectConversation(conv.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSelectConversation(conv.id);
+                    }
+                  }}
+                  className={`group flex items-center gap-3 px-3 py-2.5 rounded-[var(--r-md)] text-right transition cursor-pointer ${activeConversationId === conv.id ? "bg-marker text-onmarker border border-marker" : "bg-paper text-ink-soft hover:bg-rule border border-transparent"}`}
+                >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{conv.title}</p>
                     <p className="text-[10px] text-ink-soft truncate">{formatArabicDate(conv.updated_at)}</p>
                   </div>
-                  <button onClick={(e) => handleDeleteConversation(conv.id, e)} className="shrink-0 opacity-0 group-hover:opacity-100 transition" aria-label="حذف المحادثة"><Trash2 size={14} /></button>
-                </button>
+                  <button
+                    onClick={(e) => handleDeleteConversation(conv.id, e)}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                    aria-label="حذف المحادثة"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -358,7 +376,7 @@ export default function MentorPage() {
             </div>
             <div className="flex items-center gap-2"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-marker text-paper-2 text-[10px]"><Bot size={12} /></span></div>
           </div>
-          <div className="flex-1 overflow-y-auto p-6 space-y-4" ref={messagesEndRef}>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`flex gap-3 ${message.role === "user" ? "justify-start" : "justify-end"}`}>
                 {message.role === "assistant" && <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-paper-2"><Bot size={18} /></span>}
@@ -368,6 +386,7 @@ export default function MentorPage() {
             {sending && (
               <div className="flex justify-end gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-ink text-paper-2"><Bot size={18} /></span><p className="border border-rule bg-paper-2 rounded-[var(--r-md)] px-4 py-3"><LoaderCircle className="animate-spin" size={16} /></p></div>
             )}
+            <div ref={messagesEndRef} aria-hidden="true" />
           </div>
           <form onSubmit={handleSend} className="border-t border-rule bg-paper p-4">
             <div className="mx-auto flex max-w-xl items-center gap-2 rounded-[var(--r-md)] border border-rule bg-paper-2 p-2 shadow-sm">
