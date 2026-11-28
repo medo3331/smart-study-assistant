@@ -256,6 +256,8 @@ from (values
   ('AUC','كلية الأعمال','COM'),
   ('AUC','كلية العلوم','SCI'),
   ('AUC','الكلية الإنسانية والاجتماعية','ARTS')
+) as v(univ_code, fac_name, fac_code)
+join public.universities u on u.code = v.univ_code
 on conflict (university_id, code) do update set name = excluded.name, updated_at = now();
 
 -- 4) الأقسام — للهندسة والحاسبات والعلوم أقسام فعلية، والباقي قسم «عام»
