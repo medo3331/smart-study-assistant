@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { usePathname } from "next/navigation";
 import type { SoundTrack } from "@/app/dashboard/components/audio-library";
 
 /* ==========================================================================
@@ -35,6 +36,10 @@ export function FloatingAudioPlayer({
   onTogglePlay,
   onClose,
 }: FloatingAudioPlayerProps) {
+  // في صفحات العبادات على الموبايل فيه شريط تنقّل سفلي ثابت — نتزحزح
+  // فوقه بدل ما يتغطّى (md: الشريط مخفي والأسفل العادي يرجع).
+  const pathname = usePathname();
+  const mobileNavOffset = (pathname ?? "").startsWith("/worship");
   return (
     <AnimatePresence>
       {activeTrack && (
@@ -42,7 +47,11 @@ export function FloatingAudioPlayer({
           initial={{ y: 80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
-          className="sheet-card card-lift fixed bottom-4 left-4 right-4 max-w-lg mx-auto p-3 z-40 flex items-center justify-between gap-4"
+          className={
+            mobileNavOffset
+              ? "sheet-card card-lift fixed bottom-[4.75rem] md:bottom-4 left-4 right-4 max-w-lg mx-auto p-3 z-40 flex items-center justify-between gap-4"
+              : "sheet-card card-lift fixed bottom-4 left-4 right-4 max-w-lg mx-auto p-3 z-40 flex items-center justify-between gap-4"
+          }
         >
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-xl p-2 bg-paper rounded-[var(--r-sm)] leading-none shrink-0">

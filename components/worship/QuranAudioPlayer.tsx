@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useQuranAudio } from "@/hooks/useQuranAudio";
@@ -61,6 +62,10 @@ export function QuranAudioPlayer() {
   const { activeTrack: libraryTrack } = useAudio();
   const reduceMotion = useReducedMotion();
   const [expanded, setExpanded] = useState(false);
+  // في صفحات العبادات على الموبايل فيه شريط تنقّل سفلي ثابت (WorshipMobileNav)
+  // — المشغّل بيتزحزح فوقه بدل ما يتغطّوا (بعد الحساب: md يرجّع للأسفل).
+  const pathname = usePathname();
+  const mobileNavOffset = (pathname ?? "").startsWith("/worship");
   // الإغلاق بـ X = إيقاف + إخفاء. تراك جديد بيرجّع المشغّل لوحده.
   const [dismissed, setDismissed] = useState(false);
   const trackKey = currentReciterId
@@ -137,7 +142,14 @@ export function QuranAudioPlayer() {
           "fixed inset-x-0 z-40 pb-[env(safe-area-inset-bottom,0px)]",
           // لما فيه تراك من المكتبة الصوتية شغّال (مشغّل عائم تاني في
           // الأسفل)، نتزحزح لفوق عشان ميتغطّوش على بعض.
-          libraryTrack ? "bottom-24" : "bottom-0",
+          // وفي صفحات العبادات على الموبايل، فوق شريط التنقّل السفلي.
+          libraryTrack
+            ? mobileNavOffset
+              ? "bottom-[10.25rem] md:bottom-24"
+              : "bottom-24"
+            : mobileNavOffset
+              ? "bottom-[4.5rem] md:bottom-0"
+              : "bottom-0",
           expanded ? "p-4" : "p-2"
         )}
       >

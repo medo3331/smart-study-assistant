@@ -4,6 +4,7 @@ import { useMemo, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";
+import { cn } from "@/lib/cn";
 // المشغّل العائم (QuranAudioPlayer) اتنقل لـ app/layout.tsx جوّه
 // QuranAudioProvider — عشان يفضل ظاهر وبيتحكّم في الصوت في كل التطبيق
 // مش صفحات العبادات بس.
@@ -81,15 +82,53 @@ export function WorshipChrome({
           authStatus={data.authStatus}
           coins={data.coinsBalance}
         />
-        <main className="flex-1 px-4 py-6 md:px-6 md:py-8 pb-[calc(4rem+env(safe-area-inset-bottom,0.5rem))] md:pb-8">
+        <main className="flex-1 px-4 py-6 md:px-6 md:py-8 pb-[calc(10rem+env(safe-area-inset-bottom,0.5rem))] md:pb-8">
           <div className={`mx-auto flex ${maxWidth} flex-col gap-6`}>
             {children}
           </div>
         </main>
+        {/* 📱 شريط تنقّل سفلي للموبايل — الـ Sidebar مخفي تحت md فكانت
+            صفحات العبادات مش قابلة للتنقّل بينها على الشاشات الصغيرة. */}
+        <WorshipMobileNav items={navItems} />
         {/* ملاحظة: QuranAudioPlayer مش هنا — اتركّب على مستوى الـ root
             في app/layout.tsx عشان الصوت يفضل له كنترولز في أي صفحة. */}
       </div>
     </WorshipDataProvider>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* شريط التنقّل السفلي (موبايل بس) — pills قابلة للسحب أفقيًا                  */
+/* -------------------------------------------------------------------------- */
+
+function WorshipMobileNav({ items }: { items: NavItem[] }) {
+  return (
+    <nav
+      aria-label="تنقّل العبادات"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#0D1029]/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom,0px)] md:hidden"
+    >
+      <div className="flex gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={item.active ? "page" : undefined}
+              className={cn(
+                "flex h-12 min-w-[4.5rem] flex-shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-3 text-[11px] font-medium transition-colors",
+                item.active
+                  ? "bg-[#10B981]/15 text-[#6EE7B7]"
+                  : "text-[#9AA0C0] hover:text-[#E7E9F5]"
+              )}
+            >
+              <Icon size={18} aria-hidden />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
