@@ -34,10 +34,25 @@ export async function POST(req: Request) {
     if ("error" in auth) return auth.error;
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") return NextResponse.json({ success: false, error: "Invalid request body." }, { status: 400 });
-    const announcementId = typeof body.announcement_id === "string" ? body.announcement_id : "";
-    if (!UUID_RE.test(announcementId)) return NextResponse.json({ success: false, error: "Valid announcement_id required." }, { status: 400 });
-    const { data: announcement, error: announcementError } = await auth.service.from("announcements").select("id, title, status").eq("id", announcementId).maybeSingle();
-    if (announcementError || !announcement) return NextResponse.json({ success: false, error: "Announcement not found." }, { status: 404 });
+    let announcementId = typeof body.announcement_id === "string" ? body.announcement_id : "";
+    const customTitle = typeof body.title === "string" ? body.title.trim() : "";
+    const customBody = typeof body.body === "string" ? body.body.trim() : "";
+    if (!UUID_RE.test(announcementId)) {
+      // رسالة بريدية مخصصة: تُحفظ كإعلان مسودة داخلي تلقائيًا ثم تُستخدم في الحملة
+      if (!customTitle || customTitle.length > 200) return NextResponse.json({ success: false, error: "اكتب عنوانًا للرسالة (حتى 200 حرف) أو اختر إعلانًا محفوظًا." }, { status: 400 });
+      if (!customBody || customBody.length > 10000) return NextResponse.json({ success: false, error: "اكتب نص الرسالة (حتى 10000 حرف)." }, { status: 400 });
+      const { data: draft, error: draftError } = await auth.service.from("announcements").insert({
+        title: customTitle, body: customBody, audience: "all", status: "draft", created_by: auth.user.id,
+      }).select("id").single();
+      if (draftError || !draft) {
+        console.error("[announcement-email-campaigns] draft insert", draftError?.message);
+        return NextResponse.json({ success: false, error: "Failed to save the custom message." }, { status: 500 });
+      }
+      announcementId = draft.id;
+    } else {
+      const { data: announcement, error: announcementError } = await auth.service.from("announcements").select("id, title, status").eq("id", announcementId).maybeSingle();
+      if (announcementError || !announcement) return NextResponse.json({ success: false, error: "Announcement not found." }, { status: 404 });
+    }
 
     const audience = (body.audience ?? "all") as RecipientAudience;
     if (!["all", "student", "graduate", "freelancer"].includes(audience)) return NextResponse.json({ success: false, error: "Invalid audience." }, { status: 400 });
@@ -85,7 +100,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Failed to store the complete recipient list; campaign was rolled back." }, { status: 500 });
       }
     }
-    await recordAuditLog({ actor: auth.user.id, actor_email: auth.user.email ?? null, action: "announcements.manage", resource_type: "announcement_email_campaign", resource_id: campaign.id, details: { operation: "create", announcement_id: announcementId, recipient_count: recipientMap.size, audience: includeAll ? audience : "selected" }, result: "PASS" });
+    await recordAuditLog({ actor: auth.user.id, actor_email: auth.user.email ?? null, action: "announcements.manage", resource_type: "announcement_email_campaign", resource_id: campaign.id, details: { operation: "create", announcement_id: announcementId, recipient_count: recipientMap.size, audience: includeAll ? audience : "selected", custom_message: !UUID_RE.test(typeof body.announcement_id === "string" ? body.announcement_id : "") }, result: "PASS" });
     return NextResponse.json({ success: true, campaign, recipient_count: recipientMap.size }, { status: 201 });
   } catch (error) {
     console.error("[announcement-email-campaigns] POST", error);
