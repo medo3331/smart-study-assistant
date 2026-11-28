@@ -11,6 +11,11 @@ import {
 } from "@/components/worship/WorshipChrome";
 import { ReciterSelector } from "@/components/worship/ReciterSelector";
 import { CALCULATION_METHODS, MADHABS } from "@/lib/islamic/prayer-times";
+import {
+  QURAN_WORD_UNIT_OPTIONS,
+  defaultAmountForUnit,
+  type QuranWordUnit,
+} from "@/lib/islamic/worship-progress";
 import type { IslamicSettings } from "@/lib/islamic/worship-progress";
 import {
   ArrowLeft,
@@ -60,6 +65,33 @@ function SettingsHome() {
     key: K,
     value: IslamicSettings[K],
   ) => update({ [key]: value } as Partial<IslamicSettings>);
+
+  /** تبديل وحدة الورد — الآيات على الهدف الموجود، والباقي بكميته الافتراضية. */
+  const handleWordUnitChange = (unit: QuranWordUnit) => {
+    update({
+      quranWordUnit: unit,
+      quranWordAmount:
+        unit === "ayat" ? settings.quranDailyTarget : defaultAmountForUnit(unit),
+    });
+  };
+
+  /** السلايدر (آيات) — لو وحدة الورد هي «آيات» نزامن كمية الورد معه. */
+  const handleDailyTargetChange = (value: number) => {
+    update(
+      settings.quranWordUnit === "ayat"
+        ? { quranDailyTarget: value, quranWordAmount: value }
+        : { quranDailyTarget: value },
+    );
+  };
+
+  /** سقف الكمية المعقول لكل وحدة (والسيرفر بيحط سقف ٢٤۰ إجمالاً في db/122). */
+  const WORD_AMOUNT_MAX: Record<QuranWordUnit, number> = {
+    ayat: 100,
+    pages: 240,
+    quarters: 240,
+    ahzab: 60,
+    ajzaa: 30,
+  };
 
   // تحديد الموقع تلقائيًا بموافقة المستخدم — الرفض يرجّع الوضع اليدوي بدون إيقاف الصفحة.
   const requestCurrentLocation = () => {
@@ -297,11 +329,56 @@ function SettingsHome() {
                 step={5}
                 value={settings.quranDailyTarget}
                 onChange={(e) =>
-                  handleChange("quranDailyTarget", parseInt(e.target.value))
+                  handleDailyTargetChange(parseInt(e.target.value))
                 }
                 className="h-2 w-full appearance-none rounded-full bg-white/[0.06] accent-[#34D399]"
               />
             </Field>
+
+            <Field label="وحدة ورد القرآن اليومي">
+              <select
+                value={settings.quranWordUnit}
+                onChange={(e) => handleWordUnitChange(e.target.value as QuranWordUnit)}
+                className={selectClass}
+              >
+                {QURAN_WORD_UNIT_OPTIONS.map((unit) => (
+                  <option key={unit.id} value={unit.id} className="bg-[#0D1029]">
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {settings.quranWordUnit !== "ayat" ? (
+              <Field
+                label={`كمية الورد (${QURAN_WORD_UNIT_OPTIONS.find((u) => u.id === settings.quranWordUnit)?.label ?? ""})`}
+              >
+                <input
+                  type="number"
+                  min={1}
+                  max={WORD_AMOUNT_MAX[settings.quranWordUnit]}
+                  value={settings.quranWordAmount}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value);
+                    if (Number.isInteger(parsed) && parsed >= 1) {
+                      handleChange(
+                        "quranWordAmount",
+                        Math.min(parsed, WORD_AMOUNT_MAX[settings.quranWordUnit]),
+                      );
+                    }
+                  }}
+                  className={inputClass}
+                  dir="ltr"
+                />
+                <p className="mt-2 text-xs text-[#9AA0C0]">
+                  جزء ≈ ٢٠ صفحة • الحزب ≈ ١٠ • الربع ≈ ٢٫٥ — القارئ بيعرض تقدمك بالوحدة دي.
+                </p>
+              </Field>
+            ) : (
+              <p className="text-xs text-[#9AA0C0]">
+                وحدة «آيات» بتستخدم هدف القراءة اليومي فوق — عدّاد الآيات ومكافأة الورد بتفضل زي ما هي.
+              </p>
+            )}
           </div>
         </GlassCard>
       </Reveal>

@@ -81,9 +81,9 @@ export const MODEL_REGISTRY: readonly ModelDefinition[] = [
      * ⚠️ **ليه مش هو الأساسي**: خط التوليد الأساسي ما بيتغيّرش — التوليد شغال
      *    على `openai/gpt-oss-20b` (متحقَّق منه في المشروع) لحد ما يتأكد.
      */
-    id: "llama-3.3-70b-versatile",
+    id: "qwen/qwen3.8-27b",
     provider: "groq",
-    displayName: "Llama 3.3 70B Versatile (Groq)",
+    displayName: "Qwen 3.8 27B (Groq)",
     capabilities: ["text", "streaming"],
     contextWindow: 131_072,
     priority: 4,

@@ -7,13 +7,25 @@ import { IconBadge } from "@/components/ui/IconBadge";
 import { Reveal } from "@/components/ui/Reveal";
 import { cn } from "@/lib/cn";
 import type { Surah, Ayah } from "@/lib/islamic/types";
-import { getAllSurahs, getAyahs } from "@/lib/islamic/quran";
+import { getAllSurahs, getAyahs, getAyahLocation } from "@/lib/islamic/quran";
+import {
+  computeQuranWordProgress,
+  isQuranWordUnit,
+  type QuranWordUnit,
+} from "@/lib/islamic/worship-progress";
 import { useQuranAudio } from "@/hooks/useQuranAudio";
 import { ReciterSelector } from "@/components/worship/ReciterSelector";
 import { useReciters } from "@/hooks/useReciters";
 import { useQuranProgress } from "@/hooks/useQuranProgress";
 import { useSharedWorshipData } from "@/components/worship/WorshipChrome";
-import { fetchCloudQuranPosition, saveCloudQuranPosition } from "@/lib/worship-data";
+import {
+  fetchCloudQuranPosition,
+  saveCloudQuranPosition,
+  fetchCloudQuranBookmarks,
+  addCloudQuranBookmark,
+  removeCloudQuranBookmark,
+  type QuranBookmark,
+} from "@/lib/worship-data";
 import {
   BookOpen,
   ChevronLeft,
@@ -23,7 +35,11 @@ import {
   Play,
   Pause,
   Bookmark,
+  BookmarkCheck,
   Loader2,
+  RotateCcw,
+  ScrollText,
+  X,
 } from "lucide-react";
 
 interface QuranReaderProps {
@@ -32,6 +48,23 @@ interface QuranReaderProps {
 }
 
 const BOOKMARKS_KEY = "magicly-quran-bookmarks";
+
+/** تفسير واحد من الـ API الداخلي — نص مُنظَّف بدون HTML. */
+interface TafsirEntry {
+  id: number;
+  name: string;
+  text: string;
+}
+
+type TafsirStatus = "idle" | "loading" | "ready" | "error";
+
+/** موقع موضع القراءة في المصحف — لشريط «متابعة القراءة». */
+interface ResumeLocation {
+  surahId: number;
+  ayahId: number;
+  surahName: string;
+  pageNumber: number | null;
+}
 
 /**
  * Quran Reader Component
@@ -54,6 +87,11 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const [currentAnchorAyah, setCurrentAnchorAyah] = useState<Ayah | null>(null);
   const [cloudPositionReadyFor, setCloudPositionReadyFor] = useState<string | null>(null);
   const [positionSync, setPositionSync] = useState<"local" | "saving" | "saved" | "error">("local");
+  const [selectedAyah, setSelectedAyah] = useState<Ayah | null>(null);
+  const [tafsirStatus, setTafsirStatus] = useState<TafsirStatus>("idle");
+  const [tafsirEntries, setTafsirEntries] = useState<TafsirEntry[]>([]);
+  const [tafsirAttempt, setTafsirAttempt] = useState(0);
+  const [resumeLocation, setResumeLocation] = useState<ResumeLocation | null>(null);
   const lastSavedPosition = useRef("");
 
   // Real audio integration
@@ -81,6 +119,45 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       setBookmarks([]);
     }
   }, []);
+
+  // مزامنة العلامات المرجعية مع الحساب (db/122) — الدمج اتحاد: المحلي ∪ السحابي.
+  useEffect(() => {
+    if (!shared?.user || shared.user.is_anonymous) return;
+    if (cloudPositionReadyFor !== shared.user.id) return; // نفس بوابة جاهزية الحساب للموضع
+    let cancelled = false;
+    void (async () => {
+      const cloud = await fetchCloudQuranBookmarks(shared.supabase, shared.user!.id);
+      if (cancelled || !cloud) return;
+      setBookmarks((prev) => {
+        const merged = Array.from(new Set([...prev, ...cloud.map((b) => `${b.surahId}:${b.ayahId}`)]));
+        // نكتب الدمج محليًا كنسخة احتياطية لو فشلت كتابات السحابة لاحقاً.
+        try {
+          localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(merged));
+        } catch {
+          /* local fallback unavailable */
+        }
+        return merged;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudPositionReadyFor, shared?.user, shared?.supabase]);
+
+  // ورد اليوم بالوحدة المختارة — طبقة عرض فوق عدّاد الآيات (المكافأة على العدّاد).
+  const wordUnit: QuranWordUnit = isQuranWordUnit(shared?.settings.quranWordUnit)
+    ? (shared!.settings.quranWordUnit as QuranWordUnit)
+    : "ayat";
+  const wordTarget =
+    wordUnit === "ayat"
+      ? shared?.settings.quranDailyTarget ?? 10
+      : typeof shared?.settings.quranWordAmount === "number" && shared.settings.quranWordAmount >= 1
+        ? shared.settings.quranWordAmount
+        : 1;
+  const wordProgress = useMemo(
+    () => computeQuranWordProgress(readProgress.dailyCount, wordUnit, wordTarget),
+    [readProgress.dailyCount, wordUnit, wordTarget],
+  );
 
   // Pages = ayahs grouped by mushaf page number (from the API).
   const pages = useMemo(() => {
@@ -204,9 +281,98 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     return () => window.clearTimeout(timeout);
   }, [cloudPositionReadyFor, selectedSurah, currentAnchorAyah, readProgress.updatedAt, shared?.user, shared?.supabase]);
 
+  /* ── شريط «متابعة القراءة»: أظهر الموضع المحفوظ + رقم صفحته في المصحف ── */
+  useEffect(() => {
+    if (surahs.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const pos = { surahId: readProgress.surahId, ayahId: readProgress.ayahId };
+      if (!pos.surahId || pos.surahId < 1 || pos.ayahId < 1) {
+        if (!cancelled) setResumeLocation(null);
+        return;
+      }
+      // المستخدم واقف فعلاً في الموضع المحفوظ — مفيش داعي لشريط «كمل من هنا».
+      if (selectedSurah?.id === pos.surahId && currentAnchorAyah?.number === pos.ayahId) {
+        if (!cancelled) setResumeLocation(null);
+        return;
+      }
+      const surah = surahs.find((s) => s.id === pos.surahId);
+      if (!surah) {
+        if (!cancelled) setResumeLocation(null);
+        return;
+      }
+      // نداء خفيف بآية واحدة لمعرفة رقم الصفحة بدون تحميل السورة كاملة.
+      const location = await getAyahLocation(pos.surahId, pos.ayahId);
+      if (cancelled) return;
+      setResumeLocation({
+        surahId: pos.surahId,
+        ayahId: pos.ayahId,
+        surahName: surah.arabicName,
+        pageNumber: location?.pageNumber ?? null,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [surahs, readProgress.surahId, readProgress.ayahId, readProgress.updatedAt, selectedSurah?.id, currentAnchorAyah?.number]);
+
+  /** القفز للموضع المحفوظ — loadAyahs بتحسب صفحة الآية بنفسها. */
+  const handleResumeReading = async () => {
+    if (!resumeLocation) return;
+    const surah = surahs.find((s) => s.id === resumeLocation.surahId);
+    if (!surah) return;
+    setSelectedSurah(surah);
+    setShowSurahList(false);
+    setSelectedAyah(null);
+    await loadAyahs(surah.id, resumeLocation.ayahId);
+  };
+
+  /* ── تفسير الآية — عبر الـ API الداخلي (بروكسي سيرفر-سايد للمصدر) ── */
+  const loadTafsir = useCallback(async (surahId: number, ayahId: number) => {
+    setTafsirStatus("loading");
+    setTafsirEntries([]);
+    try {
+      const response = await fetch(`/api/worship/quran/tafsir?surah=${surahId}&ayah=${ayahId}`);
+      const data = (await response.json()) as { tafsirs?: TafsirEntry[] };
+      if (!response.ok || !Array.isArray(data.tafsirs) || data.tafsirs.length === 0) {
+        setTafsirStatus("error");
+        return;
+      }
+      setTafsirEntries(data.tafsirs);
+      setTafsirStatus("ready");
+    } catch {
+      setTafsirStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedAyah) return;
+    // نداء الشبكة يبدأ بعد الإطار الحالي — التفسير الخارجي مش حالة مزامنة فورية.
+    const timeout = window.setTimeout(() => {
+      void loadTafsir(selectedAyah.surahId, selectedAyah.number);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [selectedAyah, tafsirAttempt, loadTafsir]);
+
+  /** تحديد آية: تمييز بصري + تفسير + تثبيت موضع القراءة عليها (بدون عدّ آيات). */
+  const handleAyahSelect = (ayah: Ayah) => {
+    setSelectedAyah(ayah);
+    if (selectedSurah) {
+      updatePosition(selectedSurah.id, ayah.number, readProgress.dailyCount, undefined, false);
+    }
+  };
+
+  const closeTafsir = () => {
+    setSelectedAyah(null);
+    setTafsirStatus("idle");
+    setTafsirEntries([]);
+    setTafsirAttempt(0);
+  };
+
   const handleSurahSelect = async (surah: Surah) => {
     setSelectedSurah(surah);
     setShowSurahList(false);
+    setSelectedAyah(null);
     await loadAyahs(surah.id);
     onProgressUpdate?.(surah.id, 1);
     updatePosition(surah.id, 1, readProgress.dailyCount);
@@ -218,6 +384,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       if (nextIndex < 0 || nextIndex >= pages.length || !selectedSurah) return;
       const movingForward = nextIndex > pageIndex;
       setPageIndex(nextIndex);
+      setSelectedAyah(null);
 
       const targetPage = pages[nextIndex];
       const anchorAyah = movingForward
@@ -275,12 +442,20 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const toggleBookmark = () => {
     if (!selectedSurah || !currentAnchorAyah) return;
     const key = `${selectedSurah.id}:${currentAnchorAyah.number}`;
-    const next = bookmarks.includes(key) ? bookmarks.filter((item) => item !== key) : [...bookmarks, key];
+    const bookmark: QuranBookmark = { surahId: selectedSurah.id, ayahId: currentAnchorAyah.number };
+    const adding = !bookmarks.includes(key);
+    const next = adding ? [...bookmarks, key] : bookmarks.filter((item) => item !== key);
     setBookmarks(next);
     try {
       localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next));
     } catch {
       /* local fallback unavailable */
+    }
+    // رفع/حذف سحابي fire-and-forget — الفشل مسموح والمحلي هو الاحتياط.
+    if (shared?.user && !shared.user.is_anonymous) {
+      void (adding
+        ? addCloudQuranBookmark(shared.supabase, shared.user.id, bookmark)
+        : removeCloudQuranBookmark(shared.supabase, shared.user.id, bookmark));
     }
   };
 
@@ -331,7 +506,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
           <div className="w-[72px] flex-shrink-0 flex items-center justify-end">
             <Button
               variant="ghost"
-              icon={Bookmark}
+              icon={isBookmarked ? BookmarkCheck : Bookmark}
               aria-label={isBookmarked ? "إزالة العلامة المرجعية" : "حفظ علامة مرجعية"}
               onClick={toggleBookmark}
               disabled={!currentPage}
@@ -418,6 +593,61 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       {/* Full-Surah Reading View */}
       {!showSurahList && selectedSurah && (
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Resume banner — «أنا واقف فين»: الموضع المحفوظ + زرار كمل من هنا */}
+          {resumeLocation && (
+            <Reveal index={0}>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#10B981]/25 bg-[#10B981]/[0.06] px-4 py-3 mb-4">
+                <p className="text-sm text-[#C7CBE6]">
+                  متابعة القراءة: <span className="font-bold text-white">{resumeLocation.surahName}</span>
+                  {resumeLocation.pageNumber ? (
+                    <>
+                      {" "}— صفحة <bdi>{resumeLocation.pageNumber}</bdi> من المصحف{" "}
+                      <span className="text-[#9AA0C0]">
+                        (<bdi>{resumeLocation.pageNumber}</bdi>/<bdi>604</bdi>)
+                      </span>
+                    </>
+                  ) : (
+                    <> — آية <bdi>{resumeLocation.ayahId}</bdi></>
+                  )}
+                </p>
+                <Button
+                  variant="ghost"
+                  icon={ChevronLeft}
+                  iconPosition="end"
+                  onClick={handleResumeReading}
+                  className="text-[#6EE7B7]"
+                >
+                  كمل من هنا
+                </Button>
+              </div>
+            </Reveal>
+          )}
+
+          {/* ورد اليوم بالوحدة المختارة — عرض فوق عدّاد الآيات (المكافأة على العدّاد) */}
+          <Reveal index={0}>
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 mb-4">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-[#9AA0C0]">
+                  ورد اليوم:{" "}
+                  <bdi className="font-bold text-white">
+                    {wordProgress.completedLabel}
+                  </bdi>{" "}
+                  من <bdi>{wordProgress.targetLabel}</bdi>
+                  {wordUnit !== "ayat" && (
+                    <span className="text-[#9AA0C0]/70"> (≈ {wordProgress.ayahsEquivalent} آية)</span>
+                  )}
+                </span>
+                <span className="font-mono font-bold text-[#6EE7B7]">{Math.round(wordProgress.percent)}%</span>
+              </div>
+              <div className="mt-2 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#34D399] to-[#10B981] rounded-full transition-all duration-300"
+                  style={{ width: `${wordProgress.percent}%` }}
+                />
+              </div>
+            </div>
+          </Reveal>
+
           {/* Surah Header */}
           <Reveal index={1}>
             <GlassCard className="p-4 mb-4">
@@ -479,21 +709,42 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                     </span>
                   </div>
 
-                  {/* All ayahs of this mushaf page */}
-                  <div className="space-y-5" dir="rtl">
-                    {currentPage.ayahs.map((ayah) => (
-                      <div key={`${ayah.surahId}-${ayah.number}`} className="flex items-start gap-3">
-                        <span className="flex-shrink-0 mt-1 flex h-8 min-w-8 px-1 items-center justify-center rounded-lg bg-[#10B981]/10 text-[#34D399] font-mono text-sm font-bold">
-                          {ayah.number}
-                        </span>
-                        <p
-                          className="flex-1 text-right text-2xl leading-loose text-white font-medium whitespace-pre-wrap"
-                          style={{ fontFamily: "var(--font-plex-arabic)" }}
+                  {/* All ayahs of this mushaf page — الضغط على آية يحدّدها (تمييز + تفسير) */}
+                  <div className="space-y-2" dir="rtl">
+                    {currentPage.ayahs.map((ayah) => {
+                      const isSelected =
+                        !!selectedAyah && selectedAyah.surahId === ayah.surahId && selectedAyah.number === ayah.number;
+                      return (
+                        <button
+                          key={`${ayah.surahId}-${ayah.number}`}
+                          type="button"
+                          onClick={() => handleAyahSelect(ayah)}
+                          aria-pressed={isSelected}
+                          aria-label={`تفسير الآية ${ayah.number}`}
+                          className={cn(
+                            "w-full flex items-start gap-3 rounded-xl text-right transition-colors cursor-pointer",
+                            isSelected
+                              ? "bg-[#10B981]/10 ring-1 ring-[#10B981]/50 px-3 py-2"
+                              : "px-3 py-2 hover:bg-white/[0.03] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#10B981]/40",
+                          )}
                         >
-                          {ayah.text}
-                        </p>
-                      </div>
-                    ))}
+                          <span
+                            className={cn(
+                              "flex-shrink-0 mt-1 flex h-8 min-w-8 px-1 items-center justify-center rounded-lg font-mono text-sm font-bold",
+                              isSelected ? "bg-[#10B981] text-white" : "bg-[#10B981]/10 text-[#34D399]",
+                            )}
+                          >
+                            {ayah.number}
+                          </span>
+                          <p
+                            className="flex-1 text-right text-2xl leading-loose text-white font-medium whitespace-pre-wrap"
+                            style={{ fontFamily: "var(--font-plex-arabic)" }}
+                          >
+                            {ayah.text}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Audio Controls */}
@@ -540,6 +791,79 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
               ) : (
                 <GlassCard className="p-6 text-center text-[#9AA0C0]">
                   لا توجد آيات متاحة لهذه السورة
+                </GlassCard>
+              )}
+
+              {/* Tafsir Panel — تفسير الآية المحددة (درج أسفل صفحة المصحف) */}
+              {selectedAyah && currentPage && currentPage.ayahs.some((a) => a.number === selectedAyah.number) && (
+                <GlassCard className="p-5 mb-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <IconBadge icon={ScrollText} color="text-[#6EE7B7]" bg="bg-[#10B981]/15" size={34} />
+                      <div className="min-w-0">
+                        <p className="font-bold text-white">تفسير الآية</p>
+                        <p className="text-xs text-[#9AA0C0]">
+                          {selectedSurah?.arabicName} • آية <bdi>{selectedAyah.number}</bdi>
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      icon={X}
+                      onClick={closeTafsir}
+                      aria-label="إغلاق التفسير"
+                      className="flex-shrink-0"
+                    >
+                      <span className="sr-only">إغلاق التفسير</span>
+                    </Button>
+                  </div>
+
+                  {tafsirStatus === "loading" && (
+                    <div className="flex items-center justify-center gap-2 py-6 text-[#9AA0C0]">
+                      <Loader2 size={18} className="animate-spin" />
+                      جاري جلب التفسير...
+                    </div>
+                  )}
+
+                  {tafsirStatus === "error" && (
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-center">
+                      <p className="text-sm text-[#9AA0C0]">
+                        تعذّر جلب التفسير حاليًا — اتأكد من اتصالك وجرّب تاني.
+                      </p>
+                      <Button
+                        variant="ghost"
+                        icon={RotateCcw}
+                        iconPosition="start"
+                        onClick={() => setTafsirAttempt((n) => n + 1)}
+                        className="mt-3"
+                      >
+                        إعادة المحاولة
+                      </Button>
+                    </div>
+                  )}
+
+                  {tafsirStatus === "ready" && (
+                    <div className="space-y-4" dir="rtl">
+                      {tafsirEntries.map((entry, index) => (
+                        <details
+                          key={entry.id}
+                          open={index === 0}
+                          className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3"
+                        >
+                          <summary className="cursor-pointer list-none marker:content-none flex items-center justify-between text-sm font-semibold text-[#6EE7B7] hover:text-[#10B981] transition-colors">
+                            {entry.name}
+                            <ChevronLeft size={16} aria-hidden className="shrink-0" />
+                          </summary>
+                          <p
+                            className="mt-2 text-right text-lg leading-loose text-[#E7E9F5] whitespace-pre-line"
+                            style={{ fontFamily: "var(--font-plex-arabic)" }}
+                          >
+                            {entry.text}
+                          </p>
+                        </details>
+                      ))}
+                    </div>
+                  )}
                 </GlassCard>
               )}
 

@@ -10,7 +10,7 @@ import {
 } from "@/components/worship/WorshipChrome";
 import { SoundLibrary } from "@/app/dashboard/components/SoundLibrary";
 import { THEME_STYLES } from "@/app/dashboard/components/theme-helpers";
-import { localWorshipDate } from "@/lib/islamic/worship-progress";
+import { localWorshipDate, computeQuranWordProgress, isQuranWordUnit, type QuranWordUnit } from "@/lib/islamic/worship-progress";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
@@ -34,6 +34,18 @@ function QuranHome() {
 
   const target = shared?.settings.quranDailyTarget ?? 10;
   const readToday = shared?.progress.quran.dailyCount ?? 0;
+
+  // ورد اليوم بالوحدة المختارة (آيات | صفحات | أرباع | أحزاب | أجزاء) — db/122.
+  const wordUnit: QuranWordUnit = isQuranWordUnit(shared?.settings.quranWordUnit)
+    ? (shared!.settings.quranWordUnit as QuranWordUnit)
+    : "ayat";
+  const wordTargetAmount =
+    wordUnit === "ayat"
+      ? target
+      : typeof shared?.settings.quranWordAmount === "number" && shared.settings.quranWordAmount >= 1
+        ? shared.settings.quranWordAmount
+        : 1;
+  const wordProgress = computeQuranWordProgress(readToday, wordUnit, wordTargetAmount);
 
   /* بلوغ ورد القرآن (+٥ مرة واحدة يوميًا) — الداتابيز بتتحقق من الهدف
      المحفوظ وبتمنع التكرار بالمرجع اليومي. */
@@ -70,9 +82,9 @@ function QuranHome() {
               <span className="mr-2 text-[#9AA0C0]/80">
                 • ورد اليوم:{" "}
                 <bdi>
-                  {readToday}/{target}
-                </bdi>{" "}
-                آية
+                  {wordProgress.completedLabel} / {wordProgress.targetLabel}
+                </bdi>
+                {wordUnit === "ayat" && " آية"}
               </span>
             )}
           </p>

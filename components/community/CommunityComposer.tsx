@@ -10,7 +10,7 @@
 // - عداد أحرف، رفع صورة، خيارات استطلاع، اختيار من يشوف المنشور
 // ===========================================================================
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Loader2, Sparkles, Send, X, BarChart3 } from "lucide-react";
 import { postErrorAr } from "@/lib/community/types";
 
@@ -54,6 +54,18 @@ export default function CommunityComposer({
   const [uploading, setUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // لينكات التحديات: /community?hashtag=X → نفتح الكومبوزر والهاشتاج جاهز
+  useEffect(() => {
+    const tag = new URLSearchParams(window.location.search).get("hashtag");
+    if (tag) {
+      setKind("challenge");
+      setBody(`#${tag} `);
+      setOpen(true);
+      // ننضّف اللينك عشان الريفريش ميعيدش الحشو
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   // Magic AI
   const [aiOpen, setAiOpen] = useState(false);

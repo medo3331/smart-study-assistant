@@ -6,6 +6,7 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { LanguageProvider } from '../lib/i18n/LanguageProvider';
 import { AudioProvider } from '@/components/audio/AudioProvider';
 import { QuranAudioProvider } from '@/hooks/useQuranAudio';
+import { QuranAudioPlayer } from '@/components/worship/QuranAudioPlayer';
 import { DeferredOverlays } from '@/components/layout/DeferredOverlays';
 import { ReferralBootstrap } from "@/components/ReferralBootstrap";
 import { UnifiedNavbar } from '@/components/UnifiedNavbar';
@@ -220,6 +221,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <QuranAudioProvider>
             <UnifiedNavbar />
             {children}
+            {/* 🕌 مشغّل التلاوة على مستوى التطبيق كلها — كان بيتركّب جوّه
+                WorshipChrome (صفحات العبادات بس)، فلو المستخدم شغّل التلاوة
+                وخرج بره الصفحة، الصوت بيفضل شغّال بس مفيش أي كنترولز.
+                تركيبه هنا جوّه QuranAudioProvider بيخليه ظاهر في كل صفحة.
+
+                ⚠️ تعارض المشغّلين العائمين: فيه مشغّل تاني للمكتبة الصوتية
+                (FloatingAudioPlayer من AudioProvider، fixed bottom-4 z-40).
+                لو الاتنين ليهم تراك شغّال هيتغطوا على بعض — الحل: بدل ما
+                نعدّل AudioProvider (أب QuranAudioProvider فمش بيقدر يقرا
+                كونتكست التلاوة)، QuranAudioPlayer بيقرا useAudio() وبيتزحزح
+                لفوق (bottom-24) بس لما يكون فيه تراك مكتبة شغّال.
+                شوف components/worship/QuranAudioPlayer.tsx. */}
+            <QuranAudioPlayer />
           </QuranAudioProvider>
               {/* ودجتس عائمة (دعم/إشعارات/إعلانات/مساعد) — chunks منفصلة
                   بتتحمّل بعد الترطيب بدل ما تدخل الحزمة المشتركة لكل الصفحات. */}

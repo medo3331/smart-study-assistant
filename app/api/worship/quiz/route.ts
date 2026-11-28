@@ -1,45 +1,51 @@
 import { recordDirectProviderAttempt, startProviderAttempt } from "@/lib/ai/direct-provider-usage";
 import { resolveUsageRequestContext } from "@/lib/ai/usage-context";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import Groq from "groq-sdk";
 import { requireUser, checkRateLimit } from "@/lib/api-guard";
 import { guardAiAccessAndReserve, refundAiCreditIfNeeded } from "@/lib/ai/ai-credit-guard";
+import { createServiceClient } from "@/lib/supabase/admin";
+import {
+  QUIZ_MODEL_GROQ,
+  QUIZ_TOTAL_QUESTIONS,
+  QUIZ_BANK_MIN_ROWS,
+  buildQuizPrompt,
+  isStoredQuestionArray,
+  parseQuestions,
+  pickBankRow,
+  toClientQuestions,
+  type BankCandidateRow,
+  type StoredQuestion,
+} from "@/lib/worship-quiz-bank";
 
 /* ==========================================================================
    /api/worship/quiz — الأسئلة الدينية (مركز العبادات)
    POST واحد by action: generate | submit — نمط generate-game-questions.
 
-   generate: AI يولّد ١٠ أسئلة اختيار من متعدد (مصادر موثوقة فقط) → الجلسة
-             تُخزَّن في worship_quiz_sessions **بالإجابات الصحيحة** (سيرفر
-             فقط) → الكلاينت يستلم الأسئلة بدون correct.
+   generate: ① بنك الأسئلة الجاهزة (db/123) أولاً — صف من الأقل استخداماً
+                (ومش من آخر ٣ جلسات للمستخدم) → جلسة فوراً بدون أي حجز
+                كريديت ولا نداء AI (ده اللي بيحلّ البطء/الـ timeout).
+             ② لو البنك فاضي/مش متاح → المسار المباشر زي ما هو: AI يولّد
+                ١٠ أسئلة اختيار من متعدد (مصادر موثوقة فقط) → الجلسة
+                تُخزَّن في worship_quiz_sessions **بالإجابات الصحيحة** (سيرفر
+                فقط) → الكلاينت يستلم الأسئلة بدون correct.
    submit:   الكلاينت يرجّع اختياراته بس → تصحيح سيرفري من الجلسة المحفوظة
              (إثبات D-M-04 نفسه) → award_coins(worship_quiz, 'quiz:<id>').
+             وبعد الرد: لو صفوف البنك ناقصة → إعادة تعبئة خلفية عبر after().
 
    ⚠️ فرع worship_quiz في award_coins (db/121) بيتحقق من صف جلسة مكتملة
       (completed_at not null) مملوكة للمستخدم بالمرجع 'quiz:<uuid>' —
       الجدول وعقد الإثبات في db/120-worship-quiz.sql.
+   ⚠️ worship_quiz_bank مفيش عليه أي RLS policy — الوصول له عبر
+      service-role client حصراً (lib/supabase/admin.ts).
    ========================================================================== */
 
-const QUIZ_MODEL_GROQ = "llama-3.3-70b-versatile";
 const QUIZ_CREDIT_MODEL = "openai/gpt-oss-120b";
-const TOTAL_QUESTIONS = 10;
+const TOTAL_QUESTIONS = QUIZ_TOTAL_QUESTIONS;
 
-/** شكل السؤال الكامل كما يُخزَّن سيرفرًا (يشمل الإجابة الصحيحة). */
-type StoredQuestion = {
-  question: string;
-  options: string[];
-  correct: number;
-  source: string;
-  explanation: string;
-};
-
-/** شكل السؤال المُرسَل للكلاينت — بدون correct ولا explanation. */
-type ClientQuestion = {
-  question: string;
-  options: string[];
-  source: string;
-};
+/** إعادة التعبئة الخلفية: صفتين من Groq في النداء الواحد. */
+const BANK_REFILL_BATCHES = 2;
 
 /** شكل تفصيل النتيجة لكل سؤال. */
 type ResultDetail = {
@@ -53,73 +59,150 @@ type ResultDetail = {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * برومبت الجيل — عربي صارم: JSON فقط، ١٠ أسئلة، مصادر موثوقة حصراً.
- * المنع صريح: الأحاديث الضعيفة/الموضوعة، خلافات الفقه بين المذاهب،
- * أسئلة الرأي والاجتهاد.
- */
-function buildPrompt(): string {
-  return `أنت مختص في الأسئلة الدينية للطلاب المسلمين. أنشئ ١٠ أسئلة اختيار من متعدد في العلوم الدينية (قرآن كريم، حديث شريف، عقيدة، سيرة، عبادات).
-
-قواعد صارمة ومطلقة:
-١) الرد بصيغة JSON صالحة فقط — مصفوفة من ١٠ عناصر، بدون أي نصوص إضافية أو علامات Markdown (مثل \`\`\`json)، بالهيكل التالي تماماً:
-[
-  { "question": "نص السؤال", "options": ["الخيار ١", "الخيار ٢", "الخيار ٣", "الخيار ٤"], "correct": 0, "source": "المصدر", "explanation": "شرح موجز للإجابة الصحيحة" }
-]
-٢) correct رقم من ٠ إلى ٣ يشير إلى فهرس الإجابة الصحيحة في options.
-٣) المصادر موثوقة فقط:
-   - القرآن الكريم: اذكر اسم السورة ورقم الآية في source (مثال: "سورة البقرة، الآية ٢٨٦").
-   - الحديث الشريف: من الصحيحين (البخاري ومسلم) أو الكتب الستة مع رقم الحديث أو رقم الكتاب/الباب في source (مثال: "صحيح البخاري، حديث ١").
-   - العقيدة والسيرة والمعلومات المتفق عليها بين الجميع.
-٤) ممنوع منعاً باتاً: الأحاديث الضعيفة أو الموضوعة أو المروية بلا إسناد معروف، الخلافات الفقهية بين المذاهب، أسئلة الرأي والاجتهاد والتقدير الشخصي.
-٥) سؤال لكل عنصر، و٤ خيارات لكل سؤال، وخيار واحد صحيح فقط، وبدون تكرار للسؤال.`;
+/** مفتاح Groq من البيئة (نفس ترتيب المفاتيح في باقي الـ routes). */
+function groqApiKey(): string {
+  return (process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1 || "").trim();
 }
 
-/** تحقق صارم من مخرجات الموديل — أي عنصر ناقص يُرفض. */
-function parseQuestions(raw: string): StoredQuestion[] | null {
-  const jsonStart = raw.indexOf("[");
-  const jsonEnd = raw.lastIndexOf("]") + 1;
-  if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
-  let parsed: unknown;
+/* ==========================================================================
+   ① مسار البنك — قراءة مجموعة جاهزة وفتح الجلسة فوراً
+   ==========================================================================
+   بيرجّع Response جاهز لو لقى صف صالح، أو null لو البنك فاضي/مش متاح
+   (فيسقط النداء للمسار المباشر). أي فشل هنا صامت — البنك تحسين مش عقد. */
+async function tryServeFromBank(
+  supabase: any,
+  userId: string,
+): Promise<Response | null> {
+  let service: ReturnType<typeof createServiceClient> | null = null;
   try {
-    parsed = JSON.parse(raw.substring(jsonStart, jsonEnd));
+    service = createServiceClient();
   } catch {
+    // مفتاح الـ service مش متظبط — البنك مش متاح، نمشي على المسار المباشر.
     return null;
   }
-  if (!Array.isArray(parsed)) return null;
 
-  const out: StoredQuestion[] = [];
-  for (const item of parsed) {
-    const q = item as Record<string, unknown>;
-    const question = typeof q.question === "string" ? q.question.trim() : "";
-    const options = Array.isArray(q.options)
-      ? q.options.filter((o): o is string => typeof o === "string" && o.trim().length > 0)
-      : [];
-    const correct = q.correct;
-    const source = typeof q.source === "string" ? q.source.trim() : "";
-    const explanation = typeof q.explanation === "string" ? q.explanation.trim() : "";
-    if (
-      !question ||
-      options.length !== 4 ||
-      typeof correct !== "number" ||
-      !Number.isInteger(correct) ||
-      correct < 0 ||
-      correct > 3 ||
-      !source
-    ) {
+  try {
+    // آخر ٣ جلسات للمستخدم — بنفضّل مجموعة مش من بينها (تنويع الأسئلة).
+    const { data: recent } = await supabase
+      .from("worship_quiz_sessions")
+      .select("bank_id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    const recentBankIds = ((recent ?? []) as { bank_id: string | null }[])
+      .map((r) => r.bank_id)
+      .filter((id): id is string => typeof id === "string" && UUID_RE.test(id));
+
+    // مرشّحو البنك — عبر service client (مفيش RLS policies على الجدول).
+    const { data: rows, error } = await service
+      .from("worship_quiz_bank")
+      .select("id, questions, used_count, last_used_at")
+      .order("last_used_at", { ascending: true, nullsFirst: true })
+      .order("used_count", { ascending: true })
+      .limit(50);
+    if (error || !rows || rows.length === 0) return null;
+
+    const chosen = pickBankRow(rows as BankCandidateRow[], recentBankIds);
+    if (!chosen) return null;
+
+    const bankRow = (rows as Array<{ id: string; questions: unknown }>).find(
+      (r) => r.id === chosen.id,
+    );
+    // محتوى الـ jsonb ممكن يكون أي حاجة — نتحقق قبل ما نقدّمه للمستخدم.
+    if (!bankRow || !isStoredQuestionArray(bankRow.questions)) return null;
+    const questions: StoredQuestion[] = bankRow.questions;
+
+    // الجلسة للمستخدم — نفس عقد db/120 (الإجابات الصحيحة سيرفر فقط)
+    // + bank_id كإثبات المصدر (db/123). الإدراج عبر عميل المستخدم
+    // (سياسة RLS owner insert بتغطيه).
+    const { data: session, error: insertError } = await supabase
+      .from("worship_quiz_sessions")
+      .insert({
+        user_id: userId,
+        questions,
+        answers: null,
+        score: 0,
+        total: TOTAL_QUESTIONS,
+        bank_id: chosen.id,
+      })
+      .select("id")
+      .single();
+    if (insertError || !session) {
+      console.error("worship-quiz bank session insert failed:", insertError?.message);
       return null;
     }
-    out.push({ question, options, correct, source, explanation });
+
+    // إحصاءات الاستهلاك — فشلها مش مهم (المصدر متسجّل أصلاً في الجلسة).
+    try {
+      await service
+        .from("worship_quiz_bank")
+        .update({
+          used_count: (chosen.used_count ?? 0) + 1,
+          last_used_at: new Date().toISOString(),
+        })
+        .eq("id", chosen.id);
+    } catch {
+      // صامت — عدّاد فقط.
+    }
+
+    return NextResponse.json({
+      sessionId: session.id as string,
+      questions: toClientQuestions(questions),
+    });
+  } catch (e) {
+    // أي خطأ في مسار البنك مامايعطّلش المستخدم — fallback للمسار المباشر.
+    console.warn("worship-quiz bank path failed (fallback to direct):", e);
+    return null;
   }
-  return out.length === TOTAL_QUESTIONS ? out : null;
 }
 
-function toClientQuestions(stored: StoredQuestion[]): ClientQuestion[] {
-  return stored.map((q) => ({
-    question: q.question,
-    options: q.options,
-    source: q.source,
-  }));
+/* ==========================================================================
+   إعادة التعبئة الخلفية — بتتنده عبر after() بعد رد submit
+   ==========================================================================
+   لو صفوف البنك أقل من الحد، بنولّد صفتين جداد بنفس البرومبت والتحقق
+   ونكتبهم بالـ service client. كل حاجة هنا تفشل بصمت — دي صيانة
+   خلفية مش طلب المستخدم. */
+async function refillQuizBankIfLow(): Promise<void> {
+  try {
+    const service = createServiceClient();
+    const { count } = await service
+      .from("worship_quiz_bank")
+      .select("id", { count: "exact", head: true });
+    if (typeof count === "number" && count >= QUIZ_BANK_MIN_ROWS) return;
+
+    const apiKey = groqApiKey();
+    if (!apiKey) return;
+    const groq = new Groq({ apiKey });
+
+    for (let i = 0; i < BANK_REFILL_BATCHES; i++) {
+      try {
+        const completion = await groq.chat.completions.create({
+          model: QUIZ_MODEL_GROQ,
+          messages: [
+            {
+              role: "system",
+              content:
+                "أنت مساعد تعليمي ديني يُخرج رده بصيغة JSON صالحة فقط، والتزم بالمصادر الموثوقة دون أحاديث ضعيفة أو خلافات فقهية.",
+            },
+            { role: "user", content: buildQuizPrompt() },
+          ],
+          temperature: 0.7,
+        });
+        const questions = parseQuestions(
+          completion.choices[0]?.message?.content || "",
+        );
+        if (!questions) continue; // مخرجات مش مطابقة — نتجاهل الدفعة دي بصمت.
+        await service.from("worship_quiz_bank").insert({
+          questions,
+          model: QUIZ_MODEL_GROQ,
+        });
+      } catch {
+        // صامت — دفعة فاشلة مش مشكلة، الجاي هيعبّي.
+      }
+    }
+  } catch {
+    // صامت بالكامل.
+  }
 }
 
 export async function POST(request: Request) {
@@ -139,12 +222,18 @@ export async function POST(request: Request) {
 
     /* ── action=generate — توليد ١٠ أسئلة وفتح جلسة جديدة ── */
     if (action === "generate") {
+      // ① البنك أولاً — استجابة فورية، بدون حجز كريديت ولا نداء AI.
+      //    (بيرجّع رد جاهز أو null — أي فشل فيه بينزل للمسار المباشر تحت.)
+      const bankResponse = await tryServeFromBank(supabase, user.id);
+      if (bankResponse) return bankResponse;
+
+      // ② المسار المباشر (Groq) — زي ما هو: حجز كريديت ثم توليد.
       // Phase H: 1 credit gate (free model, but still costs credit — no anonymous bypass)
       const g = await guardAiAccessAndReserve(supabase, user.id, QUIZ_CREDIT_MODEL);
       if (!g.ok) return g.response;
       guard = g;
 
-      const apiKey = (process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1 || "").trim();
+      const apiKey = groqApiKey();
       if (!apiKey) {
         await refundAiCreditIfNeeded(supabase, userId, guard.refId);
         return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
@@ -157,7 +246,7 @@ export async function POST(request: Request) {
         model: QUIZ_MODEL_GROQ,
         messages: [
           { role: "system", content: "أنت مساعد تعليمي ديني يُخرج رده بصيغة JSON صالحة فقط، والتزم بالمصادر الموثوقة دون أحاديث ضعيفة أو خلافات فقهية." },
-          { role: "user", content: buildPrompt() },
+          { role: "user", content: buildQuizPrompt() },
         ],
         temperature: 0.7,
       }).catch(async (err) => {
@@ -187,6 +276,7 @@ export async function POST(request: Request) {
       }
 
       // الجلسة تُخزَّن بالإجابات الصحيحة (سيرفر فقط) — الكلاينت يستلم بدونها.
+      // مولّدة مباشرة → مفيش bank_id (null).
       const { data: session, error: insertError } = await supabase
         .from("worship_quiz_sessions")
         .insert({
@@ -308,6 +398,12 @@ export async function POST(request: Request) {
       } catch (e) {
         console.warn("worship_quiz award failed (متجاهَل):", e);
       }
+
+      // إعادة تعبئة خلفية — لو البنك ناقص، نعبّيه بعد ما يوصل الرد للمستخدم
+      // (after من next/server — Next 16). كل فشل جواها صامت.
+      after(() => {
+        void refillQuizBankIfLow();
+      });
 
       return NextResponse.json({ score, total: TOTAL_QUESTIONS, awarded, balance, details });
     }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   NextPrayerCard,
 } from "@/components/worship/NextPrayerCard";
@@ -49,6 +50,9 @@ function WorshipHome() {
   const shared = useSharedWorshipData();
   const { showReward } = useWorshipReward();
   const [surahs, setSurahs] = useState<Surah[]>([]);
+  // تنقّل client-side — window.location.href كان بيعمل full page reload
+  // وبيقطع التلاوة الشغّالة (المشغّل معاه في الذاكرة بيفضى).
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -342,7 +346,7 @@ function WorshipHome() {
           juzNumber={readingSurah?.juzNumber ? readingSurah.juzNumber : 1}
           readingPosition={readingPosition}
           onContinue={() => {
-            window.location.href = "/worship/quran";
+            router.push("/worship/quran");
           }}
           index={0}
         />
@@ -384,7 +388,7 @@ function WorshipHome() {
               );
             }}
             onSettingsClick={() => {
-              window.location.href = "/worship/settings";
+              router.push("/worship/settings");
             }}
           />
         )}

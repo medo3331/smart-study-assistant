@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import type { Reciter } from "./useReciters";
+// أسماء السور للـ MediaSession metadata (بيانات بحتة — مفيش React هنا).
+import { SURAH_NAMES } from "@/app/dashboard/components/audio-library";
 
 /**
  * Quran Audio Player — SINGLE source of truth for playback.
@@ -92,6 +94,12 @@ interface QuranAudioProviderProps {
  */
 export function QuranAudioProvider({ children }: QuranAudioProviderProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // آخر قارئ اتاستخدم في play() — next/prev والتلاوة المتصلة محتاجين يبنوا
+  // رابط الملف بنفس القارئ من غير ما يستلموا كائن Reciter من الكومبوننت.
+  const reciterRef = useRef<Reciter | null>(null);
+  // handleEnded بيعيش في إيفكت التركيب (deps فاضية) — بيقرأ nextSurah
+  // عن طريق ref عشان ميحافظش على نسخة قديمة من الكولباك.
+  const nextSurahRef = useRef<() => void>(() => {});
   const [state, setState] = useState<QuranAudioState>({
     state: "idle",
     currentSurahId: null,
@@ -137,12 +145,20 @@ export function QuranAudioProvider({ children }: QuranAudioProviderProps) {
       setState((s) => ({ ...s, state: "paused" }));
     };
     const handleEnded = () => {
-      setState((s) => ({
-        ...s,
-        state: "paused",
-        currentTime: s.duration,
-        progress: 1,
-      }));
+      // التلاوة المتصلة: أول ما السورة تخلص نشغّل اللي بعدها تلقائيًا بنفس
+      // القارئ — المستخدم هو اللي يوقف من زرار الإيقاف. عند آخر سورة (114)
+      // بنقف عادي بدل ما نلف من الأول.
+      const current = stateRef.current.currentSurahId;
+      if (current !== null && current < 114) {
+        nextSurahRef.current();
+      } else {
+        setState((s) => ({
+          ...s,
+          state: "paused",
+          currentTime: s.duration,
+          progress: 1,
+        }));
+      }
     };
     const handleError = (e: Event) => {
       const target = e.target as HTMLAudioElement;
@@ -195,51 +211,66 @@ export function QuranAudioProvider({ children }: QuranAudioProviderProps) {
     }
   }, [state.currentTime, state.state]);
 
-  const play = useCallback(
+  /** قراءة موضع الاستئناف المحفوظ لقارئ + سورة (مفروضة فوق startTrack). */
+  const loadPosition = useCallback((reciterId: number, surahId: number) => {
+    try {
+      const raw = localStorage.getItem(storageKey(reciterId, surahId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.savedAt > 7 * 24 * 60 * 60 * 1000) {
+        return null;
+      }
+      return parsed.position;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /**
+   * تحميل تراك جديد فعليًا (src + reset الحالة) وتشغيله — الأساس المشترك
+   * بين play() و next/prev والتلاوة المتصلة، عشان السلوك يفضل واحد.
+   */
+  const startTrack = useCallback(
     async (reciter: Reciter, surahId: number) => {
       const audio = audioRef.current;
       if (!audio) return;
 
-      const isSameTrack =
-        stateRef.current.currentSurahId === surahId &&
-        stateRef.current.currentReciterId === reciter.id;
+      const url = getAudioUrl(reciter, surahId);
 
-      if (!isSameTrack) {
-        const url = getAudioUrl(reciter, surahId);
+      setState((s) => ({
+        ...s,
+        state: "loading",
+        currentSurahId: surahId,
+        currentReciterId: reciter.id,
+        error: null,
+        currentTime: 0,
+        progress: 0,
+      }));
 
-        setState((s) => ({
-          ...s,
-          state: "loading",
-          currentSurahId: surahId,
-          currentReciterId: reciter.id,
-          error: null,
-          currentTime: 0,
-          progress: 0,
-        }));
+      audio.src = url;
+      audio.load();
 
-        audio.src = url;
-        audio.load();
+      reciterRef.current = reciter;
 
-        // Seed resume position if we have one.
-        const saved = loadPosition(reciter.id, surahId);
-        if (saved && saved > 0) {
-          // Defer seeking until metadata loads.
-          const onMeta = () => {
-            audio.currentTime = saved;
-            audio.removeEventListener("loadedmetadata", onMeta);
-          };
-          audio.addEventListener("loadedmetadata", onMeta);
-        }
+      // Seed resume position if we have one.
+      const saved = loadPosition(reciter.id, surahId);
+      if (saved && saved > 0) {
+        // Defer seeking until metadata loads.
+        const onMeta = () => {
+          audio.currentTime = saved;
+          audio.removeEventListener("loadedmetadata", onMeta);
+        };
+        audio.addEventListener("loadedmetadata", onMeta);
+      }
 
-        // Persist track as resume target.
-        try {
-          localStorage.setItem(
-            storageKey(reciter.id, surahId),
-            JSON.stringify({ position: saved ?? 0, savedAt: Date.now() })
-          );
-        } catch {
-          /* ignore */
-        }
+      // Persist track as resume target.
+      try {
+        localStorage.setItem(
+          storageKey(reciter.id, surahId),
+          JSON.stringify({ position: saved ?? 0, savedAt: Date.now() })
+        );
+      } catch {
+        /* ignore */
       }
 
       try {
@@ -252,7 +283,35 @@ export function QuranAudioProvider({ children }: QuranAudioProviderProps) {
         }));
       }
     },
-    []
+    [loadPosition]
+  );
+
+  const play = useCallback(
+    async (reciter: Reciter, surahId: number) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      const isSameTrack =
+        stateRef.current.currentSurahId === surahId &&
+        stateRef.current.currentReciterId === reciter.id;
+
+      // نفس التراك: استئناف بس. تراك جديد: تحميل فعلي عبر startTrack.
+      if (!isSameTrack) {
+        await startTrack(reciter, surahId);
+        return;
+      }
+
+      try {
+        await audio.play();
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          state: "error",
+          error: err instanceof Error ? err.message : "فشل التشغيل",
+        }));
+      }
+    },
+    [startTrack]
   );
 
   const pause = useCallback(() => {
@@ -266,29 +325,29 @@ export function QuranAudioProvider({ children }: QuranAudioProviderProps) {
     }
   }, []);
 
+  /**
+   * تنقّل فعلي لسورة تانية بنفس القارئ الحالي — بيغيّر audio.src ويكمّل
+   * شغّال، مش بيحدّث الـ state بس (كان ده سبب إن زراير next/prev مش
+   * بتغيّر الملف الفعلي).
+   */
+  const goToSurah = useCallback(
+    async (surahId: number) => {
+      const reciter = reciterRef.current;
+      if (!reciter) return;
+      await startTrack(reciter, surahId);
+    },
+    [startTrack]
+  );
+
   const nextSurah = useCallback(() => {
     const current = stateRef.current.currentSurahId;
-    if (current && current < 114) {
-      setState((s) => ({
-        ...s,
-        currentSurahId: current + 1,
-        currentTime: 0,
-        progress: 0,
-      }));
-    }
-  }, []);
+    if (current && current < 114) void goToSurah(current + 1);
+  }, [goToSurah]);
 
   const prevSurah = useCallback(() => {
     const current = stateRef.current.currentSurahId;
-    if (current && current > 1) {
-      setState((s) => ({
-        ...s,
-        currentSurahId: current - 1,
-        currentTime: 0,
-        progress: 0,
-      }));
-    }
-  }, []);
+    if (current && current > 1) void goToSurah(current - 1);
+  }, [goToSurah]);
 
   const seek = useCallback((seconds: number) => {
     const audio = audioRef.current;
@@ -311,19 +370,60 @@ export function QuranAudioProvider({ children }: QuranAudioProviderProps) {
     }
   }, []);
 
-  const loadPosition = useCallback((reciterId: number, surahId: number) => {
+  // مزامنة nextSurah داخل ref — handleEnded (إيفكت التركيب) بيناديها عن طريقه.
+  useEffect(() => {
+    nextSurahRef.current = nextSurah;
+  }, [nextSurah]);
+
+  /* ── MediaSession: metadata ──────────────────────────────────────────
+     عشان كنترولز نظام التشغيل (ويندوز/موبايل) توري اسم السورة واسم
+     القارئ، والصوت يفضل مُدار من بره المتصفح لو التاب في الخلفية. */
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const surahId = state.currentSurahId;
+    if (!surahId) return;
+
+    const surahName = SURAH_NAMES[surahId - 1] ?? `سورة ${surahId}`;
     try {
-      const raw = localStorage.getItem(storageKey(reciterId, surahId));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (Date.now() - parsed.savedAt > 7 * 24 * 60 * 60 * 1000) {
-        return null;
-      }
-      return parsed.position;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `سورة ${surahName}`,
+        artist: reciterRef.current?.arabicName ?? "القرآن الكريم",
+        album: "القرآن الكريم",
+      });
+      navigator.mediaSession.playbackState =
+        state.state === "playing" ? "playing" : "paused";
     } catch {
-      return null;
+      /* متصفح مش مدعوم — تجاهل */
     }
-  }, []);
+  }, [state.currentSurahId, state.state]);
+
+  /* ── MediaSession: أزرار الكنترولز (play/pause/next/prev) ───────────── */
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+    const handlers: Array<[MediaSessionAction, () => void]> = [
+      ["play", () => resume()],
+      ["pause", () => pause()],
+      ["nexttrack", () => nextSurah()],
+      ["previoustrack", () => prevSurah()],
+    ];
+    for (const [action, handler] of handlers) {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {
+        /* الأكشن مش مدعوم في المتصفح ده — تجاهل */
+      }
+    }
+    return () => {
+      for (const [action] of handlers) {
+        try {
+          ms.setActionHandler(action, null);
+        } catch {
+          /* تجاهل */
+        }
+      }
+    };
+  }, [resume, pause, nextSurah, prevSurah]);
 
   const value: QuranAudioContextValue = {
     ...state,
