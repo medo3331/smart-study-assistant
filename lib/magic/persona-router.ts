@@ -1,59 +1,46 @@
 // lib/magic/persona-router.ts
 //
-// Persona Orchestrator — اختيار الشخصية المناسبة لكل طلب داخل الشات الموحد.
+// Persona Orchestrator — التوجيه داخل الشات الموحد.
 //
-// أولوية الاختيار (حسب قرار التصميم المعتمد):
-//   1. اختيار المستخدم الصريح — له الأولوية المطلقة.
-//   2. محتوى الرسالة — ترفيه / تخطيط / منصة / علمي.
-//   3. سياق الصفحة — صفحة الدرس تعطي أولوية لـ Tutor، صفحة الألعاب لـ Play.
-//   4. الافتراضي — Magic.
+// الشخصيات الأربع (ماجيك/المعلم/بلاي/كوتش) اتدمجت في شخصية واحدة: Magic Agent —
+// كل الخبرات (شرح/ترفيه/تخطيط) بقت مهارات جوّاه، فالتوجيه دايمًا لـ Magic Agent
+// بغضّ النظر عن اختيار المستخدم أو محتوى الرسالة أو الصفحة (اختيار صريح قديم
+// زي "tutor" بيتقبل ويتوحّد بصمت للتوافق مع الواجهات القديمة).
+//
+// المتبقي من الاختيار الذكي: كشف نية التخطيط (isPlanningRequest) — بتشغّل
+// أداة اعتماد الخطة (كتلة plan) في unified-ai route بدل الاعتماد على شخصية كوتش.
 
-import { isMagicPersonaId, type MagicPersonaId } from "./personas";
+import type { MagicPersonaId } from "./personas";
 
 export interface PersonaRouterInput {
   explicitPersona?: string | null;
   page?: string | null;
   message: string;
   mode?: string | null;
-  /** نية الطلب من classifyChatIntent — بحث الملفات/التسجيلات يبقى لماجيك دائمًا. */
+  /** نية الطلب من classifyChatIntent — محفوظ للتوافق مع الاستدعاءات القديمة. */
   intent?: string | null;
   hasLessonContext?: boolean;
-  /** شخصية المحادثة النشطة (آخر رد) — سياق متابعة نفس الموضوع، أولويته بعد المحتوى. */
+  /** شخصية المحادثة النشطة (آخر رد) — محفوظ للتوافق، لم يعد له تأثير. */
   lastPersona?: string | null;
 }
 
 export interface PersonaSelection {
   persona: MagicPersonaId;
-  reason: string;
+  reason: "unified_agent";
 }
 
-/** نيات البحث في محتوى الطالب — شخصية ماجيك هي الواجهة دائمًا. */
-const PLATFORM_INTENTS = new Set(["WORKSPACE_SEARCH", "RECORDED_LECTURES_SEARCH"]);
+/**
+ * اختيار الشخصية — صفر تكلفة وبدون أي نداء شبكة: دايمًا Magic Agent.
+ */
+export function selectPersona(_input: PersonaRouterInput): PersonaSelection {
+  return { persona: "magic", reason: "unified_agent" };
+}
 
-const PLAY_KEYWORDS = [
-  "لعبة",
-  "ألعاب",
-  "الالعاب",
-  "العب",
-  "ألعب",
-  "العبي",
-  "اتحدى",
-  "أتحدى",
-  "تحدي",
-  "تحديات",
-  "مسابقة",
-  "مسابقات",
-  "خمن",
-  "تخمين",
-  "عجلة",
-  "escape",
-  "wheel",
-  "game",
-  "games",
-  "challenge",
-];
+/* -------------------------------------------------------------------------- */
+/* كشف نية التخطيط — كان شرط تفعيل شخصية كوتش، وبقى شرط تفعيل أداة الخطة.      */
+/* -------------------------------------------------------------------------- */
 
-const COACH_PATTERNS = [
+const PLANNING_PATTERNS = [
   /خطة\s*(مذاكر|دراسة|مراجعة)/,
   /جدول\s*(مذاكر|دراسة|مراجعة|يومي|أسبوع)/,
   /(أنظم|انظم|أنسق|نظم)\s*(مذاكرتي|وقتي|جدولي|دراستي)/,
@@ -63,109 +50,10 @@ const COACH_PATTERNS = [
   /خطتي\s*(الدراسية|المذاكرة)?/,
 ];
 
-const PLATFORM_KEYWORDS = [
-  "الموقع",
-  "المنصة",
-  "إزاي أستخدم",
-  "ازاي استخدم",
-  "أرفع محاضرة",
-  "ارفع محاضرة",
-  "أرفع ملف",
-  "ارفع ملف",
-  "حسابي",
-  "رصيدي",
-  "الرصيد",
-  "كريدت",
-  "credits",
-  "باقة",
-  "الباقات",
-  "اشتراك",
-  "الاشتراك",
-  "المميزات",
-  "كلمة السر",
-  "تسجيل الدخول",
-];
-
-const TUTOR_KEYWORDS = [
-  "اشرح",
-  "إشرح",
-  "شرح",
-  "مش فاهم",
-  "مش مفهمش",
-  "فاهمش",
-  "وضح",
-  "وضّح",
-  "بسّط",
-  "بسطلي",
-  "مثال",
-  "مسألة",
-  "حل المسألة",
-  "حل السؤال",
-  "ليه بيحصل",
-  "إيه الفرق",
-  "ايه الفرق",
-  "explain",
-  "تدريب",
-];
-
-function matchesAny(message: string, keywords: string[]): boolean {
-  const lower = message.toLowerCase();
-  return keywords.some((k) => lower.includes(k.toLowerCase()));
-}
-
-function matchesCoachPattern(message: string): boolean {
-  return COACH_PATTERNS.some((p) => p.test(message));
-}
-
-const TEACHING_MODES = new Set(["explain", "quiz", "summarize", "review", "file", "flashcards"]);
-
 /**
- * اختيار الشخصية من غير أي نداء شبكة — يتنفذ في الخلفية بسرعة وبصفر تكلفة.
+ * هل الرسالة طلب تخطيط مذاكرة (خطة/جدول/امتحان قريب)؟
+ * بتشغّل أداة اعتماد الخطة في unified-ai route.
  */
-export function selectPersona(input: PersonaRouterInput): PersonaSelection {
-  const message = (input.message || "").trim();
-
-  if (isMagicPersonaId(input.explicitPersona) && input.explicitPersona !== "magic") {
-    return { persona: input.explicitPersona, reason: "user_selected" };
-  }
-
-  // بحث محتوى الطالب (ملفات/تسجيلات) → ماجيك — نفس قاعدة workspace_intent في selectMagicPersona.
-  if (input.intent && PLATFORM_INTENTS.has(input.intent.toUpperCase())) {
-    return { persona: "magic", reason: "workspace_intent" };
-  }
-
-  if (matchesAny(message, PLAY_KEYWORDS)) {
-    return { persona: "play", reason: "message_entertainment" };
-  }
-
-  if (matchesCoachPattern(message)) {
-    return { persona: "coach", reason: "message_planning" };
-  }
-
-  if (matchesAny(message, PLATFORM_KEYWORDS)) {
-    return { persona: "magic", reason: "message_platform" };
-  }
-
-  if (matchesAny(message, TUTOR_KEYWORDS)) {
-    return { persona: "tutor", reason: "message_academic" };
-  }
-
-  // سياق المحادثة: لو نفس الموضوع شغّال مع Tutor/Play/Coach والرسالة محايدة، نفس الشخصية تكمّل.
-  if (isMagicPersonaId(input.lastPersona) && input.lastPersona !== "magic") {
-    return { persona: input.lastPersona, reason: "conversation_context" };
-  }
-
-  if (input.mode && TEACHING_MODES.has(input.mode) && input.hasLessonContext) {
-    return { persona: "tutor", reason: "lesson_mode" };
-  }
-
-  const page = (input.page || "").trim().toLowerCase();
-  if (page === "lesson" || input.hasLessonContext) {
-    return { persona: "tutor", reason: "lesson_page" };
-  }
-  if (page === "play") {
-    return { persona: "play", reason: "play_page" };
-  }
-
-  return { persona: "magic", reason: "default" };
+export function isPlanningRequest(message: string): boolean {
+  return PLANNING_PATTERNS.some((p) => p.test(message || ""));
 }

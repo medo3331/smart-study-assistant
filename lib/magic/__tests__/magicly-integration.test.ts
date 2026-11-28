@@ -13,7 +13,7 @@ describe("buildMagiclySystemPrompt integration", () => {
   const prompt = buildMagiclySystemPrompt(ctx as any, "explain", ["tool:ok"]);
 
   it("يحتوي على هوية Magic مرة واحدة", () => {
-    const matches = prompt.match(/Magic \(ماجيك\)/g) || [];
+    const matches = prompt.match(/Magic Agent \(ماجيك\)/g) || [];
     expect(matches.length).toBe(1);
     // لا هوية مكررة «ماجيكلي» (القديمة)
     const old = prompt.match(/أنت «ماجيكلي»/g) || [];

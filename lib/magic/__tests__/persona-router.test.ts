@@ -1,156 +1,107 @@
 import { describe, it, expect } from "vitest";
-import { selectPersona } from "@/lib/magic/persona-router";
-import { buildPersonaIdentityPrompt, isMagicPersonaId } from "@/lib/magic/personas";
+import { selectPersona, isPlanningRequest } from "@/lib/magic/persona-router";
+import { buildPersonaIdentityPrompt, isMagicPersonaId, normalizeMagicPersonaId } from "@/lib/magic/personas";
 
-describe("selectPersona — سيناريوهات التوجيه المعتمدة", () => {
-  it("Dashboard + «إزاي أرفع محاضرة؟» ← Magic", () => {
-    const r = selectPersona({ page: "dashboard", message: "إزاي أرفع محاضرة؟" });
-    expect(r.persona).toBe("magic");
-    expect(r.reason).toBe("message_platform");
+describe("selectPersona — الشخصية الموحّدة Magic Agent", () => {
+  it("كل الرسايل تروح لـ Magic Agent — مهما كان المحتوى", () => {
+    for (const message of [
+      "إزاي أرفع محاضرة؟",
+      "اعمل لي جدول مذاكرة",
+      "اشرحلي Routing",
+      "عايز أتحدى حد",
+      "عندي امتحان بعد يومين عن مادة الشبكات",
+      "أنا مش فاهم الجزئية دي في المحاضرة",
+      "صباح الخير",
+      "",
+    ]) {
+      const r = selectPersona({ page: "dashboard", message });
+      expect(r.persona).toBe("magic");
+      expect(r.reason).toBe("unified_agent");
+    }
   });
 
-  it("Dashboard + «اعمل لي جدول مذاكرة» ← Coach", () => {
-    const r = selectPersona({ page: "dashboard", message: "اعمل لي جدول مذاكرة" });
-    expect(r.persona).toBe("coach");
-    expect(r.reason).toBe("message_planning");
-  });
-
-  it("صفحة الدرس + «اشرحلي Routing» ← Tutor", () => {
-    const r = selectPersona({ page: "lesson", message: "اشرحلي Routing" });
-    expect(r.persona).toBe("tutor");
-  });
-
-  it("الألعاب + «عايز أتحدى حد» ← Play", () => {
-    const r = selectPersona({ page: "play", message: "عايز أتحدى حد" });
-    expect(r.persona).toBe("play");
-  });
-
-  it("«عندي امتحان بعد يومين» ← Coach (تخطيط)", () => {
-    const r = selectPersona({ page: "dashboard", message: "عندي امتحان بعد يومين عن مادة الشبكات" });
-    expect(r.persona).toBe("coach");
-    expect(r.reason).toBe("message_planning");
-  });
-
-  it("«أنا مش فاهم الجزئية دي في المحاضرة» ← Tutor", () => {
-    const r = selectPersona({ page: "dashboard", message: "أنا مش فاهم الجزئية دي في المحاضرة" });
-    expect(r.persona).toBe("tutor");
-    expect(r.reason).toBe("message_academic");
-  });
-
-  it("سؤال المنصة من داخل صفحة الدرس ← Magic (الصفحة مجرد سياق)", () => {
-    const r = selectPersona({ page: "lesson", message: "رصيدي كام؟" });
-    expect(r.persona).toBe("magic");
-    expect(r.reason).toBe("message_platform");
-  });
-
-  it("وضع الشرح داخل الدرس بدون كلمات مفتاحية ← Tutor (lesson_mode)", () => {
-    const r = selectPersona({ page: "lesson", message: "تمام كمّل", mode: "explain", hasLessonContext: true });
-    expect(r.persona).toBe("tutor");
-    expect(r.reason).toBe("lesson_mode");
-  });
-
-  it("رسالة عادية في Dashboard ← Magic (default)", () => {
-    const r = selectPersona({ page: "dashboard", message: "صباح الخير" });
-    expect(r.persona).toBe("magic");
-    expect(r.reason).toBe("default");
-  });
-
-  it("الاختيار الصريح للمستخدم له الأولوية المطلقة", () => {
+  it("الاختيار الصريح القديم (tutor/play/coach) يتوحّد على Magic Agent", () => {
     const r = selectPersona({ explicitPersona: "play", page: "lesson", message: "اشرحلي Routing" });
-    expect(r.persona).toBe("play");
-    expect(r.reason).toBe("user_selected");
-  });
-
-  it("الاختيار الصريح magic يرجع للتوجيه الآلي (مش reason=user_selected)", () => {
-    const r = selectPersona({ explicitPersona: "magic", page: "lesson", message: "اشرحلي Routing" });
-    expect(r.persona).toBe("tutor");
+    expect(r.persona).toBe("magic");
+    expect(r.reason).toBe("unified_agent");
   });
 
   it("قيم صريحة غير صالحة تُتجاهل", () => {
     const r = selectPersona({ explicitPersona: "hacker", message: "اشرحلي Routing" });
-    expect(r.persona).toBe("tutor");
-  });
-
-  it("رسالة فاضية في صفحة اللعب ← Play (سياق الصفحة)", () => {
-    const r = selectPersona({ page: "play", message: "" });
-    expect(r.persona).toBe("play");
-  });
-
-  it("سياق المحادثة: رسالة محايدة بعد Tutor تبقى مع Tutor", () => {
-    const r = selectPersona({ page: "dashboard", message: "تمام كمّل", lastPersona: "tutor" });
-    expect(r.persona).toBe("tutor");
-    expect(r.reason).toBe("conversation_context");
-  });
-
-  it("سياق المحادثة لا يمنع إشارة تخطيط واضحة ← Coach", () => {
-    const r = selectPersona({ page: "dashboard", message: "اعمل لي جدول مذاكرة", lastPersona: "tutor" });
-    expect(r.persona).toBe("coach");
-    expect(r.reason).toBe("message_planning");
-  });
-
-  it("سياق المحادثة لا يمنع إشارة ترفيه ← Play", () => {
-    const r = selectPersona({ page: "dashboard", message: "يا ريت ألعب حاجة", lastPersona: "coach" });
-    expect(r.persona).toBe("play");
-  });
-
-  it("آخر شخصية Magic لا تُثبّت (توجيه طبيعي)", () => {
-    const r = selectPersona({ page: "dashboard", message: "أهلاً", lastPersona: "magic" });
     expect(r.persona).toBe("magic");
-    expect(r.reason).toBe("default");
+    expect(r.reason).toBe("unified_agent");
   });
 
-  it("اختيار صريح يتفوق على سياق المحادثة", () => {
-    const r = selectPersona({ explicitPersona: "play", message: "تمام كمّل", lastPersona: "tutor" });
-    expect(r.persona).toBe("play");
-    expect(r.reason).toBe("user_selected");
+  it("آخر شخصية محفوظة في الجلسة لا تؤثر — Magic Agent دايمًا", () => {
+    const r = selectPersona({ page: "dashboard", message: "تمام كمّل", lastPersona: "tutor" });
+    expect(r.persona).toBe("magic");
+    expect(r.reason).toBe("unified_agent");
+  });
+
+  it("سياق الصفحة لا يغيّر الشخصية — Magic Agent في كل الصفحات", () => {
+    expect(selectPersona({ page: "lesson", message: "" }).persona).toBe("magic");
+    expect(selectPersona({ page: "play", message: "" }).persona).toBe("magic");
   });
 });
 
-describe("buildPersonaIdentityPrompt", () => {
-  it("magic يفوّض buildMagicSystemPrompt (نفس الهوية)", () => {
-    const p = buildPersonaIdentityPrompt("magic", { subject: "Math" });
-    expect(p).toContain("Magic (ماجيك)");
-    expect(p).toContain("اللهجة المصرية");
+describe("isPlanningRequest — بدل شخصية الكوتش القديمة", () => {
+  it("يكتشف طلبات التخطيط", () => {
+    expect(isPlanningRequest("اعمل لي جدول مذاكرة")).toBe(true);
+    expect(isPlanningRequest("عندي امتحان بعد يومين عن مادة الشبكات")).toBe(true);
+    expect(isPlanningRequest("أنظم مذاكرتي")).toBe(true);
   });
 
-  it("tutor يحمل دور المعلم وقواعد التنسيق", () => {
-    const p = buildPersonaIdentityPrompt("tutor", { subject: "الشبكات", lesson: "Routing" });
-    expect(p).toContain("Tutor");
+  it("لا يكتشف الرسايل العادية", () => {
+    expect(isPlanningRequest("صباح الخير")).toBe(false);
+    expect(isPlanningRequest("اشرحلي Routing")).toBe(false);
+    expect(isPlanningRequest("")).toBe(false);
+  });
+});
+
+describe("buildPersonaIdentityPrompt — هوية Magic Agent الموحّدة", () => {
+  it("كل المعرّفات (الحالية والقديمة) ترجع نفس هوية Magic Agent", () => {
+    for (const id of ["magic", "tutor", "play", "coach"] as const) {
+      const p = buildPersonaIdentityPrompt(id, { subject: "Math" });
+      expect(p).toContain("Magic Agent (ماجيك)");
+      expect(p).toContain("اللهجة المصرية");
+    }
+  });
+
+  it("هوية Magic Agent تحمل كل المهارات المدموجة", () => {
+    const p = buildPersonaIdentityPrompt("magic", {});
+    expect(p).toContain("العقل وفهم الأمر");
+    expect(p).toContain("البرمجة والتقنية");
+    expect(p).toContain("اتخاذ القرار");
+    expect(p).toContain("البحث في الإنترنت");
     expect(p).toContain("الشرح العلمي");
-    expect(p).toContain("مساعد Magicly الموحد");
-    expect(p).toContain("الدرس الحالي: Routing");
+    expect(p).toContain("التخطيط والتحفيز");
+    expect(p).toContain("الطاقة والترفيه");
   });
 
-  it("play يحمل دور الترفيه", () => {
-    const p = buildPersonaIdentityPrompt("play", {});
-    expect(p).toContain("Play");
-    expect(p).toContain("الألعاب");
-  });
-
-  it("coach يحمل دور التخطيط ولا يدّعي إنشاء مواعيد فعلية", () => {
-    const p = buildPersonaIdentityPrompt("coach", {});
-    expect(p).toContain("Coach");
-    expect(p).toContain("لا تدّعي");
-  });
-
-  it("الهويات تتكيّف مع المرحلة الدراسية", () => {
-    const primary = buildPersonaIdentityPrompt("tutor", { stage: "primary" });
-    expect(primary).toContain("مراحل أولى");
-    const university = buildPersonaIdentityPrompt("coach", { stage: "university" });
-    expect(university).toContain("جامعي");
+  it("الهوية تتكيّف مع المرحلة الدراسية", () => {
+    expect(buildPersonaIdentityPrompt("magic", { stage: "primary" })).toContain("بسط المفاهيم");
+    expect(buildPersonaIdentityPrompt("magic", { stage: "university" })).toContain("أكاديمي");
   });
 
   it("كل هوية تحتوي الممنوعات الأساسية", () => {
-    for (const id of ["magic", "tutor", "play", "coach"] as const) {
-      expect(isMagicPersonaId(id)).toBe(true);
-      expect(buildPersonaIdentityPrompt(id, {})).toContain("لا تخترع معلومات");
-    }
+    const p = buildPersonaIdentityPrompt("magic", {});
+    expect(p).toContain("ممنوعات");
+    expect(p).toContain("لا تخترع معلومات");
   });
 });
 
-describe("سجل الشخصيات", () => {
-  it("يحتوي الشخصيات الأربعة الرسمية", () => {
+describe("توافق المعرّفات القديمة", () => {
+  it("isMagicPersonaId يقبل الحالي والقديم ويرفض الغريب", () => {
     expect(isMagicPersonaId("magic")).toBe(true);
+    expect(isMagicPersonaId("tutor")).toBe(true);
+    expect(isMagicPersonaId("play")).toBe(true);
+    expect(isMagicPersonaId("coach")).toBe(true);
     expect(isMagicPersonaId("nope")).toBe(false);
+  });
+
+  it("normalizeMagicPersonaId يوحّد أي معرّف على magic", () => {
+    for (const id of ["magic", "tutor", "play", "coach", "anything"]) {
+      expect(normalizeMagicPersonaId(id)).toBe("magic");
+    }
   });
 });

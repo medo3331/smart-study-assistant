@@ -8,7 +8,7 @@
 // 🔒 الجدول مفروض عليه RLS بملكية المستخدم؛ الكتابة من السيرفر فقط.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isMagicPersonaId, type MagicPersonaId } from "./personas";
+import { isMagicPersonaId, normalizeMagicPersonaId, type MagicPersonaId } from "./personas";
 
 export interface PersonaSessionRecord {
   persona: MagicPersonaId;
@@ -29,8 +29,9 @@ export async function loadPersonaSession(
 
   if (error || !data) return null;
   if (!isMagicPersonaId(data.persona_id)) return null;
+  // معرّفات الشخصيات القديمة تتحوّل لـ Magic Agent.
   return {
-    persona: data.persona_id,
+    persona: normalizeMagicPersonaId(data.persona_id),
     routingReason: typeof data.routing_reason === "string" ? data.routing_reason : null,
   };
 }

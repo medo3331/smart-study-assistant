@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { buildMagicSystemPrompt } from "@/lib/magic/persona-prompt";
 
-describe("buildMagicSystemPrompt", () => {
-  it("يتحدث باللهجة المصرية (هوية Magic)", () => {
+describe("buildMagicSystemPrompt — هوية Magic Agent", () => {
+  it("يتحدث باللهجة المصرية (هوية Magic Agent)", () => {
     const p = buildMagicSystemPrompt({});
-    expect(p).toContain("Magic (ماجيك)");
+    expect(p).toContain("Magic Agent (ماجيك)");
     expect(p).toContain("اللهجة المصرية");
     expect(p).toContain("ماجيك");
   });
@@ -26,6 +26,15 @@ describe("buildMagicSystemPrompt", () => {
     expect(buildMagicSystemPrompt({ stage: "primary" })).toContain("بسط المفاهيم");
     expect(buildMagicSystemPrompt({ stage: "university" })).toContain("أكاديمي");
     expect(buildMagicSystemPrompt({})).toContain("وازن بين البساطة");
+  });
+
+  it("قدرات الـ Agent: عقل يفهم الأمر + برمجة + قرار + بحث إنترنت", () => {
+    const p = buildMagicSystemPrompt({});
+    expect(p).toContain("العقل وفهم الأمر");
+    expect(p).toContain("البرمجة والتقنية");
+    expect(p).toContain("اتخاذ القرار");
+    expect(p).toContain("البحث في الإنترنت");
+    expect(p).toContain("Agent متطور");
   });
 
   it("لا يحتوي على Markdown formatting tokens كنص", () => {

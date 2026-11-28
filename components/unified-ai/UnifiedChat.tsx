@@ -21,7 +21,7 @@ import { notifyCreditsChanged } from "@/lib/upsell/use-plan-quota";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
-import { MAGIC_PERSONAS, isMagicPersonaId, type MagicPersonaId } from "@/lib/magic/personas";
+import { isMagicPersonaId } from "@/lib/magic/personas";
 import { extractPlanDraft, stripPlanFence } from "@/lib/agent/plan-draft";
 import { buildChatWelcomeGreeting } from "@/lib/magic/greeting";
 import { PlanApproveCard } from "./PlanApproveCard";
@@ -155,8 +155,6 @@ export function UnifiedChat({
   const [styleModifier, setStyleModifier] = useState<string | null>(null);
   // 🌐 بحث في الإنترنت — زر صريح زي ChatGPT: الطالب يتحكم بدل تخمين الكلام.
   const [webSearchOn, setWebSearchOn] = useState(false);
-  // 🎭 اختيار الشخصية — "auto" = الـ Orchestrator يختار في الخلفية (الافتراضي).
-  const [personaChoice, setPersonaChoice] = useState<"auto" | MagicPersonaId>("auto");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -409,8 +407,7 @@ export function UnifiedChat({
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
       if (styleModifier) ctx.style = styleModifier;
       if (webSearchOn) ctx.web = true;
-      // 🎭 الشخصية المختارة يدويًا لها الأولوية على التوجيه الآلي.
-      if (personaChoice !== "auto") ctx.persona = personaChoice;
+      // 🤖 شخصية Magic Agent موحّدة — مفيش اختيار شخصيات بعد الدمج.
       //                                             API    hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
@@ -755,7 +752,7 @@ export function UnifiedChat({
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
                   {msg.persona && msg.persona !== "magic" && isMagicPersonaId(msg.persona) && (
                     <span className="rounded-full bg-black/5 px-2 py-0.5">
-                      {MAGIC_PERSONAS[msg.persona].emoji} {MAGIC_PERSONAS[msg.persona].name}
+                      🤖 Magic Agent
                     </span>
                   )}
                   {msg.sourceTitle && (
@@ -879,26 +876,14 @@ export function UnifiedChat({
         <p className="mb-2 text-[11px] text-rose-600" role="alert">🔇 {voiceNotice}</p>
       )}
 
-      {/* 🧠 اختيار الشخصية — Auto افتراضيًا والـ Orchestrator يختار في الخلفية */}
+      {/* 🤖 Magic Agent — شخصية موحّدة واحدة، مفيش اختيار شخصيات. */}
       <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label="الشخصية">
-        {(["auto", "tutor", "play", "coach"] as const).map((id) => {
-          const active = personaChoice === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setPersonaChoice(id)}
-              aria-pressed={active}
-              className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${
-                active
-                  ? "bg-[var(--accent)] text-[var(--on-marker)] border-transparent"
-                  : "border-rule bg-paper text-ink-soft hover:bg-paper-3"
-              }`}
-            >
-              {id === "auto" ? "⚡ Auto" : `${MAGIC_PERSONAS[id].emoji} ${MAGIC_PERSONAS[id].name}`}
-            </button>
-          );
-        })}
+        <span
+          className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-transparent bg-[var(--accent)] text-[var(--on-marker)]"
+          aria-current="true"
+        >
+          🤖 Magic Agent
+        </span>
       </div>
 
       {/* 🎨 أساليب الشرح — شرح تفاعلي بأكثر من طريقة (زي المدرس الشطور) */}
