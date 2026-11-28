@@ -59,9 +59,26 @@
 
 ---
 
-## 3. متبقي في DEV-M2 (ليس في هذا الجزء)
+## 3. الجزء ٢ — Hybrid + دمج المتجر (✅ 2026-11-28 — db/116)
 
-1. دمج `/store` كامل في `/shop` + redirect (D-M-02) — اللي اتعمل cross-links مؤقتة.
-2. التسعير المختلط للمنتجات نفسها (Hybrid products) + `coin_orders`/`coin_inventory` الموحدة (D-M-03).
-3. أقسام المتجر العشرة + سجل المشتريات.
-4. إصلاح `CURRENCY_META` (دين D-DEV-001).
+### ما تم تنفيذه
+1. **التسعير المختلط الذرّي (D-M-03/D-M-11):** `shop_catalog.credits_price` (null = كوينز بس) + `purchase_item` بنسخة موحّدة بتتحقق من الرصيدين **قبل** أي خصم وبتخصم الاتنين في نفس المعاملة (فشل أي جانب = rollback للكل). الخصم اليومي على جزء الكوينز بس. التوقيع `(spent, balance)` زي ما هو — الكلاينت الحالي اشتغل من غير تغيير.
+2. **إصلاح bug حي:** النسخة الحية من `purchase_item` في الإنتاج كانت القديمة (من `db/shop.sql`) — يعني شراء حزم AI بالكوينز (`useful.ai-*`) كان بيخصم كوينز **من غير منح الكريدت** (معالجة useful من phase-e عمرها ما اتصحّت). db/116 جمعتها.
+3. **٤ منتجات Learning Store هجينة** (التصميم §3، متظبطة على نطاقات الندرة): تجربة الامتحان 500+30 · مراجعة متقدمة 1000+50 · تجربة شخصية 1200+75 · حزمة مراجعة موسّعة 2000+100 — الـ effect = entitlement (بيتفتح مع تجارب AI في DEV-M3).
+4. **دمج /store في /shop (D-M-02):** قسم Magic Credits (`CreditPacksPanel` — حزم + تعليمات دفع من `app_settings` + طلبات وتأكيد inline) + قسم باقات الكوينز + المحوّل + سجل المشتريات في `/shop`. `/store` → redirect دائم لـ `/shop#credits` (الروابط القديمة في UnifiedChat/rate-limit شغالة). `StoreClient` اتحذف (كان استخدامه /store بس) — `CheckoutRequestClient` و`PaymentConfirmForm` زي ما هما.
+5. **سجل المشتريات (D-M-10):** view `shop_purchase_history` فوق `coin_ledger` بـ security_invoker (الـ RLS بتاع الجدول بيتطبق) — **مفيش جداول مالية مكررة** (لا coin_orders ولا coin_products ولا coin_inventory).
+6. **دين D-DEV-001 اتصفّى:** `CURRENCY_META` بقت تقول الحقيقة — AI_CREDITS/ENTITLEMENT/SUBSCRIPTION كلها LIVE بمخازنها الفعلية.
+
+### التحقق (إنتاج)
+- db/116 مطبّقة نظيفة — artifact `docs/artifacts/market-hybrid-apply-*.json`.
+- **Smoke transactional (BEGIN…ROLLBACK):** شراء هجين 500+30 → خصم الكوينز والكريدت + entitlement + صف مخزن في نفس المعاملة ✅ · الشرا التاني مرفوض ✅ · بعد ROLLBACK صفر صفوف ✅.
+- ترتيب الفحوص في الدالة الحية: فحص الكريدت **قبل** خصم الكوينز (متحقق آلياً من الـ def المطبّق).
+- الاختبارات: 2,376 passed (منها 10 جديدة لعقد 116) · typecheck نظيف. (تشغيلة أولى فيها 3 فشل شبكة من اختبارات Image-Gen — أُعيدت وشُحنت كاملة.)
+
+---
+
+## 4. متبقي في DEV-M2
+
+1. ربط منتجات Learning Store بتجارب AI فعلية (استهلاك الـ entitlements) — DEV-M3.
+2. عروض وحزم مجمعة (Bundles) + Seasonal — DEV-M5.
+3. Economy Balancing dashboard (تعديل الأسعار والمكافآت من اللوحة + Audit) — D-M-06/DEV-M5.

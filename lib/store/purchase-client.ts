@@ -5,6 +5,7 @@
 export type PurchaseRequestClientRow = {
   id: string;
   kind: "credits" | "plan" | "coins";
+  pack_id: string | null;
   credits: number | null;
   coin_pack_id: string | null;
   coins: number | null;

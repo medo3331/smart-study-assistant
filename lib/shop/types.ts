@@ -19,6 +19,7 @@ export const CATEGORIES = [
   "effect",
   "box",
   "useful",
+  "learning",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
@@ -114,6 +115,13 @@ export const CATEGORY: Record<Category, CategoryMeta> = {
     icon: "Zap",
     slot: null,
   },
+  learning: {
+    id: "learning",
+    name: "المتجر التعليمي",
+    lede: "تجارب مراجعة وامتحان بالذكاء الاصطناعي — كوينز + كريدت",
+    icon: "GraduationCap",
+    slot: null,
+  },
 };
 
 /**
@@ -160,6 +168,12 @@ export type ShopItem = {
   rarity: Rarity;
   /** السعر بالكوينز. صفر = مجاني (العناصر الافتراضية) */
   price: number;
+  /**
+   * السعر المختلط (D-M-03/11): كريدت إضافي يُخصم من رصيد Magic Credits
+   * في نفس معاملة الشرا. `undefined` = كوينز بس. السيرفر هو اللي بيرفض
+   * لو الرصيد مش كفاية — الرقم هنا للعرض.
+   */
+  creditsPrice?: number;
   /**
    * محتوى العنصر: معرّف الباليت للثيم، إيموجي للصورة الرمزية، مفتاح
    * التراك للصوت... الواجهة بتفسّره على حسب `category`.

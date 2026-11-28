@@ -14,7 +14,6 @@
    ========================================================================== */
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { Coins } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import PaymentConfirmForm from "@/components/store/PaymentConfirmForm";
@@ -118,7 +117,7 @@ export function CoinPacksPanel({
 
       <p className="text-[11px] text-ink-soft">
         الدفع يدوي (فودافون كاش · إنستاباي · فيزا) وبيتراجعه فريقنا قبل الشحن —
-        تعليمات الدفع الكاملة في <Link href="/store" className="underline underline-offset-4 hover:text-ink">صفحة شحن الكريدت</Link>.
+        تعليمات الدفع الكاملة في قسم Magic Credits فوق.
       </p>
 
       {message && (

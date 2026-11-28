@@ -55,7 +55,7 @@ export function ItemCard({
       ? "عندك"
       : locked
         ? `مقفول: ${state.lockedNeed}`
-        : `السعر ${item.price} كوين`;
+        : `السعر ${item.price} كوين${item.creditsPrice ? ` + ${item.creditsPrice} كريدت` : ""}`;
 
   return (
     <motion.button
@@ -108,7 +108,7 @@ export function ItemCard({
             className={`coin-pill ${state.affordable ? "" : "opacity-55"}`}
             aria-hidden
           >
-            🪙 {item.price}
+            🪙 {item.price}{item.creditsPrice ? ` + 💎 ${item.creditsPrice}` : ""}
           </span>
         )}
       </div>

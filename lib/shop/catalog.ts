@@ -474,6 +474,67 @@ const USEFUL_ITEMS: ShopItem[] = [
 ];
 
 // ============================================================================
+// المتجر التعليمي — 4 تجارب AI هجينة (D-M-03/D-M-11)
+// ============================================================================
+/**
+ * تجارب AI بتتشترى **كوينز + كريدت مع بعض** — الخصم الذري في
+ * `purchase_item` (db/116). الأسعار من التصميم §3 متظبطة على نطاقات
+ * الندرة، والـ effect = entitlement بيتفتح لما تجارب AI تتفعّل (DEV-M3).
+ * ⚠️ الأرقام لازم تطابق db/116 — الكتالوج مرآة للجدول.
+ */
+const LEARNING_ITEMS: ShopItem[] = [
+  {
+    id: "learning.ai-exam-experience",
+    category: "learning" as Category,
+    name: "تجربة الامتحان بالذكاء الاصطناعي",
+    desc: "امتحان تجربة متكامل يتولّد لك — كوينز + كريدت",
+    rarity: "rare",
+    price: 500,
+    creditsPrice: 30,
+    value: "ai-exam-experience",
+    unlock: null,
+    featured: true,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "ai-exam-experience" } },
+  },
+  {
+    id: "learning.ai-advanced-review",
+    category: "learning" as Category,
+    name: "مراجعة متقدمة بالذكاء الاصطناعي",
+    desc: "مراجعة معمّقة لأدائك مع خطة تحسين — كوينز + كريدت",
+    rarity: "epic",
+    price: 1000,
+    creditsPrice: 50,
+    value: "ai-advanced-review",
+    unlock: null,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "ai-advanced-review" } },
+  },
+  {
+    id: "learning.magic-persona-plus",
+    category: "learning" as Category,
+    name: "التجربة الشخصية Magic المتقدمة",
+    desc: "مساعد مذاكرة شخصي متقدم — كوينز + كريدت",
+    rarity: "epic",
+    price: 1200,
+    creditsPrice: 75,
+    value: "magic-persona-plus",
+    unlock: null,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "magic-persona-plus" } },
+  },
+  {
+    id: "learning.smart-review-pack",
+    category: "learning" as Category,
+    name: "حزمة المراجعة الذكية الموسّعة",
+    desc: "أكبر حزمة مراجعة — كوينز + كريدت",
+    rarity: "legendary",
+    price: 2000,
+    creditsPrice: 100,
+    value: "smart-review-pack",
+    unlock: null,
+    metadata: { useful: { type: "entitlement", kind: "feature", value: "smart-review-pack" } },
+  },
+];
+
+// ============================================================================
 // الكتالوج المجمّع
 // ============================================================================
 
@@ -494,6 +555,7 @@ export const CATALOG: readonly ShopItem[] = [
   ...EFFECT_ITEMS,
   ...DAILY_ITEMS,
   ...USEFUL_ITEMS,
+  ...LEARNING_ITEMS,
 ];
 
 /**

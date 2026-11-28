@@ -19,7 +19,7 @@
 
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Lock, Check, Coins, Zap } from "lucide-react";
+import { Lock, Check, Coins, Zap, Gem } from "lucide-react";
 import type { ShopItem } from "@/lib/shop/types";
 import { CATEGORY } from "@/lib/shop/types";
 import { RARITY } from "@/lib/shop/rarity";
@@ -243,6 +243,11 @@ export function ItemSheet({
                 </span>
               )}
               {price}
+              {item.creditsPrice && (
+                <span className="text-sm font-normal text-ink-soft">
+                  + <Gem className="w-3.5 h-3.5 inline text-ink-soft" aria-hidden /> {item.creditsPrice}
+                </span>
+              )}
             </span>
           </div>
         )}

@@ -24,7 +24,7 @@
    ما تفضل بتحمّل.
    ========================================================================== */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
 import { Search, X, Zap } from "lucide-react";
@@ -38,8 +38,10 @@ import { BOXES, type BoxTier } from "@/lib/shop/boxes";
 import { useShop } from "@/lib/shop/use-shop";
 import { BoxPanel } from "@/components/shop/BoxPanel";
 import { BoxSheet } from "@/components/shop/BoxSheet";
+import { CreditPacksPanel } from "@/components/shop/CreditPacksPanel";
 import { CoinPacksPanel } from "@/components/shop/CoinPacksPanel";
 import { ExchangeWidget } from "@/components/shop/ExchangeWidget";
+import { PurchaseHistoryPanel } from "@/components/shop/PurchaseHistoryPanel";
 import { DailyStrip } from "@/components/shop/DailyStrip";
 import { ItemCard } from "@/components/shop/ItemCard";
 import { ItemSheet } from "@/components/shop/ItemSheet";
@@ -89,8 +91,21 @@ export default function ShopPage() {
   const [boxId, setBoxId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMsg | null>(null);
   const [justBought, setJustBought] = useState<string | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [personalization, setPersonalization] = useState<Personalization | null>(null);
   const [savingPersonalization, setSavingPersonalization] = useState(false);
+
+  const refreshCreditBalance = useCallback(() => {
+    if (!supabase) return;
+    void supabase.rpc("ai_credit_balance").then(({ data }) => {
+      if (typeof data === "number") setCreditBalance(data);
+    });
+  }, [supabase]);
+
+  useEffect(() => {
+    if (session.status !== "ready") return;
+    refreshCreditBalance();
+  }, [session.status, refreshCreditBalance]);
 
   // الزائر يرجع للداشبورد — هي اللي بتعمل جلسة الزائر، مش إحنا
   useEffect(() => {
@@ -270,14 +285,9 @@ export default function ShopPage() {
       feedbackPage="shop"
       feedbackLabel="المتجر"
       action={
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push("/store")} className="btn btn-quiet text-sm">
-            شحن الكريدت
-          </button>
-          <button onClick={() => router.push("/inventory")} className="btn btn-quiet text-sm">
-            مخزني
-          </button>
-        </div>
+        <button onClick={() => router.push("/inventory")} className="btn btn-quiet text-sm">
+          مخزني
+        </button>
       }
     >
       <ShopBar state={state} />
@@ -372,8 +382,13 @@ export default function ShopPage() {
           وهو بيكتب. */}
       {showExtras && (
         <>
-          {/* شحن الكوينز بالفلوس + التبديل مع الكريدت — بيبانوا في «الكل»
-              بس وبيخفوا لو جداول db/115 مش متطبقة بعد */}
+          {/* أقسام الفلوس والتبديل (D-M-02/08/09) — بيتخفوا لو جداول
+              db/115 مش متطبقة بعد */}
+          <CreditPacksPanel
+            supabase={supabase}
+            creditBalance={creditBalance}
+            onCreditsGranted={refreshCreditBalance}
+          />
           <CoinPacksPanel
             supabase={supabase}
             coinBalance={state.balance}
@@ -384,6 +399,7 @@ export default function ShopPage() {
             coinBalance={state.balance}
             onChanged={shop.reload}
           />
+          <PurchaseHistoryPanel supabase={supabase} />
           <DailyStrip
             offers={shop.daily}
             balance={state.balance}
@@ -554,6 +570,8 @@ export default function ShopPage() {
               const res = await shop.buy(open.id);
               say(res.message, res.ok);
               if (res.ok) {
+                // الهجين بيخصم كريدت كمان — نحدّث رصيده من السيرفر
+                if (open.creditsPrice) refreshCreditBalance();
                 setJustBought(open.id);
                 setOpenId(null);
                 setTimeout(() => setJustBought(null), 700);

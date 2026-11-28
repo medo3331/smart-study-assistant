@@ -297,6 +297,16 @@
 **الدليل:** `db/115-market-money-exchange.sql` · `app/api/store/purchase-requests/route.ts` · `app/admin/actions/purchase-requests.ts`
 **المرجع:** طلب المالك مباشرة (2026-11-28) + MAGICLY ECONOMY FINAL DESIGN §6.
 
+### D-M-10 — لا جداول مالية مكررة: سجل المشتريات على الموجود
+**قرار:** جداول التصميم §9 `coin_products` / `coin_orders` / `coin_inventory` **لا تُنشأ** — المتجر بيستخدم `shop_catalog` / `shop_inventory` الموجودين، وسجل المشتريات = `coin_ledger` (حركات الصرف) + `purchase_requests` (طلبات الفلوس) عبر view `shop_purchase_history` (security_invoker). نفس قاعدة D-M-07: ممنوع نظام مالي جديد جنب الموجود.
+**الحالة:** `مقفل`
+**الدليل:** `db/116-market-hybrid.sql` §4.
+
+### D-M-11 — التسعير المختلط عمود واحد + RPC واحدة
+**قرار:** المنتج الهجين (Coins + Credits) سعره في `shop_catalog` (`price` + `credits_price`)، والشرا عبر `purchase_item` نفسها — بتتحقق من الرصيدين **قبل** أي خصم وبتخصم الاتنين في نفس المعاملة (فشل أي جانب = rollback للكل). الخصم اليومي بيتطبق على جزء الكوينز بس.
+**الحالة:** `مقفل`
+**الدليل:** `db/116-market-hybrid.sql` §3.
+
 ---
 
 ## 5. قالب القرار الجديد

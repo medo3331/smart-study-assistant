@@ -410,9 +410,11 @@ export type AnyCurrency = EconomyCurrency | FutureCurrency;
 export const CURRENCY_META = {
   XP: { purpose: "Progression", storage: "profiles.xp", status: "LIVE" as const },
   COINS: { purpose: "Store economy", storage: "coin_ledger (via coin_balance())", status: "LIVE" as const },
-  AI_CREDITS: { purpose: "AI usage", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
-  ENTITLEMENT: { purpose: "Model/feature unlock", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
-  SUBSCRIPTION: { purpose: "Paid plan -> Entitlement", storage: "NOT IMPLEMENTED", status: "FUTURE" as const },
+  // D-DEV-001 (تصحيح دين 2026-11-28): الرصيد والتخزين موجودان فعلاً —
+  // Magic Credits (واجهة) / AI Credits (كود) عبر ai_credit_ledger + credit_grants.
+  AI_CREDITS: { purpose: "AI usage", storage: "ai_credit_ledger (via ai_credit_balance())", status: "LIVE" as const },
+  ENTITLEMENT: { purpose: "Model/feature unlock", storage: "entitlements (من متجر Useful/Learning)", status: "LIVE" as const },
+  SUBSCRIPTION: { purpose: "Paid plan -> Entitlement", storage: "subscriptions (admin_activate_subscription)", status: "LIVE" as const },
 } as const;
 export interface EconomyContext { userId: string; xp: number; level: number; league: League; streak: number; coins: number; badgeCount: number; sessions: number; }
 export function createEconomyContext(args: { userId: string; xp: number; streak: number; coins: number; badgeCount: number; sessions: number; }): EconomyContext { return { userId: args.userId, xp: args.xp, level: levelFromXp(args.xp), league: leagueFromXp(args.xp), streak: args.streak, coins: args.coins, badgeCount: args.badgeCount, sessions: args.sessions }; }
@@ -484,9 +486,9 @@ export type AiCreditLedgerEntry = {
   createdAt: string;
 };
 
-// CURRENCY_META يبقى كما هو — AI_CREDITS / ENTITLEMENT ما زالتا FUTURE
-// التخزين الفعلي الآن موجود (entitlements, ai_credit_ledger) لكن غير موصول
-// بالـ Store أو AI Router حتى Phase E/G. هذا مقصود.
+// CURRENCY_META محدّث (D-DEV-001 — الدين اتصفّى 2026-11-28): كل العملات LIVE
+// والمخازن الفعلية مكتوبة فوق. التخزين كان موجود من Phase D/E لكن الميتا
+// كانت بتقول FUTURE — كده كانت بتضلّل قارئ الكود.
 
 // ---------------------------------------------------------------------------
 // Phase 4.0 — Economy Foundation: Signup + Daily Login + Study Rewards
