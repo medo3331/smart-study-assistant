@@ -144,6 +144,16 @@ const AVATARS: readonly (readonly [string, string, string, Rarity])[] = [
   ["phoenix", "🔥", "عنقاء — بيرجع بعد كل انقطاع", "legendary"],
   ["galaxy-brain", "🌌", "عقل مجرّة", "legendary"],
   ["crown", "👑", "التاج", "mythic"],
+  // DEV-M3 — دفعة موسم الامتحانات (append فقط: فهرس العناصر القديمة
+  // ثابت فأسعارها في db/shop.sql ما بتتغيرش)
+  ["graduate", "🎓", "خريج — الوصول", "rare"],
+  ["scientist", "🧪", "عالِم المعمل", "uncommon"],
+  ["books", "📚", "عاشق الكتب", "uncommon"],
+  ["rocket", "🚀", "صاروخ التقدم", "rare"],
+  ["brain", "🧠", "العقل المدبّر", "epic"],
+  ["alien", "👽", "ذكاء من بره الكوكب", "epic"],
+  ["wizard", "🧙", "ساحر المذاكرة", "legendary"],
+  ["astronaut", "🧑‍🚀", "رائد فضاء — أعلى من الجميع", "legendary"],
 ];
 
 const AVATAR_ITEMS: ShopItem[] = AVATARS.map(([id, emoji, desc, rarity], i) => ({
@@ -226,6 +236,11 @@ const TITLES: readonly (readonly [string, string, string, Rarity])[] = [
   ["knowledge-king", "ملك المعرفة", "أعلى درجة", "legendary"],
   ["legend", "أسطورة", "دوري الأساطير", "legendary"],
   ["the-one", "الوحيد", "لقب واحد بس في كل حساب", "mythic"],
+  // DEV-M3 — ألقاب الإنجاز الجديدة
+  ["quiz-master", "فاهم", "بيجيب الدرجة النهائية", "rare"],
+  ["scholar", "عالِم", "قراءته ومذاكرته كتير", "uncommon"],
+  ["champion", "بطل الأسبوع", "متصدر أسبوع Magicly", "epic"],
+  ["timekeeper", "منظّم", "بيظبط وقته كل يوم", "uncommon"],
 ];
 
 const TITLE_ITEMS: ShopItem[] = TITLES.map(([id, name, desc, rarity], i) => ({
@@ -284,6 +299,9 @@ const COMPANIONS: readonly (readonly [string, string, string, string, Rarity])[]
   ["star", "نجمة", "✨·⭐·🌟·💫", "بتلمع بالمستوى", "epic"],
   ["dragon", "تنين", "🥚·🦎·🐉·🔥", "التطوّر الكامل", "legendary"],
   ["void", "الفراغ", "⚫·🌑·🌌·🕳️", "مفيش حد يعرف هو إيه", "mythic"],
+  // DEV-M3 — رفقاء جداد
+  ["bunny", "أرنب", "🥚·🐰·🐇·🏆", "بيقفز كل ما تتقدم", "rare"],
+  ["hamster", "هامستر", "🌾·🐹·🐿️·✨", "بيخزّن إنجازك زي المخزن", "epic"],
 ];
 
 const COMPANION_ITEMS: ShopItem[] = COMPANIONS.map(

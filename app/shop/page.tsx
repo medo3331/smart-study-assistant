@@ -3,7 +3,7 @@
 /* ==========================================================================
    المتجر
 
-   ٩٣ عنصر (٩٠ تجميلي + ٣ مفيدة) في ٩ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
+   ١١٤ عنصر (١١١ تجميلي + ٣ مفيدة) في ١٠ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
    يلاقي حاجة في كومة زي دي. الحل تلات طبقات — قسم، وبحث، وترتيب — وكلهم
    بيشتغلوا مع بعض على نفس القايمة.
 
@@ -38,6 +38,7 @@ import { BOXES, type BoxTier } from "@/lib/shop/boxes";
 import { useShop } from "@/lib/shop/use-shop";
 import { BoxPanel } from "@/components/shop/BoxPanel";
 import { BoxSheet } from "@/components/shop/BoxSheet";
+import { ChampionsPanel } from "@/components/shop/ChampionsPanel";
 import { CreditPacksPanel } from "@/components/shop/CreditPacksPanel";
 import { CoinPacksPanel } from "@/components/shop/CoinPacksPanel";
 import { ExchangeWidget } from "@/components/shop/ExchangeWidget";
@@ -401,6 +402,7 @@ export default function ShopPage() {
             onChanged={shop.reload}
           />
           <PurchaseHistoryPanel supabase={supabase} />
+          <ChampionsPanel supabase={supabase} />
           <FreeRewardsPanel />
           <DailyStrip
             offers={shop.daily}

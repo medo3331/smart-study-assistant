@@ -645,6 +645,9 @@ export default function LessonDetailPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
+  // إثبات سيرفري (D-M-04): معرّف المحاولة من التوليد — التسليم بيتصحّح في
+  // /api/lesson-quiz/submit والمكافأة منه، مش من الدرجة المحلية.
+  const [quizAttemptId, setQuizAttemptId] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
 
@@ -830,6 +833,7 @@ export default function LessonDetailPage() {
     setQuizLoading(true);
     setQuizSubmitted(false);
     setQuizScore(0);
+    setQuizAttemptId(null);
     setSelectedAnswers([]);
 
     try {
@@ -848,6 +852,7 @@ export default function LessonDetailPage() {
       const parsed: QuizQuestion[] = data?.questions || [];
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("empty");
         setQuizQuestions(parsed);
+        setQuizAttemptId(typeof data?.attemptId === "string" ? data.attemptId : null);
         setSelectedAnswers(new Array(parsed.length).fill(-1));
         setQuizStarted(true);
     } catch {
@@ -869,12 +874,33 @@ export default function LessonDetailPage() {
   };
 
   const handleSubmitQuiz = () => {
+    if (quizSubmitted) return;
     let correct = 0;
     quizQuestions.forEach((q, i) => {
       if (selectedAnswers[i] === q.correctIndex) correct++;
     });
     setQuizScore(correct);
     setQuizSubmitted(true);
+
+    // التصحيح الرسمي على السيرفر (D-M-04) — الدرجة المحلية عرض مؤقت،
+    // ولو السيرفر اختلف بنأخذ درجته. المكافأة صامتة الفشل: الاختبار
+    // شغّال حتى لو جداول الاقتصاد لسه مش متطبقة.
+    if (!quizAttemptId) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/lesson-quiz/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ attemptId: quizAttemptId, answers: selectedAnswers }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) return;
+        if (typeof data.score === "number") setQuizScore(data.score);
+        if (typeof data.awarded === "number" && data.awarded > 0) setCoinsWon(data.awarded);
+      } catch (err) {
+        console.warn("lesson-quiz submit failed (متجاهَل):", err);
+      }
+    })();
   };
 
   const passThreshold = Math.ceil(quizQuestions.length * 0.6);
