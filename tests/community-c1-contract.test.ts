@@ -168,8 +168,8 @@ describe("Community C1 UI contract", () => {
   });
 
   it("inbox opens the support tab from ?category=support", () => {
-    const inbox = read("app/inbox/page.tsx");
+    const inbox = read("components/messaging/InboxClient.tsx");
     expect(inbox).toContain('window.location.search');
-    expect(inbox).toContain('params.get("category")');
+    expect(inbox).toContain('setTab("support")');
   });
 });

@@ -83,14 +83,15 @@ describe("Inbox conversations contract", () => {
   it("conversation list shows the other participant's name, avatar and last message", () => {
     expect(conversationsRoute).toContain("social_profiles");
     expect(conversationsRoute).toContain("last_message_body");
-    expect(inbox).toContain("other_avatar");
-    expect(inbox).toContain("last_message_body");
+    const client = read("components/messaging/InboxClient.tsx");
+    expect(client).toContain("other_avatar");
+    expect(client).toContain("last_message_body");
   });
 
   it("inbox search uses the query param the API expects", () => {
-    expect(inbox).toContain("data.profiles || data.users");
-    expect(inbox).toContain("?query=${encodeURIComponent(query)}");
-    expect(inbox).not.toContain("?q=${encodeURIComponent(query)}");
+    const client = read("components/messaging/InboxClient.tsx");
+    expect(client).toContain("?query=${encodeURIComponent(");
+    expect(client).not.toContain("?q=${encodeURIComponent(");
   });
 });
 

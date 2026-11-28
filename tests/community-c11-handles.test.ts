@@ -69,11 +69,12 @@ describe("C11 app contract", () => {
   });
 
   it("inbox fixes: current user is loaded, header shows the other participant, search shows handle", () => {
-    // الحالة القديمة: user كان بيفضل null فكل الرسايل بتظهر في اتجاه واحد
-    expect(inbox).toContain("setUser(data.user ?? null)");
-    expect(inbox).toContain("selectedConvData?.title");
-    expect(inbox).toContain("`@${u.handle}`");
-    // MAG ID مش سر — input text مش password
-    expect(inbox).not.toContain('type="password"');
+    const client = read("components/messaging/InboxClient.tsx");
+    // حالة المستخدم الحالي بتتحمّل — عشان اتجاه الرسايل يبقى صح
+    expect(client).toContain("setMe(data.user?.id ?? null)");
+    expect(client).toContain("selectedConvMeta?.title");
+    expect(client).toContain("`@${u.handle}`");
+    // MAG ID مش سر — input عادي مش password
+    expect(client).not.toContain('type="password"');
   });
 });

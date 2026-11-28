@@ -132,9 +132,29 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: "Failed to load requests." }, { status: 500 });
     }
 
+    // إثراء الطلبات باسم المُرسِل وصورته وhandle — بدل عرض "مرسل الطلب" المجهول
+    const rows = (data ?? []) as { sender_id: string }[];
+    let senderById = new Map<string, { display_name: string | null; handle: string | null; avatar_url: string | null }>();
+    const senderIds = [...new Set(rows.map((r) => r.sender_id))];
+    if (senderIds.length > 0) {
+      const { data: senders } = await serverClient
+        .from("social_profiles")
+        .select("user_id, display_name, handle, avatar_url")
+        .in("user_id", senderIds);
+      senderById = new Map(
+        ((senders ?? []) as { user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null }[])
+          .map((s) => [s.user_id, { display_name: s.display_name, handle: s.handle, avatar_url: s.avatar_url }]),
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      requests: data || [],
+      requests: rows.map((r) => ({
+        ...r,
+        sender_name: senderById.get(r.sender_id)?.display_name ?? null,
+        sender_handle: senderById.get(r.sender_id)?.handle ?? null,
+        sender_avatar: senderById.get(r.sender_id)?.avatar_url ?? null,
+      })),
     });
   } catch (error) {
     console.error("[message_requests] GET unexpected error:", error);
