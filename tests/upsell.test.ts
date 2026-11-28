@@ -69,14 +69,19 @@ describe("computeCreditStatus", () => {
 });
 
 describe("nextPlanFor / normalizeTier / checkoutUrlFor", () => {
-  it("free → pro", () => {
-    expect(nextPlanFor("free")).toBe("pro");
-    expect(nextPlanFor("")).toBe("pro");
-    expect(nextPlanFor(null)).toBe("pro");
+  it("free → basic (الخطة الجديدة بعد إعادة الترتيب)", () => {
+    expect(nextPlanFor("free")).toBe("basic");
+    expect(nextPlanFor("")).toBe("basic");
+    expect(nextPlanFor(null)).toBe("basic");
   });
 
-  it("premium (ميراث) → pro", () => {
-    expect(nextPlanFor("premium")).toBe("pro");
+  it("basic → pro", () => {
+    expect(nextPlanFor("basic")).toBe("pro");
+    expect(checkoutUrlFor("basic")).toBe("/checkout/basic");
+  });
+
+  it("premium (ميراث) → basic", () => {
+    expect(nextPlanFor("premium")).toBe("basic");
   });
 
   it("pro → ultra", () => {

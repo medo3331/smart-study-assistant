@@ -268,10 +268,11 @@ export async function grantUserBalance(input: {
         return { ok: false, message: "لم تُضف الكوينز (المصدر مقفول أو تجاوز السقف اليومي) — راجع قواعد المصادر." };
       }
     } else {
+      // ⚠️ تاريخ انتهاء صريح — مينفعش null (نسخ قديمة من grant_credits بتحقنه كما هو وتكسر NOT NULL).
       const { error } = await db.rpc("grant_credits", {
         p_user_id: userId,
         p_amount: input.amount,
-        p_expires_at: null,
+        p_expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
         p_source: "bonus",
         p_notes: note || `منح إداري من ${actor.userEmail ?? actor.userId}`,
       });

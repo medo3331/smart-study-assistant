@@ -56,6 +56,9 @@ function mapDbError(message: string): string {
   }
   if (message.includes("p_amount")) return "المبلغ غير صالح";
   if (message.includes("p_expires_at")) return "تاريخ الانتهاء غير صالح";
+  if (message.includes('null value in column "expires_at"')) {
+    return "دالة grant_credits في القاعدة قديمة — شغّل db/fix-grant-credits-expiry.sql في SQL Editor ثم أعد المحاولة";
+  }
   return message;
 }
 

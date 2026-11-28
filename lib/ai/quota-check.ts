@@ -77,8 +77,8 @@ function logQuotaFailOpen(userId: string, kind: QuotaKind, error: unknown): void
 }
 
 /** Fallbacks لو subscription_plans مش متاحة — نفس seeds db/epic2-admin-rbac-audit-schema.sql:157-161. */
-const FALLBACK_MESSAGES_PER_2H: Record<string, number> = { free: 20, pro: 100, ultra: 500 };
-const FALLBACK_UPLOADS_DAILY: Record<string, number> = { free: 5, pro: 30, ultra: 60 };
+const FALLBACK_MESSAGES_PER_2H: Record<string, number> = { free: 20, basic: 60, pro: 100, ultra: 500 };
+const FALLBACK_UPLOADS_DAILY: Record<string, number> = { free: 5, basic: 15, pro: 30, ultra: 60 };
 
 /**
  * فحص + استهلاك كوتة في خطوة واحدة ذرّية عبر RPC.
@@ -167,10 +167,10 @@ export async function checkSubscriptionQuota(
         limit,
         resetAt,
         reasonAr: kind === "message"
-          ? `وصلت لحد رسايل باقتك (${limit} رسالة/يوم). الكوتا بتتجدد كل 24 ساعة، أو رقّي باقتك لحد أعلى.`
+          ? `خلصت حد رسايل النهارده (${limit} رسالة). بيتجدد كل 24 ساعة — ولو محتاج أكتر، شوف الباقات.`
           : kind === "page"
-            ? `وصلت لحد صفحات اليوم (${limit} صفحة). الكوتا بتتجدد كل 24 ساعة، أو رقّي باقتك لحد أعلى.`
-            : `وصلت لحد الرفع اليومي لباقتك (${limit} ملفات).`,
+            ? `خلصت حد صفحات النهارده (${limit} صفحة). بيتجدد كل 24 ساعة — ولو محتاج أكتر، شوف الباقات.`
+            : `خلصت حد الرفع اليومي (${limit} ملفات). بيتجدد كل 24 ساعة — ولو محتاج أكتر، شوف الباقات.`,
       };
     }
 

@@ -62,11 +62,11 @@ export async function requestPageCreditsViaServer(count = 1): Promise<PageQuotaR
 }
 */
 
-/** رسالة الرفض الجاهزة للعرض — تحفّز الترقية. */
+/** رسالة الرفض الجاهزة للعرض — اقتراح ودي مش إجباري. */
 export function pageQuotaBlockedMessage(result: PageQuotaResult): string {
   if (result.reasonAr) return result.reasonAr;
   if (result.limit > 0) {
-    return `وصلت لحد ${result.limit} صفحات اليوم. الكوتا بتتجدد كل 24 ساعة، أو رقّي باقتك.`;
+    return `خلصت حد ${result.limit} صفحات النهارده. بيتجدد كل 24 ساعة — ولو محتاج أكتر، شوف الباقات.`;
   }
   return "مقدرنش أعمل صفحات جديدة دلوقتي — حاول تاني.";
 }

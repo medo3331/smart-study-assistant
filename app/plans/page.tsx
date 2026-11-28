@@ -23,6 +23,7 @@ type PlanRow = {
 
 const PLAN_META: Record<string, { accent: string; border: string; badge?: string; icon: string }> = {
   free: { accent: "from-slate-400 to-slate-600", border: "border-slate-700", icon: "🌱" },
+  basic: { accent: "from-sky-500 to-cyan-500", border: "border-sky-500/50", icon: "✨" },
   pro: { accent: "from-violet-500 to-fuchsia-500", border: "border-violet-500/50", badge: "الأكثر شعبية", icon: "⚡" },
   ultra: { accent: "from-amber-400 to-orange-500", border: "border-amber-500/50", badge: "أقصى أداء", icon: "🚀" },
 };

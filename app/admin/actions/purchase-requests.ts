@@ -95,10 +95,14 @@ export async function approvePurchaseRequest(requestId: string, adminNote?: stri
     if (!Number.isInteger(credits) || credits <= 0) {
       return { ok: false, message: "بيانات الكريدت في الطلب غير صالحة.", error: "invalid_credits" };
     }
+    // ⚠️ تمرير تاريخ انتهاء صريح (90 يومًا) — مينفعش نعتمد على default الدالة:
+    // نسخ قديمة من grant_credits في القاعدة بتحقن p_expires_at كما هو
+    // فبتيكسر قيد NOT NULL على credit_grants.expires_at (خطأ موثق 25ط).
+    const defaultExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
     const { error: grantError } = await db.rpc("grant_credits", {
       p_user_id: request.user_id,
       p_amount: credits,
-      p_expires_at: null, // default: 90 يومًا
+      p_expires_at: defaultExpiry,
       p_source: "bonus",
       p_notes: `شراء كريدت — طلب ${request.id.slice(0, 8)}`,
     });
