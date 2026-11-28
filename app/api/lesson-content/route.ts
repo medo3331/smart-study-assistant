@@ -23,6 +23,8 @@ import {
   readCitedMode,
   readCitedVersions,
 } from "@/lib/lesson/cited-derive";
+import { parseJsonPayload } from "@/lib/ai/lecture-intensive";
+import { SUMMARY_KINDS, type LessonSummaries } from "@/lib/lesson/summaries";
 import { subjectMatches } from "@/lib/academics/subject-match";
 import { extractOutline } from "@/lib/lesson/outline";
 import { alignHeadingsToTranscript } from "@/lib/lesson/video-align";
@@ -405,6 +407,81 @@ function readSavedVideo(raw: unknown): SavedLessonVideo | null {
   };
 }
 
+/* ═════════════════ الملخصات بأشكالها (P4) ═════════════════ */
+
+/** أقصى حروف للملخص الواحد. */
+const MAX_SUMMARY_KIND_CHARS = 1500;
+
+/** قراءة الملخصات المخزّنة — best-effort: أى شكل تالف ⇒ null للمفتاح. */
+function readStoredSummaries(raw: unknown): LessonSummaries | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const out: LessonSummaries = {};
+  let any = false;
+  for (const kind of SUMMARY_KINDS) {
+    const value = record[kind];
+    if (typeof value === "string" && value.trim()) {
+      out[kind] = value.slice(0, MAX_SUMMARY_KIND_CHARS);
+      any = true;
+    }
+  }
+  return any ? out : null;
+}
+
+/* ═════════════════ النوتة المربوطة بالدرس (P4) ═════════════════ */
+
+/** آخر نوتة مربوطة بالدرس — الشكل المخزَّن في `lesson_content.notes`. */
+export type StoredLessonNote = {
+  last: { title: string; body: string; source: string } | null;
+  updatedAt: string | null;
+};
+
+/** قراءة النوتة المخزّنة — best-effort ⇒ شكل فاضي. */
+function readStoredNote(raw: unknown): StoredLessonNote {
+  const empty: StoredLessonNote = { last: null, updatedAt: null };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return empty;
+  const record = raw as Record<string, unknown>;
+  const lastRaw = record.last;
+  if (!lastRaw || typeof lastRaw !== "object" || Array.isArray(lastRaw)) return empty;
+  const last = lastRaw as Record<string, unknown>;
+  if (typeof last.body !== "string" || !last.body.trim()) return empty;
+  return {
+    last: {
+      title: typeof last.title === "string" ? last.title.slice(0, 200) : "",
+      body: last.body.slice(0, MAX_NOTE_DB_CHARS),
+      source: typeof last.source === "string" ? last.source.slice(0, 120) : "",
+    },
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : null,
+  };
+}
+
+/** أقصى حروف لنص النوتة المخزَّنة في الداتابيز (نفس فلسفة MAX_NOTE_DRAFT_CHARS). */
+const MAX_NOTE_DB_CHARS = 20_000;
+
+/* ═════════════════ حوّل لـ Flashcard/MCQ (P4/P5) ═════════════════ */
+
+/** أنواع التحويل المدعومة — Mind Map في مرحلة لاحقة. */
+const CONVERSION_KINDS = ["flashcard", "mcq"] as const;
+type ConversionKind = (typeof CONVERSION_KINDS)[number];
+
+function isConversionKind(value: unknown): value is ConversionKind {
+  return typeof value === "string" && (CONVERSION_KINDS as readonly string[]).includes(value);
+}
+
+/** أقصى حروف لنص المصدر المُحوَّل. */
+const MAX_CONVERSION_SOURCE_CHARS = 6_000;
+
+/** كاش التحويلات in-memory — «ولّد مرة» لنفس النص (التخزين النهائي في النوتة نفسها). */
+const CONVERSION_CACHE = new Map<string, { body: string; ts: number }>();
+const CONVERSION_CACHE_TTL_MS = 1000 * 60 * 30;
+
+const CONVERSION_PROMPTS: Record<ConversionKind, (topic: string) => string> = {
+  flashcard: (topic) =>
+    `حوّل محتوى الدرس «${topic}» الآتي **فلاش كارد واحدة** (أو اتنين لو المحتوى فيه فكرتين مستقلتين) بصيغة نصية بالظبط دي، بالعربي والمصطلحات التقنية بالإنجليزية، وارجع النص فقط بدون أي مقدمات:\n\n🃏 فلاش كارد\n\n**السؤال:** سؤال قصير واضح\n\n**الإجابة:** إجابة دقيقة من المحتوى نفسه`,
+  mcq: (topic) =>
+    `حوّل محتوى الدرس «${topic}» الآتي **سؤال اختياري واحد (MCQ)** بصيغة نصية بالظبط دي، بالعربي والمصطلحات التقنية بالإنجليزية، وارجع النص فقط بدون أي مقدمات:\n\n❓ سؤال اختياري\n\n**السؤال:** سؤال قصير واضح\n\n- أ) خيار\n- ب) خيار\n- ج) خيار\n- د) خيار\n\n**الإجابة الصحيحة:** الحرف) الخيار — مع سطر شرح قصير من المحتوى`,
+};
+
 /* ═════════════════════════ الراوت ═════════════════════════ */
 
 type LessonContentBody = {
@@ -415,6 +492,9 @@ type LessonContentBody = {
   action?: unknown;
   lectureId?: unknown;
   video?: unknown;
+  kind?: unknown;
+  text?: unknown;
+  note?: unknown;
 };
 
 function badRequest(message: string, code: string) {
@@ -465,6 +545,9 @@ export async function GET(req: Request) {
     const videoTByHeading = transcriptSegments.length
       ? alignHeadingsToTranscript(outlineSections.map((s) => s.heading), transcriptSegments)
       : {};
+    // الملخصات بأشكالها + النوتة المربوطة بالدرس (P4).
+    const storedSummaries = readStoredSummaries(row?.summaries);
+    const storedNote = readStoredNote(row?.notes);
     // الأوضاع الم citied فوق التفريغ (general/detailed) — كائنات جوّه explanation jsonb.
     const citedModes =
       storedContent.rawExplanation
@@ -481,6 +564,8 @@ export async function GET(req: Request) {
       workspaceFiles,
       savedVideo,
       videoTByHeading,
+      summaries: storedSummaries,
+      notes: storedNote,
       // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
       explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
       // إصدارات الأوضاع الم citied — بتترجع كنص للمعاينة.
@@ -655,6 +740,204 @@ export async function POST(req: Request) {
       typeof row?.source_lecture_id === "string" && row.source_lecture_id ? row.source_lecture_id : null;
 
     const usage = resolveUsageRequestContext(req, user.id);
+
+    /* ── الملخصات بأشكالها الأربعة (P4 — نداء AI واحد مجمّع، تخزين مرة) ── */
+    if (body.action === "summaries") {
+      const limited = await checkRateLimit(`lesson-content-summaries:${user.id}`, 15, 60_000, "message");
+      if (limited) return limited;
+
+      const forceSummaries = body.force === true;
+      const existing = readStoredSummaries(row?.summaries);
+      if (existing && !forceSummaries && existing.quick && existing.detailed) {
+        return NextResponse.json({ ok: true, cached: true, summaries: existing });
+      }
+
+      // مصدر التلخيص: الشرح الم citied الأول (المصدر الأساسي) — وإلا الأوضاع المخزّنة.
+      const sourceText = (
+        stored.cited
+          ? citedToText(stored.cited)
+          : Object.values(stored.modes).filter((v) => typeof v === "string" && v.trim()).join("\n\n")
+      ).slice(0, 12_000);
+      if (!sourceText.trim()) {
+        return badRequest("مفيش شرح مخزّن للتلخيص — ولّد الشرح الأول.", "NO_SOURCE");
+      }
+
+      let completion;
+      try {
+        completion = await aiRouter.completeChat("chat", {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+              role: "user",
+              content:
+                `اكتب ٤ ملخصات لمحتوى الدرس «${topic}» (مادة ${subjectName}) الآتي. ارجع JSON فقط بالشكل ده بلا أي شرح:\n` +
+                `{ "quick": "ملخص سريع في ٣-٥ نقاط واضحة", "detailed": "ملخص تفصيلي منظم بعناوين فرعية (##)", "academic": "صياغة أكاديمية دقيقة بالتعريفات والمصطلحات", "exam_revision": "أهم النقاط اللي بتتكرر في الامتحانات — مراجعة ليلة الامتحان" }\n` +
+                `كل ملخص بالعربي والمصطلحات التقنية بالإنجليزية، وكل واحد ≤ ${MAX_SUMMARY_KIND_CHARS} حرف.\n\nمحتوى الدرس:\n${sourceText}`,
+            },
+          ],
+          temperature: 0.3,
+          maxTokens: 3000,
+          usage,
+        });
+      } catch (error) {
+        if (!(error instanceof AiProviderError)) throw error;
+        const isRate = error.status === 429;
+        return NextResponse.json(
+          { error: { message: isRate ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.", code: isRate ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" } },
+          { status: isRate ? 429 : 502 }
+        );
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = parseJsonPayload(completion.content ?? "");
+      } catch {
+        parsed = null;
+      }
+      const summaries: LessonSummaries = {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        for (const kind of SUMMARY_KINDS) {
+          const value = record[kind];
+          if (typeof value === "string" && value.trim()) summaries[kind] = value.trim().slice(0, MAX_SUMMARY_KIND_CHARS);
+        }
+      }
+      if (!summaries.quick || !summaries.detailed) {
+        return NextResponse.json(
+          { error: { message: "الرد جه بدون ملخصات صالحة. جرّب تاني.", code: "SUMMARIES_INVALID" } },
+          { status: 502 }
+        );
+      }
+
+      void recordAiOperation(supabase, {
+        userId: user.id,
+        provider: completion.provider,
+        model: completion.model,
+        taskType: "chat",
+        status: "completed",
+        usage: completion.usage,
+        contentLength: (completion.content ?? "").length,
+      });
+
+      const saved = await (async () => {
+        try {
+          const { error: upsertError } = await supabase
+            .from("lesson_content")
+            .upsert(
+              { user_id: user.id, day_id: dayId, summaries, updated_at: new Date().toISOString() },
+              { onConflict: "user_id,day_id" }
+            );
+          if (upsertError) {
+            console.warn("lesson-content: حفظ الملخصات فشل (migration ناقصة؟):", upsertError.message);
+            return false;
+          }
+          return true;
+        } catch (saveError) {
+          console.warn("lesson-content: حفظ الملخصات فشل:", saveError);
+          return false;
+        }
+      })();
+
+      return NextResponse.json({ ok: true, cached: false, saved, summaries });
+    }
+
+    /* ── النوتة المربوطة بالدرس (P4 — بديل دائم لـ localStorage) ── */
+    if (body.action === "save_note") {
+      const limited = await checkRateLimit(`lesson-content-note:${user.id}`, 60, 60_000, "message");
+      if (limited) return limited;
+
+      const now = new Date().toISOString();
+      let noteToStore: StoredLessonNote;
+      if (body.note === null || body.note === undefined) {
+        // undo — نمسح الربط المخزَّن.
+        noteToStore = { last: null, updatedAt: now };
+      } else if (body.note && typeof body.note === "object" && !Array.isArray(body.note)) {
+        const noteRecord = body.note as Record<string, unknown>;
+        const noteBody = typeof noteRecord.body === "string" ? clampText(noteRecord.body, MAX_NOTE_DB_CHARS).trim() : "";
+        if (!noteBody) return badRequest("نص النوتة فاضي.", "BAD_NOTE");
+        noteToStore = {
+          last: {
+            title: typeof noteRecord.title === "string" ? clampText(noteRecord.title, 200).trim() : "",
+            body: noteBody,
+            source: typeof noteRecord.source === "string" ? clampText(noteRecord.source, 120).trim() : "",
+          },
+          updatedAt: now,
+        };
+      } else {
+        return badRequest("بيانات النوتة غير صالحة.", "BAD_NOTE");
+      }
+
+      const { error: saveError } = await supabase
+        .from("lesson_content")
+        .upsert({ user_id: user.id, day_id: dayId, notes: noteToStore, updated_at: now }, { onConflict: "user_id,day_id" });
+      if (saveError) {
+        console.warn("lesson-content: حفظ النوتة فشل (migration ناقصة؟):", saveError.message);
+        return NextResponse.json(
+          { error: { message: "مقدرنش نحفظ النوتة. جرّب تاني.", code: "SAVE_FAILED" } },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({ ok: true, notes: noteToStore });
+    }
+
+    /* ── حوّل جزء لفلاش كارد/MCQ (P4 — نص منسق يدخل النوتة عبر الـ postMessage الموجود) ── */
+    if (body.action === "convert_note") {
+      const limited = await checkRateLimit(`lesson-content-convert:${user.id}`, 20, 60_000, "message");
+      if (limited) return limited;
+
+      if (!isConversionKind(body.kind)) return badRequest("نوع التحويل غير معروف.", "BAD_KIND");
+      const kind: ConversionKind = body.kind;
+      const sourceText = typeof body.text === "string" ? clampText(body.text, MAX_CONVERSION_SOURCE_CHARS).trim() : "";
+      if (!sourceText) return badRequest("مفيش نص للتحويل.", "NO_SOURCE");
+
+      // «ولّد مرة»: نفس النص + نفس النوع ⇒ نفس الناتج من الكاش (بدون نداء).
+      const conversionCacheKey = `${kind}|${sourceText.length}|${sourceText.slice(0, 160)}`;
+      const cachedConversion = CONVERSION_CACHE.get(conversionCacheKey);
+      if (cachedConversion && Date.now() - cachedConversion.ts < CONVERSION_CACHE_TTL_MS) {
+        return NextResponse.json({ ok: true, cached: true, body: cachedConversion.body });
+      }
+
+      let completion;
+      try {
+        completion = await aiRouter.completeChat("chat", {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: `${CONVERSION_PROMPTS[kind](topic)}\n\nالمحتوى:\n${sourceText}` },
+          ],
+          temperature: 0.3,
+          maxTokens: 1200,
+          usage,
+        });
+      } catch (error) {
+        if (!(error instanceof AiProviderError)) throw error;
+        const isRate = error.status === 429;
+        return NextResponse.json(
+          { error: { message: isRate ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.", code: isRate ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" } },
+          { status: isRate ? 429 : 502 }
+        );
+      }
+
+      const converted = (completion.content ?? "").trim().slice(0, 4000);
+      if (!converted) {
+        return NextResponse.json(
+          { error: { message: "الموديل رجع بدون محتوى. حاول تاني.", code: "EMPTY_COMPLETION" } },
+          { status: 502 }
+        );
+      }
+
+      void recordAiOperation(supabase, {
+        userId: user.id,
+        provider: completion.provider,
+        model: completion.model,
+        taskType: "chat",
+        status: "completed",
+        usage: completion.usage,
+        contentLength: converted.length,
+      });
+
+      CONVERSION_CACHE.set(conversionCacheKey, { body: converted, ts: Date.now() });
+      return NextResponse.json({ ok: true, cached: false, body: converted });
+    }
 
     /* ── المسار المربوط: شرح + ملخص مبنيّين على التفريغ ── */
     if (linkedLectureId) {

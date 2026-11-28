@@ -27,6 +27,7 @@ import {
   type ExplanationVersion,
 } from "@/lib/lesson/explanations";
 import { citedToText } from "@/lib/lesson/cited-derive";
+import { SUMMARY_KINDS, SUMMARY_KIND_LABELS, type LessonSummaries, type SummaryKind } from "@/lib/lesson/summaries";
 import { useLessonStudio } from "../LessonStudioProvider";
 
 /** 📚 ملف مساحة العمل مرشح كمصدر للدرس — مطابق لمادة الدرس. */
@@ -163,6 +164,11 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
   // 🎯 محاذاة الأقسام بتوقيت التفريغ (P3): heading → ثوانٍ الفيديو (null = مفيش محاذاة).
   const [videoTByHeading, setVideoTByHeading] = useState<Record<string, number | null>>({});
+  // 📋 الملخصات بأشكالها الأربعة (P4) — تتولد مرة وتخزّن في الداتابيز.
+  const [summaries, setSummaries] = useState<LessonSummaries | null>(null);
+  const [activeSummaryKind, setActiveSummaryKind] = useState<SummaryKind>("quick");
+  const [summariesLoading, setSummariesLoading] = useState(false);
+  const [summariesError, setSummariesError] = useState<string | null>(null);
 
   /** تطبيق حالة الربط من رد الراوت (GET أو فعل الربط/الفصل). */
   const applyLinkState = (data: any) => {
@@ -416,6 +422,30 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     }
   };
 
+  /** 📋 الملخصات (P4): نداء AI واحد مجمّع — تتولد مرة وتخزّن (force = إعادة توليد). */
+  const loadSummaries = async (force = false) => {
+    if (summariesLoading) return;
+    setSummariesLoading(true);
+    setSummariesError(null);
+    try {
+      const response = await fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, action: "summaries", force }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok || !data?.summaries) {
+        throw new Error(data?.error?.message || "التلخيص فشل — جرّب تاني.");
+      }
+      setSummaries(data.summaries as LessonSummaries);
+      setActiveSummaryKind((prev) => (data.summaries[prev] ? prev : "quick"));
+    } catch (error) {
+      setSummariesError(error instanceof Error ? error.message : "التلخيص فشل — جرّب تاني.");
+    } finally {
+      setSummariesLoading(false);
+    }
+  };
+
   const retryFetch = () => {
     void fetchContent(activeMode ?? "simple");
   };
@@ -438,6 +468,14 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           setVideoTByHeading(data.videoTByHeading as Record<string, number | null>);
         }
         if (data.savedVideo) studio.setSavedVideo(data.savedVideo);
+        // آخر نوتة مربوطة بالدرس — من الداتابيز (P4، بدل localStorage).
+        if (data.notes && typeof data.notes === "object" && data.notes.last) {
+          studio.restoreNoteFromDb(data.notes.last);
+        }
+        // الملخصات المخزّنة (P4).
+        if (data.summaries && typeof data.summaries === "object") {
+          setSummaries(data.summaries as LessonSummaries);
+        }
         // إصدارات الأوضاع الثلاثة من الصف المخزّن (best-effort).
         if (data.explanationVersions && typeof data.explanationVersions === "object") {
           setAllVersions(data.explanationVersions as Partial<Record<ExplanationMode, ExplanationVersion[]>>);
@@ -835,9 +873,12 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
                     </button>
                   </div>
                 )}
-                {/* 📝 أضف للنوتة (P1-6) — المعاينة قبل الإضافة جوه NotebookPanel */}
+                {/* 📝 أضف للنوتة (P1-6) — المعاينة قبل الإضافة جوه NotebookPanel
+                    + 🃏/❓ التحويل (P4): فلاش كارد/MCQ من الشرح المعروض */}
                 <div className="mt-3">
                   <AddToNotebookMenu
+                    dayId={dayId}
+                    convertSource={() => displayText}
                     buildDraft={() => {
                       const text = displayText ?? summary ?? "";
                       if (!text.trim()) return null;
@@ -854,6 +895,68 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 📋 الملخصات بأشكالها الأربعة (P4) — تتولد مرة واحدة وتخزّن في الداتابيز */}
+      <div className="sheet-card p-5 sm:p-6 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="eyebrow eyebrow-flush mb-0">الملخصات</p>
+          {summaries && (
+            <button
+              onClick={() => void loadSummaries(true)}
+              disabled={summariesLoading}
+              className="btn btn-quiet text-[11px] px-2.5 py-1 ms-auto"
+              title="توليد صياغات جديدة — القديمة بتتفوق لحد التوليد الجديد"
+            >
+              ♻️ أعد التوليد
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {SUMMARY_KINDS.map((kind) => (
+            <button
+              key={kind}
+              onClick={() => setActiveSummaryKind(kind)}
+              aria-pressed={activeSummaryKind === kind}
+              disabled={!summaries?.[kind]}
+              className={`text-[11.5px] font-bold px-3 py-1.5 rounded-[6px] border transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                activeSummaryKind === kind && summaries?.[kind]
+                  ? "bg-ink text-paper-2 border-ink"
+                  : "bg-paper border-rule text-ink-soft hover:text-ink hover:bg-paper-3"
+              }`}
+            >
+              {SUMMARY_KIND_LABELS[kind]}
+            </button>
+          ))}
+          {!summaries && (
+            <button
+              onClick={() => void loadSummaries()}
+              disabled={summariesLoading}
+              className="btn btn-marker text-xs px-3.5 py-2"
+            >
+              {summariesLoading ? "بيجهّز الملخصات…" : "جهّز الملخصات"}
+            </button>
+          )}
+        </div>
+        {summariesError && <p className="text-[11.5px] text-ink-soft">{summariesError}</p>}
+        {summaries?.[activeSummaryKind] && (
+          <div className="rounded-[var(--r-sm)] border border-rule bg-paper-2 p-3.5">
+            <span className="tag tag-quiet mb-2 inline-block">الملخص المخزّن — متولّد مرة وخزّن</span>
+            <div className="text-[12.5px] text-ink leading-relaxed">{renderMarkdownLite(summaries[activeSummaryKind] as string)}</div>
+            <div className="mt-3">
+              <AddToNotebookMenu
+                dayId={dayId}
+                label="حوّل الملخص"
+                convertSource={() => summaries[activeSummaryKind] ?? null}
+                buildDraft={() => {
+                  const text = summaries[activeSummaryKind] ?? "";
+                  if (!text.trim()) return null;
+                  return { title: topic, body: text, source: `الملخص (${SUMMARY_KIND_LABELS[activeSummaryKind]})` };
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 📚 مصادر الدرس (P2) — ربط خفيف: المحاضرة المرتبطة + ملفات المادة من مساحة العمل */}
       <div className="sheet-card p-5 sm:p-6 space-y-3">

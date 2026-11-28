@@ -94,6 +94,8 @@ type LessonStudioContextValue = {
   openNotebook: (draft?: NotebookDraft) => void;
   closeNotebook: () => void;
   queueNotebookDraft: (draft: NotebookDraft) => void;
+  /** استرجاع آخر نوتة من الداتابيز عند فتح الدرس (P4). */
+  restoreNoteFromDb: (draft: NotebookDraft | null) => void;
   /** موافقة الـ Preview — بيرجّع الـ draft المعتمد عشان الـ Panel يبعت postMessage بيه. */
   approvePendingDraft: () => NotebookDraft | null;
   dismissPendingDraft: () => void;
@@ -275,6 +277,25 @@ export function LessonStudioProvider({
   const [pendingDraft, setPendingDraft] = useState<NotebookDraft | null>(null);
   const [lastAppended, setLastAppended] = useState<NotebookDraft | null>(null);
 
+  /** 💾 حفظ آخر نوتة مربوطة بالدرس في الداتابيز (P4 — بديل localStorage) — best-effort. */
+  const persistNote = useCallback(
+    (draft: NotebookDraft | null) => {
+      void fetch("/api/lesson-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayId, action: "save_note", note: draft }),
+      }).catch(() => {
+        /* الحفظ best-effort — إضافة النوتة نفسها ما بتتعتمدش عليه */
+      });
+    },
+    [dayId]
+  );
+
+  /** استرجاع آخر نوتة من الداتابيز عند فتح الدرس (LearnTab boot). */
+  const restoreNoteFromDb = useCallback((draft: NotebookDraft | null) => {
+    setLastAppended(draft);
+  }, []);
+
   const openNotebook = useCallback((draft?: NotebookDraft) => {
     if (draft) setPendingDraft(draft);
     setNotebookOpen(true);
@@ -293,36 +314,22 @@ export function LessonStudioProvider({
 
   const dismissPendingDraft = useCallback(() => setPendingDraft(null), []);
 
-  /** موافقة الـ Preview — الـ NotebookPanel هو اللي يبعت الـ postMessage للـ iframe. */
+  /** موافقة الـ Preview — الـ NotebookPanel هو اللي يبعت الـ postMessage للـ iframe.
+   *  P4: الموافقة بتحفظ النوتة مربوطة بالدرس في الداتابيز (زي localStorage قبل كده). */
   const approvePendingDraft = useCallback((): NotebookDraft | null => {
     const approved = pendingDraft;
-    if (approved) setLastAppended(approved);
+    if (approved) {
+      setLastAppended(approved);
+      persistNote(approved);
+    }
     setPendingDraft(null);
     return approved;
-  }, [pendingDraft]);
+  }, [pendingDraft, persistNote]);
 
-  const undoLastAppend = useCallback(() => setLastAppended(null), []);
-
-  // آخر نوتة للدرس — localStorage `lesson-notes:<dayId>` (الربط الدائم P4).
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`lesson-notes:${dayId}`);
-      // مزامنة مع نظام خارجي (localStorage) — نفس نمط LessonProgressPanel المعتمد.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setLastAppended(JSON.parse(raw) as NotebookDraft);
-    } catch {
-      /* تجاهل — localStorage مش متاح أو المحتوى تالف */
-    }
-  }, [dayId]);
-
-  useEffect(() => {
-    try {
-      if (lastAppended) localStorage.setItem(`lesson-notes:${dayId}`, JSON.stringify(lastAppended));
-      else localStorage.removeItem(`lesson-notes:${dayId}`);
-    } catch {
-      /* تجاهل */
-    }
-  }, [lastAppended, dayId]);
+  const undoLastAppend = useCallback(() => {
+    setLastAppended(null);
+    persistNote(null);
+  }, [persistNote]);
 
   // ── مستوى الشرح ──
   const [explanationLevel, setExplanationLevel] = useState<ExplanationLevel>("standard");
@@ -462,6 +469,7 @@ export function LessonStudioProvider({
       openNotebook,
       closeNotebook,
       queueNotebookDraft,
+      restoreNoteFromDb,
       approvePendingDraft,
       dismissPendingDraft,
       undoLastAppend,
@@ -479,7 +487,7 @@ export function LessonStudioProvider({
       lesson, activeTab, setActiveTab, navigatorOpen, toggleNavigator, outline, currentSectionId,
       videoOpen, videoActive, videoCandidates, videoLoading, miniPlayerOn, lastTimestamp, dismissedVideoIds,
       openVideo, closeVideo, ensureVideoLoaded, dismissVideoCandidate, savedVideo, notebookOpen, pendingDraft, lastAppended,
-      openNotebook, closeNotebook, queueNotebookDraft, approvePendingDraft, dismissPendingDraft,
+      openNotebook, closeNotebook, queueNotebookDraft, restoreNoteFromDb, approvePendingDraft, dismissPendingDraft,
       undoLastAppend, explanationLevel, explanationMode, explanationSnapshot, progress, saveResume, tutorContext,
     ]
   );
@@ -510,8 +518,8 @@ export function useTutorContext() {
 }
 
 export function useNotebook() {
-  const { notebook, openNotebook, closeNotebook, queueNotebookDraft, approvePendingDraft, dismissPendingDraft, undoLastAppend } = useLessonStudio();
-  return { notebook, openNotebook, closeNotebook, queueNotebookDraft, approvePendingDraft, dismissPendingDraft, undoLastAppend };
+  const { notebook, openNotebook, closeNotebook, queueNotebookDraft, restoreNoteFromDb, approvePendingDraft, dismissPendingDraft, undoLastAppend } = useLessonStudio();
+  return { notebook, openNotebook, closeNotebook, queueNotebookDraft, restoreNoteFromDb, approvePendingDraft, dismissPendingDraft, undoLastAppend };
 }
 
 export function useStudioVideo() {
