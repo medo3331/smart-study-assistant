@@ -129,13 +129,24 @@ export function getTimeUntilNextPrayer(prayerTimes: PrayerTimes): number {
 }
 
 /**
+ * عتبة التمييز بين «تاريخ مطلق» و«مدة نسبية» بالمللي ثانية.
+ * أي قيمة ≥ 2000-01-01 بتتعامل كتاريخ مطلق (Unix ms) — كل مستدعِي الـ UI
+ * بيمرر prayer.timestamp مطلق، والمدد النسبية الحقيقية أصغر بكتير من كده.
+ * قبل كده التاريخ المطلق اللي عدى (الصلاة حانت) كان بيتفسر كمدة نسبية ضخمة.
+ */
+const ABSOLUTE_TIMESTAMP_THRESHOLD_MS = 946_684_800_000; // 2000-01-01 UTC
+
+/**
  * Format time remaining as human-readable string
  * Accepts either absolute timestamp (Unix ms) or relative milliseconds
  */
 export function formatTimeRemaining(inputMs: number): string {
-  // Detect if input is absolute timestamp (future date) or relative milliseconds
+  // التواريخ المطلقة بتتحسب من Date.now() في لحظة الاستدعاء — تعويض drift
+  // (الحساب من اللحظة الحالية مش من قيمة متخزنة قديمة).
   const now = Date.now();
-  const ms = inputMs > now ? inputMs - now : inputMs;
+  const ms = inputMs >= ABSOLUTE_TIMESTAMP_THRESHOLD_MS
+    ? inputMs - now
+    : inputMs;
   
   if (ms <= 0) return "حان الوقت";
   

@@ -90,10 +90,13 @@ describe("Magicly Chess ♟️", () => {
     expect(engine).toContain("isAttacked");
   });
 
-  it("الـ AI minimax بعمق حسب الصعوبة مع أكل أولًا", () => {
+  it("الـ AI minimax بعمق حسب المستوى (٥ مستويات) مع أكل أولًا", () => {
     expect(ai).toContain("alpha");
     expect(ai).toContain("beta");
-    expect(ai).toContain("difficulty - 1");
+    expect(ai).toContain("depth - 1");
+    // ٥ مستويات: مبتدئ/هاوي/متوسط/متقدم/محترف
+    expect(ai).toContain("AI_LEVELS");
+    expect(ai).toContain('"محترف ♛"');
   });
 
   it("الواجهة بتسجل النتيجة عبر arcade_submit_score ومرة واحدة بس", () => {
@@ -112,7 +115,7 @@ describe("Gaming Hub", () => {
   });
 
   it("لينك الشطرنج متاح في الـ Hub", () => {
-    expect(hubPage).toContain('href: "/games/chess"');
+    expect(hubPage).toContain('href="/games/chess"');
   });
 
   it("إنجازات الواجهة نفس معرفات السيرفر", () => {
@@ -124,5 +127,38 @@ describe("Gaming Hub", () => {
 
   it("الألعاب المسجلة في السيرفر نفس قائمة الواجهة", () => {
     for (const g of ARCADE_GAMES) expect(sql).toContain(`'${g}'`);
+  });
+});
+
+describe("الشطرنج UX — نمط chess.com", () => {
+  const chess = readFileSync(join(root, "app", "games", "chess", "page.tsx"), "utf8").replace(/\r\n/g, "\n");
+
+  it("باج الكش: الكمبيوتر بيلعب حتى وهو في كش (مش بيقف)", () => {
+    // الإنهاء بيتحقق بـ checkmate/stalemate — الـ check مش بيمنع نقلة الـ AI
+    expect(chess).toMatch(/nextStatus === "checkmate" \|\| nextStatus === "stalemate"/);
+    expect(chess).toMatch(/aiTurn\(\); \/\/ ← الباج القديم: الكش كان بيوقف الكمبيوتر — اتصلح/);
+  });
+
+  it("مربعات ثابتة (مش بتصغر وتكبر) ولوحة أكبر", () => {
+    expect(chess).toContain("h-[57px] w-[57px]");
+    expect(chess).toContain("sm:h-16 sm:w-16");
+    expect(chess).toContain("overflow-x-auto");
+  });
+
+  it("تلوين مربعات الحركة (أخضر) والأكل (أحمر) بنمط chess.com", () => {
+    expect(chess).toContain('!bg-[#a3c98a]');
+    expect(chess).toContain('!bg-[#d98d7c]');
+    expect(chess).toContain("!bg-[#f2e394]"); // آخر نقلة
+  });
+
+  it("المدرب ماجِك 🧙 بيعلّم أثناء اللعب", () => {
+    expect(chess).toContain("ماجِك — مدربك");
+    expect(chess).toContain('say("كش على ملك الكومبيوتر!');
+  });
+
+  it("تعليمات دايمًا ظاهرة + تفاصيل القطع + ٥ مستويات", () => {
+    expect(chess).toContain("إزاي تلعب — التعليمات");
+    expect(chess).toContain("PIECE_RULES");
+    expect(chess).toContain("تراجع");
   });
 });

@@ -27,7 +27,6 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { createClient } from "@/lib/supabase/server";
-import { ENGAGEMENT_EVENT_TYPES, recordEngagementEvent } from "@/lib/engagement/events";
 import type { LectureTranscript } from "./transcription-shared";
 
 /** القيم اللي بتتحوّل لصف واحد في `public.lectures`. */
@@ -273,24 +272,5 @@ export async function saveLectureForCurrentUser(input: {
     };
   }
 
-  /* 📊 حدث Engine واحد (P1-B2) — محاضرة اتحفظت فعلاً.
-   *
-   * مصدر الإثبات: نفس عملية الحفظ اللي فوق (المحاضرة اتكتبت في
-   * `public.lectures` صاحبها من الجلسة) ⇒ server_verified.
-   *
-   * ⚠️ best-effort: فشل تسجيل الحدث مايوقّعش الحفظ، ومافيش Coins/XP هنا. */
-  const savedLecture = data as SavedLectureRef;
-  void recordEngagementEvent({
-    type: ENGAGEMENT_EVENT_TYPES.LECTURE_SAVED,
-    sourceId: String(savedLecture.id),
-    userId: user.id,
-    metadata: {
-      has_subject: Boolean(resolvedSubjectId),
-      source_type: (savedLecture as { source_type?: string | null }).source_type ?? null,
-    },
-  }).catch((error: unknown) => {
-    console.error("lecture-store: engagement event:", error);
-  });
-
-  return { ok: true, lecture: savedLecture };
+  return { ok: true, lecture: data as SavedLectureRef };
 }

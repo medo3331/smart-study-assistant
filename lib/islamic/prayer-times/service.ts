@@ -10,6 +10,7 @@
 import type { PrayerTimes, PrayerTime } from "../types";
 import type { CalculationMethodId, MadhabId } from "../prayer-times";
 import { dateInTimeZone, zonedDateTimeToTimestamp } from "./timezone";
+import { roundCoordinate } from "./live";
 
 // ============================================================================
 // Configuration
@@ -138,9 +139,15 @@ const METHOD_NAMES: Record<number, string> = {
 // Cache Key Generation
 // ============================================================================
 
-function generateCacheKey(params: PrayerTimesRequestParams): string {
+/**
+ * مفتاح الكاش بيشمل الإحداثيات مقربة لخطوة 0.01° (~1.1 كم) — أي تغيير
+ * موقع أصغر من كده بيوفر على نفس مدخلة الكاش، وأكبر منه يبني مفتاح جديد
+ * فيتجاب مواقيت الموقع الجديد فورًا بدل إظهار مواقيت موقع قديم.
+ * مصدَّر للاختبار والتحقق من سلوك التقريب.
+ */
+export function generateCacheKey(params: PrayerTimesRequestParams): string {
   const dateStr = params.localDate ?? dateInTimeZone(params.date, params.timezone);
-  return `${dateStr}|${params.latitude}|${params.longitude}|${params.calculationMethod}|${params.madhab}|${params.timezone}`;
+  return `${dateStr}|${roundCoordinate(params.latitude)}|${roundCoordinate(params.longitude)}|${params.calculationMethod}|${params.madhab}|${params.timezone}`;
 }
 
 // ============================================================================

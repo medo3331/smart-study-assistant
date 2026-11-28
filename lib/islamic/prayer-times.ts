@@ -19,6 +19,16 @@ export {
   isPrayerTime 
 } from "./prayer-times/next-prayer";
 
+// أدوات التحديث الحيّ (تقريب الإحداثيات + عتبة تغيّر الموقع + تعويض drift)
+export {
+  COORDINATE_QUANTUM,
+  LOCATION_CHANGE_THRESHOLD_DEGREES,
+  roundCoordinate,
+  hasLocationChangedSignificantly,
+  computeRemainingMs,
+  isCountdownExpired,
+} from "./prayer-times/live";
+
 // Re-export types for convenience
 export type { PrayerTimes } from "./types";
 
