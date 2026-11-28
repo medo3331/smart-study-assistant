@@ -29,6 +29,14 @@ import {
 import { citedToText } from "@/lib/lesson/cited-derive";
 import { useLessonStudio } from "../LessonStudioProvider";
 
+/** 📚 ملف مساحة العمل مرشح كمصدر للدرس — مطابق لمادة الدرس. */
+type WorkspaceFileOption = {
+  id: string;
+  originalName: string;
+  fileType: string;
+  createdAt: string;
+};
+
 /**
  * الشرح المربوط بالتسجيل — جوّه LectureCitationProvider: زر «استمع من هنا»
  * في أي مرجع بيشغّل التسجيل من اللحظة المرتبطة (لو مفيش صوت يبقى الزر مش بيظهر).
@@ -150,6 +158,9 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   // 🎚️ الأوضاع الثلاثة فوق التفريغ (P2): لما الدرس يكون مربوط، الوضع التلخيصي
   // derivation نصي والأوضاع التانية توليد AI محكم بالاقتباس — كلها فوق التفريغ.
   const [linkedModes, setLinkedModes] = useState<Partial<Record<ExplanationMode, LinkedModePayload>>>({});
+  // 📚 مصادر الدرس (P2): ملفات مساحة العمل المرتبطة بمادة الدرس — من GET.
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileOption[]>([]);
+  const [openingFileId, setOpeningFileId] = useState<string | null>(null);
 
   /** تطبيق حالة الربط من رد الراوت (GET أو فعل الربط/الفصل). */
   const applyLinkState = (data: any) => {
@@ -383,6 +394,26 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
     else void fetchContent(activeMode, { force: true });
   };
 
+  /** 📚 فتح ملف مصدر — رابط قراءة موقّع من /api/files (نفس عقود مساحة العمل). */
+  const openWorkspaceFile = async (fileId: string) => {
+    setOpeningFileId(fileId);
+    try {
+      const res = await fetch("/api/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && typeof data?.url === "string") {
+        window.open(data.url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      // الفتح ميزة إضافية — الفشل صامت.
+    } finally {
+      setOpeningFileId(null);
+    }
+  };
+
   const retryFetch = () => {
     void fetchContent(activeMode ?? "simple");
   };
@@ -398,6 +429,8 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
         const data = await response.json().catch(() => null);
         if (!response.ok || !data?.ok) throw new Error("READ_FAILED");
         applyLinkState(data);
+        // مصادر الدرس — ملفات مساحة العمل المرتبطة بالمادة (best-effort).
+        if (Array.isArray(data.workspaceFiles)) setWorkspaceFiles(data.workspaceFiles as WorkspaceFileOption[]);
         // إصدارات الأوضاع الثلاثة من الصف المخزّن (best-effort).
         if (data.explanationVersions && typeof data.explanationVersions === "object") {
           setAllVersions(data.explanationVersions as Partial<Record<ExplanationMode, ExplanationVersion[]>>);
@@ -809,6 +842,44 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 📚 مصادر الدرس (P2) — ربط خفيف: المحاضرة المرتبطة + ملفات المادة من مساحة العمل */}
+      <div className="sheet-card p-5 sm:p-6 space-y-3">
+        <p className="eyebrow eyebrow-flush mb-0">مصادر الدرس</p>
+        {link && (
+          <div className="flex flex-wrap items-center gap-2 rounded-[var(--r-sm)] border border-rule bg-paper px-3.5 py-2.5">
+            <span aria-hidden>🎙️</span>
+            <span className="text-[12px] font-bold text-ink truncate">المحاضرة المرتبطة: {link.lectureTitle}</span>
+            <button onClick={() => setLinkModalOpen(true)} className="btn btn-quiet text-[11px] px-2.5 py-1 ms-auto shrink-0">
+              تغيير
+            </button>
+          </div>
+        )}
+        {workspaceFiles.length === 0 ? (
+          <p className="text-[11.5px] text-ink-soft leading-relaxed">
+            مفيش ملفات مرتبطة بمادة الدرس في مساحة العمل — لما ترفع ملفات المادة دي هتظهر هنا كمصادر مقترحة.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {workspaceFiles.map((file) => (
+              <li
+                key={file.id}
+                className="flex flex-wrap items-center gap-2 rounded-[var(--r-sm)] border border-rule bg-paper px-3.5 py-2.5"
+              >
+                <span className="tag tag-quiet shrink-0">{file.fileType}</span>
+                <span className="text-[12px] font-bold text-ink truncate flex-1 min-w-[8rem]">{file.originalName}</span>
+                <button
+                  onClick={() => void openWorkspaceFile(file.id)}
+                  disabled={openingFileId === file.id}
+                  className="btn btn-quiet text-[11px] px-2.5 py-1 shrink-0"
+                >
+                  {openingFileId === file.id ? "بيفتح…" : "فتح"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <LectureLinkModal
         open={linkModalOpen}

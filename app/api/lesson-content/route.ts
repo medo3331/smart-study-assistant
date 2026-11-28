@@ -169,6 +169,48 @@ async function loadDay(supabase: SupabaseClient, userId: string, dayId: string) 
   return data ?? null;
 }
 
+/** أقصى عدد ملفات مصادر مقترحة في الرد. */
+const MAX_WORKSPACE_FILES = 12;
+
+type WorkspaceFileOption = {
+  id: string;
+  originalName: string;
+  fileType: string;
+  createdAt: string;
+};
+
+/**
+ * ملفات مساحة العمل المرتبطة بمادة الدرس (مرحلة P2 — مصادر الدرس):
+ * جدول `files` عليه `subject` نصي — المطابقة بنفس منطق المحاضرات
+ * (`subjectMatches` بعد التطبيع العربي). fail-open: جدول ناقص ⇒ قائمة فاضية.
+ */
+async function loadWorkspaceFiles(
+  supabase: SupabaseClient,
+  userId: string,
+  subjectName: string
+): Promise<WorkspaceFileOption[]> {
+  if (!subjectName) return [];
+  try {
+    const { data } = await supabase
+      .from("files")
+      .select("id, original_name, file_type, subject, created_at")
+      .eq("profile_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(80);
+    const matched = (data ?? []).filter(
+      (row) => typeof row.subject === "string" && row.subject.trim() && subjectMatches(row.subject, subjectName)
+    );
+    return matched.slice(0, MAX_WORKSPACE_FILES).map((row) => ({
+      id: row.id as string,
+      originalName: typeof row.original_name === "string" ? row.original_name : "ملف",
+      fileType: typeof row.file_type === "string" ? row.file_type : "file",
+      createdAt: typeof row.created_at === "string" ? row.created_at : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function loadSubject(supabase: SupabaseClient, configId: string): Promise<string> {
   const { data } = await supabase
     .from("study_configs")
@@ -385,6 +427,8 @@ export async function GET(req: Request) {
     const linkState = await buildLinkState(supabase, user.id, day, subjectName, linkedLectureId);
 
     const storedContent = readStoredContent(row);
+    // مصادر الدرس (P2): ملفات مساحة العمل المرتبطة بمادة الدرس.
+    const workspaceFiles = await loadWorkspaceFiles(supabase, user.id, subjectName);
     // الأوضاع الم citied فوق التفريغ (general/detailed) — كائنات جوّه explanation jsonb.
     const citedModes =
       storedContent.rawExplanation
@@ -398,6 +442,7 @@ export async function GET(req: Request) {
       ...linkState,
       content: storedContent,
       citedModes,
+      workspaceFiles,
       // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
       explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
       // إصدارات الأوضاع الم citied — بتترجع كنص للمعاينة.
