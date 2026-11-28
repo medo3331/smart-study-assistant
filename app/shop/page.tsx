@@ -41,6 +41,7 @@ import { BoxSheet } from "@/components/shop/BoxSheet";
 import { CreditPacksPanel } from "@/components/shop/CreditPacksPanel";
 import { CoinPacksPanel } from "@/components/shop/CoinPacksPanel";
 import { ExchangeWidget } from "@/components/shop/ExchangeWidget";
+import { FreeRewardsPanel } from "@/components/shop/FreeRewardsPanel";
 import { PurchaseHistoryPanel } from "@/components/shop/PurchaseHistoryPanel";
 import { DailyStrip } from "@/components/shop/DailyStrip";
 import { ItemCard } from "@/components/shop/ItemCard";
@@ -400,6 +401,7 @@ export default function ShopPage() {
             onChanged={shop.reload}
           />
           <PurchaseHistoryPanel supabase={supabase} />
+          <FreeRewardsPanel />
           <DailyStrip
             offers={shop.daily}
             balance={state.balance}

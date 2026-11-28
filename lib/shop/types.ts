@@ -20,6 +20,7 @@ export const CATEGORIES = [
   "box",
   "useful",
   "learning",
+  "bundles",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
@@ -120,6 +121,13 @@ export const CATEGORY: Record<Category, CategoryMeta> = {
     name: "المتجر التعليمي",
     lede: "تجارب مراجعة وامتحان بالذكاء الاصطناعي — كوينز + كريدت",
     icon: "GraduationCap",
+    slot: null,
+  },
+  bundles: {
+    id: "bundles",
+    name: "الحزم والعروض",
+    lede: "مجموعة جاهزة بسعر أقل من شرا كل حاجة لوحدها",
+    icon: "Package",
     slot: null,
   },
 };
