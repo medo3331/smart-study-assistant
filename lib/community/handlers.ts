@@ -141,6 +141,32 @@ export async function profilePatchHandler(req: Request) {
     return NextResponse.json({ success: false, error: "Invalid body." }, { status: 400 });
   }
 
+  // اسم المستخدم في المجتمع (handle) — بيروح عبر change_handle عشان
+  // التحقق من الصيغة والكلمات المحجوزة والتفرد يتم في مكان واحد.
+  let handleChanged = false;
+  if ("handle" in body && typeof body.handle === "string" && body.handle.trim()) {
+    const handle = body.handle.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
+      return NextResponse.json({
+        success: false,
+        error: "اسم المستخدم لازم يكون 3–20 حرف إنجليزي صغير أو أرقام أو _ فقط.",
+      }, { status: 400 });
+    }
+    const { data: hRes, error: hErr } = await auth.client.rpc("change_handle", { p_handle: handle });
+    if (hErr || !hRes?.ok) {
+      const codeMessages: Record<string, string> = {
+        invalid_handle: "اسم المستخدم لازم يكون 3–20 حرف إنجليزي صغير أو أرقام أو _ فقط.",
+        reserved_handle: "الاسم ده محجوز للمنصة — اختار اسم تاني.",
+        handle_taken: "الاسم ده مأخوذ — اختار اسم تاني.",
+      };
+      return NextResponse.json({
+        success: false,
+        error: codeMessages[hRes?.code ?? ""] ?? "تعذّر تغيير اسم المستخدم.",
+      }, { status: 409 });
+    }
+    handleChanged = true;
+  }
+
   const patch: Record<string, unknown> = {};
   for (const key of ALLOWED_PROFILE_FIELDS) {
     if (key in body) patch[key] = body[key];
@@ -162,6 +188,9 @@ export async function profilePatchHandler(req: Request) {
     return NextResponse.json({ success: false, error: "الاهتمامات لازم تكون قائمة." }, { status: 400 });
   }
   if (Object.keys(patch).length === 0) {
+    if (handleChanged) {
+      return NextResponse.json({ success: true });
+    }
     return NextResponse.json({ success: false, error: "لا يوجد حقول للتحديث." }, { status: 400 });
   }
 
