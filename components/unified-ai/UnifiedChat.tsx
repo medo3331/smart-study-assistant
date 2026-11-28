@@ -16,6 +16,7 @@ import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { FeatureGuide } from "@/components/FeatureGuide";
 import { guides } from "@/lib/guides";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
+import { notifyCreditsChanged } from "@/lib/upsell/use-plan-quota";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 function supportWhatsappHref(code?: string, detail?: string) {
@@ -305,8 +306,11 @@ export function UnifiedChat({
 
        // Show assistant response
        const assistantText = data?.answer || "Unified AI.";
-      // تحديث رصيد الكريدت من السيرفر (بعد التسوية) — best-effort
-      if (typeof data?.metadata?.balance === "number") setCreditBalance(data.metadata.balance);
+      // تحديث رصيد الكريدت من السيرفر (بعد التسوية) — وبثّ الحدث للعروض الأخرى
+      if (typeof data?.metadata?.balance === "number") {
+        setCreditBalance(data.metadata.balance);
+        notifyCreditsChanged(data.metadata.balance);
+      }
       // ⚡ إجراءات من السيرفر (مثال: طلب امتحان مكتمل ⇒ رابط المولّد).
       const replyActions = Array.isArray(data?.actions)
         ? (data.actions as { label: string; href: string; external?: boolean }[])
