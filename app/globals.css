@@ -7036,6 +7036,12 @@ html {
   z-index: 0;
 }
 
+.mw-wheel-square {
+  /* حاوية قياس: كل عناصر العجلة (الحلقات/المرکز/العقد) بتتحجّب نسبيًا —
+     العجلة تفضل دايرة حقيقية على الموبايل بس أصغر. */
+  container-type: inline-size;
+}
+
 .mw-ring {
   position: absolute;
   border-radius: 9999px;

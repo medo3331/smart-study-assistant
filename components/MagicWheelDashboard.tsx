@@ -18,23 +18,6 @@
 
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-/* ميديا-كوئيري بدون setState جوه effect — النمط الموصى بيه في React 19
-   (بيتفادى تحذير react-hooks/set-state-in-effect وبيتحدّث لحظيًا).
-   SSR بيرندر الوضع الدائري، والعميل بيصوب أول حاجة لو الشاشة صغيرة. */
-function useMediaQuery(query: string): boolean {
-  return useSyncExternalStore(
-    useCallback(
-      (onStoreChange) => {
-        const mql = window.matchMedia(query);
-        mql.addEventListener("change", onStoreChange);
-        return () => mql.removeEventListener("change", onStoreChange);
-      },
-      [query],
-    ),
-    () => window.matchMedia(query).matches,
-    () => false,
-  );
-}
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -356,8 +339,6 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
   const colors = useThemeColors();
   const router = useRouter();
 
-  /* أقل من 640px (زي ما البريف بيعمل) → شبكة عمودية بدل الدائرة */
-  const isVertical = useMediaQuery("(max-width: 640px)");
 
   const branches = buildWheelBranches({ currentDay, currentDayId });
 
@@ -497,37 +478,18 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
           </div>
         </header>
 
-        {/* ═════ أفرع العجلة — شبكة عمودية على الموبايل ═════ */}
-        {isVertical ? (
-          <nav
-            aria-label="تنقل العجلة — عرض شبكي"
-            className="grid w-full grid-cols-2 gap-3 md:grid-cols-3"
-          >
-            {branches.map((b, i) => (
-              <WheelBranch
-                key={b.id}
-                branch={b}
-                color={colorFor(i)}
-                badge={badgeFor(b.id)}
-                onOpenSettings={openSettings}
-                layout="grid"
-                highlight={b.id === activeBranch}
-              />
-            ))}
-          </nav>
-        ) : (
-          /* ═════ العرض الدائري ═════ */
+        {/* ═════ أفرع العجلة — العرض الدائري (كل الشاشات: العجلة بتتقاس نسبيًا فتصغر على الموبايل) ═════ */}
           <div
             className={`mw-wheel-square relative mx-auto flex aspect-square w-full max-w-[720px] items-center justify-center${reduced ? "" : " mw-cycle"}${celebrating && !reduced ? " mw-celebrate" : ""}`}
           >
             <div
               className="mw-ring mw-ring-dash"
-              style={{ width: "clamp(320px, 62vw, 470px)", height: "clamp(320px, 62vw, 470px)" }}
+              style={{ width: "min(65cqw, 470px)", height: "min(65cqw, 470px)" }}
               aria-hidden
             />
             <div
               className="mw-ring mw-ring-dot"
-              style={{ width: "clamp(270px, 52vw, 390px)", height: "clamp(270px, 52vw, 390px)" }}
+              style={{ width: "min(54cqw, 390px)", height: "min(54cqw, 390px)" }}
               aria-hidden
             />
 
@@ -578,7 +540,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             <Link
               href="/"
               className="mw-center"
-              style={{ width: 160, height: 160 }}
+              style={{ width: "min(30cqw, 160px)", height: "min(30cqw, 160px)" }}
               aria-label="Magic — العودة للرئيسية"
             >
               <MagiclyGlyph className="h-10 w-12 text-[#FFB13B] drop-shadow-[0_0_12px_rgba(255,177,59,0.75)]" />
@@ -601,7 +563,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                 return (
                   <div
                     key={b.id}
-                    className="absolute"
+                    className="absolute h-0 w-0"
                     style={{
                       top: `${cy}%`,
                       left: `${cx}%`,
@@ -615,7 +577,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                       onOpenSettings={openSettings}
                       layout="circle"
                       delayMs={reduced ? 0 : i * 130}
-                      size="clamp(80px, 13vw, 118px)"
+                      size="clamp(66px, 19cqw, 118px)"
                       highlight={b.id === activeBranch}
                     />
                   </div>
@@ -661,7 +623,6 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
               </div>
             )}
           </div>
-        )}
 
         {/* ═════ شريط الإحصاءات — بيانات حقيقية من props الداشبورد ═════ */}
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
