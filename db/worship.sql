@@ -416,3 +416,84 @@ $$;
 
 revoke all on function public.award_coins(text, text, jsonb) from public;
 grant execute on function public.award_coins(text, text, jsonb) to authenticated;
+
+-- ملخص يوم العبادة في استدعاء واحد (كوينز + سلسلة + تقدّم اليوم).
+-- الكود بيتنادى عليه من lib/worship-data.ts (supabase.rpc("worship_daily_summary")).
+-- اليوم بيتحدد بمنطقة المستخدم الزمنية المحفوظة، وUTC لو مفيش.
+create or replace function public.worship_daily_summary()
+returns table (
+  day date,
+  prayers jsonb,
+  adhkar jsonb,
+  quran_ayahs int,
+  coins_balance int,
+  coins_today int,
+  streak int
+)
+language plpgsql stable security definer
+set search_path = public, pg_catalog
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_timezone text;
+  v_day date;
+  v_day_start timestamptz;
+  v_prayers jsonb;
+  v_adhkar jsonb;
+  v_quran_ayahs int;
+  v_balance int;
+  v_coins_today int;
+  v_streak int;
+begin
+  if v_uid is null then
+    raise exception 'worship_daily_summary: لازم تكون داخل بحسابك';
+  end if;
+
+  select nullif(p.worship_settings ->> 'timezone', '')
+    into v_timezone
+    from public.profiles p
+   where p.id = v_uid;
+  v_timezone := coalesce(v_timezone, 'UTC');
+  begin
+    v_day := (now() at time zone v_timezone)::date;
+    v_day_start := v_day::timestamp at time zone v_timezone;
+  exception when invalid_parameter_value then
+    raise exception 'worship_daily_summary: منطقة زمنية غير صالحة';
+  end;
+
+  select w.prayers, w.adhkar, w.quran_ayahs
+    into v_prayers, v_adhkar, v_quran_ayahs
+    from public.worship_progress w
+   where w.user_id = v_uid and w.day = v_day;
+
+  select coalesce(sum(l.amount), 0)::int
+    into v_balance
+    from public.coin_ledger l
+   where l.user_id = v_uid;
+
+  select coalesce(sum(l.amount), 0)::int
+    into v_coins_today
+    from public.coin_ledger l
+   where l.user_id = v_uid
+     and l.source_type = 'earn'
+     and l.amount > 0
+     and l.created_at >= v_day_start;
+
+  select coalesce(p.streak, 0)
+    into v_streak
+    from public.profiles p
+   where p.id = v_uid;
+
+  return query select
+    v_day,
+    coalesce(v_prayers, '{}'::jsonb),
+    coalesce(v_adhkar, '{}'::jsonb),
+    coalesce(v_quran_ayahs, 0),
+    coalesce(v_balance, 0),
+    coalesce(v_coins_today, 0),
+    coalesce(v_streak, 0);
+end;
+$$;
+
+revoke all on function public.worship_daily_summary() from public;
+grant execute on function public.worship_daily_summary() to authenticated;
