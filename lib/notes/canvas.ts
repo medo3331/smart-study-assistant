@@ -11,11 +11,37 @@
 // The module is DOM-free at import time (functions take a 2D context), so the
 // geometry helpers are unit-testable in Node.
 
-import type { NoteImage, NoteText, NotesTemplate, Stroke } from "./types";
+import type { NoteImage, NoteText, NotesTemplate, PageFormat, Stroke } from "./types";
 
 /** A4 at 96dpi. Page coordinates are stored in this space. */
 export const PAGE_WIDTH = 794;
 export const PAGE_HEIGHT = 1123;
+
+/** لون سطور الشرح الخلفية — أغمق شوية من الرمادي الفاتح عشان السطر يبان وأوضح. */
+export const RULE_INK = "#d8dee6";
+/** لون نقاط قالب النقاط — نفس فكرة RULE_INK لكن للنقاط. */
+export const DOT_INK = "#c7ccd6";
+
+/** مقاس النوتة الجديد — A4 عرضي: صفحة أكبر وأعرض من الافتراضي القديم. */
+export const DEFAULT_PAGE_FORMAT: PageFormat = "wide";
+
+/** أبعاد كل مقاس صفحة مدعوم، بإحداثيات الصفحة (96dpi). */
+export const PAGE_FORMAT_DIMENSIONS: Record<PageFormat, { width: number; height: number }> = {
+  a4: { width: PAGE_WIDTH, height: PAGE_HEIGHT },
+  wide: { width: 1123, height: 794 },
+  slide: { width: 1280, height: 720 },
+};
+
+/** أبعاد الصفحة حسب مقاس النوتة — النوتات القديمة من غير مقاس تُقرأ A4 طولي. */
+export function pageDimensions(format: PageFormat | undefined): { width: number; height: number } {
+  return PAGE_FORMAT_DIMENSIONS[format ?? "a4"];
+}
+
+export const PAGE_FORMAT_OPTIONS: readonly { id: PageFormat; label: string }[] = [
+  { id: "a4", label: "A4 طولي" },
+  { id: "wide", label: "A4 عرضي (أوسع)" },
+  { id: "slide", label: "شاشة عرض 16:9" },
+];
 
 export const TEMPLATE_OPTIONS: readonly { id: NotesTemplate; label: string }[] = [
   { id: "lined", label: "مسطّر" },
@@ -353,7 +379,7 @@ export function paintPageBackground(
 
   if (template !== "blank") {
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "#e5e7eb";
+    ctx.strokeStyle = RULE_INK;
 
     if (template === "lined") {
       const gap = 32;
@@ -387,12 +413,12 @@ export function paintPageBackground(
     }
 
     if (template === "dotted") {
-      ctx.fillStyle = "#d1d5db";
+      ctx.fillStyle = DOT_INK;
       const gap = 28;
       for (let y = gap; y < height; y += gap) {
         for (let x = gap; x < width; x += gap) {
           ctx.beginPath();
-          ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+          ctx.arc(x, y, 1.2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -408,7 +434,7 @@ export function paintPageBackground(
         ctx.moveTo(0, y + 0.5);
         ctx.lineTo(width, y + 0.5);
         ctx.stroke();
-        ctx.strokeStyle = "#e5e7eb";
+        ctx.strokeStyle = RULE_INK;
         ctx.setLineDash([4, 6]);
         ctx.beginPath();
         ctx.moveTo(0, y - gap * 0.45);
@@ -427,7 +453,7 @@ export function paintPageBackground(
       ctx.moveTo(midX + 0.5, 0);
       ctx.lineTo(midX + 0.5, height);
       ctx.stroke();
-      ctx.strokeStyle = "#e5e7eb";
+      ctx.strokeStyle = RULE_INK;
       ctx.lineWidth = 1;
       const gap = 32;
       for (let y = gap; y < height; y += gap) {
@@ -472,7 +498,7 @@ export function paintPageBackground(
       ctx.textAlign = "right";
       ctx.fillText("المهام", width - 24, headerHeight + 30);
 
-      ctx.strokeStyle = "#e5e7eb";
+      ctx.strokeStyle = RULE_INK;
       ctx.lineWidth = 1;
       const taskCount = 10;
       const taskGap = Math.min(64, Math.floor((height - headerHeight - 140) / taskCount));
@@ -507,7 +533,7 @@ export function paintPageBackground(
       const summaryTop = height - summaryHeight + 0.5;
 
       // مسطّر خفيف جوه منطقة الملاحظات (شمال عمود الكلمات).
-      ctx.strokeStyle = "#e5e7eb";
+      ctx.strokeStyle = RULE_INK;
       const gap = 32;
       for (let y = gap; y < summaryTop - gap / 2; y += gap) {
         ctx.beginPath();
@@ -722,8 +748,19 @@ export function paintText(
     (ctx as CanvasRenderingContext2D & { direction: CanvasDirection }).direction = "rtl";
   }
   ctx.textAlign = "right";
+  // هالة بيضاء حوالين كل حرف — النص يبان واضح فوق سطور الشرح أو الرسم من تحته.
+  const haloWidth = Math.max(3, text.size / 6);
   lines.forEach((line, index) => {
-    ctx.fillText(line, text.x + 4, text.y + index * lineHeight + 4);
+    const x = text.x + 4;
+    const y = text.y + index * lineHeight + 4;
+    ctx.save();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = haloWidth;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeText(line, x, y);
+    ctx.restore();
+    ctx.fillText(line, x, y);
   });
   ctx.restore();
 }

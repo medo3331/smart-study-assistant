@@ -43,7 +43,7 @@ export default function NotesLibrary() {
   const [newTitle, setNewTitle] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  // 🔍 بحث شامل عبر كل الدفاتر.
+  // 🔍 بحث شامل عبر كل النوتات.
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -53,7 +53,7 @@ export default function NotesLibrary() {
   // attribute on <details>.
   const initialGuideOpen = React.useRef<boolean | null>(null);
 
-  // 🔍 مؤشر البحث — بيتبنى مرة، وبيتحدّث مع كل تحميل للدفاتر.
+  // 🔍 مؤشر البحث — بيتبنى مرة، وبيتحدّث مع كل تحميل للنوتات.
   const searchIndexRef = React.useRef<
     Awaited<ReturnType<typeof buildSearchIndex>> | null
   >(null);
@@ -79,7 +79,7 @@ export default function NotesLibrary() {
     }
     setSearching(true);
     try {
-      // نبني من جديد لو الدفاتر اتغيرت بعد آخر بناء.
+      // نبني من جديد لو النوتات اتغيرت بعد آخر بناء.
       setSearchResults(searchIndex(searchIndexRef.current, query));
     } finally {
       setSearching(false);
@@ -94,7 +94,7 @@ export default function NotesLibrary() {
       setError(null);
       return sorted;
     } catch (e) {
-      setError("تعذّر تحميل الدفاتر. جرّب إعادة تحميل الصفحة.");
+      setError("تعذّر تحميل النوتات. جرّب إعادة تحميل الصفحة.");
       console.error("[notes] listNotebooks failed", e);
       return null;
     } finally {
@@ -112,9 +112,9 @@ export default function NotesLibrary() {
     });
   }, [repo, load]);
 
-  // 📥 ?importFile=<id> — زر «للنوته» في «ملفاتي»: بيفتح آخر دفتر
+  // 📥 ?importFile=<id> — زر «للنوته» في «ملفاتي»: بيفتح آخر نوتة
   // (أو بيعمل واحد) مع تمرير البارميتر للمحرر، لأن معالجة الاستيراد
-  // عايشة جوة محرر الدفتر مش في المكتبة.
+  // عايشة جوة محرر النوتة مش في المكتبة.
   const handledImportRedirectRef = React.useRef(false);
   useEffect(() => {
     if (handledImportRedirectRef.current) return;
@@ -133,7 +133,7 @@ export default function NotesLibrary() {
         if (target) {
           router.replace(`/notes/${target.id}?importFile=${encodeURIComponent(fileId)}`);
         } else {
-          // مفيش دفاتر — بيعمل دفتر جديد فوراً مع الاستيراد.
+          // مفيش نوتات — بيعمل نوتة جديدة فوراً مع الاستيراد.
           const now = new Date().toISOString();
           const notebookId = newNotesId();
           const pageId = newNotesId();
@@ -152,7 +152,7 @@ export default function NotesLibrary() {
           await repo.saveNotebook({
             id: notebookId,
             ownerId: repo.ownerId,
-            title: "دفتر جديد",
+            title: "نوتة جديدة",
             pageIds: [pageId],
             currentPageId: pageId,
             revision: 1,
@@ -173,7 +173,7 @@ export default function NotesLibrary() {
 
   const createNotebook = async () => {
     if (!repo || !canWrite || creating) return;
-    const title = newTitle.trim() || "دفتر جديد";
+    const title = newTitle.trim() || "نوتة جديدة";
     setCreating(true);
     try {
       const now = new Date().toISOString();
@@ -216,7 +216,7 @@ export default function NotesLibrary() {
       router.push(`/notes/${notebookId}`);
     } catch (e) {
       console.error("[notes] create notebook failed", e);
-      setError("تعذّر إنشاء الدفتر.");
+      setError("تعذّر إنشاء النوتة.");
       setCreating(false);
     }
   };
@@ -255,7 +255,7 @@ export default function NotesLibrary() {
       await load(repo);
     } catch (e) {
       console.error("[notes] delete failed", e);
-      setError("تعذّر حذف الدفتر.");
+      setError("تعذّر حذف النوتة.");
     } finally {
       setBusyId(null);
     }
@@ -264,8 +264,8 @@ export default function NotesLibrary() {
   return (
     <div className="notes-page">
       <NotesHeader
-        title="دفاتري"
-        subtitle="دفاتر بخط اليد، متعددة الصفحات، محفوظة على جهازك — بدون رفع لأي سيرفر."
+        title="نوتاتي"
+        subtitle="نوتات بخط اليد، متعددة الصفحات، محفوظة على جهازك — بدون رفع لأي سيرفر."
         chips={
           <>
             <NotesChip tone={canWrite ? "ok" : "warn"} title="حالة قفل الكتابة">
@@ -280,7 +280,7 @@ export default function NotesLibrary() {
 
       {lease === "read-only" && boot.phase === "ready" ? (
         <p className="notes-alert" data-tone="warn">
-          تبويب تاني بيملك الكتابة على نفس الدفاتر. العرض متاح، والإنشاء والتعديل مقفولين مؤقتاً.
+          تبويب تاني بيملك الكتابة على نفس النوتات. العرض متاح، والإنشاء والتعديل مقفولين مؤقتاً.
         </p>
       ) : null}
 
@@ -314,8 +314,8 @@ export default function NotesLibrary() {
             onKeyDown={(event) => {
               if (event.key === "Enter") void createNotebook();
             }}
-            placeholder="اسم الدفتر الجديد"
-            aria-label="اسم الدفتر الجديد"
+            placeholder="اسم النوتة الجديد"
+            aria-label="اسم النوتة الجديد"
             disabled={!canWrite || creating}
             className="notes-input"
           />
@@ -326,7 +326,7 @@ export default function NotesLibrary() {
             data-tone="primary"
             className="notes-btn"
           >
-            {creating ? "بيتعمل…" : "＋ دفتر جديد"}
+            {creating ? "بيتعمل…" : "＋ نوتة جديدة"}
           </button>
         </div>
       ) : null}
@@ -340,8 +340,8 @@ export default function NotesLibrary() {
               setSearchQuery(event.target.value);
               void runGlobalSearch(event.target.value);
             }}
-            placeholder="🔍 ابحث في كل الدفاتر — أسماء الصفحات والنصوص…"
-            aria-label="بحث في كل الدفاتر"
+            placeholder="🔍 ابحث في كل النوتات — أسماء الصفحات والنصوص…"
+            aria-label="بحث في كل النوتات"
             className="notes-input"
             style={{ flex: 1 }}
           />
@@ -381,13 +381,13 @@ export default function NotesLibrary() {
       ) : null}
 
       {loading && boot.phase === "ready" ? (
-        <p className="notes-hint">بنحمّل الدفاتر…</p>
+        <p className="notes-hint">بنحمّل النوتات…</p>
       ) : null}
 
       {!loading && boot.phase === "ready" && notebooks.length === 0 ? (
         <div className="notes-empty">
-          <strong>مفيش دفاتر لسه</strong>
-          اكتب اسم فوق واضغط «دفتر جديد» عشان تبدأ أول صفحة.
+          <strong>مفيش نوتات لسه</strong>
+          اكتب اسم فوق واضغط «نوتة جديدة» عشان تبدأ أول صفحة.
         </div>
       ) : null}
 
@@ -408,7 +408,7 @@ export default function NotesLibrary() {
                     if (event.key === "Enter") void renameNotebook(notebook);
                     if (event.key === "Escape") setRenamingId(null);
                   }}
-                  aria-label="اسم الدفتر"
+                  aria-label="اسم النوتة"
                   autoFocus
                   className="notes-input"
                 />
@@ -447,7 +447,7 @@ export default function NotesLibrary() {
                 href={`/notes/${notebook.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="افتح الدفتر في تبويب جديد (البيانات من نفس الجهاز)"
+                title="افتح النوتة في تبويب جديد (البيانات من نفس الجهاز)"
                 className="notes-btn notes-btn-sm"
               >
                 ↗ تبويب

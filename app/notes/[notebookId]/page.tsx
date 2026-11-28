@@ -26,7 +26,7 @@ export default function NotebookEditorPage() {
     <div className="notes-page">
       {notebookId === null ? (
         <p className="notes-alert" data-tone="error">
-          معرّف الدفتر غير صالح.
+          معرّف النوتة غير صالح.
         </p>
       ) : null}
 

@@ -5,10 +5,10 @@ import Link from "next/link";
 import { emptyPageContent, pageContentStrokes } from "@/lib/notes/content";
 import { classifyNotesError } from "@/lib/notes/errors";
 import {
-  PAGE_HEIGHT,
-  PAGE_WIDTH,
+  PAGE_FORMAT_OPTIONS,
   TEMPLATE_OPTIONS,
   imageAt,
+  pageDimensions,
   paintPageBackground,
   paintSelectionOutline,
   paintShapeStroke,
@@ -66,6 +66,7 @@ import type {
   NoteText,
   NotesTemplate,
   PageContent,
+  PageFormat,
   StoragePage,
   Stroke,
 } from "@/lib/notes/types";
@@ -74,7 +75,11 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { NotesChip, NotesThemeToggle } from "@/components/notes/NotesHeader";
 import NotesGuide from "@/components/notes/NotesGuide";
 import PageThumbs from "@/components/notes/PageThumbs";
+import PresentMode from "@/components/notes/PresentMode";
 import NotesAssistant from "@/components/notes/NotesAssistant";
+import MagicWriteDialog from "@/components/notes/MagicWriteDialog";
+import { wrapAiText, type AiLayoutResult } from "@/lib/notes/ai-layout";
+import { buildInkRevealStages, inkDelayMs, type InkRevealStage } from "@/lib/notes/ink-reveal";
 import StudyCards from "@/components/notes/StudyCards";
 
 /**
@@ -134,7 +139,7 @@ export default function NotebookEditor({
 
   // ---- Document state ----
   const [notebookId, setNotebookId] = useState<string | null>(null);
-  const [notebookTitle, setNotebookTitle] = useState("دفتر");
+  const [notebookTitle, setNotebookTitle] = useState("النوتة");
   const [pages, setPages] = useState<UiPage[]>([]);
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -155,6 +160,8 @@ export default function NotebookEditor({
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   /** Mirrors templateRef for rendering; the ref stays the paint-side truth. */
   const [template, setTemplateState] = useState<NotesTemplate>("lined");
+  /** مقاس الصفحة (نوتة كامل) — mirrors pageFormatRef; "a4" للنوتات القديمة. */
+  const [pageFormat, setPageFormatState] = useState<PageFormat>("a4");
 
   // ---- View state ----
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
@@ -163,6 +170,10 @@ export default function NotebookEditor({
   const [pdfOpen, setPdfOpen] = useState(false);
   const [pdfSelected, setPdfSelected] = useState<Set<string>>(new Set());
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // ---- عرض تقديمي / PPTX ----
+  const [presenting, setPresenting] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
 
   // ---- Share (read-only link) state ----
   const [shareOpen, setShareOpen] = useState(false);
@@ -251,6 +262,7 @@ export default function NotebookEditor({
   const dprRef = useRef(1);
   const contentRef = useRef<PageContent>(emptyPageContent());
   const templateRef = useRef<NotesTemplate>("lined");
+  const pageFormatRef = useRef<PageFormat>("a4");
   const currentStrokeRef = useRef<Stroke | null>(null);
   const shapeStartRef = useRef<[number, number] | null>(null);
   const isDrawingRef = useRef(false);
@@ -408,6 +420,7 @@ export default function NotebookEditor({
     const viewHeight = canvas.height / dpr;
     const viewZoom = zoomRef.current;
     const pan = panRef.current;
+    const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, viewWidth, viewHeight);
@@ -422,14 +435,14 @@ export default function NotebookEditor({
     ctx.shadowBlur = 22;
     ctx.shadowOffsetY = 8;
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+    ctx.fillRect(0, 0, pageW, pageH);
     ctx.restore();
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+    ctx.rect(0, 0, pageW, pageH);
     ctx.clip();
-    paintPageBackground(ctx, templateRef.current, PAGE_WIDTH, PAGE_HEIGHT);
+    paintPageBackground(ctx, templateRef.current, pageW, pageH);
     const content = contentRef.current;
     for (const image of content.images) {
       const decoded = lookupImage(image.src);
@@ -575,13 +588,14 @@ export default function NotebookEditor({
     if (!fittedRef.current && rect.width > 0) {
       fittedRef.current = true;
       const remembered = savedViewRef.current?.zoom;
+      const { width: pageW } = pageDimensions(pageFormatRef.current);
       const fit = clamp(
-        remembered ?? (rect.width - 64) / PAGE_WIDTH,
+        remembered ?? (rect.width - 64) / pageW,
         MIN_ZOOM,
         MAX_ZOOM,
       );
       zoomRef.current = fit;
-      panRef.current = { x: (rect.width - PAGE_WIDTH * fit) / 2, y: 24 };
+      panRef.current = { x: (rect.width - pageW * fit) / 2, y: 24 };
       setView({ zoom: fit, panX: panRef.current.x, panY: 24 });
     }
     paint();
@@ -736,7 +750,7 @@ export default function NotebookEditor({
     };
   }, [getSaveCoordinator]);
 
-  // 🏷️ أسماء الصفحات (اختيارية) — بتتخزن في الدفتر وتظهر في الـ thumbnails.
+  // 🏷️ أسماء الصفحات (اختيارية) — بتتخزن في النوتة وتظهر في الـ thumbnails.
   const [pageNames, setPageNames] = useState<Record<string, string>>({});
   const pageNamesRef = useRef<Record<string, string>>({});
 
@@ -752,6 +766,7 @@ export default function NotebookEditor({
         existing,
         now: nowIso(),
         pageNames: pageNamesRef.current,
+        pageFormat: pageFormatRef.current,
       });
       await repo.saveNotebook(record);
       return record;
@@ -863,7 +878,7 @@ export default function NotebookEditor({
         if (boot.status === "missing") {
           setLoaded(true);
           setMessage(
-            "الدفتر ده مش موجود على الجهاز ده — دفاترك متخزنة محلياً في المتصفح، فالرابط لو اتفتح من جهاز أو متصفح تاني مش هيلاقي الدفتر. افتح «دفاتري» واختار دفترك من هناك.",
+            "النوتة ده مش موجود على الجهاز ده — نوتاتك متخزنة محلياً في المتصفح، فالرابط لو اتفتح من جهاز أو متصفح تاني مش هيلاقي النوتة. افتح «نوتاتي» واختار نوتتك من هناك.",
           );
           return;
         }
@@ -873,7 +888,7 @@ export default function NotebookEditor({
           setMessage(
             boot.reason === "no-pages"
               ? "مفيش صفحات محفوظة، والتبويب ده للقراءة فقط."
-              : "مفيش دفاتر محفوظة، والتبويب ده للقراءة فقط.",
+              : "مفيش نوتات محفوظة، والتبويب ده للقراءة فقط.",
           );
           return;
         }
@@ -894,10 +909,13 @@ export default function NotebookEditor({
 
         const active =
           uiPages.find((page) => page.id === boot.activePageId) ?? uiPages[0] ?? null;
-        // 🏷️ أسماء الصفحات المحفوظة في الدفتر.
+        // 🏷️ أسماء الصفحات المحفوظة في النوتة.
         const names = boot.notebook.pageNames ?? {};
         pageNamesRef.current = names;
         setPageNames(names);
+        // 📐 مقاس الصفحات المخزّن على مستوى النوتة — النوتات القديمة من غير مقاس تقرأ A4 طولي.
+        pageFormatRef.current = boot.notebook.pageFormat ?? "a4";
+        setPageFormatState(pageFormatRef.current);
         // 🎯 وصلنا من نتيجة بحث عالمي؟ (?page=<pageId>) — افتحها بدل اللي اتحفظ.
         const targetPageId = new URLSearchParams(window.location.search).get("page");
         const target = targetPageId ? uiPages.find((page) => page.id === targetPageId) : null;
@@ -906,7 +924,7 @@ export default function NotebookEditor({
       } catch (error) {
         if (cancelled) return;
         console.error("[notes] bootstrap failed", classifyNotesError(error), error);
-        setMessage(`تعذّر تحميل الدفتر (${classifyNotesError(error)}).`);
+        setMessage(`تعذّر تحميل النوتة (${classifyNotesError(error)}).`);
         setLoaded(true);
       }
     })();
@@ -1380,18 +1398,19 @@ export default function NotebookEditor({
     const cols = Math.max(1, Math.min(12, Number(match[2])));
 
     const canvas = canvasRef.current;
-    const viewWidth = canvas ? canvas.width / dprRef.current : PAGE_WIDTH;
-    const viewHeight = canvas ? canvas.height / dprRef.current : PAGE_HEIGHT;
+    const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+    const viewWidth = canvas ? canvas.width / dprRef.current : pageW;
+    const viewHeight = canvas ? canvas.height / dprRef.current : pageH;
     const pan = panRef.current;
     const zoomLevel = zoomRef.current;
     // مركز الشاشة الحالي في إحداثيات الصفحة.
     const centerX = (viewWidth / 2 - pan.x) / zoomLevel;
     const centerY = (viewHeight / 2 - pan.y) / zoomLevel;
 
-    const width = Math.min(cols * 110, PAGE_WIDTH - 96);
-    const height = Math.min(rows * 56, PAGE_HEIGHT - 96);
-    const left = Math.max(48, Math.min(centerX - width / 2, PAGE_WIDTH - width - 48));
-    const top = Math.max(48, Math.min(centerY - height / 2, PAGE_HEIGHT - height - 48));
+    const width = Math.min(cols * 110, pageW - 96);
+    const height = Math.min(rows * 56, pageH - 96);
+    const left = Math.max(48, Math.min(centerX - width / 2, pageW - width - 48));
+    const top = Math.max(48, Math.min(centerY - height / 2, pageH - height - 48));
 
     const line = (points: Array<[number, number]>): Stroke => ({
       id: newId(),
@@ -1531,8 +1550,9 @@ export default function NotebookEditor({
         }
 
         const canvas = canvasRef.current;
-        const viewWidth = canvas ? canvas.width / dprRef.current : PAGE_WIDTH;
-        const viewHeight = canvas ? canvas.height / dprRef.current : PAGE_HEIGHT;
+        const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+        const viewWidth = canvas ? canvas.width / dprRef.current : pageW;
+        const viewHeight = canvas ? canvas.height / dprRef.current : pageH;
         const pan = panRef.current;
         const zoomLevel = zoomRef.current;
         const centerX = (viewWidth / 2 - pan.x) / zoomLevel;
@@ -1544,8 +1564,8 @@ export default function NotebookEditor({
           id: newId(),
           kind: "image",
           src: finalUrl,
-          x: clamp(centerX - width / 2, 8, PAGE_WIDTH - width - 8),
-          y: clamp(centerY - height / 2, 8, PAGE_HEIGHT - height - 8),
+          x: clamp(centerX - width / 2, 8, pageW - width - 8),
+          y: clamp(centerY - height / 2, 8, pageH - height - 8),
           width,
           height,
         };
@@ -1650,6 +1670,9 @@ export default function NotebookEditor({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      // ✍️ أي دوس على الورقة أثناء كتابة Magic = إكمال فوري.
+      if (inkAnimRef.current) inkAnimRef.current.cancelled = true;
+
       // Pan: space held, or middle button. Always available, even read-only.
       if (spaceRef.current || event.button === 1) {
         event.preventDefault();
@@ -1737,6 +1760,10 @@ export default function NotebookEditor({
             // (زي PowerPoint) — بدل ما الضغطة تحرك النص وما تقدرش تعدله.
             if (selectionRef.current?.kind === "text" && selectionRef.current.id === text.id) {
               openTextEditor({ id: text.id, x: text.x, y: text.y, value: text.text });
+              // 🎨 المحرر بيورث خصايص النص الموجود — مش قيم الأدوات العامة.
+              setTextSize(text.size);
+              setTextFont(text.font ?? FONT_OPTIONS[0].id);
+              setColor(text.color);
               return;
             }
             startSingleDrag("text", text.id, { ...text });
@@ -2090,6 +2117,9 @@ export default function NotebookEditor({
       });
       if (text) {
         openTextEditor({ id: text.id, x: text.x, y: text.y, value: text.text });
+        setTextSize(text.size);
+        setTextFont(text.font ?? FONT_OPTIONS[0].id);
+        setColor(text.color);
       }
     },
     [canWrite, openTextEditor, toPagePoint, tool],
@@ -2120,9 +2150,35 @@ export default function NotebookEditor({
     const container = containerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    const fit = clamp((rect.width - 64) / PAGE_WIDTH, MIN_ZOOM, MAX_ZOOM);
-    applyView(fit, { x: (rect.width - PAGE_WIDTH * fit) / 2, y: 24 });
+    const { width: pageW } = pageDimensions(pageFormatRef.current);
+    const fit = clamp((rect.width - 64) / pageW, MIN_ZOOM, MAX_ZOOM);
+    applyView(fit, { x: (rect.width - pageW * fit) / 2, y: 24 });
   }, [applyView]);
+
+  /** 📐 تغيير مقاس الصفحة للنوتة كله — المحتوى يحتفظ بإحداثياته والورقة تكبر حواليه. */
+  const changePageFormat = useCallback(
+    (format: PageFormat) => {
+      if (!repo.canWrite) return;
+      pageFormatRef.current = format;
+      setPageFormatState(format);
+      paint();
+      fitToWidth();
+      const nbId = notebookIdRef.current;
+      if (!nbId) return;
+      void saveNotebookRecord(
+        nbId,
+        pages.map((page) => page.id),
+        currentPageIdRef.current,
+        notebookTitle,
+      )
+        .then(() => setSaveStatus("saved"))
+        .catch((error) => {
+          console.error("[notes] page format save failed", classifyNotesError(error), error);
+          setSaveStatus("error");
+        });
+    },
+    [fitToWidth, notebookTitle, paint, pages, repo, saveNotebookRecord, setSaveStatus],
+  );
 
   const handleWheelRef = useRef<(event: WheelEvent) => void>(() => undefined);
 
@@ -2249,9 +2305,10 @@ export default function NotebookEditor({
 
   const renderPageToCanvas = useCallback(
     (page: UiPage, scale = 2): HTMLCanvasElement | null => {
+      const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
       const offscreen = document.createElement("canvas");
-      offscreen.width = PAGE_WIDTH * scale;
-      offscreen.height = PAGE_HEIGHT * scale;
+      offscreen.width = pageW * scale;
+      offscreen.height = pageH * scale;
       const ctx = offscreen.getContext("2d");
       if (!ctx) return null;
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -2259,8 +2316,8 @@ export default function NotebookEditor({
         ctx,
         page.template,
         page.content,
-        PAGE_WIDTH,
-        PAGE_HEIGHT,
+        pageW,
+        pageH,
         lookupImage,
       );
       return offscreen;
@@ -2305,7 +2362,13 @@ export default function NotebookEditor({
         chosen.flatMap((page) => page.content.images.map((image) => image.src)),
       );
       const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+      // 📐 مقاس ورقة الـ PDF يتبع مقاس النوتة (طولي/عرضي/شاشة).
+      const { width: fmtW, height: fmtH } = pageDimensions(pageFormatRef.current);
+      const pdf = new jsPDF({
+        unit: "px",
+        format: fmtW > fmtH ? [fmtH, fmtW] : [fmtW, fmtH],
+        orientation: fmtW > fmtH ? "landscape" : "portrait",
+      });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
@@ -2333,15 +2396,74 @@ export default function NotebookEditor({
     }
   }, [ensureImagesLoaded, notebookTitle, pages, pdfSelected, renderPageToCanvas]);
 
+  /** 📊 تصدير النوتة كملف PowerPoint — كل صفحة سلايد بمقاس الورقة نفسها. */
+  const exportPptx = useCallback(async () => {
+    if (exportingPptx || pages.length === 0) return;
+    setExportingPptx(true);
+    try {
+      await ensureImagesLoaded(
+        pages.flatMap((page) => page.content.images.map((image) => image.src)),
+      );
+      const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+      const widthIn = pageW / 96;
+      const heightIn = pageH / 96;
+      const { default: PptxGenJS } = await import("pptxgenjs");
+      const pptx = new PptxGenJS();
+      pptx.defineLayout({ name: "MAGICLY_PAGE", width: widthIn, height: heightIn });
+      pptx.layout = "MAGICLY_PAGE";
+      pptx.title = notebookTitle || "notebook";
+      let added = 0;
+      for (const page of pages) {
+        const canvas = renderPageToCanvas(page, 2);
+        if (!canvas) continue;
+        const slide = pptx.addSlide();
+        slide.addImage({
+          data: canvas.toDataURL("image/jpeg", 0.92),
+          x: 0,
+          y: 0,
+          w: widthIn,
+          h: heightIn,
+        });
+        added += 1;
+      }
+      if (added === 0) {
+        setMessage("مقدرناش نصدّر الصفحات.");
+        return;
+      }
+      await pptx.writeFile({ fileName: `${notebookTitle || "notebook"}.pptx` });
+      setMessage(`اتصدّر ملف باور بوينت بـ ${added} سلايد ✅`);
+    } catch (error) {
+      console.error("[notes] pptx export failed", error);
+      setMessage("فشل تصدير الـ PowerPoint.");
+    } finally {
+      setExportingPptx(false);
+    }
+  }, [ensureImagesLoaded, exportingPptx, notebookTitle, pages, renderPageToCanvas]);
+
+  /** 🎬 صفحة بدء العرض التقديمي التفاعلي. */
+  const startPresentation = useCallback(() => {
+    if (pages.length === 0) return;
+    setPresenting(true);
+  }, [pages.length]);
+
+  /** 🖌️ رسم محتوى صفحة داخل أي canvas — يستخدمه وضع العرض. */
+  const renderPageInto = useCallback(
+    (page: UiPage, ctx: CanvasRenderingContext2D, width: number, height: number) => {
+      renderPageContent(ctx, page.template, page.content, width, height, lookupImage);
+    },
+    [lookupImage],
+  );
+
   // ---- PDF import ----
 
-  /** 📤 مشاركة الدفتر كلل قراءة — بيبنى snapshot خفيف وبيوجّه لينك عام. */
+  /** 📤 مشاركة النوتة كلل قراءة — بيبنى snapshot خفيف وبيوجّه لينك عام. */
   const createShareLink = useCallback(async () => {
     setShareBusy(true);
     setShareError(null);
     setShareLink(null);
     try {
       const payload = {
+        pageFormat: pageFormatRef.current,
         pages: pages.map((page) => ({
           id: page.id,
           template: page.template,
@@ -2365,7 +2487,7 @@ export default function NotebookEditor({
     } finally {
       setShareBusy(false);
     }
-  }, [notebookTitle, pages]);
+  }, [notebookTitle, pages, pageFormatRef]);
 
   /** يفتح ملف PDF (محلي أو من «ملفاتي») ويعرض اختيار النطاق. */
   const openPdfImport = useCallback(
@@ -2438,7 +2560,7 @@ export default function NotebookEditor({
     [openPdfImport],
   );
 
-  /** 📥 استيراد أي ملف من «ملفاتي» كصفحة جديدة في الدفتر الحالي:
+  /** 📥 استيراد أي ملف من «ملفاتي» كصفحة جديدة في النوتة الحالي:
    *  PDF → منتقي النطاق الموجود، صورة → خلفية صفحة، docx/نص → نص مطبوع. */
   const importLibraryEntry = useCallback(
     async (entry: { id: string; file_name: string; file_type: string }) => {
@@ -2498,7 +2620,8 @@ export default function NotebookEditor({
           });
           const largest = Math.max(element.naturalWidth, element.naturalHeight);
           const scale = largest > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / largest : 1;
-          const fit = Math.min(PAGE_WIDTH / element.naturalWidth, PAGE_HEIGHT / element.naturalHeight);
+          const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+          const fit = Math.min(pageW / element.naturalWidth, pageH / element.naturalHeight);
           let src = dataUrl;
           if (scale < 1) {
             const offscreen = document.createElement("canvas");
@@ -2773,10 +2896,11 @@ export default function NotebookEditor({
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      const scale = canvas.width / PAGE_WIDTH;
+      const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+      const scale = canvas.width / pageW;
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+      ctx.fillRect(0, 0, pageW, pageH);
       for (const stroke of strokes) {
         if (stroke.shape) paintShapeStroke(ctx, stroke);
         else paintStroke(ctx, stroke);
@@ -2850,7 +2974,7 @@ export default function NotebookEditor({
   const showTextControls = tool === "text" || selection?.kind === "text";
 
   /** What the assistant sees: notebook title + the page's typed texts. */
-  /** 🎴 نصوص المذاكرة: نصوص الصفحة الحالية — لو قليلة، بيجمع من الدفتر كله. */
+  /** 🎴 نصوص المذاكرة: نصوص الصفحة الحالية — لو قليلة، بيجمع من النوتة كله. */
   const getStudyTexts = useCallback(() => {
     const pageTexts = contentRef.current.texts
       .map((text) => text.text)
@@ -2876,10 +3000,10 @@ export default function NotebookEditor({
       .filter((line) => line.trim() !== "")
       .join("\n")
       .slice(0, 1800);
-    return `دفتر: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
+    return `نوتة: ${notebookTitle} — صفحة ${pages.length === 0 ? 1 : (pages.findIndex((page) => page.id === currentPageId) + 1) || 1}\n${typed || "(مفيش نصوص مكتوبة على الصفحة دي)"}`;
   }, [currentPageId, notebookTitle, pages]);
 
-  /** 🎴 تحميل/حفظ ديك المذاكرة في meta store للدفتر. */
+  /** 🎴 تحميل/حفظ ديك المذاكرة في meta store للنوتة. */
   const loadStudyDeck = useCallback(
     (key: string) => repo.getMeta(key) as Promise<never>,
     [repo],
@@ -2941,7 +3065,7 @@ export default function NotebookEditor({
       form.append("file", blob, "page.jpg");
       form.append(
         "question",
-        "دي صورة صفحة من دفتر طالب. اقرا خط اليد واكتب بالحرف كل اللي مكتوب فيه، سطر بسطر بنفس الترتيب، من غير أي تعليق أو ترقيم. رجّع النص فقط.",
+        "دي صورة صفحة من نوتة طالب. اقرا خط اليد واكتب بالحرف كل اللي مكتوب فيه، سطر بسطر بنفس الترتيب، من غير أي تعليق أو ترقيم. رجّع النص فقط.",
       );
       const res = await fetch("/api/ai/image-analysis", { method: "POST", body: form });
       const data = await res.json().catch(() => null);
@@ -2966,47 +3090,133 @@ export default function NotebookEditor({
 
   /** إدراج النص المقروء على الصفحة — الأصل (خط الطالب) مش بيتمس أبداً. */
   /** 🤖 إدراج نص من الـ AI على الصفحة — بلوكات قابلة للتحريك والتعديل. */
-  const insertAiText = useCallback(
-    (text: string) => {
-      if (!canWrite) return;
-      const clean = text.trim();
-      if (!clean) return;
+  /** ✍️ محرك الكتابة التدريجية — النص بيكتب كلمة كلمة وسطر سطر ترتيبًا، والمخططات/الجداول تظهر في مكانها في التسلسل. */
+  const inkAnimRef = useRef<{ cancelled: boolean; aborted: boolean } | null>(null);
+
+  const animateInkInsert = useCallback(
+    async (newTexts: NoteText[], newImages: NoteImage[], newStrokes: Stroke[], doneMessage: string) => {
+      if (!canWrite || newTexts.length + newImages.length === 0) return;
+      if (inkAnimRef.current) inkAnimRef.current.cancelled = true;
+      const token = { cancelled: false, aborted: false };
+      inkAnimRef.current = token;
+
+      const startPageId = currentPageIdRef.current;
       const content = contentRef.current;
-      const lines = clean
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .slice(0, 60);
-      const startX = PAGE_WIDTH - 64;
-      const startY = 72;
-      const lineHeight = 34;
-      const blocks: NoteText[] = lines.map((line, index) => ({
-        id: newId(),
-        kind: "text",
-        text: line,
-        x: Math.max(24, startX - line.length * 9),
-        y: startY + index * lineHeight,
-        size: 20,
-        color: "#111827",
-      }));
-      setContent({
+      const imageById = new Map(newImages.map((image) => [image.id, image]));
+      const strokeById = new Map(newStrokes.map((stroke) => [stroke.id, stroke]));
+      // السطور بتتضاف فاضية وبتتملى كلمة كلمة أمام الطالب.
+      let working: PageContent = {
         strokes: content.strokes,
-        texts: [...content.texts, ...blocks],
+        texts: [...content.texts, ...newTexts.map((text) => ({ ...text, text: "" }))],
         images: content.images,
-      });
-      multiSelRef.current = new Set(blocks.map((block) => block.id));
-      setMultiCount(blocks.length);
+      };
+      setContent(working);
+
+      const stages: InkRevealStage[] = buildInkRevealStages(newTexts, newImages, newStrokes);
+      const wordTick = inkDelayMs(stages.filter((stage) => stage.kind === "text").length);
+      const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      for (const stage of stages) {
+        if (token.cancelled || token.aborted) break;
+        if (currentPageIdRef.current !== startPageId) {
+          token.aborted = true;
+          break;
+        }
+        await tick(stage.kind === "text" ? wordTick : 140);
+        if (token.cancelled || token.aborted) break;
+        if (stage.kind === "text") {
+          working = {
+            ...working,
+            texts: working.texts.map((text) =>
+              text.id === stage.id ? { ...text, text: stage.value } : text,
+            ),
+          };
+        } else if (stage.kind === "image") {
+          const image = imageById.get(stage.id);
+          if (image) working = { ...working, images: [...working.images, image] };
+        } else {
+          const stroke = strokeById.get(stage.id);
+          if (stroke) working = { ...working, strokes: [...working.strokes, stroke] };
+        }
+        setContent(working);
+      }
+
+      if (token.aborted) {
+        inkAnimRef.current = null;
+        return;
+      }
+
+      // المحتوى النهائي — بيغطّي حالة الإسقاط (الطالب دوس أثناء الكتابة).
+      const finalContent: PageContent = {
+        strokes: [...content.strokes, ...newStrokes],
+        texts: [...content.texts, ...newTexts],
+        images: [...content.images, ...newImages],
+      };
+      contentRef.current = finalContent;
+      multiSelRef.current = new Set([
+        ...newTexts.map((text) => text.id),
+        ...newImages.map((image) => image.id),
+      ]);
+      setMultiCount(newTexts.length + newImages.length);
       selectionRef.current = null;
       setSelection(null);
       paint();
       commitHistory();
       scheduleSave();
-      setMessage(`اتدرج ${blocks.length} سطر من الـ AI على الصفحة — عدّلهم براحتك.`);
+      setMessage(doneMessage);
+      inkAnimRef.current = null;
     },
     [canWrite, commitHistory, paint, scheduleSave, setContent],
   );
 
-  /** 🎨 إدراج رسمة/مخطط AI في وسط الصفحة — الصورة بتتحفظ dataURL جوه الصفحة. */
+  /** 🧠 إدراج نص من الـ AI على الصفحة — معلّف مرتّب بحافة يمينى واحدة وبيكتب كلمة كلمة. */
+  const insertAiText = useCallback(
+    (text: string) => {
+      if (!canWrite) return;
+      const clean = text.trim();
+      if (!clean) return;
+      const size = 20;
+      const maxWidth = pageDimensions(pageFormatRef.current).width - 128;
+      const lines = wrapAiText(clean, size, maxWidth)
+        .slice(0, 60)
+        .map((line) => line.trim());
+      const blocks: NoteText[] = lines.map((line, index) => ({
+        id: newId(),
+        kind: "text",
+        text: line,
+        x: pageDimensions(pageFormatRef.current).width - 64,
+        y: 72 + index * size * 1.55,
+        size,
+        color: "#111827",
+      }));
+      void animateInkInsert(
+        blocks,
+        [],
+        [],
+        `Magic كتب ${blocks.length} سطر على الصفحة — عدّلهم براحتك.`,
+      );
+    },
+    [animateInkInsert, canWrite],
+  );
+
+  /** ✅ Magic Write — إدراج بلوكات منظّمة (نصوص + صور مخططات + خطوط جداول) كعناصر حقيقية بكتابة تدريجية. */
+  const insertAiBlocks = useCallback(
+    (applied: AiLayoutResult) => {
+      if (!canWrite) return;
+      const added = applied.texts.length + applied.images.length;
+      if (added === 0) return;
+      void animateInkInsert(
+        applied.texts,
+        applied.images,
+        applied.strokes,
+        applied.clipped
+          ? "Magic كتب المحتوى على الصفحة — في بلوكات زائدة ما اتّسعت، قلّل المحدد وجرّب تاني."
+          : `Magic كتب ${added} عنصر على الصفحة — عدّلهم براحتك.`,
+      );
+    },
+    [animateInkInsert, canWrite],
+  );
+
   const insertAiImage = useCallback(
     (dataUrl: string) => {
       if (!canWrite || !dataUrl.startsWith("data:image/")) return;
@@ -3015,14 +3225,15 @@ export default function NotebookEditor({
       element.onload = () => {
         // نلزّق الرسمة في نص الصفحة بمقاس معقول (fit داخل A4).
         const natural = Math.max(element.naturalWidth, element.naturalHeight) || 1;
-        const scale = Math.min(1, Math.min(PAGE_WIDTH - 80, PAGE_HEIGHT - 260) / natural);
+        const { width: pageW, height: pageH } = pageDimensions(pageFormatRef.current);
+        const scale = Math.min(1, Math.min(pageW - 80, pageH - 260) / natural);
         const width = Math.round(element.naturalWidth * scale);
         const height = Math.round(element.naturalHeight * scale);
         const noteImage: NoteImage = {
           id: newId(),
           kind: "image",
           src: dataUrl,
-          x: Math.round((PAGE_WIDTH - width) / 2),
+          x: Math.round((pageW - width) / 2),
           y: 120,
           width,
           height,
@@ -3046,6 +3257,75 @@ export default function NotebookEditor({
     },
     [canWrite, commitHistory, paint, scheduleSave, setContent],
   );
+
+  /** ✅ Magic Write dialog — الموضوع المبدئي من النص المحدد. */
+  const [magicWriteOpen, setMagicWriteOpen] = useState(false);
+  const [magicWriteTopic, setMagicWriteTopic] = useState("");
+  const openMagicWrite = useCallback(() => {
+    if (!canWrite) return;
+    const selected = getSelectedText();
+    setMagicWriteTopic(selected?.trim().slice(0, 4000) ?? "");
+    setMagicWriteOpen(true);
+  }, [canWrite, getSelectedText]);
+
+  /** 🎨 تنسيق مباشر للعناصر المحددة — لون/حجم/نوع خط بيتطبق فورًا على النص (واللون على الأشكال) المحدد. */
+  const applySelectionStyle = useCallback(
+    (style: { color?: string; size?: number; font?: string }) => {
+      if (!canWrite) return;
+      const targets = new Set<string>();
+      const sel = selectionRef.current;
+      if (sel) targets.add(sel.id);
+      multiSelRef.current.forEach((id) => targets.add(id));
+      if (targets.size === 0) return;
+      const content = contentRef.current;
+      const patchText = (text: NoteText): NoteText => ({
+        ...text,
+        ...(style.color ? { color: style.color } : {}),
+        ...(style.size ? { size: style.size } : {}),
+        ...(style.font ? { font: style.font } : {}),
+      });
+      const texts = content.texts.map((text) => (targets.has(text.id) ? patchText(text) : text));
+      const strokes = style.color
+        ? content.strokes.map((stroke) => (targets.has(stroke.id) ? { ...stroke, color: style.color! } : stroke))
+        : content.strokes;
+      setContent({ ...content, texts, strokes });
+      commitHistory();
+    },
+    [canWrite, commitHistory, setContent],
+  );
+
+  const applyColor = useCallback(
+    (value: string) => {
+      setColor(value);
+      applySelectionStyle({ color: value });
+    },
+    [applySelectionStyle],
+  );
+  const applyTextFont = useCallback(
+    (value: string) => {
+      setTextFont(value);
+      applySelectionStyle({ font: value });
+    },
+    [applySelectionStyle],
+  );
+  const applyTextSize = useCallback(
+    (value: number) => {
+      const clamped = clamp(Math.round(value), 12, 96);
+      setTextSize(clamped);
+      applySelectionStyle({ size: clamped });
+    },
+    [applySelectionStyle],
+  );
+
+  // 🎨 لما الطالب يحدد نص — الأدوات بتعكس خصايصه (لونه، حجمه، نوع خطه) بدل القيم العامة.
+  useEffect(() => {
+    if (selection?.kind !== "text" || multiCount > 0) return;
+    const element = contentRef.current.texts.find((text) => text.id === selection.id);
+    if (!element) return;
+    setTextSize(element.size);
+    setTextFont(element.font ?? FONT_OPTIONS[0].id);
+    setColor(element.color);
+  }, [selection]);
 
   /** 📁 رفع ملف على النوته مباشرة — يوزع حسب النوع:
    *  صورة → عنصر صورة على الصفحة · PDF → منتقي صفحات الخلفية ·
@@ -3114,7 +3394,7 @@ export default function NotebookEditor({
           id: newId(),
           kind: "text",
           text,
-          x: PAGE_WIDTH - 64,
+          x: pageDimensions(pageFormatRef.current).width - 64,
           y: 72,
           size: 18,
           color: "#2563eb",
@@ -3122,14 +3402,14 @@ export default function NotebookEditor({
       } else {
         // سطر بسطر — كل سطر بلوك مستقل من ناحية اليمين (RTL).
         const lines = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 60);
-        const startX = PAGE_WIDTH - 64;
+        const startX = pageDimensions(pageFormatRef.current).width - 64;
         const startY = 72;
         const lineHeight = 34;
         newBlocks = lines.map((line, index) => ({
           id: newId(),
           kind: "text",
           text: line,
-          x: Math.max(24, startX - line.length * 9),
+          x: startX,
           y: startY + index * lineHeight,
           size: 20,
           color: "#2563eb",
@@ -3190,6 +3470,8 @@ export default function NotebookEditor({
     ? {
         left: textDraft.x * view.zoom + view.panX,
         top: textDraft.y * view.zoom + view.panY,
+        // النص بيترسم مركز محاذاة يمين — المحرر بيتحاذا على الحفة اليمنى مثله.
+        transform: "translateX(-100%)",
         fontSize: textSize * view.zoom,
         color,
         fontFamily: textFont,
@@ -3206,7 +3488,7 @@ export default function NotebookEditor({
         {!besideMode ? (
           <>
             <Link href="/notes" className="notes-btn notes-btn-sm">
-              → دفاتري
+              → نوتاتي
             </Link>
             <h1 className="notes-title">{notebookTitle}</h1>
           </>
@@ -3218,7 +3500,7 @@ export default function NotebookEditor({
             href={`/notes/${notebookId}`}
             target="_blank"
             rel="noopener noreferrer"
-            title="افتح نفس الدفتر في تبويب جديد (البيانات من نفس الجهاز)"
+            title="افتح نفس النوتة في تبويب جديد (البيانات من نفس الجهاز)"
             className="notes-btn notes-btn-sm"
           >
             ↗ تبويب جديد
@@ -3437,7 +3719,7 @@ export default function NotebookEditor({
               type="button"
               aria-label={`لون ${swatch}`}
               aria-pressed={color === swatch}
-              onClick={() => setColor(swatch)}
+              onClick={() => applyColor(swatch)}
               disabled={!canWrite}
               data-active={color === swatch}
               style={{ backgroundColor: swatch }}
@@ -3449,7 +3731,7 @@ export default function NotebookEditor({
             aria-label="لون مخصص"
             value={color}
             disabled={!canWrite}
-            onChange={(event) => setColor(event.target.value)}
+            onChange={(event) => applyColor(event.target.value)}
             className="notes-swatch"
           />
         </div>
@@ -3489,7 +3771,7 @@ export default function NotebookEditor({
               الخط
               <select
                 value={textFont}
-                onChange={(event) => setTextFont(event.target.value)}
+                onChange={(event) => applyTextFont(event.target.value)}
                 disabled={!canWrite}
                 className="notes-input notes-btn-sm"
               >
@@ -3508,10 +3790,30 @@ export default function NotebookEditor({
                 max={96}
                 value={textSize}
                 disabled={!canWrite}
-                onChange={(event) => setTextSize(Number(event.target.value))}
+                onChange={(event) => applyTextSize(Number(event.target.value))}
                 className="notes-range"
               />
+              <button
+                type="button"
+                onClick={() => applyTextSize(textSize - 2)}
+                disabled={!canWrite}
+                title="تصغير خط النص المحدد"
+                aria-label="تصغير الخط"
+                className="notes-btn notes-icon-btn"
+              >
+                A-
+              </button>
               <span className="notes-count">{textSize}</span>
+              <button
+                type="button"
+                onClick={() => applyTextSize(textSize + 2)}
+                disabled={!canWrite}
+                title="تكبير خط النص المحدد"
+                aria-label="تكبير الخط"
+                className="notes-btn notes-icon-btn"
+              >
+                A+
+              </button>
             </label>
           </>
         ) : null}
@@ -3566,6 +3868,15 @@ export default function NotebookEditor({
           </button>
           <button
             type="button"
+            onClick={openMagicWrite}
+            disabled={!canWrite}
+            title="Magic يشرح الموضوع ويكتبه على الصفحة بعناوين ونقاط وأمثلة ومخططات"
+            className="notes-btn"
+          >
+            ✨ Magic Write
+          </button>
+          <button
+            type="button"
             onClick={() => void convertHandwriting()}
             disabled={!canWrite || handwritingBusy}
             title="تجريبي: يقرا خط اليد ويحوله لنص قابل للتعديل — الأصل مش بيتمس"
@@ -3603,6 +3914,24 @@ export default function NotebookEditor({
         </div>
 
         <span className="notes-sep" aria-hidden="true" />
+
+        <div className="notes-group" role="group" aria-label="مقاس الصفحة">
+          <span className="notes-group-label">المقاس</span>
+          {PAGE_FORMAT_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => changePageFormat(option.id)}
+              disabled={!canWrite}
+              data-active={pageFormat === option.id}
+              aria-pressed={pageFormat === option.id}
+              title={`مقاس الصفحة: ${option.label}`}
+              className="notes-btn notes-btn-sm"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
         <div className="notes-group" role="group" aria-label="قالب الصفحة">
           {TEMPLATE_OPTIONS.map((option) => (
@@ -3655,10 +3984,29 @@ export default function NotebookEditor({
           </button>
           <button
             type="button"
+            onClick={() => void exportPptx()}
+            disabled={pages.length === 0 || exportingPptx}
+            className="notes-btn"
+            title="صدّر النوتة كملف PowerPoint — كل صفحة سلايد بنفس مقاس الورقة"
+          >
+            {exportingPptx ? "جاري التصدير…" : "تصدير PowerPoint"}
+          </button>
+          <button
+            type="button"
+            onClick={startPresentation}
+            disabled={pages.length === 0}
+            data-tone="primary"
+            className="notes-btn"
+            title="عرض تقديمي تفاعلي بملء الشاشة — تنقّل بالأسهم، اشرح بقلم الليزر، وارسم على السلايد"
+          >
+            ▶️ عرض تقديمي
+          </button>
+          <button
+            type="button"
             onClick={() => setShareOpen(true)}
             disabled={pages.length === 0}
             className="notes-btn"
-            title="لينك للقراءة فقط — تبعته لأي حد يشوف دفترك"
+            title="لينك للقراءة فقط — تبعته لأي حد يشوف نوتتك"
           >
             🔗 مشاركة
           </button>
@@ -3889,6 +4237,7 @@ export default function NotebookEditor({
           content: page.content,
         }))}
         activePageId={currentPageId}
+        pageSize={pageDimensions(pageFormat)}
         lookup={lookupImage}
         onSelect={(pageId) => void selectPage(pageId)}
         pageNames={pageNames}
@@ -3902,8 +4251,8 @@ export default function NotebookEditor({
             autoFocus
             type="search"
             value={query}
-            placeholder="ابحث في نصوص الدفتر…"
-            aria-label="ابحث في نصوص الدفتر"
+            placeholder="ابحث في نصوص النوتة…"
+            aria-label="ابحث في نصوص النوتة"
             className="notes-input"
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -3982,12 +4331,12 @@ export default function NotebookEditor({
             className="notes-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="مشاركة الدفتر"
+            aria-label="مشاركة النوتة"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="notes-modal-title">🔗 مشاركة للقراءة فقط</h2>
             <p className="notes-modal-sub">
-              بيبعت نسخة حالية من الدفتر ({pages.length} صفحة) — اللي بيفتح اللينك
+              بيبعت نسخة حالية من النوتة ({pages.length} صفحة) — اللي بيفتح اللينك
               يشوف ويقلّع الصفحات بس، من غير تسجيل ولا أدوات تحرير. التعديلات
               اللي بتعملها بعد كده مش بتوصل لللينك القديم.
             </p>
@@ -4137,6 +4486,14 @@ export default function NotebookEditor({
         </div>
       ) : null}
 
+      <MagicWriteDialog
+        open={magicWriteOpen}
+        onClose={() => setMagicWriteOpen(false)}
+        initialTopic={magicWriteTopic}
+        pageContext={getEditorContext}
+        onApply={insertAiBlocks}
+      />
+
       <NotesAssistant
         getEditorContext={getEditorContext}
         getSelectedText={getSelectedText}
@@ -4144,6 +4501,7 @@ export default function NotebookEditor({
         defaultOpen={besideMode}
         onInsertToPage={canWrite ? insertAiText : undefined}
         onInsertImage={canWrite ? insertAiImage : undefined}
+        onOpenMagicWrite={canWrite ? openMagicWrite : undefined}
       />
 
       {/* 📝 معاينة قراءة خط اليد — تصحيح قبل الإدراج */}
@@ -4205,6 +4563,20 @@ export default function NotebookEditor({
         getSavedDeck={loadStudyDeck}
         saveDeck={saveStudyDeck}
       />
+
+      {/* 🎬 العرض التقديمي التفاعلي — كل صفحة سلايد بملء الشاشة */}
+      {presenting ? (
+        <PresentMode
+          pages={pages}
+          initialIndex={Math.max(
+            0,
+            pages.findIndex((page) => page.id === currentPageId),
+          )}
+          pageSize={pageDimensions(pageFormat)}
+          renderPage={renderPageInto}
+          onClose={() => setPresenting(false)}
+        />
+      ) : null}
     </div>
   );
 }
