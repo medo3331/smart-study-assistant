@@ -26,6 +26,7 @@ export default function AnnouncementEmailCampaignsAdmin() {
   const [campaignProgress, setCampaignProgress] = useState<{ accepted: number; failed: number; remaining: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/announcements?all=1").then((r) => r.json()).then((d) => { if (d.success) setAnnouncements(d.announcements || []); else setMsg(d.error || "Failed to load announcements"); }).catch(() => setMsg("Failed to load announcements"));
@@ -102,7 +103,11 @@ export default function AnnouncementEmailCampaignsAdmin() {
       });
       const d = await res.json();
       if (!d.success) { setMsg(d.error || "Send failed"); return; }
-      setMsg(`في هذه الدفعة: قُبل ${d.accepted}، فشل ${d.failed}، متبقٍ ${d.remaining}.`);
+      setMsg(
+        `في هذه الدفعة: قُبل ${d.accepted}، فشل ${d.failed}، متبقٍ ${d.remaining}.` +
+        (d.failed > 0 && d.first_error ? ` سبب الفشل: ${d.first_error}` : "")
+      );
+      if (d.failed > 0 && d.first_error) setLastError(d.first_error); else setLastError(null);
       if ((d.remaining || 0) > 0 && !retryFailed) { setCampaignProgress({ accepted: d.accepted_total ?? d.accepted, failed: d.failed_total ?? d.failed, remaining: d.remaining }); }
       else { setCampaignProgress(null); setPreview(false); }
       const updatedCampaign = { ...targetCampaign, status: d.status, accepted_count: d.accepted_total ?? ((targetCampaign.accepted_count || 0) + d.accepted), failed_count: d.failed_total ?? d.failed };
@@ -196,7 +201,12 @@ export default function AnnouncementEmailCampaignsAdmin() {
         <button onClick={createCampaign} disabled={busy || (!allAudience && allEmails.length === 0) || (allAudience && recipientTotal === 0) || !announcementId} className="rounded bg-amber-500 px-4 py-2 font-bold text-slate-900 disabled:opacity-50">
           مراجعة وإنشاء حملة
         </button>
-        {msg && <p className="text-sm text-rose-300">{msg}</p>}
+        {msg && <p className="text-sm text-rose-300 whitespace-pre-line">{msg}</p>}
+        {lastError && (
+          <div className="rounded border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
+            <strong>سبب فشل آخر إرسال:</strong> {lastError}
+          </div>
+        )}
       </div>
 
       {campaignProgress && campaign && <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-500/40 bg-blue-500/10 p-3 text-sm text-blue-100"><span>الحملة تُرسل على دفعات: {campaignProgress.remaining} مستلم متبقٍ.</span><button onClick={() => confirmSend(false)} disabled={busy} className="rounded bg-blue-600 px-3 py-1.5 font-bold text-white disabled:opacity-50">إرسال الدفعة التالية</button></div>}
@@ -220,14 +230,19 @@ export default function AnnouncementEmailCampaignsAdmin() {
         <h3 className="text-lg font-bold text-amber-300">سجل الحملات</h3>
         <div className="space-y-2">
           {campaigns.map((c) => (
-            <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-700 p-3">
-              <div className="text-sm text-slate-200">{c.id.slice(0, 8)} — {c.status} — مستلمون: {c.recipient_count}, مقبول: {c.accepted_count}, فشل: {c.failed_count}</div>
-              <div className="flex gap-2">
-                {c.status === "queued" && <button onClick={() => { setCampaign(c); setCampaignProgress({ accepted: c.accepted_count || 0, failed: c.failed_count || 0, remaining: Math.max(0, c.recipient_count - (c.accepted_count || 0)) }); setPreview(false); }} className="rounded bg-blue-700 px-3 py-1 text-xs text-white">استكمال الإرسال</button>}
-                {c.failed_count > 0 && c.status === "partial_failed" && (
-                  <button onClick={() => { setCampaign(c); confirmSend(true, c); }} className="rounded bg-slate-700 px-3 py-1 text-xs text-slate-100">إعادة محاولة الفاشلة فقط</button>
-                )}
+            <div key={c.id} className="rounded border border-slate-700 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm text-slate-200">{c.id.slice(0, 8)} — {c.status} — مستلمون: {c.recipient_count}, مقبول: {c.accepted_count}, فشل: {c.failed_count}</div>
+                <div className="flex gap-2">
+                  {c.status === "queued" && <button onClick={() => { setCampaign(c); setCampaignProgress({ accepted: c.accepted_count || 0, failed: c.failed_count || 0, remaining: Math.max(0, c.recipient_count - (c.accepted_count || 0)) }); setPreview(false); }} className="rounded bg-blue-700 px-3 py-1 text-xs text-white">استكمال الإرسال</button>}
+                  {c.failed_count > 0 && c.status === "partial_failed" && (
+                    <button onClick={() => { setCampaign(c); confirmSend(true, c); }} className="rounded bg-slate-700 px-3 py-1 text-xs text-slate-100">إعادة محاولة الفاشلة فقط</button>
+                  )}
+                </div>
               </div>
+              {c.failed_count > 0 && (c as { last_error?: string | null }).last_error && (
+                <p className="mt-2 text-xs text-rose-300">سبب الفشل: {(c as { last_error?: string | null }).last_error}</p>
+              )}
             </div>
           ))}
           {campaigns.length === 0 && <p className="text-sm text-slate-400">لا توجد حملات</p>}

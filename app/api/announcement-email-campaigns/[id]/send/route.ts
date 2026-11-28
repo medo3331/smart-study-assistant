@@ -7,6 +7,7 @@ import { sendResendEmail } from "@/lib/email/resend";
 import { buildAnnouncementEmail } from "@/lib/email/announcement-template";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEND_BATCH_SIZE = 20;
 
 export const maxDuration = 60;
@@ -87,8 +88,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
     const subject = campaign.subject_override || email.subject;
 
+    // المُرسل: override الحملة ← متغير البيئة ← app_settings.email_sender_address
+    let settingsSender: string | null = null;
+    if (!campaign.sender_override) {
+      try {
+        const { data: setting } = await service
+          .from("app_settings")
+          .select("value")
+          .eq("key", "email_sender_address")
+          .maybeSingle();
+        const value = (setting as { value?: string } | null)?.value;
+        settingsSender = typeof value === "string" && EMAIL_RE.test(value.trim()) ? value.trim() : null;
+      } catch {
+        settingsSender = null;
+      }
+    }
+    const fromSender = campaign.sender_override || settingsSender;
+
     let accepted = 0;
     let failed = 0;
+    let firstError: string | null = null;
 
     for (const recipient of toSend) {
       // claim row
@@ -104,7 +123,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         subject,
         html: email.html,
         text: email.text,
-        from: campaign.sender_override,
+        from: fromSender,
       });
 
       if (result.ok) {
@@ -116,9 +135,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }).eq("id", recipient.id);
       } else {
         failed += 1;
+        const rawError = result.error ?? "Unknown send error.";
+        if (!firstError) firstError = rawError;
+        // رسالة واضحة للإدارة عند نقص الإعدادات — بدل خطأ غامض
+        const friendly = rawError.includes("RESEND_API_KEY")
+          ? "إعدادات البريد ناقصة: أضف RESEND_API_KEY في متغيرات البيئة، وحدد بريد المُرسل (RESEND_FROM_EMAIL أو حقل المُرسل في الحملة أو app_settings.email_sender_address) ثم أعد محاولة الفاشل."
+          : rawError;
         await service.from("announcement_email_recipients").update({
           status: "failed",
-          error: result.error,
+          error: friendly,
         }).eq("id", recipient.id);
       }
 
@@ -147,7 +172,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       accepted_count: acceptedTotal ?? ((campaign.accepted_count || 0) + accepted),
       failed_count: failedTotal ?? failed,
       completed_at: new Date().toISOString(),
-      last_error: failed > 0 ? "Some recipients failed; retry failed only." : null,
+      // السبب الحقيقي لأول فشل — يظهر للإدارة في اللوحة
+      last_error: failed > 0 ? (firstError ?? "Some recipients failed; retry failed only.") : null,
     }).eq("id", id);
 
     await recordAuditLog({
@@ -164,6 +190,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       success: true,
       accepted,
       failed,
+      first_error: firstError,
       accepted_total: acceptedTotal ?? 0,
       failed_total: failedTotal ?? 0,
       status: nextStatus,
