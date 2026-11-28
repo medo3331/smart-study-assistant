@@ -9,6 +9,7 @@
 
 import type { PrayerTimes, PrayerTime } from "../types";
 import type { CalculationMethodId, MadhabId } from "../prayer-times";
+import { dateInTimeZone, zonedDateTimeToTimestamp } from "./timezone";
 
 // ============================================================================
 // Configuration
@@ -50,6 +51,7 @@ interface AlAdhanResponse {
     date: {
       readable: string;
       timestamp: string;
+      gregorian: { date: string };
       hijri: {
         date: string;
         format: string;
@@ -76,13 +78,15 @@ interface AlAdhanResponse {
   };
 }
 
-interface PrayerTimesRequestParams {
+export interface PrayerTimesRequestParams {
   date: Date;
   latitude: number;
   longitude: number;
   timezone: string;
   calculationMethod: CalculationMethodId;
   madhab: MadhabId;
+  /** Explicit local calendar date (YYYY-MM-DD), when supplied by the caller. */
+  localDate?: string;
 }
 
 // ============================================================================
@@ -92,11 +96,11 @@ interface PrayerTimesRequestParams {
 const CALCULATION_METHOD_MAP: Record<CalculationMethodId, number> = {
   muslim_world_league: 3,
   egyptian: 5,
-  karachi: 4,
-  umm_al_qura: 2,
-  dubai: 8,
-  moonsighting_committee: 6,
-  north_america: 7,
+  karachi: 1,
+  umm_al_qura: 4,
+  dubai: 16,
+  moonsighting_committee: 15,
+  north_america: 2,
   kuwait: 9,
   qatar: 10,
   singapore: 11,
@@ -109,21 +113,19 @@ const MADHAB_MAP: Record<MadhabId, number> = {
 
 const METHOD_NAMES: Record<number, string> = {
   1: "University of Islamic Sciences, Karachi",
-  2: "Umm Al-Qura University, Makkah",
+  2: "Islamic Society of North America (ISNA)",
   3: "Muslim World League",
-  4: "Islamic Society of North America (ISNA)",
+  4: "Umm Al-Qura University, Makkah",
   5: "Egyptian General Authority of Survey",
-  6: "Moonsighting Committee",
-  7: "North America (ISNA)",
-  8: "Dubai",
+  8: "Gulf Region",
   9: "Kuwait",
   10: "Qatar",
   11: "Singapore (MUIS)",
   12: "Turkey (Diyanet)",
   13: "Russia (Spiritual Administration)",
   14: "France (Union Organization)",
-  15: "Morocco",
-  16: "Indonesia (Kementerian Agama)",
+  15: "Moonsighting Committee",
+  16: "Dubai",
   17: "Tunisia",
   18: "Algeria",
   19: "Malaysia (JAKIM)",
@@ -137,7 +139,7 @@ const METHOD_NAMES: Record<number, string> = {
 // ============================================================================
 
 function generateCacheKey(params: PrayerTimesRequestParams): string {
-  const dateStr = params.date.toISOString().split("T")[0];
+  const dateStr = params.localDate ?? dateInTimeZone(params.date, params.timezone);
   return `${dateStr}|${params.latitude}|${params.longitude}|${params.calculationMethod}|${params.madhab}|${params.timezone}`;
 }
 
@@ -149,18 +151,18 @@ function generateCacheKey(params: PrayerTimesRequestParams): string {
  * Fetch prayer times from AlAdhan API
  */
 async function fetchFromAlAdhan(params: PrayerTimesRequestParams): Promise<AlAdhanResponse> {
-  const methodId = CALCULATION_METHOD_MAP[params.calculationMethod] || DEFAULT_METHOD;
-  const madhabId = MADHAB_MAP[params.madhab] || DEFAULT_MADHAB;
+  const methodId = CALCULATION_METHOD_MAP[params.calculationMethod] ?? DEFAULT_METHOD;
+  const madhabId = MADHAB_MAP[params.madhab] ?? DEFAULT_MADHAB;
   
-  const dateStr = params.date.toISOString().split("T")[0];
-  const [day, month, year] = dateStr.split("-").reverse().join("-").split("-"); // DD-MM-YYYY
+  const dateStr = params.localDate ?? dateInTimeZone(params.date, params.timezone);
+  const [year, month, day] = dateStr.split("-");
   
   const url = new URL(`${ALADHAN_API_BASE}/timings/${day}-${month}-${year}`);
   url.searchParams.set("latitude", params.latitude.toString());
   url.searchParams.set("longitude", params.longitude.toString());
   url.searchParams.set("method", methodId.toString());
   url.searchParams.set("school", madhabId.toString());
-  url.searchParams.set("timezone", params.timezone);
+  url.searchParams.set("timezonestring", params.timezone);
   url.searchParams.set("iso8601", "false");
 
   const response = await fetch(url.toString(), {
@@ -180,6 +182,18 @@ async function fetchFromAlAdhan(params: PrayerTimesRequestParams): Promise<AlAdh
   if (data.code !== 200 || data.status !== "OK") {
     throw new Error(`AlAdhan API returned error: ${data.status}`);
   }
+  if (!data.data?.date?.gregorian?.date || !data.data?.timings || !data.data?.meta) {
+    throw new Error("AlAdhan API returned an incomplete response");
+  }
+
+  const expectedDate = params.localDate ?? dateInTimeZone(params.date, params.timezone);
+  const expectedAlAdhanDate = expectedDate.split("-").reverse().join("-");
+  const responseDate = data.data?.date?.gregorian?.date;
+  const [responseDay, responseMonth, responseYear] = responseDate?.split("-") ?? [];
+  const normalizedResponseDate = `${responseYear}-${responseMonth}-${responseDay}`;
+  if (normalizedResponseDate !== expectedDate) {
+    throw new Error(`AlAdhan returned a different date than requested (${expectedDate})`);
+  }
 
   return data;
 }
@@ -193,21 +207,16 @@ function normalizeAlAdhanResponse(
 ): PrayerTimes {
   const { data } = response;
   const { timings, meta, date } = data;
+  const localDate = params.localDate ?? dateInTimeZone(params.date, params.timezone);
 
   // Compute methodId for METHOD_NAMES lookup
-  const methodId = CALCULATION_METHOD_MAP[params.calculationMethod] || DEFAULT_METHOD;
+  const methodId = CALCULATION_METHOD_MAP[params.calculationMethod] ?? DEFAULT_METHOD;
   
   // Parse timestamps for each prayer
   const now = new Date();
-  const baseDate = new Date(now);
-  baseDate.setHours(0, 0, 0, 0);
-  
-  const parseTimeToTimestamp = (timeStr: string, base: Date): number => {
-    const [hours, minutes] = timeStr.split(":").map(Number);
-    const result = new Date(base);
-    result.setHours(hours, minutes, 0, 0);
-    return result.getTime();
-  };
+
+  const parseTimeToTimestamp = (timeStr: string): number =>
+    zonedDateTimeToTimestamp(localDate, timeStr, params.timezone);
 
   const prayerNames = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha", "Imsak", "Midnight"] as const;
   const timestamps: Record<string, number> = {};
@@ -215,20 +224,20 @@ function normalizeAlAdhanResponse(
   for (const prayer of prayerNames) {
     const timeStr = timings[prayer];
     if (timeStr) {
-      timestamps[prayer.toLowerCase()] = parseTimeToTimestamp(timeStr, baseDate);
+      timestamps[prayer.toLowerCase()] = parseTimeToTimestamp(timeStr);
     }
   }
 
   // Determine next prayer
-  const nextPrayer = getNextPrayerFromTimestamps(timestamps, now);
+  const nextPrayer = getNextPrayerFromTimestamps(timestamps, now, params.timezone, timings, localDate);
 
   // Build display location name
-  const displayName = params.latitude && params.longitude 
+  const displayName = Number.isFinite(params.latitude) && Number.isFinite(params.longitude)
     ? `${params.latitude.toFixed(4)}, ${params.longitude.toFixed(4)}`
     : "Unknown Location";
 
   return {
-    date: params.date.toISOString().split("T")[0],
+    date: localDate,
     timezone: meta.timezone,
     location: {
       latitude: meta.latitude,
@@ -249,14 +258,14 @@ function normalizeAlAdhanResponse(
       name: params.madhab === "shafi" ? "الشافعي" : "الحنفي",
     },
     prayers: {
-      fajr: timings.Fajr,
-      sunrise: timings.Sunrise,
-      dhuhr: timings.Dhuhr,
-      asr: timings.Asr,
-      maghrib: timings.Maghrib,
-      isha: timings.Isha,
-      imsak: timings.Imsak,
-      midnight: timings.Midnight,
+      fajr: timings.Fajr.split(" ")[0],
+      sunrise: timings.Sunrise.split(" ")[0],
+      dhuhr: timings.Dhuhr.split(" ")[0],
+      asr: timings.Asr.split(" ")[0],
+      maghrib: timings.Maghrib.split(" ")[0],
+      isha: timings.Isha.split(" ")[0],
+      imsak: timings.Imsak?.split(" ")[0],
+      midnight: timings.Midnight?.split(" ")[0],
     },
     timestamps: {
       fajr: timestamps.fajr,
@@ -278,7 +287,10 @@ function normalizeAlAdhanResponse(
  */
 function getNextPrayerFromTimestamps(
   timestamps: Record<string, number>,
-  now: Date
+  now: Date,
+  timezone: string,
+  timings: AlAdhanTimings,
+  localDate: string,
 ): PrayerTime | null {
   const prayerOrder = ["fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha"] as const;
   const arabicNames: Record<string, string> = {
@@ -298,7 +310,7 @@ function getNextPrayerFromTimestamps(
       return {
         name: prayer.charAt(0).toUpperCase() + prayer.slice(1),
         arabicName: arabicNames[prayer],
-        time: new Date(timestamp).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        time: timings[prayer === "fajr" ? "Fajr" : prayer === "sunrise" ? "Sunrise" : prayer === "dhuhr" ? "Dhuhr" : prayer === "asr" ? "Asr" : prayer === "maghrib" ? "Maghrib" : "Isha"].split(" ")[0],
         timestamp,
         isNext: true,
         isCurrent: false,
@@ -307,19 +319,44 @@ function getNextPrayerFromTimestamps(
   }
 
   // If all prayers passed, next is Fajr tomorrow
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  const fajrTomorrow = timestamps.fajr + 24 * 60 * 60 * 1000;
+  const [year, month, day] = localDate.split("-").map(Number);
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+  const nextLocalDate = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, "0")}-${String(nextDay.getUTCDate()).padStart(2, "0")}`;
+  const fajrTomorrow = zonedDateTimeToTimestamp(nextLocalDate, timings.Fajr, timezone);
   
   return {
     name: "Fajr",
     arabicName: "الفجر",
-    time: new Date(fajrTomorrow).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", hour12: false }),
+    time: timings.Fajr.split(" ")[0],
     timestamp: fajrTomorrow,
     isNext: true,
     isCurrent: false,
   };
+}
+
+function nextPrayerForCached(
+  prayerTimes: PrayerTimes,
+  params: PrayerTimesRequestParams,
+  now: Date,
+): PrayerTime | null {
+  const timestamps: Record<string, number> = { ...prayerTimes.timestamps };
+  const timings: AlAdhanTimings = {
+    Fajr: prayerTimes.prayers.fajr,
+    Sunrise: prayerTimes.prayers.sunrise,
+    Dhuhr: prayerTimes.prayers.dhuhr,
+    Asr: prayerTimes.prayers.asr,
+    Maghrib: prayerTimes.prayers.maghrib,
+    Isha: prayerTimes.prayers.isha,
+    Imsak: prayerTimes.prayers.imsak,
+    Midnight: prayerTimes.prayers.midnight,
+  };
+  return getNextPrayerFromTimestamps(
+    timestamps,
+    now,
+    params.timezone,
+    timings,
+    prayerTimes.date,
+  );
 }
 
 // ============================================================================
@@ -331,12 +368,32 @@ function getNextPrayerFromTimestamps(
  * Uses cache when available, otherwise fetches from AlAdhan API
  */
 export async function getPrayerTimes(params: PrayerTimesRequestParams): Promise<PrayerTimes> {
-  const cacheKey = generateCacheKey(params);
+  if (!Number.isFinite(params.latitude) || params.latitude < -90 || params.latitude > 90 || !Number.isFinite(params.longitude) || params.longitude < -180 || params.longitude > 180) {
+    throw new Error("Invalid coordinates");
+  }
+  if (!Object.hasOwn(CALCULATION_METHOD_MAP, params.calculationMethod) || !Object.hasOwn(MADHAB_MAP, params.madhab)) {
+    throw new Error("Invalid prayer calculation settings");
+  }
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: params.timezone });
+  } catch {
+    throw new Error("Invalid IANA timezone");
+  }
+
+  const localDate = params.localDate ?? dateInTimeZone(params.date, params.timezone);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate)) throw new Error("Invalid local date");
+  const [year, month, day] = localDate.split("-").map(Number);
+  if (new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) !== localDate) {
+    throw new Error("Invalid local date");
+  }
+
+  const cacheKey = generateCacheKey({ ...params, localDate });
   const cached = prayerTimesCache.get(cacheKey);
 
-  // Return cached data if still valid
+  // Timings are cacheable, but the next-prayer marker must be recalculated
+  // for every request (a previously upcoming prayer may have passed).
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+    return { ...cached.data, nextPrayer: nextPrayerForCached(cached.data, params, new Date()) };
   }
 
   try {
@@ -351,10 +408,10 @@ export async function getPrayerTimes(params: PrayerTimesRequestParams): Promise<
 
     return normalized;
   } catch (error) {
-      // Try to return stale cache if available
+      // If the same date has stale timings, keep them but refresh the next prayer marker.
       if (cached) {
         console.warn("AlAdhan API failed, returning stale cache:", error);
-        return cached.data;
+        return { ...cached.data, nextPrayer: nextPrayerForCached(cached.data, params, new Date()) };
       }
 
       // Re-throw with more context - NEVER return mock data
@@ -372,8 +429,32 @@ export async function getTodayPrayerTimes(
   calculationMethod: CalculationMethodId = "egyptian",
   madhab: MadhabId = "shafi"
 ): Promise<PrayerTimes> {
+  const now = new Date();
   return getPrayerTimes({
-    date: new Date(),
+    date: now,
+    localDate: dateInTimeZone(now, timezone),
+    latitude,
+    longitude,
+    timezone,
+    calculationMethod,
+    madhab,
+  });
+}
+
+export async function getPrayerTimesForDate(
+  localDate: string,
+  latitude: number,
+  longitude: number,
+  timezone: string,
+  calculationMethod: CalculationMethodId = "egyptian",
+  madhab: MadhabId = "shafi",
+): Promise<PrayerTimes> {
+  const [year, month, day] = localDate.split("-").map(Number);
+  // Noon UTC is only a stable carrier for the explicitly supplied local date;
+  // AlAdhan receives that date and timezone as separate inputs.
+  return getPrayerTimes({
+    date: new Date(Date.UTC(year, month - 1, day, 12)),
+    localDate,
     latitude,
     longitude,
     timezone,

@@ -34,6 +34,12 @@ export interface WorshipSummary {
   streak: number;
 }
 
+export interface QuranReadingPosition {
+  surahId: number;
+  ayahId: number;
+  updatedAt: string;
+}
+
 interface SummaryRow {
   day: string;
   prayers: Record<string, boolean> | null;
@@ -99,6 +105,7 @@ export async function syncWorshipProgress(
       p_prayers: cloud.prayers,
       p_adhkar: cloud.adhkar,
       p_quran_ayahs: cloud.quranAyahs,
+      p_day: record.date,
     });
     if (error) {
       console.warn("syncWorshipProgress:", error.message);
@@ -145,6 +152,52 @@ export async function fetchWorshipSummary(
   } catch (err) {
     console.warn("fetchWorshipSummary failed:", err);
     return null;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* موضع قراءة القرآن — حساب المستخدم مع localStorage كنسخة احتياطية            */
+/* -------------------------------------------------------------------------- */
+
+export async function fetchCloudQuranPosition(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<QuranReadingPosition | null> {
+  try {
+    const { data, error } = await supabase
+      .from("quran_reading_positions")
+      .select("surah_id, ayah_id, updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as { surah_id: number; ayah_id: number; updated_at: string };
+    if (!Number.isInteger(row.surah_id) || row.surah_id < 1 || row.surah_id > 114 || !Number.isInteger(row.ayah_id) || row.ayah_id < 1 || !row.updated_at) return null;
+    return { surahId: row.surah_id, ayahId: row.ayah_id, updatedAt: row.updated_at };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCloudQuranPosition(
+  supabase: SupabaseClient,
+  userId: string,
+  position: QuranReadingPosition,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("quran_reading_positions").upsert({
+      user_id: userId,
+      surah_id: position.surahId,
+      ayah_id: position.ayahId,
+      updated_at: position.updatedAt,
+    }, { onConflict: "user_id" });
+    if (error) {
+      console.warn("saveCloudQuranPosition:", error.message);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("saveCloudQuranPosition failed:", error);
+    return false;
   }
 }
 

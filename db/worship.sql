@@ -46,10 +46,14 @@ create index if not exists worship_progress_user_day_idx
   on public.worship_progress (user_id, day desc);
 
 -- الكتابة من الواجهة عبر RPC واحد — يضمن وجود صف اليوم قبل أي مكافأة.
+-- أزل التوقيع السابق لتفادي غموض PostgREST بعد إضافة معامل اليوم المحلي.
+drop function if exists public.upsert_worship_progress(jsonb, jsonb, int);
+
 create or replace function public.upsert_worship_progress(
   p_prayers jsonb default null,
   p_adhkar jsonb default null,
-  p_quran_ayahs int default null
+  p_quran_ayahs int default null,
+  p_day date default null
 )
 returns void
 language plpgsql security definer
@@ -57,10 +61,28 @@ set search_path = public, pg_catalog
 as $$
 declare
   v_uid uuid := auth.uid();
-  v_day date := (now() at time zone 'utc')::date;
+  v_day date := coalesce(p_day, (now() at time zone 'utc')::date);
+  v_timezone text;
 begin
   if v_uid is null then
     raise exception 'upsert_worship_progress: لازم تكون داخل بحسابك';
+  end if;
+
+  select p.worship_settings ->> 'timezone'
+    into v_timezone
+    from public.profiles p
+   where p.id = v_uid;
+
+  if v_timezone is not null and v_timezone <> '' then
+    begin
+      if v_day <> (now() at time zone v_timezone)::date then
+        raise exception 'upsert_worship_progress: اليوم لا يطابق المنطقة الزمنية للحساب';
+      end if;
+    exception when invalid_parameter_value then
+      raise exception 'upsert_worship_progress: منطقة زمنية غير صالحة';
+    end;
+  elsif p_day is not null and p_day <> (now() at time zone 'utc')::date then
+    raise exception 'upsert_worship_progress: اليوم المحلي غير متاح في إعدادات الحساب';
   end if;
 
   insert into public.worship_progress (user_id, day)
@@ -76,8 +98,8 @@ begin
 end;
 $$;
 
-revoke all on function public.upsert_worship_progress(jsonb, jsonb, int) from public;
-grant execute on function public.upsert_worship_progress(jsonb, jsonb, int) to authenticated;
+revoke all on function public.upsert_worship_progress(jsonb, jsonb, int, date) from public;
+grant execute on function public.upsert_worship_progress(jsonb, jsonb, int, date) to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- ٢) إعدادات العبادة على البروفايل — عمود واحد + قائمة بيضاء للحفظ.
@@ -110,12 +132,20 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_clean jsonb;
+  v_timezone text;
 begin
   if v_uid is null then
     raise exception 'save_worship_settings: لازم تكون داخل بحسابك';
   end if;
   if p_settings is null or jsonb_typeof(p_settings) <> 'object' then
     raise exception 'save_worship_settings: الإعدادات لازم تكون كائن JSON';
+  end if;
+
+  v_timezone := p_settings->>'timezone';
+  if v_timezone is not null and v_timezone <> '' and not exists (
+    select 1 from pg_catalog.pg_timezone_names t where t.name = v_timezone
+  ) then
+    raise exception 'save_worship_settings: منطقة زمنية غير صالحة';
   end if;
 
   v_clean := jsonb_build_object(
@@ -134,8 +164,8 @@ begin
             and (p_settings->>'longitude')::numeric between -180 and 180
            then (p_settings->>'longitude')::numeric end,
     'timezone',
-      case when length(coalesce(p_settings->>'timezone','')) between 1 and 64
-           then left(p_settings->>'timezone', 64) end,
+      case when length(coalesce(v_timezone,'')) between 1 and 64
+           then left(v_timezone, 64) end,
     'calculation_method',
       case when length(coalesce(p_settings->>'calculation_method','')) between 1 and 40
            then left(p_settings->>'calculation_method', 40) end,
@@ -204,6 +234,9 @@ declare
   v_capped    boolean := false;
   v_ref       text := p_ref_id;
   v_day       text := ((now() at time zone 'utc')::date)::text;
+  v_local_day date;
+  v_timezone  text;
+  v_local_start timestamptz;
   v_days      int;
   /* متغيرات تحقق مصادر العبادة: اليوم والاسم المشتقين من المرجع */
   v_wday      date;
@@ -217,6 +250,18 @@ begin
   if coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) then
     raise exception 'award_coins: الزائر مايكسبش كوينز — سجّل حساب';
   end if;
+
+  select nullif(p.worship_settings ->> 'timezone', '')
+    into v_timezone
+    from public.profiles p
+   where p.id = v_uid;
+  v_timezone := coalesce(v_timezone, 'UTC');
+  begin
+    v_local_day := (now() at time zone v_timezone)::date;
+    v_local_start := v_local_day::timestamp at time zone v_timezone;
+  exception when invalid_parameter_value then
+    raise exception 'award_coins: منطقة زمنية غير صالحة في الإعدادات';
+  end;
 
   -- المبلغ من الجدول، مش من الكلاينت.
   select amount, daily_cap, is_live
@@ -322,6 +367,9 @@ begin
       end if;
       v_wday  := (left(v_ref, 10))::date;
       v_wname := substr(v_ref, 12);
+      if v_wday <> v_local_day then
+        raise exception 'award_coins: لا يمكن صرف مكافأة صلاة عن يوم سابق أو لاحق';
+      end if;
       if v_wname not in ('fajr','dhuhr','asr','maghrib','isha') then
         raise exception 'award_coins: اسم صلاة غير مسموح: %', v_wname;
       end if;
@@ -340,6 +388,9 @@ begin
         raise exception 'award_coins: worship_quran محتاج مرجع تاريخ صالح';
       end if;
       v_wday := v_ref::date;
+      if v_wday <> v_local_day then
+        raise exception 'award_coins: لا يمكن صرف مكافأة القرآن عن يوم سابق أو لاحق';
+      end if;
       if not exists (
         select 1 from public.worship_progress w
          where w.user_id = v_uid
@@ -361,6 +412,9 @@ begin
       end if;
       v_wday  := (left(v_ref, 10))::date;
       v_wname := substr(v_ref, 12);
+      if v_wday <> v_local_day then
+        raise exception 'award_coins: لا يمكن صرف مكافأة أذكار عن يوم سابق أو لاحق';
+      end if;
       if v_wname not in ('morning','evening','after-prayer','sleep','general') then
         raise exception 'award_coins: تصنيف أذكار غير معروف: %', v_wname;
       end if;
@@ -368,7 +422,13 @@ begin
         select 1 from public.worship_progress w
          where w.user_id = v_uid
            and w.day = v_wday
-           and coalesce((w.adhkar ->> v_wname)::int, 0) > 0
+           and coalesce((w.adhkar ->> v_wname)::int, 0) >= case v_wname
+             when 'morning' then 8
+             when 'evening' then 11
+             when 'after-prayer' then 104
+             when 'sleep' then 5
+             when 'general' then 101
+           end
       ) then
         raise exception 'award_coins: الأذكار دي مش متسجّلة على حسابك';
       end if;
@@ -388,8 +448,11 @@ begin
      where user_id = v_uid
        and source  = p_source
        and source_type = 'earn'
-       and created_at >= (((now() at time zone 'utc')::date)::timestamp
-                          at time zone 'utc');
+       and created_at >= case
+         when p_source in ('worship_prayer', 'worship_quran', 'worship_adhkar')
+           then v_local_start
+         else (((now() at time zone 'utc')::date)::timestamp at time zone 'utc')
+       end;
 
     if v_today_cnt >= v_cap then
       v_capped := true;
@@ -415,3 +478,82 @@ $$;
 
 revoke all on function public.award_coins(text, text, jsonb) from public;
 grant execute on function public.award_coins(text, text, jsonb) to authenticated;
+
+-- ملخص اليوم الذي تقرؤه واجهة مركز العبادة؛ اليوم وحدود مكافآته حسب منطقة الحساب.
+create or replace function public.worship_daily_summary()
+returns table (
+  day date,
+  prayers jsonb,
+  adhkar jsonb,
+  quran_ayahs int,
+  coins_balance int,
+  coins_today int,
+  streak int
+)
+language plpgsql stable security definer
+set search_path = public, pg_catalog
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_timezone text;
+  v_day date;
+  v_day_start timestamptz;
+  v_prayers jsonb;
+  v_adhkar jsonb;
+  v_quran_ayahs int;
+  v_balance int;
+  v_coins_today int;
+  v_streak int;
+begin
+  if v_uid is null then
+    raise exception 'worship_daily_summary: لازم تكون داخل بحسابك';
+  end if;
+
+  select nullif(p.worship_settings ->> 'timezone', '')
+    into v_timezone
+    from public.profiles p
+   where p.id = v_uid;
+  v_timezone := coalesce(v_timezone, 'UTC');
+  begin
+    v_day := (now() at time zone v_timezone)::date;
+    v_day_start := v_day::timestamp at time zone v_timezone;
+  exception when invalid_parameter_value then
+    raise exception 'worship_daily_summary: منطقة زمنية غير صالحة';
+  end;
+
+  select w.prayers, w.adhkar, w.quran_ayahs
+    into v_prayers, v_adhkar, v_quran_ayahs
+    from public.worship_progress w
+   where w.user_id = v_uid and w.day = v_day;
+
+  select coalesce(sum(l.amount), 0)::int
+    into v_balance
+    from public.coin_ledger l
+   where l.user_id = v_uid;
+
+  select coalesce(sum(l.amount), 0)::int
+    into v_coins_today
+    from public.coin_ledger l
+   where l.user_id = v_uid
+     and l.source_type = 'earn'
+     and l.amount > 0
+     and l.created_at >= v_day_start;
+
+  select coalesce(p.streak, 0)
+    into v_streak
+    from public.profiles p
+   where p.id = v_uid;
+
+  return query select
+    v_day,
+    coalesce(v_prayers, '{}'::jsonb),
+    coalesce(v_adhkar, '{}'::jsonb),
+    coalesce(v_quran_ayahs, 0),
+    coalesce(v_balance, 0),
+    coalesce(v_coins_today, 0),
+    coalesce(v_streak, 0);
+end;
+$$;
+
+revoke all on function public.worship_daily_summary() from public;
+grant execute on function public.worship_daily_summary() to authenticated;

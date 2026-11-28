@@ -6,7 +6,7 @@ const strict = process.env.GATE_STRICT === "1";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["lib/**/__tests__/**/*.test.ts", "tests/**/*.test.ts"],
+    include: ["lib/**/__tests__/**/*.test.ts", "components/**/__tests__/**/*.test.tsx", "components/**/__tests__/**/*.test.ts", "tests/**/*.test.ts"],
     passWithNoTests: false,
     allowOnly: !strict,
     reporters: process.env.CI ? ["default"] : ["default"],

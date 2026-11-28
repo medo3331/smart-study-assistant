@@ -1,4 +1,9 @@
 import type { Dhikr, AdhkarCategory } from "./types";
+import { ADHKAR_BY_CATEGORY } from "./adhkar-data";
+import {
+  getTodayWorship,
+  saveWorshipDay,
+} from "./worship-progress";
 
 /**
  * Adhkar Service Layer
@@ -8,18 +13,15 @@ import type { Dhikr, AdhkarCategory } from "./types";
  */
 
 export async function getAdhkar(category: AdhkarCategory): Promise<Dhikr[]> {
-  const { mockAdhkar } = await import("./mock-data");
-  return mockAdhkar[category] || [];
+  return ADHKAR_BY_CATEGORY[category];
 }
 
 export async function getAllAdhkar(): Promise<Record<AdhkarCategory, Dhikr[]>> {
-  const { mockAdhkar } = await import("./mock-data");
-  return mockAdhkar;
+  return ADHKAR_BY_CATEGORY;
 }
 
 export async function getAdhkarById(id: string): Promise<Dhikr | null> {
-  const { mockAdhkar } = await import("./mock-data");
-  for (const category of Object.values(mockAdhkar)) {
+  for (const category of Object.values(ADHKAR_BY_CATEGORY)) {
     const found = category.find(d => d.id === id);
     if (found) return found;
   }
@@ -33,11 +35,11 @@ export async function getAdhkarById(id: string): Promise<Dhikr | null> {
 export async function getAdhkarProgress(
   userId: string,
   category: AdhkarCategory,
-  _date: string
+  date: string
 ): Promise<{ completed: boolean; currentCount: number }> {
-  void _date;
-  const { mockAdhkarProgress } = await import("./mock-data");
-  return mockAdhkarProgress[category] || { completed: false, currentCount: 0 };
+  void userId;
+  const progress = getTodayWorship(date).adhkar[category];
+  return { completed: progress?.completed ?? false, currentCount: progress?.count ?? 0 };
 }
 
 /**
@@ -46,14 +48,19 @@ export async function getAdhkarProgress(
 export async function updateAdhkarProgress(
   userId: string,
   category: AdhkarCategory,
-  _date: string,
+  date: string,
   progress: { completed?: boolean; currentCount?: number }
 ): Promise<{ completed: boolean; currentCount: number }> {
-  void _date;
-  // Mock implementation - replace with database call
-  const { mockAdhkarProgress } = await import("./mock-data");
-  const current = mockAdhkarProgress[category] || { completed: false, currentCount: 0 };
-  return { ...current, ...progress };
+  void userId;
+  const day = getTodayWorship(date);
+  const previous = day.adhkar[category] ?? { completed: false, count: 0 };
+  const current = {
+    completed: progress.completed ?? previous.completed,
+    count: progress.currentCount ?? previous.count,
+  };
+  day.adhkar[category] = current;
+  saveWorshipDay(day);
+  return { completed: current.completed, currentCount: current.count };
 }
 
 /**

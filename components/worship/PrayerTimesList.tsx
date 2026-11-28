@@ -15,6 +15,7 @@ import {
   Sunrise,
   MapPin,
   Calendar,
+  CheckCircle2,
   Settings,
   ChevronDown,
   Bell,
@@ -23,6 +24,8 @@ import {
 
 interface PrayerTimesListProps {
   data: PrayerTimesData;
+  completedPrayers?: ReadonlySet<string>;
+  onCompletePrayer?: (prayer: string) => void;
   onSettingsClick?: () => void;
 }
 
@@ -30,7 +33,12 @@ interface PrayerTimesListProps {
  * Full Prayer Times Display
  * Shows all 5 prayers + sunrise with next prayer highlighted
  */
-export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps) {
+export function PrayerTimesList({
+  data,
+  completedPrayers = new Set<string>(),
+  onCompletePrayer,
+  onSettingsClick,
+}: PrayerTimesListProps) {
   const [showDetails, setShowDetails] = useState(false);
 
   const prayerIcons: Record<string, any> = {
@@ -75,7 +83,7 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
             <div className="p-3 rounded-xl bg-white/[0.02]">
               <IconBadge icon={Calendar} color="text-[#B69CFF]" bg="bg-[#7C5CFF]/15" size={36} />
               <p className="text-xs text-[#9AA0C0] mt-1">التاريخ الميلادي</p>
-              <p className="font-mono font-medium text-white">{new Date(data.date).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+              <p className="font-mono font-medium text-white">{new Date(`${data.date}T12:00:00Z`).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.02]">
               <IconBadge icon={Calendar} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={36} />
@@ -118,28 +126,8 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
                 <span className="text-white font-medium">{data.madhab}</span>
               </div>
               <div className="flex justify-between">
-                <span>خط العرض</span>
-                <span className="text-white font-medium font-mono">{data.location}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>خط الطول</span>
-                <span className="text-white font-medium font-mono">—</span>
-              </div>
-              <div className="flex justify-between">
                 <span>المنطقة الزمنية</span>
-                <span className="text-white font-medium font-mono">Africa/Cairo</span>
-              </div>
-              <div className="flex justify-between">
-                <span>إشعارات الصلاة</span>
-                <span className="text-white font-medium">مفعلة</span>
-              </div>
-              <div className="flex justify-between">
-                <span>صوت الأذان</span>
-                <span className="text-white font-medium">مفعل</span>
-              </div>
-              <div className="flex justify-between">
-                <span>تنبيه قبل الصلاة</span>
-                <span className="text-white font-medium font-mono">10 دقائق</span>
+                <span className="text-white font-medium font-mono">{data.timezone || "غير محددة"}</span>
               </div>
             </motion.div>
           )}
@@ -156,6 +144,12 @@ export function PrayerTimesList({ data, onSettingsClick }: PrayerTimesListProps)
               icons={prayerIcons}
               colors={prayerColors}
               index={index}
+              completed={completedPrayers.has(prayer.name.toLowerCase())}
+              onComplete={
+                prayer.name !== "Sunrise" && prayer.timestamp <= Date.now() && onCompletePrayer
+                  ? () => onCompletePrayer(prayer.name.toLowerCase())
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -192,9 +186,11 @@ interface PrayerTimeRowProps {
   icons: Record<string, any>;
   colors: Record<string, { color: string; bg: string }>;
   index: number;
+  completed?: boolean;
+  onComplete?: () => void;
 }
 
-function PrayerTimeRow({ prayer, icons, colors, index }: PrayerTimeRowProps) {
+function PrayerTimeRow({ prayer, icons, colors, index, completed = false, onComplete }: PrayerTimeRowProps) {
   const Icon = icons[prayer.name] || Sun;
   const { color, bg } = colors[prayer.name] || { color: "text-[#9AA0C0]", bg: "bg-white/[0.04]" };
   const isNext = prayer.isNext;
@@ -249,6 +245,23 @@ function PrayerTimeRow({ prayer, icons, colors, index }: PrayerTimeRowProps) {
           <p className="text-xs text-[#7C5CFF] mt-1">متبقي {formatTimeRemaining(prayer.timestamp)}</p>
         )}
       </div>
+
+      {prayer.name !== "Sunrise" && onComplete && (
+        <button
+          type="button"
+          onClick={onComplete}
+          disabled={completed}
+          aria-label={completed ? `تم تسجيل ${prayer.arabicName}` : `تسجيل إتمام ${prayer.arabicName}`}
+          className={cn(
+            "rounded-xl border px-3 py-2 text-xs font-medium transition-colors",
+            completed
+              ? "border-[#2DD4BF]/30 bg-[#2DD4BF]/10 text-[#2DD4BF]"
+              : "border-white/[0.08] text-[#C7CBE6] hover:border-[#2DD4BF]/30 hover:text-[#2DD4BF]",
+          )}
+        >
+          {completed ? <CheckCircle2 size={18} aria-hidden /> : "سجلت الصلاة"}
+        </button>
+      )}
 
       {/* Time */}
       <div className="text-left">

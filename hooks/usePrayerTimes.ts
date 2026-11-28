@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { PrayerTimes, PrayerTimesData } from "@/lib/islamic/types";
 import { convertToLegacyFormat } from "@/lib/islamic/prayer-times";
+import { dateInTimeZone } from "@/lib/islamic/prayer-times/timezone";
 
 interface UsePrayerTimesOptions {
   latitude?: number;
@@ -42,7 +43,7 @@ export function usePrayerTimes(options: UsePrayerTimesOptions = {}): UsePrayerTi
   const [error, setError] = useState<string | null>(null);
 
   const fetchPrayerTimes = useCallback(async () => {
-    if (!enabled || !latitude || !longitude) {
+    if (!enabled || latitude == null || longitude == null) {
       return;
     }
 
@@ -50,17 +51,15 @@ export function usePrayerTimes(options: UsePrayerTimesOptions = {}): UsePrayerTi
     setError(null);
 
     try {
+      const localDate = date ?? dateInTimeZone(new Date(), timezone);
       const params = new URLSearchParams({
         latitude: latitude.toString(),
         longitude: longitude.toString(),
         timezone,
         calculationMethod,
         madhab,
+        date: localDate,
       });
-
-      if (date) {
-        params.set("date", date);
-      }
 
       // Worship Center uses its own AlAdhan-backed route; /api/islamic/prayer-times
       // keeps its original contract in this app and is left untouched.
@@ -104,16 +103,17 @@ export function useTodayPrayerTimes(
   calculationMethod?: string,
   madhab?: string
 ) {
-  const today = new Date().toISOString().split("T")[0];
+  const timezoneId = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const today = dateInTimeZone(new Date(), timezoneId);
   
   return usePrayerTimes({
     latitude,
     longitude,
-    timezone,
+    timezone: timezoneId,
     calculationMethod,
     madhab,
     date: today,
-    enabled: !!latitude && !!longitude,
+    enabled: latitude != null && longitude != null,
   });
 }
 

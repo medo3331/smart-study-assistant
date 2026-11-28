@@ -66,6 +66,7 @@ export interface PrayerTimes {
  */
 export interface PrayerTimesData {
   date: string; // ISO date string
+  timezone?: string;
   hijriDate: string;
   location: string;
   calculationMethod: string;
@@ -109,6 +110,7 @@ export interface Dhikr {
   source?: string;
   repeatCount: number;
   transliteration?: string;
+  sourceUrl?: string;
 }
 
 export interface AdhkarProgress {
@@ -146,4 +148,5 @@ export interface DailyProgressItem {
   completed: boolean;
   current?: boolean;
   time?: string;
+  href?: string;
 }

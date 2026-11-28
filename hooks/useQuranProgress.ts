@@ -4,12 +4,14 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getQuranProgress,
+  getQuranReadingPosition,
   setQuranPosition,
+  localWorshipDate,
 } from "@/lib/islamic/worship-progress";
 
 interface UseQuranProgressReturn {
-  progress: { surahId: number; ayahId: number; dailyCount: number };
-  updatePosition: (surahId: number, ayahId: number, dailyCount?: number) => void;
+  progress: { surahId: number; ayahId: number; dailyCount: number; updatedAt?: string };
+  updatePosition: (surahId: number, ayahId: number, dailyCount?: number, updatedAt?: string, countRead?: boolean) => void;
   dailyTarget: number;
   dailyProgress: number;
   isLoaded: boolean;
@@ -20,42 +22,46 @@ interface UseQuranProgressReturn {
  * Persists to localStorage via the centralized worship-progress abstraction.
  */
 export function useQuranProgress(
-  dailyTarget: number = 10
+  dailyTarget: number = 10,
+  timezone?: string,
 ): UseQuranProgressReturn {
   const [progress, setProgress] = useState<{
     surahId: number;
     ayahId: number;
     dailyCount: number;
+    updatedAt?: string;
   }>({ surahId: 1, ayahId: 1, dailyCount: 0 });
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const p = getQuranProgress();
+    const daily = getQuranProgress(localWorshipDate(new Date(), timezone));
+    const position = getQuranReadingPosition();
     setProgress({
-                  surahId: p.surahId,
-      ayahId: p.ayahId,
-      dailyCount: p.dailyCount,
+      surahId: position?.surahId ?? daily.surahId,
+      ayahId: position?.ayahId ?? daily.ayahId,
+      dailyCount: daily.dailyCount,
+      updatedAt: position?.updatedAt ?? daily.updatedAt,
     });
     setIsLoaded(true);
-  }, []);
+  }, [timezone]);
 
   const updatePosition = useCallback(
-    (surahId: number, ayahId: number, dailyCount?: number) => {
-      // عدّاد آيات النهارده بيزيد فعليًا مع كل آية جديدة بتتقرا في اليوم
-      // (وليس موضع القراءة) — بيتصفّر طبيعيًا مع أول يوم جديد.
-      const newCount =
-        dailyCount !== undefined
-          ? dailyCount
-          : Math.max(progress.dailyCount + (ayahId !== progress.ayahId ? 1 : 0), ayahId);
+    (surahId: number, ayahId: number, dailyCount?: number, updatedAt?: string, countRead = true) => {
+      const timestamp = updatedAt ?? new Date().toISOString();
+      const date = localWorshipDate(new Date(), timezone);
+      const todayProgress = getQuranProgress(date);
+      const previousPosition = getQuranReadingPosition();
+      const positionChanged = previousPosition?.surahId !== surahId || previousPosition?.ayahId !== ayahId;
       const next = {
         surahId,
         ayahId,
-        dailyCount: newCount,
+        dailyCount: dailyCount ?? todayProgress.dailyCount + (countRead && positionChanged ? 1 : 0),
+        updatedAt: timestamp,
       };
       setProgress(next);
-      setQuranPosition(surahId, ayahId, newCount);
+      setQuranPosition(surahId, ayahId, next.dailyCount, date, timestamp);
     },
-    [progress.dailyCount, progress.ayahId]
+    [progress.dailyCount, progress.ayahId, progress.surahId, timezone]
   );
 
   const dailyProgress =

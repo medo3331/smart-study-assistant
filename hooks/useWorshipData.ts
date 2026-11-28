@@ -6,6 +6,9 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   getTodayWorship,
+  getQuranReadingPosition,
+  localWorshipDate,
+  saveWorshipDay,
   loadSettings,
   saveSettings,
   subscribeSettings,
@@ -61,6 +64,8 @@ export interface UseWorshipDataReturn {
   streak: number;
   isCloudReady: boolean;
   refreshSummary: () => Promise<void>;
+  /** Save local-first daily progress and sync it to the account when available. */
+  updateProgress: (mutator: (day: WorshipDayRecord) => WorshipDayRecord) => WorshipDayRecord;
   /**
    * تسجيل حدث عبادة + مكافأته عبر award_coins الموجود (مرجع حتمي،
    * والتكرار بيرجع awarded=0 بهدوء من الداتابيز).
@@ -221,7 +226,7 @@ export function useWorshipData(): UseWorshipDataReturn {
     if (!user || user.is_anonymous) return;
     const s = await fetchWorshipSummary(supabase);
     if (s) setSummary(s);
-  }, [supabase, user]);
+  }, [supabase, user, settings.timezone]);
 
   useEffect(() => {
     if (!user || user.is_anonymous) return;
@@ -229,15 +234,22 @@ export function useWorshipData(): UseWorshipDataReturn {
   }, [user, refreshSummary]);
 
   /* ── التقدّم المحلي + المزامنة الصاعدة ─────────────────────────────── */
-  const [localProgress, setLocalProgress] = useState<WorshipDayRecord>(() =>
-    getTodayWorship(),
-  );
+  const [localProgress, setLocalProgress] = useState<WorshipDayRecord>(() => {
+    const day = getTodayWorship(localWorshipDate(new Date(), settings.timezone));
+    const position = getQuranReadingPosition();
+    return position ? { ...day, quran: { ...day.quran, ...position } } : day;
+  });
 
   useEffect(() => {
-      setLocalProgress(getTodayWorship(todayUtc()));
-    // القرآن والتسبيح بيكتبوا في التخزين مباشرة — بنسمع للحدث ونعيد القراءة.
-      const handler = () => {
-      const fresh = getTodayWorship(todayUtc());
+    const today = localWorshipDate(new Date(), settings.timezone);
+    const day = getTodayWorship(today);
+    const position = getQuranReadingPosition();
+    setLocalProgress(position ? { ...day, quran: { ...day.quran, ...position } } : day);
+    // القرآن والتسبيح والأذكار يكتبون محليًا — نعيد القراءة بتاريخ المنطقة المضبوطة.
+    const handler = () => {
+      const freshDay = getTodayWorship(today);
+      const currentPosition = getQuranReadingPosition();
+      const fresh = currentPosition ? { ...freshDay, quran: { ...freshDay.quran, ...currentPosition } } : freshDay;
       setLocalProgress((prev) =>
         JSON.stringify(recordToCloud(prev)) ===
         JSON.stringify(recordToCloud(fresh))
@@ -247,7 +259,7 @@ export function useWorshipData(): UseWorshipDataReturn {
     };
     window.addEventListener("worship-progress-change", handler);
     return () => window.removeEventListener("worship-progress-change", handler);
-  }, []);
+  }, [settings.timezone]);
 
   /** كل كتابة محلية بترفع نسخة للداتابيز — بدون انتظار وبدون مكافآت هنا. */
   const syncUp = useCallback(
@@ -263,13 +275,20 @@ export function useWorshipData(): UseWorshipDataReturn {
    * المكافآت بعد ثانية عشان الأرقام تعكس آخر حدث (لو حصل صرف).
    */
   const mutateProgress = useCallback(
-    (mutator: (day: WorshipDayRecord) => WorshipDayRecord) => {
-      const before = getTodayWorship();
+    (
+      mutator: (day: WorshipDayRecord) => WorshipDayRecord,
+      sync = true,
+    ) => {
+      const before = getTodayWorship(
+        localWorshipDate(new Date(), settings.timezone),
+      );
       const after = mutator({ ...before });
+      saveWorshipDay(after);
       setLocalProgress(after);
-      syncUp(after);
+      if (sync) syncUp(after);
+      return after;
     },
-    [syncUp],
+    [syncUp, settings.timezone],
   );
 
   /**
@@ -290,11 +309,11 @@ export function useWorshipData(): UseWorshipDataReturn {
       metadata: Record<string, unknown>,
       onReward?: (reward: WorshipAwardResult) => void,
     ): Promise<void> => {
-      // ضيف/حدّث الحدث محليًا أولًا، وارفعه فورًا للسيرفر قبل النداء.
-      mutateProgress(mutator);
-      if (user && !user.is_anonymous) {
-        await syncWorshipProgress(supabase, getTodayWorship());
-      }
+      // Persist locally for guests too; authenticated accounts also sync before the reward check.
+      const updated = mutateProgress(mutator, false);
+      if (!user || user.is_anonymous) return;
+
+      await syncWorshipProgress(supabase, updated);
       const reward = await awardWorshipActivity(
         supabase,
         source,
@@ -302,7 +321,6 @@ export function useWorshipData(): UseWorshipDataReturn {
         metadata,
       );
       if (onReward) onReward(reward);
-      // الرصيد الراجع من award_coins هو نفس رصيد المتجر (coin_balance).
       if (reward.coins > 0) {
         setTimeout(() => void refreshSummary(), 400);
       }
@@ -360,6 +378,7 @@ export function useWorshipData(): UseWorshipDataReturn {
       streak: summary?.streak ?? 0,
       isCloudReady: !!summary,
       refreshSummary,
+      updateProgress: mutateProgress,
       recordEvent,
     }),
     [
@@ -372,6 +391,7 @@ export function useWorshipData(): UseWorshipDataReturn {
       mergedProgress,
       summary,
       refreshSummary,
+      mutateProgress,
       recordEvent,
     ],
   );

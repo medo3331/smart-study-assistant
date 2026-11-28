@@ -8,15 +8,16 @@ export function generateDailyProgressItems(
   prayerTimes: string[],
   nextPrayerIndex: number,
   completedPrayers: Set<string>,
-  completedAdhkar: Set<string>
+  completedAdhkar: Set<string>,
+  quranCompleted = false,
+  quranProgressLabel = "",
 ): DailyProgressItem[] {
   const prayerNames = [
-    { id: "fajr", label: "Fajr", arabicLabel: "الفجر", iconName: "Sun", time: prayerTimes[0] },
-    { id: "sunrise", label: "Sunrise", arabicLabel: "الشروق", iconName: "Sun", time: prayerTimes[1] },
-    { id: "dhuhr", label: "Dhuhr", arabicLabel: "الظهر", iconName: "Sun", time: prayerTimes[2] },
-    { id: "asr", label: "Asr", arabicLabel: "العصر", iconName: "Sun", time: prayerTimes[3] },
-    { id: "maghrib", label: "Maghrib", arabicLabel: "المغرب", iconName: "Moon", time: prayerTimes[4] },
-    { id: "isha", label: "Isha", arabicLabel: "العشاء", iconName: "Moon", time: prayerTimes[5] },
+    { id: "fajr", label: "Fajr", arabicLabel: "الفجر", iconName: "Sun", time: prayerTimes[0], href: "/worship/prayer-times" },
+    { id: "dhuhr", label: "Dhuhr", arabicLabel: "الظهر", iconName: "Sun", time: prayerTimes[1], href: "/worship/prayer-times" },
+    { id: "asr", label: "Asr", arabicLabel: "العصر", iconName: "Sun", time: prayerTimes[2], href: "/worship/prayer-times" },
+    { id: "maghrib", label: "Maghrib", arabicLabel: "المغرب", iconName: "Moon", time: prayerTimes[3], href: "/worship/prayer-times" },
+    { id: "isha", label: "Isha", arabicLabel: "العشاء", iconName: "Moon", time: prayerTimes[4], href: "/worship/prayer-times" },
   ];
 
   const items: DailyProgressItem[] = [
@@ -27,8 +28,9 @@ export function generateDailyProgressItems(
       arabicLabel: "أذكار الصباح",
       iconName: "Sparkles",
       completed: completedAdhkar.has("morning"),
-      current: !completedAdhkar.has("morning") && nextPrayerIndex >= 1 && nextPrayerIndex <= 2,
+      current: !completedAdhkar.has("morning") && nextPrayerIndex <= 1,
       time: "بعد الفجر",
+      href: "/worship/adhkar",
     },
     // Fajr
     {
@@ -36,23 +38,17 @@ export function generateDailyProgressItems(
       completed: completedPrayers.has("fajr"),
       current: nextPrayerIndex === 0,
     },
-    // Sunrise
-    {
-      ...prayerNames[1],
-      completed: completedPrayers.has("sunrise"),
-      current: nextPrayerIndex === 1,
-    },
     // Dhuhr
     {
-      ...prayerNames[2],
+      ...prayerNames[1],
       completed: completedPrayers.has("dhuhr"),
-      current: nextPrayerIndex === 2,
+      current: nextPrayerIndex === 1,
     },
     // Asr
     {
-      ...prayerNames[3],
+      ...prayerNames[2],
       completed: completedPrayers.has("asr"),
-      current: nextPrayerIndex === 3,
+      current: nextPrayerIndex === 2,
     },
     // Evening Adhkar
     {
@@ -61,14 +57,15 @@ export function generateDailyProgressItems(
       arabicLabel: "أذكار المساء",
       iconName: "Sparkles",
       completed: completedAdhkar.has("evening"),
-      current: !completedAdhkar.has("evening") && nextPrayerIndex >= 3 && nextPrayerIndex <= 4,
+      current: !completedAdhkar.has("evening") && nextPrayerIndex >= 2 && nextPrayerIndex <= 3,
       time: "بعد العصر",
+      href: "/worship/adhkar",
     },
     // Maghrib
     {
-      ...prayerNames[4],
+      ...prayerNames[3],
       completed: completedPrayers.has("maghrib"),
-      current: nextPrayerIndex === 4,
+      current: nextPrayerIndex === 3,
     },
     // Quran Wird
     {
@@ -76,15 +73,16 @@ export function generateDailyProgressItems(
       label: "Quran Daily Wird",
       arabicLabel: "ورد القرآن",
       iconName: "BookOpen",
-      completed: completedAdhkar.has("quran"),
-      current: !completedAdhkar.has("quran"),
-      time: "أي وقت",
+      completed: quranCompleted,
+      current: !quranCompleted,
+      time: quranProgressLabel || "أي وقت",
+      href: "/worship/quran",
     },
     // Isha
     {
-      ...prayerNames[5],
+      ...prayerNames[4],
       completed: completedPrayers.has("isha"),
-      current: nextPrayerIndex === 5,
+      current: nextPrayerIndex === 4,
     },
     // Sleep Adhkar
     {
@@ -93,8 +91,9 @@ export function generateDailyProgressItems(
       arabicLabel: "أذكار النوم",
       iconName: "Moon",
       completed: completedAdhkar.has("sleep"),
-      current: !completedAdhkar.has("sleep") && nextPrayerIndex === 5,
+      current: !completedAdhkar.has("sleep") && nextPrayerIndex === 4,
       time: "قبل النوم",
+      href: "/worship/adhkar",
     },
   ];
 

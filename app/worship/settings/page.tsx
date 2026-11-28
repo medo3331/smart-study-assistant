@@ -14,7 +14,6 @@ import type { IslamicSettings } from "@/lib/islamic/worship-progress";
 import {
   ArrowLeft,
   MapPin,
-  Bell,
   BookOpen,
   Headphones,
   Layers as LayersIcon,
@@ -54,6 +53,29 @@ function SettingsHome() {
     value: IslamicSettings[K],
   ) => update({ [key]: value } as Partial<IslamicSettings>);
 
+  const requestCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      shared.updateSettingsLocal({ locationMode: "manual" });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        const nextLocation = {
+          ...settings.location,
+          city: "",
+          country: "",
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          timezone,
+        };
+        update({ location: nextLocation, latitude: nextLocation.latitude, longitude: nextLocation.longitude, timezone, locationMode: "automatic" });
+      },
+      () => shared.updateSettingsLocal({ locationMode: "manual" }),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+  };
+
   return (
     <>
       {/* Header */}
@@ -91,6 +113,10 @@ function SettingsHome() {
             />
 
             <div className="space-y-4">
+              <button type="button" onClick={requestCurrentLocation} className="rounded-xl border border-[#7C5CFF]/30 px-4 py-2 text-sm text-[#B69CFF] hover:bg-[#7C5CFF]/10">
+                استخدام موقعي الحالي بموافقتي
+              </button>
+              <p className="text-xs text-[#9AA0C0]">يمكنك رفض إذن الموقع والاستمرار بإدخال المدينة والإحداثيات يدويًا.</p>
               <Field label="المدينة">
                 <input
                   type="text"
@@ -194,55 +220,10 @@ function SettingsHome() {
           </GlassCard>
         </Reveal>
 
-        <Reveal index={3}>
-          <GlassCard className="space-y-6 p-6">
-            <SectionHeader
-              icon={Bell}
-              color="text-[#2DD4BF]"
-              bg="bg-[#2DD4BF]/15"
-              title="الإشعارات والتنبيهات"
-              description="إدارة تنبيهات الصلاة والأذان"
-            />
-            <div className="space-y-4">
-              <SettingToggle
-                label="إشعارات الصلاة"
-                description="تلقي تنبيه عند دخول كل وقت صلاة"
-                checked={settings.prayerNotifications}
-                onChange={(checked) =>
-                  handleChange("prayerNotifications", checked)
-                }
-              />
-              <SettingToggle
-                label="تذكير أذكار الصباح"
-                description="تنبيه بعد صلاة الفجر لأذكار الصباح"
-                checked={settings.morningAdhkarReminder}
-                onChange={(checked) =>
-                  handleChange("morningAdhkarReminder", checked)
-                }
-              />
-              <SettingToggle
-                label="تذكير أذكار المساء"
-                description="تنبيه بعد صلاة العصر لأذكار المساء"
-                checked={settings.eveningAdhkarReminder}
-                onChange={(checked) =>
-                  handleChange("eveningAdhkarReminder", checked)
-                }
-              />
-              <SettingToggle
-                label="تذكير أذكار النوم"
-                description="تنبيه قبل النوم لأذكار النوم"
-                checked={settings.sleepAdhkarReminder ?? false}
-                onChange={(checked) =>
-                  handleChange("sleepAdhkarReminder", checked)
-                }
-              />
-            </div>
-          </GlassCard>
-        </Reveal>
       </>
 
       {/* ── QURAN SETTINGS ── */}
-      <Reveal index={4}>
+      <Reveal index={3}>
         <GlassCard className="space-y-6 p-6">
           <SectionHeader
             icon={BookOpen}
@@ -270,7 +251,7 @@ function SettingsHome() {
       </Reveal>
 
       {/* ── AUDIO ── */}
-      <Reveal index={5}>
+      <Reveal index={4}>
         <GlassCard className="space-y-6 p-6">
           <SectionHeader
             icon={Headphones}
@@ -284,7 +265,7 @@ function SettingsHome() {
       </Reveal>
 
       {/* Reset / Back */}
-      <Reveal index={6}>
+      <Reveal index={5}>
         <div className="flex gap-4">
           <button
             type="button"
@@ -359,45 +340,6 @@ function SectionHeader({
         <h3 className="text-lg font-bold text-white">{title}</h3>
         <p className="text-sm text-[#9AA0C0]">{description}</p>
       </div>
-    </div>
-  );
-}
-
-function SettingToggle({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4">
-      <div className="flex-1">
-        <p className="font-medium text-white">{label}</p>
-        <p className="mt-0.5 text-sm text-[#9AA0C0]">{description}</p>
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        className={
-          "relative h-6 w-11 flex-shrink-0 rounded-full transition-colors " +
-          (checked ? "bg-[#7C5CFF]" : "bg-white/[0.1]")
-        }
-      >
-        <span
-          className={
-            "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform " +
-            (checked ? "translate-x-5" : "translate-x-0.5")
-          }
-        />
-      </button>
     </div>
   );
 }

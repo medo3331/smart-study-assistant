@@ -2,8 +2,9 @@ import type { PrayerTimesData, PrayerTime } from "./types";
 import type { PrayerTimes } from "./types";
 
 export { 
-  getPrayerTimes, 
-  getTodayPrayerTimes, 
+  getPrayerTimes,
+  getTodayPrayerTimes,
+  getPrayerTimesForDate,
   clearExpiredCache, 
   getCacheStats, 
   preloadPrayerTimes 
@@ -173,6 +174,7 @@ export function convertToLegacyFormat(prayerTimes: PrayerTimes): PrayerTimesData
 
   return {
     date: prayerTimes.date,
+    timezone: prayerTimes.timezone,
     hijriDate: prayerTimes.hijriDate,
     location: prayerTimes.location.displayName,
     calculationMethod: prayerTimes.calculationMethod.name,
