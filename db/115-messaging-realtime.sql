@@ -1,0 +1,15 @@
+-- ============================================================================
+-- 115 — MESSAGING REALTIME (C13.2)
+-- اللايف شات: تشغيل Supabase Realtime على جدول messages
+-- ----------------------------------------------------------------------------
+-- بيضيف جدول messages على publication supabase_realtime عشان عميل الطلبة
+-- يستقبل INSERT events لحظيًا (postgres_changes) — الواجهة بتفلتر
+-- conversation_id على مستوى القناة، وقراءة الرسالة محمية بـ RLS
+-- (messages: read via conversation membership).
+--
+-- ملاحظة: التنفيذ مرّة واحدة — لو الجدول مضاف قبل كده هيطلع خطأ duplicate
+-- وتقدر تتجاهله أو تشغّل النسخة الغيار:
+--   alter publication supabase_realtime drop table public.messages;
+--   alter publication supabase_realtime add table public.messages;
+-- ============================================================================
+alter publication supabase_realtime add table public.messages;

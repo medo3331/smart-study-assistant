@@ -138,6 +138,31 @@ export default function InboxClient() {
     const t = setInterval(() => { void openConversation(selectedConv, true); }, 5_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  }, [selectedConv]);
+
+  // اللايف شات — استقبال الرسايل لحظيًا عبر Realtime (مع البولينج كشبكة أمان)
+  useEffect(() => {
+    if (!selectedConv) return;
+    const sb = createClient();
+    const ch = sb
+      .channel(`messaging:${selectedConv}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${selectedConv}` },
+        (payload: { new: Msg }) => {
+          const row = payload.new;
+          if (!row?.id) return;
+          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          void loadConversations();
+          requestAnimationFrame(() => {
+            listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+          });
+        }
+      )
+      .subscribe();
+    return () => { void sb.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConv]);
 
   // ------------------------------------------------------------- المحادثة
