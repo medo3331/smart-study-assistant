@@ -59,6 +59,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const post = Array.isArray(postRow) ? postRow[0] : null;
 
     // 🛡️ C4: فحص التعليق بالـAI قبل النشر (fail-open)
+    // 🛡️ C6: فلترة حتمية للكلمات الممنوعة أولًا
+    const { data: hasBlockedWord, error: bwError } = await auth.client.rpc("community_text_has_blocked_word", { p_text: body.body });
+    if (!bwError && hasBlockedWord === true) {
+      void logBlockedContent(auth.user.id, "comment", body.body, "blocked_word");
+      return NextResponse.json({ success: false, code: "content_blocked", error: "يحتوي التعليق على عبارة مخالفة لقواعد المجتمع." }, { status: 409 });
+    }
     const scan = await scanCommunityText(body.body);
     if (scan.violation) {
       void logBlockedContent(auth.user.id, "comment", body.body, scan.category);

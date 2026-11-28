@@ -39,6 +39,9 @@ export async function followHandler(req: Request) {
     console.error("[community/follow] RPC error:", error);
     return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
   }
+  if (action === "follow" && (data as any)?.ok && target !== auth.user.id) {
+    void socialNotify(auth.client, target, "متابع جديد", "بدأ شخص بمتابعتك.", "/community");
+  }
   return NextResponse.json({ success: true, ...(data as object) }, { status: (data as any).ok ? 200 : 409 });
 }
 
@@ -179,14 +182,18 @@ export async function profilePatchHandler(req: Request) {
 export type SupabaseClient = Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
 export async function socialNotify(
-  client: SupabaseClient,
+  _client: SupabaseClient,
   recipientId: string,
   title: string,
   body: string,
   linkUrl: string,
 ): Promise<void> {
   try {
-    const { error } = await client.from("notifications").insert({
+    // جدول notifications مفعّل عليه RLS بلا سياسة INSERT —
+    // نكتب عبر service client حتى لا تفشل الإشعارات بصمت.
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const service = createServiceClient();
+    const { error } = await service.from("notifications").insert({
       recipient_id: recipientId,
       type: "social",
       title,

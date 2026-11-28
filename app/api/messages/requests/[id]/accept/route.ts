@@ -59,13 +59,15 @@ export async function POST(
       }, { status: 200 });
     }
 
-    // 2. Accept the request (atomic via RPC)
+    // 2. Accept the request (atomic via RPC — returns jsonb {ok, status, conversation_id})
     const { data, error: rpcError } = await serverClient.rpc("public.accept_message_request", {
       p_request_id: params.id,
       p_user_id: user.id,
     });
 
-    if (rpcError || !data || data.length === 0) {
+    const result = (data ?? null) as { ok?: boolean; status?: string; conversation_id?: string; code?: string } | null;
+
+    if (rpcError || !result || !result.ok || !result.conversation_id) {
       // Check if the request was already processed (idempotent)
       const { data: existingConvo, error: convError } = await serverClient
         .from("conversations")
@@ -87,13 +89,24 @@ export async function POST(
       }, { status: 200 });
     }
 
+    // إشعار المُرسِل أن طلبه قُبل
+    {
+      const { socialNotify } = await import("@/lib/community/handlers");
+      void socialNotify(
+        serverClient,
+        request.sender_id,
+        "تم قبول طلب المراسلة",
+        "يمكنكما الآن المحادثة.",
+        `/inbox?conversation=${result.conversation_id}`,
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      request: { id: params.id, status: data[0].status || "accepted" },
+      request: { id: params.id, status: result.status || "accepted" },
       conversation: {
-        id: data[0].conversation_id,
-        title: data[0].conversation_title,
-        status: data[0].status,
+        id: result.conversation_id,
+        status: "active",
       },
     }, { status: 200 });
   } catch (error) {

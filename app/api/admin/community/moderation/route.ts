@@ -37,11 +37,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") === "all" ? null : (url.searchParams.get("status") ?? "pending");
 
-  const [reports, actions, appeals, audit] = await Promise.all([
+  const [reports, actions, appeals, audit, blockedWords] = await Promise.all([
     g.service.rpc("mod_list_reports", { p_status: status ?? "pending", p_limit: 100 }),
     g.service.rpc("mod_list_actions", { p_active_only: false, p_limit: 100 }),
     g.service.rpc("mod_list_appeals", { p_status: status ?? "pending", p_limit: 100 }),
     g.service.rpc("mod_list_audit", { p_limit: 80 }),
+    g.service.from("moderation_blocked_words").select("id, word, created_at").order("created_at", { ascending: false }).limit(300),
   ]);
 
   type ListPayload = { ok?: boolean; code?: string; reports?: unknown[]; actions?: unknown[]; appeals?: unknown[]; entries?: unknown[] };
@@ -60,6 +61,7 @@ export async function GET(req: Request) {
     actions: pick(actions).actions ?? [],
     appeals: pick(appeals).appeals ?? [],
     audit: pick(audit).entries ?? [],
+    blockedWords: (blockedWords.data ?? []) as unknown[],
   });}
 
 export async function POST(req: Request) {
@@ -133,6 +135,34 @@ export async function POST(req: Request) {
         p_notes: typeof body.notes === "string" ? body.notes : null,
       };
       break;
+    }
+    case "add_blocked_word": {
+      const word = typeof body.word === "string" ? body.word.trim().toLowerCase() : "";
+      if (!word || word.length > 100) {
+        return NextResponse.json({ success: false, error: "Invalid word." }, { status: 400 });
+      }
+      const { error: insErr } = await g.service
+        .from("moderation_blocked_words")
+        .upsert({ word, added_by: g.userId }, { onConflict: "word", ignoreDuplicates: true });
+      if (insErr) {
+        console.error("[admin/moderation] add_blocked_word error:", insErr);
+        return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+    case "remove_blocked_word": {
+      if (typeof body.wordId !== "string" || !UUID_RE.test(body.wordId)) {
+        return NextResponse.json({ success: false, error: "Invalid wordId." }, { status: 400 });
+      }
+      const { error: delErr } = await g.service
+        .from("moderation_blocked_words")
+        .delete()
+        .eq("id", body.wordId);
+      if (delErr) {
+        console.error("[admin/moderation] remove_blocked_word error:", delErr);
+        return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
     }
     default:
       return NextResponse.json({ success: false, error: "Unknown action." }, { status: 400 });

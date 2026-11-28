@@ -41,67 +41,62 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "receiver_profile_id is required." }, { status: 400 });
     }
 
-    // 1. Find the receiver's user ID by profile ID
-    const { data: profile, error: profileError } = await serverClient
-      .from("public_profiles")
-      .select("user_id")
-      .eq("profile_id", receiver_profile_id)
-      .single();
-
-    if (profileError || !profile) {
-      return NextResponse.json({ success: false, error: "Receiver not found." }, { status: 404 });
-    }
-
-    const receiverId = profile.user_id;
-
-    // 2. Check if receiver exists (must be an active user)
-    const { data: receiverUser, error: userError } = await serverClient
-      .from("auth.users")
-      .select("id")
-      .eq("id", receiverId)
-      .single();
-
-    if (userError || !receiverUser) {
-      return NextResponse.json({ success: false, error: "Receiver account not found." }, { status: 404 });
-    }
-
-    // 3. Check if users can message each other (no block, no duplicate request)
-    const canMessage = await serverClient.rpc("public_can_message", {
-      user_a: user.id,
-      user_b: receiverId,
+    // رسالة واحدة عبر RPC: صداقة ⇒ محادثة فورية، وإلا طلب مراسلة
+    // (يتحقق من الحظر والخصوصية والتكرار و rate limit داخليًا).
+    const { data, error } = await serverClient.rpc("send_message_request", {
+      p_receiver: receiver_profile_id,
+      p_note: typeof note === "string" && note.trim() ? note.trim() : null,
     });
 
-    if (!canMessage || !canMessage.boolean || !canMessage.boolean) {
-      return NextResponse.json({ success: false, error: "Cannot message this user (blocked or duplicate request)." }, { status: 403 });
+    if (error) {
+      console.error("[message_requests] POST rpc error:", error);
+      return NextResponse.json({ success: false, error: "Failed to create request." }, { status: 500 });
     }
 
-    // 4. Insert message request
-    const { data, error } = await serverClient
-      .from("message_requests")
-      .insert({
-        sender_id: user.id,
-        receiver_id: receiverId,
-        note: note || null,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-      })
-      .select("*")
-      .single();
+    const result = (data ?? {}) as {
+      ok?: boolean;
+      status?: string;
+      code?: string;
+      request_id?: string;
+      conversation_id?: string;
+    };
 
-    if (error) {
-      console.error("[message_requests] POST error:", error);
-      return NextResponse.json({ success: false, error: "Failed to create request." }, { status: 500 });
+    if (!result.ok) {
+      const codeMessages: Record<string, string> = {
+        self: "لا يمكنك مراسلة نفسك.",
+        receiver_not_found: "المستخدم غير موجود.",
+        blocked: "لا يمكن مراسلة هذا المستخدم.",
+        privacy: "هذا المستخدم لا يقبل الرسائل.",
+        duplicate: "لديك طلب مراسلة قائم مع هذا المستخدم بالفعل.",
+        rate_limited: "أرسلت طلبات كثيرة — حاول لاحقًا.",
+      };
+      const msg = codeMessages[result.code ?? ""] ?? "Cannot message this user.";
+      const statusCode = result.code === "rate_limited" ? 429 : result.code === "receiver_not_found" ? 404 : 403;
+      return NextResponse.json({ success: false, error: msg, code: result.code }, { status: statusCode });
+    }
+
+    // إشعار المستلم بطلب المراسلة
+    if (result.status === "pending" && result.request_id) {
+      const { socialNotify } = await import("@/lib/community/handlers");
+      void socialNotify(
+        serverClient,
+        receiver_profile_id,
+        "وصلك طلب مراسلة",
+        "لديك طلب مراسلة جديد — افتح صندوق الطلبات للرد.",
+        `/inbox?category=requests`,
+      );
     }
 
     return NextResponse.json({
       success: true,
       request: {
-        id: data.id,
-        sender_id: data.sender_id,
-        receiver_id: data.receiver_id,
-        status: data.status,
-        created_at: data.created_at,
-        note: data.note,
-        expires_at: data.expires_at,
+        id: result.request_id ?? null,
+        sender_id: user.id,
+        receiver_id: receiver_profile_id,
+        status: result.status ?? "pending",
+        conversation_id: result.conversation_id ?? null,
+        created_at: new Date().toISOString(),
+        note: note ?? null,
       },
     }, { status: 201 });
   } catch (error) {

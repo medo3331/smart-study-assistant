@@ -6,7 +6,7 @@
 // ===========================================================================
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText } from "lucide-react";
+import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X } from "lucide-react";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
 
 type Report = {
@@ -48,11 +48,13 @@ function dt(iso: string | null): string {
 }
 
 export default function AdminModerationClient() {
-  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit">("reports");
+  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit" | "words">("reports");
   const [reports, setReports] = useState<Report[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [blockedWords, setBlockedWords] = useState<{ id: string; word: string; created_at: string }[]>([]);
+  const [newWord, setNewWord] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +80,7 @@ export default function AdminModerationClient() {
         setActions(d.actions ?? []);
         setAppeals(d.appeals ?? []);
         setAudit(d.audit ?? []);
+        setBlockedWords(d.blockedWords ?? []);
       } else {
         setError(d.error || "فشل تحميل البيانات.");
       }
@@ -144,6 +147,7 @@ export default function AdminModerationClient() {
     { id: "reports" as const, label: `التقارير (${reports.length})`, icon: MessageSquareWarning },
     { id: "appeals" as const, label: `الاعتراضات (${appeals.length})`, icon: Gavel },
     { id: "actions" as const, label: "العقوبات", icon: ShieldAlert },
+    { id: "words" as const, label: `الكلمات الممنوعة (${blockedWords.length})`, icon: Ban },
     { id: "audit" as const, label: "سجل التدقيق", icon: ScrollText },
   ];
 
@@ -175,6 +179,56 @@ export default function AdminModerationClient() {
       </div>
 
       {error ? <AdminNotice tone="rose">{error}</AdminNotice> : null}
+
+      {/* ------------------------------------------------- الكلمات الممنوعة */}
+      {tab === "words" && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-bold text-slate-800">الكلمات والعبارات الممنوعة</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            أي منشور أو تعليق يحتوي كلمة من القائمة دي بيترفض فورًا قبل فحص مساعد الإشراف الذكي — فلترة حتمية أسرع وأثبت.
+          </p>
+          <div className="mb-4 flex gap-2">
+            <input
+              value={newWord}
+              onChange={(e) => setNewWord(e.target.value)}
+              placeholder="اكتب الكلمة أو العبارة الممنوعة…"
+              className="w-full max-w-sm rounded border border-slate-200 px-3 py-1.5 text-sm"
+            />
+            <button
+              onClick={() => {
+                const w = newWord.trim().toLowerCase();
+                if (!w) return;
+                void post({ action: "add_blocked_word", word: w }, "add-word").then((ok) => {
+                  if (ok) { setNewWord(""); void load(); }
+                });
+              }}
+              disabled={busy !== null || !newWord.trim()}
+              className="inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" /> إضافة
+            </button>
+          </div>
+          {blockedWords.length === 0 && !loading ? (
+            <p className="text-sm text-slate-500">مفيش كلمات ممنوعة لسه.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {blockedWords.map((w) => (
+                <li key={w.id} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                  <span className="font-medium">{w.word}</span>
+                  <button
+                    onClick={() => void post({ action: "remove_blocked_word", wordId: w.id }, `rm-${w.id}`).then((ok) => { if (ok) void load(); })}
+                    disabled={busy !== null}
+                    className="text-slate-400 hover:text-red-600 disabled:opacity-50"
+                    aria-label={`حذف ${w.word}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* ------------------------------------------------------------ تقارير */}
       {tab === "reports" && (

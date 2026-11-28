@@ -77,6 +77,18 @@ export async function POST(
       .eq("participant_id", "!=", user.id)
       .neq("participant_id", null);
 
+    // إشعار المستلمين برسالة جديدة (service client داخليًا)
+    const { socialNotify } = await import("@/lib/community/handlers");
+    for (const p of others ?? []) {
+      void socialNotify(
+        serverClient,
+        p.participant_id,
+        "رسالة جديدة",
+        messageBody.trim().slice(0, 120),
+        `/inbox?conversation=${params.id}`,
+      );
+    }
+
     for (const p of others ?? []) {
       await serverClient.from("message_state").upsert({
         user_msg_state_id: p.participant_id + "-" + message.id,

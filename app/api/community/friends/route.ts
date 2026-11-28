@@ -95,6 +95,17 @@ export async function POST(req: Request) {
     }
 
     const data = result.data as { ok: boolean; code?: string; status?: string; request_id?: string };
+
+    // إشعارات التفاعل الاجتماعي
+    if (data.ok) {
+      const { socialNotify } = await import("@/lib/community/handlers");
+      if (action === "request" && target) {
+        void socialNotify(auth.client, target, "وصلك طلب صداقة", "لديك طلب صداقة جديد — افتح صفحة الأصدقاء للرد.", "/community/friends");
+      } else if (action === "accept" && target) {
+        void socialNotify(auth.client, target, "تم قبول طلب الصداقة", "أصبحتما صديقين الآن.", "/community/friends");
+      }
+    }
+
     return NextResponse.json({ success: true, ...data }, { status: data.ok ? 200 : 409 });
   } catch (e) {
     console.error("[community/friends] Unexpected:", e);
