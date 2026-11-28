@@ -97,6 +97,19 @@ describe("buildPersonaDirective", () => {
     expect(buildPersonaDirective("coach")).toContain("كوتش (Coach)");
   });
 
+  it("الكوتش مشجع ملهم بيفهم الهدف ويطوّر المستوى", () => {
+    const directive = buildPersonaDirective("coach");
+    expect(directive).toContain("مشجع ملهم");
+    expect(directive).toContain("هدف الطالب");
+    expect(directive).toContain("تطوير مستواه");
+  });
+
+  it("الكوتش بيتعامل مع «عندي امتحان» كرحلة تخطيط من غير روابط", () => {
+    const directive = buildPersonaDirective("coach");
+    expect(directive).toContain("متبعتش روابط لصفحات");
+    expect(directive).toContain("خطة واقعية بخطوات مرقّمة ومواعيد");
+  });
+
   it("كل الشخصيات المتخصصة تؤكد الهوية الموحدة", () => {
     for (const id of ["tutor", "play", "coach"] as const) {
       expect(buildPersonaDirective(id)).toContain("شخصية Magic الموحدة");
