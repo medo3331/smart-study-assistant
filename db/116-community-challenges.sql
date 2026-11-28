@@ -41,7 +41,6 @@ create table if not exists public.community_challenges (
   ends_at      timestamptz not null,
   status       text not null default 'active'
                check (status in ('active','ended','cancelled')),
-  winner_entry uuid references public.community_challenge_entries (id) on delete set null,
   created_by   uuid references auth.users (id) on delete set null,
   created_at   timestamptz not null default now(),
   check (ends_at > starts_at)
@@ -67,6 +66,11 @@ create table if not exists public.community_challenge_entries (
 
 create index if not exists idx_challenge_entries_challenge
   on public.community_challenge_entries (challenge_id, joined_at);
+
+-- عمود الفائز بيتضاف بعد ما الجدولين يبقوا موجودين (الترتيب مهم للـ FK)
+alter table public.community_challenges
+  add column if not exists winner_entry uuid
+  references public.community_challenge_entries (id) on delete set null;
 
 -- ----------------------------------------------------------------------------
 -- ٤) RLS — مقفولة تمامًا (نمط C2): كل الوصول عبر RPCs
