@@ -1,4 +1,4 @@
-import { buildMagicSystemPrompt } from "@/lib/magic/persona-prompt";
+import { buildPersonaIdentityPrompt, type AiPersonaId } from "@/lib/magic/personas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentLesson, getStudentProgress, searchUserFiles, shouldMarkCurrentLessonComplete, updateStudyProgress } from "@/lib/magicly-tools";
 import { withDiagramGuidelines } from "@/lib/ai/prompt-engine";
@@ -300,7 +300,8 @@ export function buildMagiclySystemPrompt(
   mode: MagiclyMode,
   toolFacts: string[] = [],
   workspaceDigest?: string | null,
-  recentQuestions: string[] = []
+  recentQuestions: string[] = [],
+  personaId: AiPersonaId = "magic"
 ) {
   // ⚠️ P0 (2026-11): الذاكرة بيانات غير موثوقة (بتتكتب من محتوى المستخدم/
   // النموذج)، فلازم تتقدّم كبيانات خام — مش كتعليمات — وقاعدة أمان صريحة.
@@ -322,7 +323,7 @@ export function buildMagiclySystemPrompt(
       recentQuestions.map((q) => `- ${q}`).join("\n")
     : "";
 
-  const persona = buildMagicSystemPrompt({
+  const persona = buildPersonaIdentityPrompt(personaId, {
     subject: context.subject,
     lesson: context.lesson,
     mode,

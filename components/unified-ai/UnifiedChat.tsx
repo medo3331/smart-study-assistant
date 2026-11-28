@@ -20,6 +20,10 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
+import { PERSONAS, isValidPersona, type AiPersonaId } from "@/lib/magic/personas";
+import { extractPlanDraft, stripPlanFence } from "@/lib/agent/plan-draft";
+import { buildChatWelcomeGreeting } from "@/lib/magic/greeting";
+import { PlanApproveCard } from "./PlanApproveCard";
 // 🎨 chips أساليب الشرح — قيم معروفة مسبقًا تطابق EXPLANATION_STYLES في السيرفر.
 const STYLE_CHIPS = [
   { id: "simpler", label: "🪄 أبسط" },
@@ -48,6 +52,8 @@ type ChatMsg = {
   attachmentName?: string;
   /** ⚡ استهلاك الطلب — من السيرفر (مصدر التكلفة الوحيد). */
   creditsUsed?: number;
+  /** 🎭 الشخصية التي أجابت — من Persona Orchestrator. */
+  persona?: string;
   /** 📖 عنوان المصدر المرتبط بالإجابة (workspace/lecture) — citation بسيط. */
   sourceTitle?: string;
   /** إجراءات مقترحة (مثال: زر «افتح مولّد الامتحان»). */
@@ -71,18 +77,21 @@ export function UnifiedChat({
   initialContext,
   lesson,
   initialConversationId,
+  initialDraft,
 }: {
   initialContext?: any;
   lesson?: LessonContext;
   initialConversationId?: string;
+  /** رسالة جاهزة في خانة الكتابة — من ردود سريعة خارجية (?q=). */
+  initialDraft?: string;
 }) {
   const router = useRouter();
   const { locale } = useLanguage();
   const isAr = locale === "ar";
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: "assistant", content: "أهلاً! أنا مساعد Magicly الذكي 🧠 — اسألني عن أي حاجة في مذاكرتك، أو ارفع ملف/صورة وهشرحها لك. تقدر تطلب: شرح، تلخيص، اختبار سريع، أو خطة مراجعة.", },
+    { role: "assistant", content: buildChatWelcomeGreeting(null, typeof window !== "undefined" ? new Date().getHours() : 12), },
   ]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialDraft ?? "");
   const [loading, setLoading] = useState(false);
   const [conversations, setConversations] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -143,6 +152,8 @@ export function UnifiedChat({
   const [styleModifier, setStyleModifier] = useState<string | null>(null);
   // 🌐 بحث في الإنترنت — زر صريح زي ChatGPT: الطالب يتحكم بدل تخمين الكلام.
   const [webSearchOn, setWebSearchOn] = useState(false);
+  // 🎭 اختيار الشخصية — "auto" = الـ Orchestrator يختار في الخلفية (الافتراضي).
+  const [personaChoice, setPersonaChoice] = useState<"auto" | AiPersonaId>("auto");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -186,7 +197,7 @@ export function UnifiedChat({
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
   const newChat = useCallback(() => {
-    setMessages([{ role: "assistant", content: "أهلاً! أنا مساعد Magicly الذكي 🧠 — اسألني عن أي حاجة في مذاكرتك، أو ارفع ملف/صورة وهشرحها لك." }]);
+    setMessages([{ role: "assistant", content: buildChatWelcomeGreeting(null, new Date().getHours()) }]);
     setConversationId(null);
     setInput("");
     removeAttachment();
@@ -395,6 +406,8 @@ export function UnifiedChat({
       if (studyMode && studyMode !== "explain") ctx.mode = studyMode;
       if (styleModifier) ctx.style = styleModifier;
       if (webSearchOn) ctx.web = true;
+      // 🎭 الشخصية المختارة يدويًا لها الأولوية على التوجيه الآلي.
+      if (personaChoice !== "auto") ctx.persona = personaChoice;
       //                                             API    hidden system prompt
       if (lesson && (lesson.title || lesson.content || lesson.description)) {
         ctx.lesson = {
@@ -525,6 +538,7 @@ export function UnifiedChat({
           role: "assistant",
           content: assistantText,
           ...(typeof data?.creditsUsed === "number" ? { creditsUsed: data.creditsUsed } : {}),
+          ...(isValidPersona(data?.metadata?.persona) ? { persona: data.metadata.persona } : {}),
           ...(typeof data?.sourceTitle === "string" && data.sourceTitle ? { sourceTitle: data.sourceTitle } : {}),
           ...(replyActions ? { actions: replyActions } : {}),
         },
@@ -704,19 +718,29 @@ export function UnifiedChat({
 
       {/* Chat messages */}
       <div className="space-y-3 mb-4 min-h-[240px]">
-        {messages.map((msg, i) => (
+        {messages.map((msg, i) => {
+        const planDraft = msg.role === "assistant" ? extractPlanDraft(msg.content) : null;
+        return (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
             <div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--card-primary)] border border-[var(--rule)] text-ink shadow-sm"}`}>
               {msg.role === "user" ? (
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
-                <ExplanationView content={msg.content} />
+                <>
+                  <ExplanationView content={planDraft ? stripPlanFence(msg.content) : msg.content} />
+                  {planDraft && <PlanApproveCard draft={planDraft.draft} />}
+                </>
               )}
               {msg.attachmentName && (
                 <span className="inline-block mt-2 text-[10px] opacity-80 bg-black/10 rounded px-2 py-0.5">📎 {msg.attachmentName}</span>
               )}
-              {(msg.sourceTitle || typeof msg.creditsUsed === "number") && (
+              {(msg.sourceTitle || typeof msg.creditsUsed === "number" || (msg.persona && msg.persona !== "magic")) && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
+                  {msg.persona && msg.persona !== "magic" && isValidPersona(msg.persona) && (
+                    <span className="rounded-full bg-black/5 px-2 py-0.5">
+                      {PERSONAS[msg.persona].emoji} {PERSONAS[msg.persona].name}
+                    </span>
+                  )}
                   {msg.sourceTitle && (
                     <span className="rounded-full bg-black/5 px-2 py-0.5">📖 المصدر: {msg.sourceTitle}</span>
                   )}
@@ -783,7 +807,8 @@ export function UnifiedChat({
               )}
             </div>
           </div>
-        ))}
+        );
+        })}
         {loading && (
           <div className="flex justify-end">
             <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-[var(--accent)] text-[var(--on-marker)] text-sm flex items-center gap-2">
@@ -836,6 +861,28 @@ export function UnifiedChat({
       {voiceNotice && (
         <p className="mb-2 text-[11px] text-rose-600" role="alert">🔇 {voiceNotice}</p>
       )}
+
+      {/* 🧠 اختيار الشخصية — Auto افتراضيًا والـ Orchestrator يختار في الخلفية */}
+      <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label="الشخصية">
+        {(["auto", "tutor", "play", "coach"] as const).map((id) => {
+          const active = personaChoice === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPersonaChoice(id)}
+              aria-pressed={active}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${
+                active
+                  ? "bg-[var(--accent)] text-[var(--on-marker)] border-transparent"
+                  : "border-rule bg-paper text-ink-soft hover:bg-paper-3"
+              }`}
+            >
+              {id === "auto" ? "⚡ Auto" : `${PERSONAS[id].emoji} ${PERSONAS[id].name}`}
+            </button>
+          );
+        })}
+      </div>
 
       {/* 🎨 أساليب الشرح — شرح تفاعلي بأكثر من طريقة (زي المدرس الشطور) */}
       <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label="أسلوب الشرح">
