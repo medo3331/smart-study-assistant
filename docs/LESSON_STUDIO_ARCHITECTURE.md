@@ -267,7 +267,7 @@ lesson_content (PK: user_id + day_id)
 └─ RLS owner-only (select/insert/update/delete بـ auth.uid())
 ```
 
-### 3.2 التطوير المقترح — `lesson_content` v2 (migration واحد جديد: `db/48-lesson-studio.sql`)
+### 3.2 التطوير المنفَّذ — `lesson_content` v2 (migration مجمّع واحد: `db/119-lesson-studio.sql`)
 
 > **⚠️ محدَّث في P2 — طريقة الشرح الجديدة (قرار المستخدم):** بدل خطة المستويات الخمسة
 > (`simplified / standard / deep_dive / practical / exam_focus`)، الشرح بقى بـ **٣ أوضاع معتمدة
@@ -297,12 +297,12 @@ lesson_content (PK: user_id + day_id)
 نضيف أعمدة على **نفس الجدول** (مش جدول جديد — التدقيق أسس ده صح):
 
 ```sql
--- db/48-lesson-studio.sql (اقتراح — ينفّذ في P2/P3 حسب الطور، مش في P1)
+-- db/119-lesson-studio.sql (المنفَّذ فعليًا — الرقم اتحرّك من 48: db/48–51
+-- كلها متاخدة بملفات exam-* وآخر رقم متاخد 118 — التفصيل في هيدر الملف نفسه)
 alter table public.lesson_content
-  -- أقسام الدرس (outline) — مصدر الـ Study Navigator وربط topics بالفيديو
+  -- أقسام الدرس (outline) — مصدر الـ Study Navigator وربط الأقسام بالفيديو
   add column if not exists outline jsonb,
-  -- [{ id, title, level_key, video_t (ثوانٍ | null), summary }]
-  -- نقاط دخول النيڤيجيشن + checkpoints تتعلى منها
+  -- [{ id, heading, source, video_t (ثوانٍ | null) }]
 
   -- Checkpoints (أسئلة القسم — اختيارية مش بوابة)
   add column if not exists checkpoints jsonb,
@@ -312,14 +312,24 @@ alter table public.lesson_content
   add column if not exists summaries jsonb,
   -- { quick, detailed, academic, exam_revision } — كل شكل يولّد ويخزّن مرة
 
-  -- الفيديو المختار — عشان مايتبحثش كل مرة (الكاش الحالي in-memory بس!)
+  -- الفيديو المختار (P3) — عشان مايتبحثش كل مرة
   add column if not exists video jsonb,
-  -- { video_id, title, channel, kind: "best|quick|deep|practical", picked_at }
+  -- { videoId, title, channel, embedUrl, watchUrl, thumbnail, pickedAt }
 
   -- Smart Resume
-  add column if not exists resume jsonb;
-  -- { last_tab, last_section_id, last_video_id, last_video_t, updated_at }
+  add column if not exists resume jsonb,
+  -- { last_tab, last_section_id, last_video_id, updated_at }
+
+  -- النوتة المربوطة بالدرس (P4 — بديل دائم لـ localStorage)
+  add column if not exists notes jsonb,
+  -- { last: { title, body, source }, updatedAt }
+
+  -- جلسات مختبر حل المشكلات (P6 — آخر ٣ جلسات)
+  add column if not exists labs jsonb;
+  -- [{ id, problem, understanding, steps: [{title, guidance}], attempts: [...], createdAt, updatedAt }]
 ```
+
+> الأعمدة بتورّث RLS الجدول تلقائيًا (owner-only من db/46) — مفيش policies إضافية.
 
 **مستويات الشرح الخمسة** (Simplified / Standard / Deep Dive / Practical / Exam Focus): بتتجوا جوه `explanation` كمفاتيح إضافية `{ simplified, standard, deep_dive, practical, exam_focus }` مع **مطابقة ترحيل** من المفاتيح الحالية (`simple→simplified`, `academic→standard`, `visual→standard`) — المفاتيح القديمة ما تتمسحش، والقراءة بتقبل الاتنين. التنفيذ الفعلي للمستويين الجداد (deep_dive/exam_focus) في **P2** — P1 بيشتغل بالموجود.
 
@@ -375,7 +385,7 @@ alter table public.lesson_content
 > **⚠️ محدَّث في P3 — YouTube Intelligence:**
 > 5. **حفظ الفيديو المختار:** أول تشغيل لأي فيديو ⇒ `POST /api/lesson-content`
 >    بـ `action: "set_video"` يخزّنه في `lesson_content.video` (jsonb — migration
->    مجمّعة واحدة `db/50-lesson-studio.sql`، الرقم اتحرّك من 48 لأنه متاخد).
+>    مجمّعة واحدة `db/119-lesson-studio.sql`، الرقم اتحرّك من 48 لأنه وكل الأرقام الللي بعده متاخدة).
 >    `ensureVideoLoaded` لو لقى فيديو محفوظ ⇒ **skip البحث تمامًا** — والطالب
 >    يقدر يدوّر يدويًا في أي وقت (البحث اليدوي بيحفظ برضه عند التشغيل).
 > 6. **محاذاة الأقسام بتوقيت الفيديو:** GET `/api/lesson-content` بيرجّع
@@ -412,7 +422,7 @@ alter table public.lesson_content
 | **الآلية** | `NotebookPanel` بيلفّ `/notes` في iframe same-origin (نفس نمط `NotesSplitPanel` الموجود — التخزين IndexedDB والقفل والكوتة شغالين زي أي تبويب). |
 | **الإضافة** | أي «أضف للنوتة» (من الشرح/الفيديو/الملخص) ⇒ `queueNotebookDraft({ title, body, source })` ⇒ الـ Panel بيعرض **Preview** (النص اللي هيضاف + المصدر) ⇒ موافقة ⇒ `postMessage` للـ iframe بإجراء `magicly:append-note` ⇒ **Undo** (زر بيرجّع آخر إضافة — بيتخزن آخر draft في الـ provider لحد إغلاق الـ panel). |
 | **اللمسة المعتمدة في `NotebookEditor.tsx`** | ✅ قرار المستخدم (§7.1-2): listener واحد (~20 سطر) في `components/notes/NotebookEditor.tsx` — يسمع `magicly:append-note` **من نفس الأوريجين فقط** (فحص `event.origin === window.location.origin`) ويتجاهل أي رسالة تانية (حدث غير معروف / payload أكبر من الحد). دي **اللمسة الوحيدة المسموحة** في ملفات الـ notes في P1. |
-| **النوتة المرتبطة بالدرس** | **P4 — في الداتابيز بدل localStorage:** آخر نوتة معتمدة بتتحفظ في `lesson_content.notes` jsonb (عمود من `db/50-lesson-studio.sql`) بـ `action: "save_note"` — استرجاع في boot (GET) وحفظ عند الموافقة، والـ undo بيمسح الربط المخزَّن. قرار موثّق: النوتة نفسها فا إلها جدول notes كامل (كان هيطلب migration تاني) — اللي اتنقل للداتابيز هو **ربط آخر إضافة بالدرس** (زي وظيفة localStorage بالظبط بس دائم وعبر الأجهزة)، ووثيقة النوتة نفسها فا عايشة في `/notes` (IndexedDB). |
+| **النوتة المرتبطة بالدرس** | **P4 — في الداتابيز بدل localStorage:** آخر نوتة معتمدة بتتحفظ في `lesson_content.notes` jsonb (عمود من `db/119-lesson-studio.sql`) بـ `action: "save_note"` — استرجاع في boot (GET) وحفظ عند الموافقة، والـ undo بيمسح الربط المخزَّن. قرار موثّق: النوتة نفسها فا إلها جدول notes كامل (كان هيطلب migration تاني) — اللي اتنقل للداتابيز هو **ربط آخر إضافة بالدرس** (زي وظيفة localStorage بالظبط بس دائم وعبر الأجهزة)، ووثيقة النوتة نفسها فا عايشة في `/notes` (IndexedDB). |
 | **حوّل لـ Flashcard/MCQ (P4)** | قائمة «أضف للنوتة» بقيت كاملة: Flashcard/MCQ بيتولّدوا بنداء AI اقتصادي (`action: "convert_note"` في `/api/lesson-content` — كاش in-memory «ولّد مرة» لكل نص) والناتج **نص منسق** بيدخل النوتة بنفس `magicly:append-note` الموجود — بدون أي تعديل في `NotebookEditor` (القرار المقفول). Mind Map فضلت «جاي قريبًا». |
 | **الملخصات بأشكالها (P4)** | `action: "summaries"` — نداء AI **واحد مجمّع** بيطلّع الأشكال الأربعة (`quick/detailed/academic/exam_revision`) من الشرح المخزّن (cited الأول وإلا الأوضاع) وبيتخزنوا في `lesson_content.summaries` jsonb — «ولّد مرة وخزّن» + «أعد التوليد» بإصدار جديد. العرض في تاب Learn تحت الشرح مع «حوّل الملخص». |
 

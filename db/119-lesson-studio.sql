@@ -6,8 +6,10 @@
 -- آمن للتكرار (add column if not exists).
 --
 -- ⚠️ ملاحظة ترقيم: التصميم كان بياسمي الملف db/48-lesson-studio.sql، لكن
---    db/48 و db/49 اتفصلوا قبل كده لـ exam-generator/exam-documents —
---    فالملف ده رقمه db/50 (نفس المحتوى المقصود).
+--    db/48/49/50/51 (exam-*) وآخر رقم متاخد 118 اتفصلوا قبل كده (exam-generator /
+--    exam-documents / exam-topic / exam-source-budget ... إلخ) — فالملف ده
+--    رقمه db/119 (أول رقم حر بعد أعلى ملف موجود 118-store-expansion.sql) —
+--    نفس المحتوى المقصود.
 --
 -- اللي بيضيفه (أعمدة jsonb على نفس الجدول lesson_content — RLS الجدول
 -- بيغطيها تلقائيًا، مفيش policies إضافية):
