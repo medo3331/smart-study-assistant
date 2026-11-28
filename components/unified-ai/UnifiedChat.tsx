@@ -22,7 +22,10 @@ import { SITE_LINKS } from "@/lib/site-links";
 import { getSupportPhone, buildWhatsAppReport, buildWhatsAppUrl } from "@/lib/unified-ai/whatsapp-report";
 import { CREDIT_COSTS } from "@/lib/ai/credit-pricing";
 import { isMagicPersonaId } from "@/lib/magic/personas";
+import type { AgentArtifact } from "@/lib/agent/actions";
+import { AgentArtifacts } from "@/components/unified-ai/AgentArtifacts";
 import { extractPlanDraft, stripPlanFence } from "@/lib/agent/plan-draft";
+import { extractAgentActions } from "@/lib/agent/actions";
 import { buildChatWelcomeGreeting } from "@/lib/magic/greeting";
 import { PlanApproveCard } from "./PlanApproveCard";
 // 🎨 chips أساليب الشرح — قيم معروفة مسبقًا تطابق EXPLANATION_STYLES في السيرفر.
@@ -59,6 +62,8 @@ type ChatMsg = {
   sourceTitle?: string;
   /** إجراءات مقترحة (مثال: زر «افتح مولّد الامتحان»). */
   actions?: { label: string; href: string; external?: boolean }[];
+  /** 🛠️ نتائج أدوات Magic Agent (مخططات/ملفات/صور/بحث/اختبارات). */
+  artifacts?: AgentArtifact[];
 };
 
 type Attachment = {
@@ -547,6 +552,10 @@ export function UnifiedChat({
       const replyActions = Array.isArray(data?.actions)
         ? (data.actions as { label: string; href: string; external?: boolean }[])
         : undefined;
+      // 🛠️ نتائج أدوات Magic Agent من السيرفر.
+      const replyArtifacts = Array.isArray(data?.artifacts)
+        ? (data.artifacts as AgentArtifact[])
+        : undefined;
       setMessages((m) => [
         ...m,
         {
@@ -556,6 +565,7 @@ export function UnifiedChat({
           ...(isMagicPersonaId(data?.metadata?.persona) ? { persona: data.metadata.persona } : {}),
           ...(typeof data?.sourceTitle === "string" && data.sourceTitle ? { sourceTitle: data.sourceTitle } : {}),
           ...(replyActions ? { actions: replyActions } : {}),
+          ...(replyArtifacts ? { artifacts: replyArtifacts } : {}),
         },
       ]);
       removeAttachment();
@@ -744,6 +754,9 @@ export function UnifiedChat({
       <div className="space-y-3 mb-4 min-h-[240px]">
         {messages.map((msg, i) => {
         const planDraft = msg.role === "assistant" ? extractPlanDraft(msg.content) : null;
+        // 🛠️ تنظيف دفاعي: كتل magic-action المحفوظة في التاريخ ما تتنعرضش كنص.
+        const agentCleaned = msg.role === "assistant" ? extractAgentActions(msg.content).cleanedMessage : msg.content;
+        const displayContent = planDraft ? stripPlanFence(agentCleaned) : agentCleaned;
         return (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
             <div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-paper-3 border border-rule text-ink" : "bg-[var(--card-primary)] border border-[var(--rule)] text-ink shadow-sm"}`}>
@@ -751,8 +764,9 @@ export function UnifiedChat({
                 <div className="prose prose-sm max-w-none text-sm leading-relaxed text-ink"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
               ) : (
                 <>
-                  <ExplanationView content={planDraft ? stripPlanFence(msg.content) : msg.content} />
+                  <ExplanationView content={displayContent} />
                   {planDraft && <PlanApproveCard draft={planDraft.draft} />}
+                  {msg.artifacts && msg.artifacts.length > 0 && <AgentArtifacts artifacts={msg.artifacts} />}
                 </>
               )}
               {msg.attachmentName && (

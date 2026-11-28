@@ -595,7 +595,13 @@ async function generatePPTX(options: GenerateFileOptions): Promise<FileResult> {
   const sections = asRecordArray(data.sections);
   sections.forEach((section) => {
     const body = String(section.body ?? section.content ?? "");
-    addBulletSlide(String(section.heading ?? section.title ?? "قسم"), [body]);
+    // تقسيم النص لنقاط شرائح — سطر لكل نقطة (بدل نقطة واحدة ضخمة).
+    const bullets = body
+      .split(/\r?\n+/)
+      .map((s) => s.trim().replace(/^[-•*]\s*/, ""))
+      .filter(Boolean)
+      .slice(0, 8);
+    addBulletSlide(String(section.heading ?? section.title ?? "قسم"), bullets.length ? bullets : [body]);
   });
 
   const questions = asRecordArray(data.questions);

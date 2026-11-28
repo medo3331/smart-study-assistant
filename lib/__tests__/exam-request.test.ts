@@ -208,9 +208,9 @@ describe("containsExamSignal", () => {
 });
 
 describe("EXAM_REQUEST_PROMPT_RULES", () => {
-  it("بيمنع الموديل من يسأل أسئلة توضيحية", () => {
+  it("بيمنع الموديل من يسأل أسئلة توضيحية ويطلب اختبار داخل الشات", () => {
     expect(EXAM_REQUEST_PROMPT_RULES).toContain("متسألش أسئلة توضيحية");
-    expect(EXAM_REQUEST_PROMPT_RULES).toContain("افتح مولّد الامتحان");
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("magic-action quiz");
   });
 });
 
@@ -244,9 +244,10 @@ describe("المساعد — اقتراح الموضوع العام", () => {
     expect(answer).toContain("محاضراتك محفوظة جاهزة");
   });
 
-  it("قواعد البرومبت بتقول صراحةً: متقولش «مفيش محاضرات»", () => {
-    expect(EXAM_REQUEST_PROMPT_RULES).toContain("موضوع عام");
+  it("قواعد البرومبت بتقول صراحةً: متقولش «مفيش محاضرات» — اعمل الاختبار في الشات", () => {
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("معلومات عامة صحيحة");
     expect(EXAM_REQUEST_PROMPT_RULES).toContain("مفيش محاضرات");
+    expect(EXAM_REQUEST_PROMPT_RULES).toContain("magic-action quiz");
   });
 });
 

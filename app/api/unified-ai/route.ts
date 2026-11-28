@@ -70,14 +70,11 @@ import {
 import type { AiTaskType } from "@/lib/ai/types";
 import { buildSystemPrompt } from "@/lib/ai/prompt-builder";
 import {
-  buildExamAnswer,
-  buildExamHref,
   containsExamSignal,
   detectExamRequestFromHistory,
   EXAM_REQUEST_PROMPT_RULES,
   type ChatTurn,
 } from "@/lib/exam-request";
-import { userHasExamSources } from "@/lib/ai/exam-sources";
 import { todayISO } from "@/lib/exam-plans";
 import {
   formatStudentSnippets,
@@ -95,6 +92,12 @@ import {
 import { isPlanningRequest, selectPersona } from "@/lib/magic/persona-router";
 import { buildPersonaIdentityPrompt } from "@/lib/magic/personas";
 import { loadPersonaSession, savePersonaSession } from "@/lib/magic/persona-session";
+import {
+  AGENT_ACTION_INSTRUCTIONS,
+  EXAM_ACTION_DIRECTIVE,
+  extractAgentActions,
+} from "@/lib/agent/actions";
+import { runAgentActions, type AgentArtifact } from "@/lib/agent/action-runner";
 
 // 🎨 أساليب الشرح — chips الواجهة تحقن تعليمات تعليمية في الـ system
 // (المفتاح هنا تعليم تعليمي مش نص حر — منع الحقن بأي شيء حر من الكلاينت).
@@ -185,60 +188,6 @@ async function loadConversationTurns(
     return rows.reverse().map((row) => ({ role: row.role, content: row.content }));
   } catch {
     return [];
-  }
-}
-
-/**
- * حفظ دور المحادثة — best-effort (فشلها ما بيحرمش الطالب من الرد).
- *
- * ⚠️ **ليه مهمة في المسار السريع (طلب امتحان)**: لو ما حفظناش الدور،
- *    الرسالة «عايز امتحان» بتضيع من السجل ⇒ الردود الجاية («5»، «عربي»)
- *    متبقاش ليها سياق ⇒ المساعد بيرجع يسأل تاني ⇒ **حلقة مفرغة**.
- */
-async function saveTurn(params: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-  userId: string;
-  conversationId: string;
-  userMessage: string;
-  answer: string;
-}): Promise<string> {
-  const { supabase, userId, conversationId, userMessage, answer } = params;
-  if (!answer) return "";
-  try {
-    let savedId = conversationId;
-    if (savedId) {
-      const { data: owned } = await supabase
-        .from("chat_conversations")
-        .select("id")
-        .eq("id", savedId)
-        .eq("user_id", userId)
-        .maybeSingle();
-      // محادثة حد تاني ما تُستخدمش أبدًا (تلويث تاريخ + فقدان contexto).
-      if (!owned) savedId = "";
-    }
-    if (!savedId) {
-      const { data: conversation } = await supabase
-        .from("chat_conversations")
-        .insert({ user_id: userId, title: userMessage.slice(0, 80) || "محادثة جديدة" })
-        .select("id")
-        .single();
-      savedId = conversation?.id ?? "";
-    }
-    if (savedId) {
-      await supabase.from("chat_messages").insert([
-        { conversation_id: savedId, user_id: userId, role: "user", content: userMessage },
-        { conversation_id: savedId, user_id: userId, role: "assistant", content: answer },
-      ]);
-      await supabase
-        .from("chat_conversations")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", savedId)
-        .eq("user_id", userId);
-    }
-    return savedId;
-  } catch (error) {
-    console.warn("[unified-ai] could not save conversation (non-blocking):", error);
-    return "";
   }
 }
 
@@ -844,6 +793,9 @@ export async function POST(req: Request) {
         // 📝 قواعد طلب الامتحان — الطلب الناقص (ناقصه العدد مثلاً) بيعدّي
         //    للموديل، والقواعد بتقولله اسأل سؤالًا واحدًا محددًا مش سلسلة.
         input.system = `${input.system}\n\n--- قواعد طلب الامتحان ---\n${EXAM_REQUEST_PROMPT_RULES}`;
+        // 🛠️ أدوات Magic Agent — الوكيل بينفّذ (مخططات/ملفات/صور/بحث/اختبارات)
+        //    عبر كتل magic-action بدل ما يبعت روابط.
+        input.system = `${input.system}\n\n${AGENT_ACTION_INSTRUCTIONS}`;
         // 🎯 Magic Agent: لما الرسالة طلب تخطيط مذاكرة، بيطلع خطة قابلة للاعتماد — المسودة في كتلة ```plan
         //    والطالب هو الوحيد اللي بينشئها فعليًا بزر «اعتمد الخطة» (حماية من الإنشاء التلقائي).
         if (isPlanningRequest(prompt)) {
@@ -878,10 +830,10 @@ export async function POST(req: Request) {
         console.warn("[unified-ai] student context build failed, continuing without it:", e);
       }
     } else {
-      // 🙋 الزوار — نفس توجيه الشخصية بدون سياق قاعدة البيانات.
-      input.system = buildPersonaIdentityPrompt(personaSelection.persona, {
+      // 🙋 الزوار — نفس توجيه الشخصية بدون سياق قاعدة البيانات + أدوات الوكيل.
+      input.system = `${buildPersonaIdentityPrompt(personaSelection.persona, {
         mode: typeof rawMode === "string" ? rawMode : null,
-      });
+      })}\n\n${AGENT_ACTION_INSTRUCTIONS}`;
     }
 
     // ---- Batch 4D.2: Workspace source resolution (authenticated only) ----
@@ -908,35 +860,11 @@ export async function POST(req: Request) {
 
       const examRequest = detectExamRequestFromHistory(examTurns);
       if (examRequest?.active) {
-        // 🌍 عنده ملفات؟ ⇒ «موضوع عام» مش الخيار الأفضل؛ مافيش ⇒ نفتح
-        //    المولّد على تاب «موضوع عام» بمفرغ (مفيش «مفيش محاضرات»).
-        const hasSources = await userHasExamSources(supabase, userId);
-        const topicMode = !hasSources && Boolean(examRequest.subject);
-        const answer = buildExamAnswer(examRequest, new URL(req.url).origin, { hasSources });
-        if (reserveRef) {
-          try { await supabase.rpc("refund_ai_credit", { p_user_id: userId, p_ref_id: reserveRef }); } catch {}
-        }
-        // ⚠️ لازم نحفظ الدور: من غيره «عايز امتحان» بتضيع من السجل
-        //    والردود الجاية متبقاش ليها سياق ⇒ حلقة مفرغة.
-        const savedConversationId = await saveTurn({
-          supabase,
-          userId,
-          conversationId: incomingConversationId,
-          userMessage: prompt,
-          answer,
-        });
-        return NextResponse.json({
-          ok: true,
-          answer,
-          actions: [
-            {
-              label: topicMode ? "افتح مولّد موضوع عام" : "افتح مولّد الامتحان",
-              href: buildExamHref(examRequest, { topic: topicMode }),
-            },
-          ],
-          metadata: { modelUsed: modelToUse, resolvedVia, persona: personaSelection.persona, personaReason: personaSelection.reason },
-          conversationId: savedConversationId || incomingConversationId || undefined,
-        });
+        // 🤖 Magic Agent — مفيش رد جاهز برابط: الوكيل بيعمل الاختبار بنفسه
+        //    داخل الشات عبر كتلة magic-action quiz (أسئلة من محتوى ملفاته
+        //    من السياق أو معلومات عامة في المادة)، ومولّد الامتحان بيفضل
+        //    خيار إضافي بيثبت في نص الرد.
+        input.system = `${input.system || ""}\n\n--- طلب امتحان صريح ---\n${EXAM_ACTION_DIRECTIVE}`;
       }
       if (intentResult.intent === "CLARIFICATION") {
         const answer = "هل تقصد ملفات Workspace أم المحاضرات المسجلة؟ حدد المصدر أو اسم الملف.";
@@ -1103,6 +1031,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: result.error || "حدث خطأ مؤقت. جرب مرة أخرى.", code: "PROVIDER_ERROR" }, { status: 502 });
     }
 
+    // 🛠️ تنفيذ أدوات Magic Agent — كتل magic-action في الرد بتتنفّذ فعليًا
+    //    (بحث/مخطط/صورة/ملف/اختبار) وبتترجع للواجهة كـ artifacts، والكتل نفسها
+    //    بتتشال من نص الرد قبل العرض والحفظ. best-effort — فشل أداة ما يكسرش الرد.
+    let finalAnswer = result.answer;
+    let agentArtifacts: AgentArtifact[] = [];
+    try {
+      const extracted = extractAgentActions(result.answer);
+      if (extracted.actions.length > 0) {
+        finalAnswer = extracted.cleanedMessage;
+        agentArtifacts = await runAgentActions(extracted.actions, {
+          subject: typeof ctxInput?.subject === "string" ? ctxInput.subject : null,
+          stage: null,
+          aiComplete: async (messages) => {
+            const diagramResult = await unifiedAI({
+              prompt: messages[messages.length - 1]?.content ?? "",
+              system: messages.find((m) => m.role === "system")?.content,
+              task: "mind_map",
+            });
+            if (!diagramResult.ok) throw new Error(diagramResult.error || "diagram model failed");
+            return diagramResult.answer;
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[unified-ai] agent actions failed (non-blocking):", e);
+    }
+
     // 📚 مرفق الشات بيتحفظ في المكتبة الموحّدة — Storage + files + materials
     //    (best-effort: فشله ما يمنعش الرد) — الطالب يرفع من الشات على طول
     //    والملف يبقى موجود في مساحة العمل والـ AI يقرأ منه في المحادثات الجاية.
@@ -1168,10 +1123,10 @@ export async function POST(req: Request) {
           // 📡 جزء تكملة: رسالة الطالب الأصلية محفوظة مع الجزء الأول —
           // تكرارها هنا يلوث الذاكرة بأسئلة مكررة.
           const rows = continuationPart > 0
-            ? [{ conversation_id: savedConversationId, user_id: userId, role: "assistant", content: result.answer }]
+            ? [{ conversation_id: savedConversationId, user_id: userId, role: "assistant", content: finalAnswer }]
             : [
                 { conversation_id: savedConversationId, user_id: userId, role: "user", content: `${userPromptForMemory}${attachmentMemory}` },
-                { conversation_id: savedConversationId, user_id: userId, role: "assistant", content: result.answer },
+                { conversation_id: savedConversationId, user_id: userId, role: "assistant", content: finalAnswer },
               ];
           await supabase.from("chat_messages").insert(rows);
           await supabase
@@ -1222,12 +1177,14 @@ export async function POST(req: Request) {
 
     const uiResponse = {
       ok: true,
-      answer: result.answer,
+      answer: finalAnswer,
       hasMore: result.hasMore === true,
       creditsUsed: getCreditCost("unified-ai"),
       sourceTitle: workspaceSourceTitle || undefined,
       agentUsed: result.agentUsed,
       extractedText: result.extractedText,
+      // 🛠️ أدوات Magic Agent — المخططات/الملفات/الصور/نتائج البحث/الاختبارات.
+      ...(agentArtifacts.length > 0 ? { artifacts: agentArtifacts } : {}),
       metadata: {
         ...result.metadata,
         modelUsed: modelToUse,
