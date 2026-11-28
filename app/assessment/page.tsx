@@ -30,6 +30,7 @@ import {
   readPendingChoice,
 } from "@/lib/user-persona";
 import { personaToRole, roleHome, safeNext } from "@/lib/auth-roles";
+import { getSuggestedSubjects } from "@/lib/subject-suggestions";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import {
   CURRICULUM_MAX_FOCUS_TOPIC_CHARS,
@@ -191,6 +192,8 @@ export default function AssessmentPage() {
   const [subjectsAuto, setSubjectsAuto] = useState<string[]>([]);
   // نظام الأسيسمنت السريع — كل مواد المستخدم بتتحفظ في البروفايل مرة واحدة
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [customSubjects, setCustomSubjects] = useState<string[]>([]);
+  const [customSubjectDraft, setCustomSubjectDraft] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   // EPIC 1 — Multi-profile integration (max 3/account; 1 Active profile)
   const profileState = useProfileState(defaultProfileForUser(persona));
@@ -348,7 +351,6 @@ export default function AssessmentPage() {
     setStep("quiz");
   }, []);
 
-  const suggestedTracks = persona === "student" && subjectsAuto.length > 0 ? subjectsAuto : getTracks(field, persona);
   const needsStudentLevel = persona === "student";
 
   function resetUniversity() {
@@ -364,11 +366,51 @@ export default function AssessmentPage() {
     && customFacultyName.trim().length > 0
     && customDepartmentName.trim().length > 0;
 
+  const stageCodeForFlow = stagesDB.find((s) => s.id === eduStageId)?.code ?? null;
+  const isUniFlow = persona === "student" && stageCodeForFlow === "UNIVERSITY";
+  const uniFacultyName = isUniFlow
+    ? (uniManualDone ? customFacultyName.trim() : facultiesDB.find((f) => f.id === facultyId)?.name ?? "")
+    : "";
+  const uniDepartmentName = isUniFlow
+    ? (uniManualDone ? customDepartmentName.trim() : departmentsDB.find((d) => d.id === departmentId)?.name ?? "")
+    : "";
+  const trackCodeForFlow = tracksDB.find((tr) => tr.id === eduTrackId)?.code ?? null;
+  const gradeOrderForFlow = gradesDB.find((g) => g.id === eduGradeId)?.order_index ?? null;
+  const suggestedSubjects = React.useMemo(
+    () => (persona === "student" && subjectsAuto.length > 0
+      ? subjectsAuto
+      : getSuggestedSubjects({
+          persona, field, isUniversity: isUniFlow,
+          facultyName: uniFacultyName, departmentName: uniDepartmentName,
+          educationSystem: eduSystem, stageCode: stageCodeForFlow,
+          gradeOrder: gradeOrderForFlow, trackCode: trackCodeForFlow,
+        })),
+    [persona, subjectsAuto, field, isUniFlow, uniFacultyName, uniDepartmentName, eduSystem, stageCodeForFlow, gradeOrderForFlow, trackCodeForFlow]
+  );
+  const suggestedTracks = persona === "student" ? [] : getTracks(field, persona);
+  const allStudentChips = React.useMemo(
+    () => Array.from(new Set([...suggestedSubjects, ...customSubjects])),
+    [suggestedSubjects, customSubjects]
+  );
+  const studentHasSubjects = persona === "student"
+    && (selectedSubjects.length > 0 || subject.trim().length > 0);
+
+  const autoFilledKey = React.useRef("");
+  useEffect(() => {
+    if (persona !== "student" || subjectsAuto.length > 0 || suggestedSubjects.length === 0) return;
+    if (selectedSubjects.length > 0) return;
+    const key = suggestedSubjects.join("|");
+    if (autoFilledKey.current === key) return;
+    autoFilledKey.current = key;
+    setSelectedSubjects(suggestedSubjects);
+    setSubject((prev) => prev || suggestedSubjects[0] || "");
+  }, [persona, subjectsAuto, suggestedSubjects, selectedSubjects]);
+
   function choosePersona(nextPersona: Persona) {
     setPersona(nextPersona);
     // المستوى خاص بالطالب؛ إبقاؤه بعد اختيار شخصية تانية يخلّي بيانات
     // الحساب تقول حاجتين متناقضتين.
-    if (nextPersona !== "student") { setStudentLevel(null); setEduStageId(null); setEduGradeId(null); setEduTrackId(null); resetUniversity(); setSubjectsAuto([]); }
+    if (nextPersona !== "student") { setStudentLevel(null); setEduStageId(null); setEduGradeId(null); setEduTrackId(null); resetUniversity(); setSubjectsAuto([]); setCustomSubjects([]); setCustomSubjectDraft(""); }
     else { setEduTrackId(null); setSubjectsAuto([]); }
   }
 
@@ -450,6 +492,16 @@ export default function AssessmentPage() {
 
   function toggleSubject(name: string) {
     setSelectedSubjects((prev) => (prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]));
+  }
+
+  function addCustomSubject() {
+    const raw = customSubjectDraft.trim().replace(/[,،]+$/g, "").trim();
+    if (!raw) return;
+    const name = raw.slice(0, 80);
+    setCustomSubjects((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setSelectedSubjects((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setSubject((prev) => prev || name);
+    setCustomSubjectDraft("");
   }
 
   function collectSubjects(): string[] {
@@ -914,9 +966,7 @@ export default function AssessmentPage() {
                         </button>
                       </div>
                       <p className="text-[11px] text-ink-soft mt-1.5">
-                        {locale === "ar"
-                          ? "اقتراحات المواد بتبني على المنهج المصري حاليًا — ولو بتذاكر منهج تاني، اكتب موادك في الخطوة الجاية."
-                          : "Suggestions are based on the Egyptian curriculum — for other systems, type your subjects in the next step."}
+                        {locale === "ar" ? "اقتراحات المواد بتتعدّل حسب منهجك ومرحلتك وكليتك — وتقدر دايمًا تضيف أي مادة بنفسك." : "Suggestions adapt to your system, stage and faculty — and you can always add any subject yourself."}
                       </p>
                     </div>
                   )}
@@ -949,7 +999,7 @@ export default function AssessmentPage() {
                         type="button"
                         onClick={() => { resetUniversity(); setUniManual((v) => !v); }}
                         aria-pressed={uniManual}
-                        className="mt-1 text-xs underline underline-offset-4 text-ink-soft hover:text-ink transition"
+                        className="mt-1 w-full text-xs font-bold px-3 py-2.5 rounded-[var(--r-sm)] border border-dashed border-rule-strong text-ink-soft hover:text-ink hover:border-ink transition"
                       >
                         {uniManual
                           ? (locale === "ar" ? "← رجوع لقائمة الجامعات" : "← Back to the list")
@@ -1142,7 +1192,7 @@ export default function AssessmentPage() {
                 </p>
               </div>
 
-              {!(persona === "student" && subjectsAuto.length > 0) && (
+              {persona !== "student" && (
               <div>
                 <label htmlFor="subject-input" className="field-label">
                   إيه الموضوع أو التراك اللي عايز تبدأ فيه؟
@@ -1159,7 +1209,7 @@ export default function AssessmentPage() {
               )}
 
               {/* 🌍 المجال — يظهر لغير الطالب فقط؛ الطالب المنهجي واخد تخصصه من المرحلة/الشعبة */}
-              {!(persona === "student" && subjectsAuto.length > 0) && (
+              {persona !== "student" && (
               <div>
                 <p className="field-label">مجالك</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -1181,8 +1231,9 @@ export default function AssessmentPage() {
               </div>
               )}
 
+              {persona !== "student" && (
               <div>
-                <p className="field-label">{persona === "student" && subjectsAuto.length > 0 ? (locale === "ar" ? "موادك المقترحة (من منهجك)" : "Your subjects (from curriculum)") : "اقتراحات مناسبة ليك"}</p>
+                <p className="field-label">اقتراحات مناسبة ليك</p>
                 <div className="chip-row" role="list">
                   {suggestedTracks.map((track) => (
                     <button
@@ -1196,15 +1247,15 @@ export default function AssessmentPage() {
                     </button>
                   ))}
                 </div>
-                {persona === "student" && subjectsAuto.length > 0 && <p className="text-[11px] text-ink-soft mt-1.5">من قاعدة البيانات — تُعدَّل عبر SQL بدون كود.</p>}
               </div>
+              )}
 
-              {/* نظام الأسيسمنت السريع — كل موادك بتتحفظ في البروفايل مرة واحدة */}
-              {persona === "student" && subjectsAuto.length > 0 && (
+              {/* اقتراحات المواد بتتعدّل حسب مرحلتك وتخصصك ومنهجك — وتقدر تضيف أي مادة بنفسك */}
+              {persona === "student" && (
                 <div>
                   <p className="field-label">{locale === "ar" ? "كل موادك — بتتحفظ في بروفايلك مرة واحدة" : "All your subjects — saved to your profile at once"}</p>
                   <div className="chip-row" role="list">
-                    {subjectsAuto.map((name) => (
+                    {allStudentChips.map((name) => (
                       <button
                         key={name}
                         type="button"
@@ -1215,8 +1266,32 @@ export default function AssessmentPage() {
                         <span aria-hidden="true">{selectedSubjects.includes(name) ? "✓ " : "+ "}</span>{name}
                       </button>
                     ))}
+                    {allStudentChips.length === 0 && (
+                      <span className="text-xs text-ink-soft">{locale === "ar" ? "اضف موادك تحت 👇" : "Add your subjects below 👇"}</span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-ink-soft mt-1.5">{locale === "ar" ? "تقدر تعدّل التفضيلات دي في أي وقت بعد كده." : "You can edit these preferences anytime later."}</p>
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      id="custom-subject-input"
+                      value={customSubjectDraft}
+                      onChange={(e) => setCustomSubjectDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomSubject(); } }}
+                      placeholder={locale === "ar" ? "مادة تانية مش موجودة؟ اكتبها وأضفها…" : "Another subject? Type it and add it…"}
+                      className="field text-sm flex-1 min-w-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomSubject}
+                      className="btn btn-quiet text-sm px-4 whitespace-nowrap"
+                    >
+                      {locale === "ar" ? "＋ أضف المادة" : "＋ Add subject"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-ink-soft mt-1.5">
+                    {locale === "ar"
+                      ? "الاقتراحات دي بتتعدّل حسب مرحلتك وتخصصك (كلية/قسم) وشعبتك ومنهجك — لفّل أي مادة مش عايزها، وتقدر تعدّل التفضيلات دي في أي وقت."
+                      : "Suggestions adapt to your stage, faculty/department, track and system — toggle off anything you don't want, and edit these preferences anytime."}
+                  </p>
                 </div>
               )}
 
@@ -1249,8 +1324,8 @@ export default function AssessmentPage() {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
-                  onClick={() => subject.trim() && setStep("curriculum")}
-                  disabled={!subject.trim()}
+                  onClick={() => { if (persona === "student" ? studentHasSubjects : subject.trim()) setStep("curriculum"); }}
+                  disabled={persona === "student" ? !studentHasSubjects : !subject.trim()}
                   className="btn btn-marker btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   كمّل لتحديد المنهج
