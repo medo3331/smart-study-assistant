@@ -1,51 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/app/dashboard/components/PageShell";
 import { useAuthUser } from "@/app/dashboard/components/use-page-data";
+import MemoryGame from "@/app/dashboard/components/games/MemoryGame";
+import BreakTimer from "./components/BreakTimer";
+import ReactionTest from "./components/ReactionTest";
+import QuizRush from "./components/QuizRush";
+import DailyRiddle from "./components/DailyRiddle";
+import PenaltyShootout from "./components/PenaltyShootout";
+import EscapeRoomGame from "./components/EscapeRoomGame";
 import {
-  ACHIEVEMENTS, ARCADE_GAMES, ARCADE_GAME_NAMES, levelFor, xpForLevel,
+  ACHIEVEMENTS, ARCADE_GAME_NAMES, levelFor, xpForLevel,
   type GameProfileRow,
 } from "@/lib/games/arcade";
 
 /**
- * Magicly Arcade 🕹️ — Gaming Hub.
+ * Magicly Arcade 🕹️ — مكان واحد لكل الألعاب.
  *
- * المرحلة ١ (Arcade Foundation — db/124): بروفايل لاعب موحد (XP/مستوى/نتائج)
- * + ترتيب الشطرنج + إنجازات السيرفر + مكافآت محدودة عشان الألعاب تفضل
- * مكافأة للمذاكرة مش بديل عنها.
- *
- * الألعاب الحقيقية كلها بتكافئ من السيرفر (`arcade_submit_score` أو
- * `claim_break_game`) — الكروت "قريب" بتوسّط خطة Gaming Universe.
+ * هنا كله: ألعاب الاستراحة (مؤقت/ذاكرة/سرعة/كويز/فزورة/جول ولا لا؟)
+ * + غرفة الهروب + الشطرنج + بروفايل اللاعب والترتيب والإنجازات.
+ * المكافآت كلها من السيرفر (`claim_break_game` / `arcade_submit_score`) —
+ * محدودة عشان تفضل مكافأة للمذاكرة مش بديل عنها.
  */
 
-type ArcadeCard = {
-  href: string;
-  emoji: string;
-  title: string;
-  desc: string;
-  live: boolean;
-  featured?: boolean;
-};
-
-const GAMES: ArcadeCard[] = [
-  { href: "/games/chess", emoji: "♟️", title: "Magicly Chess", desc: "شطرنج ضد الكمبيوتر بـ ٣ مستويات — XP وترتيب", live: true, featured: true },
-  { href: "/break#penalty", emoji: "⚽", title: "جول ولا لا؟", desc: "ركلات ترجيح — هاتريك ٣ جول = مكافأة", live: true },
-  { href: "/break", emoji: "🧠", title: "Memory Match", desc: "مطابقة مصطلحات مولّدة من مادتك بالـ AI", live: true },
-  { href: "/break", emoji: "⚡", title: "Reaction Test", desc: "سرعة بديهة — كل ما تسرع تكسب أسرع", live: true },
-  { href: "/break", emoji: "🏃", title: "Quiz Rush", desc: "سؤال سريع من خطة مذاكرتك اليومية", live: true },
-  { href: "/break", emoji: "🧩", title: "فزورة اليوم", desc: "لغز يومي بتلميح ومحاولات محدودة", live: true },
-  { href: "/escape-room", emoji: "🚪", title: "غرفة الهروب", desc: "٣ ألغاز متسلسلة في مراجعة كاملة", live: true },
-  { href: "/shop", emoji: "📦", title: "الصناديق والعجلة", desc: "صناديق مفاجآت وعجلة الحظ من المتجر", live: true },
-];
-
-const UPCOMING: ArcadeCard[] = [
-  { href: "/games", emoji: "🏃‍♂️", title: "Magicly Run", desc: "اللعبة الرئيسية — ٣ حارات وشخصيات Magicly", live: false },
-  { href: "/games", emoji: "⚽", title: "Magicly Football", desc: "مباريات Mini Football سريعة", live: false },
-  { href: "/games", emoji: "🧱", title: "Magic Blocks", desc: "ترتيب وتفجير بلوكات", live: false },
-  { href: "/games", emoji: "🎫", title: "Magic Battle Pass", desc: "مسار مكافآت موسمي بمستويات وجوائز", live: false },
-  { href: "/games", emoji: "🏆", title: "بطولات موسمية", desc: "مسابقات بين الكليات وجوائز Coins", live: false },
+const UPCOMING = [
+  { emoji: "🏃‍♂️", title: "Magicly Run", desc: "اللعبة الرئيسية — ٣ حارات وشخصيات Magicly" },
+  { emoji: "⚽", title: "Magicly Football", desc: "مباريات Mini Football سريعة" },
+  { emoji: "🧱", title: "Magic Blocks", desc: "ترتيب وتفجير بلوكات" },
+  { emoji: "🎫", title: "Magic Battle Pass", desc: "مسار مكافآت موسمي بمستويات وجوائز" },
+  { emoji: "🏆", title: "بطولات موسمية", desc: "مسابقات بين الكليات وجوائز Coins" },
 ];
 
 const DAILY_MISSIONS = [
@@ -56,30 +41,13 @@ const DAILY_MISSIONS = [
 
 type LeaderRow = { rank: number; display_name: string; handle: string | null; code: string; xp: number; level: number; best_score: number; wins: number };
 
-function Card({ game }: { game: ArcadeCard }) {
-  const inner = (
-    <div className={`sheet-card flex h-full flex-col gap-2 p-5 transition ${game.live ? "hover:border-marker/60" : "opacity-60"}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-3xl">{game.emoji}</span>
-        {game.live ? <span className="tag">متاحة الآن</span> : <span className="tag opacity-70">قريب ✨</span>}
-      </div>
-      <h2 className="h4 font-extrabold">{game.title}</h2>
-      <p className="text-sm text-ink-soft">{game.desc}</p>
-    </div>
-  );
-  return game.live ? (
-    <Link href={game.href} className="block h-full">{inner}</Link>
-  ) : (
-    <div className="h-full cursor-default">{inner}</div>
-  );
-}
-
 export default function GamesPage() {
   const { supabase, session } = useAuthUser();
   const [profiles, setProfiles] = useState<GameProfileRow[]>([]);
   const [claimed, setClaimed] = useState<string[]>([]);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [ready, setReady] = useState(false);
+  const [arcadeNote, setArcadeNote] = useState("");
 
   useEffect(() => {
     if (!supabase || session.status !== "ready") return;
@@ -95,6 +63,17 @@ export default function GamesPage() {
     });
   }, [supabase, session]);
 
+  // مكافآت ألعاب البريك — نفس عقد claim_break_game (سقف ٢/يوم + شرط المذاكرة)
+  const claimBreakGame = useCallback(
+    async (game: "reaction" | "penalty") => {
+      if (!supabase) return;
+      const { data, error } = await supabase.rpc("claim_break_game", { p_game: game });
+      const row = Array.isArray(data) ? data[0] : data;
+      setArcadeNote(error ? error.message : row?.message ?? "تم");
+    },
+    [supabase],
+  );
+
   const totalXp = profiles.reduce((s, p) => s + p.xp, 0);
   const level = levelFor(totalXp);
   const nextLevelXp = xpForLevel(level + 1);
@@ -107,9 +86,13 @@ export default function GamesPage() {
     <PageShell
       eyebrow="Magicly Arcade"
       title="🕹️ عالم ألعاب ماجِك"
-      lede="Play. Compete. Unlock. Repeat. — العب، اتنافس، افتح شخصياتك، وكل ده مكافأة بعد المذاكرة."
+      lede="Play. Compete. Unlock. Repeat. — كل الألعاب في مكان واحد: استراحة، هروب، شطرنج، وترفيه — وكل المكافآت من السيرفر بعد مذاكرة حقيقية."
       action={<Link href="/shop" className="btn btn-quiet text-sm">🛍️ عناصر الألعاب</Link>}
     >
+      {arcadeNote && (
+        <p className="rounded-xl border border-rule bg-paper-2/60 px-4 py-2 text-sm text-ink">{arcadeNote}</p>
+      )}
+
       {/* بروفايل اللاعب */}
       {session.status === "ready" && ready && (
         <section className="sheet-card space-y-3 p-5">
@@ -139,7 +122,18 @@ export default function GamesPage() {
         </section>
       )}
 
-      {/* اللعبة المميزة */}
+      {/* المهام اليومية */}
+      <section className="sheet-card space-y-2 p-5">
+        <h2 className="h3">🎯 مهام اليوم</h2>
+        <div className="flex flex-wrap gap-2">
+          {DAILY_MISSIONS.map((m) => (
+            <span key={m.text} className="tag text-sm">{m.icon} {m.text}</span>
+          ))}
+        </div>
+        <p className="text-xs text-ink-soft">أول فوز في اليوم = 5 🪙 · كل إنجاز مرة واحدة · المكافآت من السيرفر مباشرة</p>
+      </section>
+
+      {/* اللعبة المميزة — الشطرنج */}
       <Link href="/games/chess" className="block">
         <section className="sheet-card flex flex-col gap-3 border-marker/50 bg-gradient-to-l from-marker/10 to-transparent p-6 transition hover:border-marker">
           <span className="tag w-fit">اللعبة المميزة</span>
@@ -147,32 +141,37 @@ export default function GamesPage() {
             <span className="text-5xl">♟️</span>
             <div>
               <h2 className="h2 font-extrabold">Magicly Chess</h2>
-              <p className="text-sm text-ink-soft">Run • Collect • Unlock — استراتيجية وترتيب ضد الكمبيوتر</p>
+              <p className="text-sm text-ink-soft">شطرنج ضد الكمبيوتر بـ ٣ مستويات — XP وترتيب</p>
             </div>
           </div>
         </section>
       </Link>
 
-      {/* المكتبة */}
+      {/* 🚪 غرفة الهروب */}
       <section className="space-y-3">
-        <h2 className="text-sm font-bold text-ink-soft">مكتبة الألعاب</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {GAMES.map((g) => (
-            <Card key={g.title} game={g} />
-          ))}
-        </div>
+        <h2 className="text-sm font-bold text-ink-soft">🚪 غرفة الهروب</h2>
+        <EscapeRoomGame />
       </section>
 
-      {/* مهام يومية */}
-      <section className="sheet-card space-y-3 p-5">
-        <h2 className="h3">🎯 مهام اليوم</h2>
-        <div className="flex flex-wrap gap-2">
-          {DAILY_MISSIONS.map((m) => (
-            <span key={m.text} className="tag text-sm">{m.icon} {m.text}</span>
-          ))}
+      {/* 🎮 ألعاب الاستراحة — كلها هنا */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-bold text-ink-soft">🎮 ألعاب الاستراحة</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <PenaltyShootout onWin={claimBreakGame} />
+          <ReactionTest onWin={claimBreakGame} />
+          <QuizRush />
+          <BreakTimer />
+        </div>
+        <div className="grid gap-4">
+          <section className="sheet-card space-y-3 p-5">
+            <h2 className="h3">🧠 Memory Match الذكية</h2>
+            <p className="text-sm text-ink-soft">لعبة مطابقة المصطلحات المُولّدة بالذكاء الاصطناعي خصيصاً لمادتك.</p>
+            <MemoryGame lessonText="أنظمة التشغيل وإدارة العمليات والذاكرة وحل المشكلات البرمجية" />
+          </section>
+          <DailyRiddle />
         </div>
         <p className="text-xs text-ink-soft">
-          أول فوز في اليوم = 5 🪙 · كل إنجاز مرة واحدة · المكافآت من السيرفر مباشرة
+          مكافآت الاستراحة: ٥ Coins للفوز · سقف ٢ مكافآت يوميًا · بتشتغل بس لو ذاكرت النهارده 💪
         </p>
       </section>
 
@@ -216,12 +215,19 @@ export default function GamesPage() {
         </section>
       )}
 
-      {/* قادم */}
+      {/* قادم — Gaming Universe */}
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-ink-soft">على الطريق — Gaming Universe</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {UPCOMING.map((g) => (
-            <Card key={g.title} game={g} />
+            <div key={g.title} className="sheet-card flex h-full cursor-default flex-col gap-2 p-5 opacity-60">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl">{g.emoji}</span>
+                <span className="tag opacity-70">قريب ✨</span>
+              </div>
+              <h3 className="h4 font-extrabold">{g.title}</h3>
+              <p className="text-sm text-ink-soft">{g.desc}</p>
+            </div>
           ))}
         </div>
       </section>

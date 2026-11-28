@@ -13,6 +13,8 @@ const root = join(__dirname, "..");
 const sql = readFileSync(join(root, "db", "122-showcase-arcade.sql"), "utf8").replace(/\r\n/g, "\n");
 const uPage = readFileSync(join(root, "app", "u", "[code]", "page.tsx"), "utf8").replace(/\r\n/g, "\n");
 const breakPage = readFileSync(join(root, "app", "break", "page.tsx"), "utf8").replace(/\r\n/g, "\n");
+const escapePage = readFileSync(join(root, "app", "escape-room", "page.tsx"), "utf8").replace(/\r\n/g, "\n");
+const penaltyGame = readFileSync(join(root, "app", "games", "components", "PenaltyShootout.tsx"), "utf8").replace(/\r\n/g, "\n");
 const gamesPage = readFileSync(join(root, "app", "games", "page.tsx"), "utf8").replace(/\r\n/g, "\n");
 const navConfig = readFileSync(join(root, "app", "dashboard", "components", "nav-config.ts"), "utf8").replace(/\r\n/g, "\n");
 
@@ -70,14 +72,31 @@ describe("واجهة Showcase على البروفايل العام", () => {
 describe("Arcade وخط الألعاب", () => {
   it("صفحة /games موجودة وفيها الألعاب الحية والقادمة", () => {
     expect(gamesPage).toContain("Magicly Arcade");
-    expect(gamesPage).toContain('href: "/escape-room"');
+    expect(gamesPage).toContain("Magicly Chess");
     expect(gamesPage).toContain("Magic Battle Pass");
   });
 
-  it("لعبة جول ولا لا؟ في Break Zone بتلعب ٣ أهداف وبتكافئ penalty", () => {
-    expect(breakPage).toContain("جول ولا لا؟");
-    expect(breakPage).toContain("claim('penalty')");
-    expect(breakPage).toMatch(/streak\s*>=\s*3/);
+  it("لعبة جول ولا لا؟ واقعية: كورة بتطير + شبكة + حارس بينط — وبتكافئ penalty", () => {
+    expect(penaltyGame).toContain("جول ولا لا؟");
+    expect(penaltyGame).toContain("claim_break_game");
+    expect(penaltyGame).toMatch(/next >= 3/);
+    // الواقعية: الكورة بتتحرك (transition + مواضع) والحارس بينط (rotate)
+    expect(penaltyGame).toContain("transition-all");
+    expect(penaltyGame).toContain("repeating-linear-gradient"); // الشبكة
+    expect(penaltyGame).toMatch(/rotate/);
+  });
+
+  it("كل الألعاب في مكان واحد: /break و/escape-room بيعملوا redirect لـ /games", () => {
+    expect(breakPage).toContain('redirect("/games")');
+    expect(escapePage).toContain('redirect("/games")');
+    // الـ Hub نفسه فيه كل الألعاب جواه
+    expect(gamesPage).toContain("EscapeRoomGame");
+    expect(gamesPage).toContain("PenaltyShootout");
+    expect(gamesPage).toContain("ReactionTest");
+    expect(gamesPage).toContain("QuizRush");
+    expect(gamesPage).toContain("DailyRiddle");
+    expect(gamesPage).toContain("BreakTimer");
+    expect(gamesPage).toContain("MemoryGame");
   });
 
   it("nav فيه عنصر الألعاب", () => {

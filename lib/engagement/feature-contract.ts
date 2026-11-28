@@ -138,7 +138,7 @@ export const FEATURE_SPECS: Record<FeatureKey, FeatureSpec> = {
   },
   [FEATURE_KEYS.GAMES]: {
     label: "الألعاب",
-    route: "/break",
+    route: "/games",
     availability: "available",
     discoverable: false,
     discoveryCopy: null,

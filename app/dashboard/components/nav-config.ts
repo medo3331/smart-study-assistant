@@ -212,8 +212,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "tracks", icon: "tracks", label: "التريكز", latin: "Tracks", href: "/dashboard/tracks" },
       { id: "quran", icon: "quran", label: "القرآن الكريم", latin: "Quran", scrollTo: "quran" },
       { id: "worship", icon: "worship", label: "عباداتي", latin: "Worship Center", href: "/worship" },
-      { id: "break", icon: "break", label: "استراحة", latin: "Break Zone", href: "/break" },
-      { id: "escape", icon: "escape", label: "غرفة الهروب", latin: "Escape Room", href: "/escape-room" },
+      // Break Zone وغرفة الهروب اندمجوا في Arcade (/games) — بنده الألعاب في المجتمع
     ],
   },
   {
