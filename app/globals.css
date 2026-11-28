@@ -7042,6 +7042,33 @@ html {
   container-type: inline-size;
 }
 
+/* على الحاويات الصغيرة (موبايل): نكبّت التوهج والحلقات الزايدة
+   عشان العناصر ما تتداخلش بصريًا ويقعد لكل عنصر حيّز واضح. */
+@container (max-width: 480px) {
+  .mw-node-card {
+    border-width: 2px;
+    box-shadow:
+      0 2px 10px var(--shade),
+      0 0 10px color-mix(in srgb, var(--node-c, var(--accent)) 14%, transparent);
+  }
+  .mw-node:hover .mw-node-card {
+    box-shadow:
+      0 4px 14px var(--shade-lift),
+      0 0 14px color-mix(in srgb, var(--node-c, var(--accent)) 26%, transparent);
+  }
+  .mw-center {
+    box-shadow: 0 0 36px color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+  .mw-center::before {
+    inset: -10%;
+    opacity: 0.35;
+  }
+  .mw-node-current::after {
+    inset: -4px;
+    border-width: 2px;
+  }
+}
+
 .mw-ring {
   position: absolute;
   border-radius: 9999px;
@@ -7323,7 +7350,7 @@ html {
   transform:
     translate(-50%, -50%)
     rotate(var(--spark-a, 0deg))
-    translateX(clamp(160px, 31vw, 235px))
+    translateX(min(29cqw, 235px))
     rotate(calc(-1 * var(--spark-a, 0deg)))
     scale(0.5);
   animation: mw-sparkle-twinkle 5.1s ease-in-out var(--spark-d, 0s) infinite;
@@ -7331,11 +7358,11 @@ html {
 @keyframes mw-sparkle-twinkle {
   0%, 100% {
     opacity: 0;
-    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(clamp(160px, 31vw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(0.5);
+    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(min(29cqw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(0.5);
   }
   50% {
     opacity: 0.9;
-    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(clamp(160px, 31vw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(1);
+    transform: translate(-50%, -50%) rotate(var(--spark-a, 0deg)) translateX(min(29cqw, 235px)) rotate(calc(-1 * var(--spark-a, 0deg))) scale(1);
   }
 }
 
@@ -7367,7 +7394,7 @@ html {
 @keyframes mw-burst {
   0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(34px) scale(0.6); }
   15% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(clamp(170px, 32vw, 250px)) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(min(31cqw, 250px)) scale(1); }
 }
 
 /* احترام تقليل الحركة: لا دوران، لا طَفْو، لا رسم تدريجي — كل حاجة تثبت */

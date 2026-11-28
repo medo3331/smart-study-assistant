@@ -484,12 +484,12 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
           >
             <div
               className="mw-ring mw-ring-dash"
-              style={{ width: "min(65cqw, 470px)", height: "min(65cqw, 470px)" }}
+              style={{ width: "min(60cqw, 470px)", height: "min(60cqw, 470px)" }}
               aria-hidden
             />
             <div
               className="mw-ring mw-ring-dot"
-              style={{ width: "min(54cqw, 390px)", height: "min(54cqw, 390px)" }}
+              style={{ width: "min(50cqw, 390px)", height: "min(50cqw, 390px)" }}
               aria-hidden
             />
 
@@ -540,7 +540,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             <Link
               href="/"
               className="mw-center"
-              style={{ width: "min(30cqw, 160px)", height: "min(30cqw, 160px)" }}
+              style={{ width: "min(26cqw, 160px)", height: "min(26cqw, 160px)" }}
               aria-label="Magic — العودة للرئيسية"
             >
               <MagiclyGlyph className="h-10 w-12 text-[#FFB13B] drop-shadow-[0_0_12px_rgba(255,177,59,0.75)]" />
@@ -556,7 +556,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
             >
               {branches.map((b, i) => {
                 const a = ANGLES_DEG[i];
-                const r = 36;
+                const r = 40;
                 const rad = ((a - 90) * Math.PI) / 180;
                 const cx = 50 + Math.sin(rad) * r;
                 const cy = 50 + Math.cos(rad) * r;
@@ -577,7 +577,7 @@ export default function MagicWheelDashboard(props: MagicWheelProps = {}) {
                       onOpenSettings={openSettings}
                       layout="circle"
                       delayMs={reduced ? 0 : i * 130}
-                      size="clamp(66px, 19cqw, 118px)"
+                      size="clamp(54px, 17cqw, 118px)"
                       highlight={b.id === activeBranch}
                     />
                   </div>
