@@ -206,6 +206,8 @@ export default function DashboardPage() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** مستخدم onboarded من غير خطة مذاكرة — بنعرضه بطاقة بدل ما نطّرده على /assessment. */
+  const [needsPlan, setNeedsPlan] = useState(false);
   const hasLoadedRef = useRef(false);
   /** منع double-click على «افتح اللي بعده بدري» أثناء نداء السيرفر. */
   const unlockingDayRef = useRef(false);
@@ -554,7 +556,7 @@ export default function DashboardPage() {
             setDays(savedDays);
           }
         } else {
-          router.push("/assessment");
+          setNeedsPlan(true);
           return;
         }
 
@@ -1071,6 +1073,24 @@ export default function DashboardPage() {
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-2 border-rule border-t-redpen rounded-full animate-spin mx-auto" />
           <p className="tag justify-center">بيحمّل بياناتك</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ حالة "البروفايل جاهز من غير خطة" — اختيارية، مش تحويل إجباري
+  if (needsPlan) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-paper px-4" dir="rtl">
+        <div className="sheet-card sheet-card-live p-6 max-w-sm w-full space-y-3 text-center">
+          <p className="eyebrow eyebrow-flush">خطتك</p>
+          <h1 className="h3">مفيش خطة مذاكرة لسه</h1>
+          <p className="text-xs text-ink-soft leading-relaxed">
+            بروفايلك محفوظ وجاهز — ابنِ خطتك في أي وقت يناسبك.
+          </p>
+          <Link href="/assessment" className="btn btn-marker btn-block text-sm">
+            ابنِ خطتك دلوقتي
+          </Link>
         </div>
       </div>
     );
