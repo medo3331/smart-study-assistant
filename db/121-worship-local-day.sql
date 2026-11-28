@@ -355,7 +355,21 @@ begin
     when 'worship_quiz' then
       -- الأسئلة الدينية (db/120/121): الدليل جلسة أسئلة مكتملة مملوكة للمستخدم.
       if v_ref is null
-         or v_ref !~ '^quiz:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
+         or v_ref !~ '^quiz:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+        raise exception 'award_coins: worship_quiz محتاج مرجع quiz:معرّف-الجلسة';
+      end if;
+      if not exists (
+        select 1 from public.worship_quiz_sessions s
+         where s.id = substr(v_ref, 6)::uuid
+           and s.user_id = v_uid
+           and s.completed_at is not null
+      ) then
+        raise exception 'award_coins: مفيش جلسة أسئلة مكتملة بالمرجع ده على حسابك';
+      end if;
+
+    else
+      raise exception 'award_coins: المصدر % شغّال من غير تحقق حدث', p_source;
+  end case;
 
   insert into public.coin_wallets (user_id) values (v_uid)
     on conflict (user_id) do nothing;
@@ -405,62 +419,6 @@ begin
            v_capped;
 end;
 $$;
- then
-        raise exception 'award_coins: worship_quiz محتاج مرجع quiz:معرّف-الجلسة';
-      end if;
-      if not exists (
-        select 1 from public.worship_quiz_sessions s
-         where s.id = substr(v_ref, 6)::uuid
-           and s.user_id = v_uid
-           and s.completed_at is not null
-      ) then
-        raise exception 'award_coins: مفيش جلسة أسئلة مكتملة بالمرجع ده على حسابك';
-      end if;
 
-    else
-      raise exception 'award_coins: المصدر % شغّال من غير تحقق حدث', p_source;
-  end case;
-
-  insert into public.coin_wallets (user_id) values (v_uid)
-    on conflict (user_id) do nothing;
-
-  -- قفل صف المحفظة: من غيره طلبان متزامنان يقرآن نفس عدّاد السقف.
-  perform 1 from public.coin_wallets where user_id = v_uid for update;
-
-  if v_cap is not null then
-    /* بداية اليوم بالقاهرة في الخطوتين — الصيغة مقصودة بالحرف
-       (شرح الفخ كامل في db/43-retention-p0-streak.sql). */
-    select count(*) into v_today_cnt
-      from public.coin_ledger
-     where user_id = v_uid
-       and source  = p_source
-       and source_type = 'earn'
-       and created_at >= (public.cairo_day()::timestamp
-                          at time zone 'Africa/Cairo');
-
-    if v_today_cnt >= v_cap then
-      v_capped := true;
-    end if;
-  end if;
-
-  if not v_capped then
-    -- on conflict do nothing: الفهرس الفريد (user_id, source, ref_id)
-    -- بيرجّع awarded = 0 بدل exception عند التكرار.
-    insert into public.coin_ledger (user_id, source, amount, source_type, ref_id, metadata, source_class)
-    values (v_uid, p_source, v_amount, 'earn', v_ref, coalesce(p_metadata, '{}'::jsonb), v_class)
-    on conflict do nothing;
-
-    if found then
-      v_awarded := v_amount;
-    end if;
-  end if;
-
-  return query
-    select v_awarded,
-           coalesce((select sum(l.amount)::int from public.coin_ledger l where l.user_id = v_uid), 0),
-           v_capped;
-end;
-$$;
-
-revoke all on function public.award_coins(text, text, jsonb) from public;
+revoke all on function public.award_coins(text, text, jsonb) from public, anon;
 grant execute on function public.award_coins(text, text, jsonb) to authenticated;
