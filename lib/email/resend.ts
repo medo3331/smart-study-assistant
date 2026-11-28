@@ -29,8 +29,11 @@ export async function sendResendEmail(input: {
     process.env.RESEND_FROM?.trim();
   const chosenFrom = (input.from || envFrom || "").trim();
   const sender = chosenFrom ? `ماجيكلي <${chosenFrom}>` : null;
-  if (!apiKey || !sender) {
-    return { ok: false, id: null, error: "RESEND_API_KEY or sender email missing" };
+  if (!apiKey) {
+    return { ok: false, id: null, error: "RESEND_API_KEY missing — add it to the hosting environment variables." };
+  }
+  if (!sender) {
+    return { ok: false, id: null, error: "Sender email missing — set RESEND_FROM_EMAIL (or the campaign sender / app_settings.email_sender_address)." };
   }
 
   try {
