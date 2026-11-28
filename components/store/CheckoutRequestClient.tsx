@@ -13,11 +13,13 @@ export default function CheckoutRequestClient({
   durationDays,
   isAuthenticated,
   paymentsEnabled,
+  waHref,
 }: {
   planKey: string;
   durationDays: number;
   isAuthenticated: boolean;
   paymentsEnabled: boolean;
+  waHref?: string;
 }) {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -64,20 +66,44 @@ export default function CheckoutRequestClient({
 
   if (!paymentsEnabled) {
     return (
-      <div className="rounded-xl bg-amber-400/10 border border-amber-400/30 p-4 text-amber-300 font-bold text-sm">
-        الدفع غير مفعل حالياً. الاشتراك متاح عبر الدعم المباشر فقط.
+      <div className="space-y-3">
+        <div className="rounded-xl bg-amber-400/10 border border-amber-400/30 p-4 text-amber-300 font-bold text-sm">
+          الدفع غير مفعل حالياً. الاشتراك متاح عبر الدعم المباشر فقط.
+        </div>
+        {waHref && (
+          <a
+            href={waHref}
+            target="_blank"
+            rel="noreferrer"
+            className="block w-full text-center rounded-xl font-bold py-3 transition border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+          >
+            تواصل مع الدعم عبر واتساب
+          </a>
+        )}
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <a
-        href="/login"
-        className="inline-block w-full text-center rounded-xl font-bold py-3.5 transition bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:brightness-110"
-      >
-        سجّل الدخول لطلب الاشتراك
-      </a>
+      <div className="space-y-3">
+        <a
+          href="/login"
+          className="inline-block w-full text-center rounded-xl font-bold py-3.5 transition bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:brightness-110"
+        >
+          سجّل الدخول لطلب الاشتراك
+        </a>
+        {waHref && (
+          <a
+            href={waHref}
+            target="_blank"
+            rel="noreferrer"
+            className="block w-full text-center rounded-xl font-bold py-3 transition border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+          >
+            أو تواصل عبر واتساب
+          </a>
+        )}
+      </div>
     );
   }
 
@@ -100,6 +126,14 @@ export default function CheckoutRequestClient({
             </a>
           </div>
         )}
+        {waHref && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+            محتاج مساعدة أسرع؟{" "}
+            <a href={waHref} target="_blank" rel="noreferrer" className="underline font-bold">
+              تواصل مع الدعم عبر واتساب ↗
+            </a>
+          </div>
+        )}
         <p className="text-sm text-[#9AA0C0]">حولت المبلغ؟ سجّل وسيلة الدفع ورقم العملية ليتراجع طلبك.</p>
         <PaymentConfirmForm
           requestId={requestId}
@@ -116,7 +150,7 @@ export default function CheckoutRequestClient({
           {error}
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           type="button"
           onClick={() => createRequest(false)}
@@ -133,10 +167,27 @@ export default function CheckoutRequestClient({
         >
           اطلب عبر رسايل الدعم
         </button>
+        {waHref ? (
+          <a
+            href={waHref}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl font-bold py-3.5 text-center transition border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+          >
+            تواصل عبر واتساب
+          </a>
+        ) : (
+          <a
+            href="/inbox?category=support"
+            className="rounded-xl font-bold py-3.5 text-center transition border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+          >
+            تواصل مع الدعم
+          </a>
+        )}
       </div>
       <p className="text-xs text-[#7A8298] text-center">
         سينشئ طلبًا بحالة «بانتظار الدفع» — بعد التحويل أكّد الدفع هنا، والإدارة تراجع الطلب وتفعّل الاشتراك.
-        عبر رسايل الدعم تفتح لك محادثة مع الإدارة لتأكيد الدفع والمتابعة.
+        ولو تحب، كمل مع الدعم من داخل المنصة أو عبر واتساب.
       </p>
     </div>
   );

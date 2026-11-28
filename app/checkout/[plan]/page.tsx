@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getPlanSettings } from "@/lib/plans/settings";
+import { SITE_LINKS } from "@/lib/site-links";
 import CheckoutRequestClient from "@/components/store/CheckoutRequestClient";
 import PlansUnavailable from "@/components/plans/PlansUnavailable";
 import Link from "next/link";
@@ -33,6 +34,9 @@ export default async function CheckoutPage({ params }: { params: Promise<{ plan:
  if(Array.isArray(plan.file_types)&&plan.file_types.length) features.push(`أنواع الملفات: ${plan.file_types.join(", ")}`);
  features.push(plan.video_audio_exclusive?"فيديو/صوت مسموح":"بدون فيديو/صوت");
  if(plan.trial_days&&plan.trial_days>0) features.push(`تجربة مجانية ${plan.trial_days} يوم`);
+ const waBase=SITE_LINKS.whatsapp;
+ const waMsg=`أهلاً، أريد الاشتراك في باقة ${plan.display_name_ar||plan.name||plan.plan_key} (${price}/شهر).`;
+ const waHref=`${waBase}${waBase.includes("?")?"&":"?"}text=${encodeURIComponent(waMsg)}`;
  return (<main dir="rtl" className="min-h-screen bg-[#0B0F1E] text-[#E7E9F5]"><div className="max-w-3xl mx-auto px-4 py-10">
  <Link href="/plans" className="text-sm text-[#9AA0C0] hover:text-white mb-6 inline-block">← العودة للباقات</Link>
  <h1 className="text-3xl font-extrabold mb-2">صفحة الدفع</h1>
@@ -47,8 +51,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ plan:
  </section>
  <section className="rounded-2xl border border-[#2A3050] bg-[#13182E] p-6 mb-6">
   <h2 className="text-xl font-extrabold mb-3">{settings.paymentsEnabled?"طلب الاشتراك":"التفعيل"}</h2>
-  <p className="text-sm text-[#9AA0C0] mb-4">{settings.paymentsEnabled?"اطلب الاشتراك، حوّل المبلغ بأي وسيلة من اللي فوق، ثم أكّد الدفع برقم العملية — وسيصلك إشعار بعد مراجعة الإدارة.":"تواصل مع الدعم لإتمام الاشتراك."}</p>
-  <CheckoutRequestClient planKey={plan.plan_key} durationDays={30} isAuthenticated={isAuthenticated} paymentsEnabled={settings.paymentsEnabled} />
+  <p className="text-sm text-[#9AA0C0] mb-4">{settings.paymentsEnabled?"اطلب الاشتراك، حوّل المبلغ بأي وسيلة من اللي فوق، ثم أكّد الدفع برقم العملية — وسيصلك إشعار بعد مراجعة الإدارة. وتقدر تتواصل مع الدعم من داخل المنصة أو عبر واتساب.":"تواصل مع الدعم لإتمام الاشتراك."}</p>
+  <CheckoutRequestClient planKey={plan.plan_key} durationDays={30} isAuthenticated={isAuthenticated} paymentsEnabled={settings.paymentsEnabled} waHref={waHref} />
  </section>
  <footer className="text-center text-xs text-[#7A8298] pt-6 border-t border-[#2A3050]">Magiclly — دفع يدوي فقط</footer>
  </div></main>);

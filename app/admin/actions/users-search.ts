@@ -130,12 +130,20 @@ export async function searchUsers(
       if (codeProfile) searchRows = [codeProfile, ...searchRows].slice(0, 50);
     }
     // Enrich emails from auth.users (profiles.email is often NULL).
-    // Resolve only the current page's IDs so large auth directories are not rescanned per query.
+    // مسح دفعي واحد (صفحات 1000) بدل نداء getUserById لكل صف — يسمح بجلب كل المسجلين بسرعة.
     let emailMap: Record<string, string> = {};
     try {
-      for (const id of searchRows.map((row: any) => row.id).filter(Boolean)) {
-        const { data: account, error: accountError } = await privileged.auth.admin.getUserById(id);
-        if (!accountError && account.user?.email) emailMap[id] = account.user.email;
+      const wanted = new Set<string>(searchRows.map((row: any) => row.id).filter(Boolean));
+      for (let page = 1; page <= 100 && wanted.size > 0; page++) {
+        const { data: accountsPage, error: accountsError } = await privileged.auth.admin.listUsers({ page, perPage: 1000 });
+        if (accountsError) break;
+        for (const account of accountsPage?.users ?? []) {
+          if (wanted.has(account.id)) {
+            if (account.email) emailMap[account.id] = account.email;
+            wanted.delete(account.id);
+          }
+        }
+        if ((accountsPage?.users?.length ?? 0) < 1000) break;
       }
     } catch (error) {
       console.error("[admin users-search] auth email lookup failed", error);
@@ -304,6 +312,33 @@ export async function searchUsersPaged(
     { page, pageSize, totalRef }
   );
   return { rows, total: totalRef.value ?? rows.length, page, pageSize };
+}
+
+/**
+ * جلب كل المسجلين (بلا حد 50) — يمرّ صفحة صفحة (500/صفحة) حتى يغطي العدد الكلي.
+ * حد أمان 5000 مستخدم لمنع الطلبات العنيفة.
+ */
+export async function searchUsersAll(
+  query: string,
+  planFilter: string = "all",
+  statusFilter: string = "all",
+  codeFilter: string = "all"
+): Promise<UserSearchResult[]> {
+  try {
+    await requireAdminActor("users.read");
+  } catch (e) {
+    if (e instanceof ActionAuthError) return [];
+    throw e;
+  }
+  const out: UserSearchResult[] = [];
+  const pageSize = 500;
+  const maxUsers = 5000;
+  for (let page = 1; out.length < maxUsers; page++) {
+    const paged = await searchUsersPaged(query, planFilter, statusFilter, codeFilter, null, null, page, pageSize);
+    out.push(...paged.rows);
+    if (paged.rows.length < pageSize) break;
+  }
+  return out;
 }
 
 type UserOperationalData = Pick<UserSearchResult,

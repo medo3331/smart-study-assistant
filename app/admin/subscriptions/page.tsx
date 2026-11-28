@@ -3,8 +3,10 @@ import { CalendarClock, Search } from "lucide-react";
 import { hasPermission } from "@/lib/auth-roles";
 import { requireAdminPermission } from "@/lib/admin/auth-check";
 import { getSubscriptionStatus, extendSubscription, revokeSubscription, resetSubscriptionQuota } from "@/app/admin/actions/subscription-manage";
-import { searchUsers } from "@/app/admin/actions/users-search";
+import { searchUsersAll } from "@/app/admin/actions/users-search";
+import { listPurchaseRequests, type PurchaseRequestAdminView } from "@/lib/admin/purchase-requests";
 import SubscriptionCenter from "@/components/admin/SubscriptionCenter";
+import SubscriptionRequestsTable from "@/app/admin/subscription-requests/SubscriptionRequestsTable";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminStatCard } from "@/components/admin/ui";
 
 /**
@@ -45,8 +47,19 @@ export default async function AdminSubscriptionsPage({
     hasPermission(supabase, user.id, user.email ?? null, "subscriptions.manage"),
     hasPermission(supabase, user.id, user.email ?? null, "users.ban"),
     hasPermission(supabase, user.id, user.email ?? null, "users.unban"),
-    searchUsers("", "all", "all", "all"),
+    searchUsersAll(""),
   ]);
+
+  // طلبات دفع الاشتراكات — تظهر في مركز المستخدمين لمن يملك subscriptions.manage
+  let subscriptionRequests: PurchaseRequestAdminView[] = [];
+  if (canManageSubscriptions) {
+    try {
+      const all = await listPurchaseRequests(200, "plan");
+      subscriptionRequests = all.filter((r) => r.kind === "plan");
+    } catch {
+      // الجداول غير مطبقة بعد — القسم يظهر فاضي بدل كسر الصفحة
+    }
+  }
   const canActivate = isOwner && canManageSubscriptions;
   const lookupRaw = (sp.sub_lookup ?? "").trim();
   const status = lookupRaw ? await getSubscriptionStatus(lookupRaw) : null;
@@ -79,6 +92,16 @@ export default async function AdminSubscriptionsPage({
         canGrantCredits={canGrantCredits}
         canGrantReward={canGrantReward}
       />
+
+      {canManageSubscriptions ? (
+        <AdminCard
+          title="طلبات دفع الاشتراكات"
+          description="بيانات المستخدم اللي عمل الطلب + إثبات الدفع + محادثة الدعم — عدّل الطلب (الباقة/المدة/المبلغ) ثم اقبل أو ارفض. القسم الكامل في /admin/subscription-requests."
+          tone={subscriptionRequests.some((r) => r.status === "payment_submitted") ? "amber" : "purple"}
+        >
+          <SubscriptionRequestsTable requests={subscriptionRequests} />
+        </AdminCard>
+      ) : null}
 
       <AdminCard
         title="بحث عن اشتراك مستخدم"

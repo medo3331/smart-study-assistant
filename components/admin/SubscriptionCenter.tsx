@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { BadgeCheck, BookOpen, CircleAlert, CreditCard, Gift, Search, Sparkles, Users, Wallet } from "lucide-react";
 import { grantCreditsAction } from "@/app/admin/actions/grants-manage";
-import { searchUsers, type UserSearchResult } from "@/app/admin/actions/users-search";
+import { searchUsersAll, type UserSearchResult } from "@/app/admin/actions/users-search";
 import { activateSubscription } from "@/app/admin/actions/subscription-activate";
 import { revokeSubscription } from "@/app/admin/actions/subscription-manage";
 import { banUser, unbanUser } from "@/app/admin/actions/users-ban";
@@ -70,7 +70,7 @@ export default function SubscriptionCenter({ initialUsers, canActivate, canRevok
 
   async function refreshUsers() {
     try {
-      const found = await searchUsers(query, "all", "all", "all");
+      const found = await searchUsersAll(query);
       setUsers(found);
       setSelected((current) => current.filter((id) => found.some((user) => user.id === id)));
       router.refresh();
@@ -87,10 +87,10 @@ export default function SubscriptionCenter({ initialUsers, canActivate, canRevok
     event.preventDefault();
     startTransition(async () => {
       try {
-        const found = await searchUsers(query, "all", "all", "all");
+        const found = await searchUsersAll(query);
         setUsers(found);
         setSelected((current) => current.filter((id) => found.some((user) => user.id === id)));
-        setFeedback(`ظهرت ${found.length} نتيجة كحد أقصى.`);
+        setFeedback(`ظهرت ${found.length} نتيجة (كل المسجلين).`);
         setResults([]);
       } catch (error) {
         setFeedback(error instanceof Error ? error.message : "تعذر البحث عن المستخدمين.");
@@ -130,7 +130,7 @@ export default function SubscriptionCenter({ initialUsers, canActivate, canRevok
       const result = await activateSubscription({ recipientUserId: user.id, planKey: plan, durationDays: days, note: note || "تفعيل من مركز المستخدمين" });
       setFeedback(result.message);
       if (result.ok) {
-        const refreshed = await searchUsers(query, "all", "all", "all");
+        const refreshed = await searchUsersAll(query);
         setUsers(refreshed);
         setSelected((current) => current.filter((id) => refreshed.some((row) => row.id === id)));
         router.refresh();
