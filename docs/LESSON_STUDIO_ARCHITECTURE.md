@@ -589,11 +589,11 @@ P1-9 (Cleanup) في الآخر
 
 ## 8. الأطوار التالية (Next — سطر لكل واحد)
 
-- **P2 — AI Teaching Engine (✅ منفَّذ — M1):** طريقة الشرح الجديدة — **الـ Tutor هو واجهة الشرح** بـ ٣ أوضاع (شرح عام / تلخيصي / تفصيلي) + أزرار سريعة في الـ Tutor وتاب Learn (نفس المحرك — مصدر واحد) + إعادة توليد بإصدارات محفوظة + badge شفافية المصدر على كل شرح. النوتة العائمة (سحب/تصغير/إخفاء/استعادة + localStorage). الفيديوهات: بحث يدوي + اقتراح واعي بالمادة والموضوع + بوابة صلة صارمة + «ليه اتيرشح» + «مش مناسب». المتبقي لـ P2+: checkpoints لكل قسم من `outline` + مستوى فهم محسوب + resume في الداتابيز (`lesson_content.resume` + `outline` migration `db/48`).
-- **P3 — YouTube Intelligence:** حفظ الفيديو المختار + محاذاة topics بتوقيت الفيديو من `transcript` (T2) + navigation «من القسم للفيديو والعكس» (الفيدباك وروابط `&t=` — بدون enablejsapi حسب القرار المقفول §7.1-1).
-- **P4 — Summaries & Notebook:** ملخصات بأشكالها (`summaries` jsonb) + ربط النوتة دائمًا بالدرس (جدول وليس localStorage) + «حوّل لـ Note» كامل.
-- **P5 — Practice & Assessment:** flashcards من الشرح المخزّن + تحويل أي جزء لـ Flashcard/MCQ/Mind Map + تحليل نتايج الاختبار (`lesson_quiz_attempts`).
-- **P6 — Subject Labs:** مسارات مخصصة لكل مرحلة تعليمية (طب/هندسة/…) فوق نفس بنية الـ Studio — extension points جاهزة (`SpecializationTools` slot).
+- **P2 — AI Teaching Engine (✅ منفَّذ بالكامل):** طريقة الشرح الجديدة — **الـ Tutor هو واجهة الشرح** بـ ٣ أوضاع (شرح عام / تلخيصي / تفصيلي) + أزرار سريعة في الـ Tutor وتاب Learn (نفس المحرك — مصدر واحد) + إعادة توليد بإصدارات محفوظة + badge شفافية المصدر على كل شرح. **والأوضاع الثلاثة بتشتغل فوق التفريغ** للدرس المربوط (تلخيصي derivation نصي — عام/تفصيلي توليد محكم بالاقتباس). النوتة العائمة (سحب/تصغير/إخفاء/استعادة). الفيديوهات: بحث يدوي + اقتراح واعي + بوابة صلة صارمة + «ليه اتيرشح» + «مش مناسب». مصادر الدرس (ملفات مساحة العمل المطابقة للمادة في تاب Learn).
+- **P3 — YouTube Intelligence (✅ منفَّذ):** حفظ الفيديو المختار (`action: set_video` → `lesson_content.video` — الجلسات الجاية من غير بحث) + محاذاة الأقسام بتوقيت التفريغ (`alignHeadingsToTranscript` — عتبة 0.5 بعد التطبيع العربي، الفشل = null بصدق) + تنقل قسم↔فيديو (Navigator ⏱ يفتح `watchUrl + &t=` — مركز الفيديو يقفز للقسم في الشرح — بدون enablejsapi).
+- **P4 — Summaries & Notebook (✅ منفَّذ):** ملخصات الأشكال الأربعة (نداء AI واحد مجمّع → `summaries` jsonb) + ربط النوتة بالدرس في الداتابيز (`notes` jsonb بدل localStorage) + «حوّل لـ Flashcard/MCQ» كامل (نص منسق عبر نفس postMessage — بدون لمس NotebookEditor).
+- **P5 — Practice & Assessment (✅ منفَّذ):** flashcards من الشرح المخزّن (`questions` jsonb — عرض/قلب/للنوتة) + تحويل أي جزء (شغّال من P4) + تحليل نتايج الاختبار (`extractWeakQuestions` من `lesson_quiz_attempts` — نقاط تحسين في الـ Navigator). Mind Map فضلت مؤجلة.
+- **P6 — Subject Labs (✅ أول Lab منفَّذ):** extension point الرسمي هو `SpecializationRegistry` (فوق `SpecializationTools` — وصلنا `id: "quantitative"`) + **Lab فعلي واحد: مختبر حل المشكلات خطوة بخطوة** (`ProblemSolvingLab`) للمواد الحسابية/البرمجية — AI يقسّم المسألة لخطوات توجيهية والطالب يحاول خطوة خطوة بتقييم (correct/partial/wrong + فيدباك)، الجلسة محفوظة في `lesson_content.labs` (آخر ٣). Labs تانية (طب/لغات…) scaffolding جاهز بنفس العقود.
 
 ---
 

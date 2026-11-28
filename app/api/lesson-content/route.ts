@@ -26,6 +26,16 @@ import {
 import { parseJsonPayload } from "@/lib/ai/lecture-intensive";
 import { SUMMARY_KINDS, type LessonSummaries } from "@/lib/lesson/summaries";
 import { parseFlashcards, readFlashcards } from "@/lib/lesson/flashcards";
+import {
+  MAX_LAB_ATTEMPT_CHARS,
+  MAX_LAB_PROBLEM_CHARS,
+  parseLabPlan,
+  parseLabVerdict,
+  readLabs,
+  readLatestLab,
+  upsertLabSession,
+  type LabSession,
+} from "@/lib/lesson/lab";
 import { subjectMatches } from "@/lib/academics/subject-match";
 import { extractOutline } from "@/lib/lesson/outline";
 import { alignHeadingsToTranscript } from "@/lib/lesson/video-align";
@@ -496,6 +506,10 @@ type LessonContentBody = {
   kind?: unknown;
   text?: unknown;
   note?: unknown;
+  problem?: unknown;
+  sessionId?: unknown;
+  stepIndex?: unknown;
+  attempt?: unknown;
 };
 
 function badRequest(message: string, code: string) {
@@ -550,6 +564,8 @@ export async function GET(req: Request) {
     const storedSummaries = readStoredSummaries(row?.summaries);
     const storedNote = readStoredNote(row?.notes);
     const storedFlashcards = readFlashcards(row?.questions);
+    // آخر جلسة مختبر حل مشكلات (P6).
+    const storedLab = readLatestLab(row?.labs);
     // الأوضاع الم citied فوق التفريغ (general/detailed) — كائنات جوّه explanation jsonb.
     const citedModes =
       storedContent.rawExplanation
@@ -569,6 +585,7 @@ export async function GET(req: Request) {
       summaries: storedSummaries,
       notes: storedNote,
       flashcards: storedFlashcards,
+      lab: storedLab,
       // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
       explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
       // إصدارات الأوضاع الم citied — بتترجع كنص للمعاينة.
@@ -733,7 +750,7 @@ export async function POST(req: Request) {
 
     const { data: row } = await supabase
       .from("lesson_content")
-      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at, video, resume, notes, summaries, questions")
+      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at, video, resume, notes, summaries, questions, labs")
       .eq("user_id", user.id)
       .eq("day_id", dayId)
       .maybeSingle();
@@ -1024,6 +1041,175 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ ok: true, cached: false, saved, flashcards: cards });
+    }
+
+    /* ── مختبر حل المشكلات (P6 — حل تدريجي بتوجيه AI، بدون محاكيات) ── */
+    if (body.action === "problem_lab") {
+      const labMode = body.mode === "step" ? "step" : "plan";
+
+      const { data: labRow } = await supabase
+        .from("lesson_content")
+        .select("labs")
+        .eq("user_id", user.id)
+        .eq("day_id", dayId)
+        .maybeSingle();
+      const storedLabs = labRow?.labs ?? null;
+
+      /* خطة جديدة: تقسيم المسألة لخطوات (توجيه من غير إجابات نهائية). */
+      if (labMode === "plan") {
+        const limited = await checkRateLimit(`lesson-content-lab:${user.id}`, 15, 60_000, "message");
+        if (limited) return limited;
+
+        const problem = typeof body.problem === "string" ? clampText(body.problem, MAX_LAB_PROBLEM_CHARS).trim() : "";
+        if (!problem) return badRequest("اكتب المسألة الأول.", "NO_PROBLEM");
+
+        let completion;
+        try {
+          completion = await aiRouter.completeChat("chat", {
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              {
+                role: "user",
+                content:
+                  `المسألة دي لطالب بيدرس «${topic}» (مادة ${subjectName}):${eduLineFrom(body.edu)}\n${problem}\n\n` +
+                  `المطلوب: حل توجيهي **خطوة بخطوة** — مش الحل النهائي. ارجع JSON فقط بالشكل ده بلا أي شرح:\n` +
+                  `{ "understanding": "فهم المسألة في سطرين — إيه المعطيات والمطلوب", "steps": [{ "title": "عنوان الخطوة", "guidance": "توجيه يخلي الطالب يعرف يعمل إيه في الخطوة دي — من غير ما تحلها له" }] } ` +
+                  `— من ٣ لـ ٦ خطوات مرتّبة، بالعربي والمصطلحات والمعادلات بالإنجليزية.`,
+              },
+            ],
+            temperature: 0.3,
+            maxTokens: 1800,
+            usage,
+          });
+        } catch (error) {
+          if (!(error instanceof AiProviderError)) throw error;
+          const isRate = error.status === 429;
+          return NextResponse.json(
+            { error: { message: isRate ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.", code: isRate ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" } },
+            { status: isRate ? 429 : 502 }
+          );
+        }
+
+        const plan = parseLabPlan(completion.content ?? "");
+        if (!plan) {
+          return NextResponse.json(
+            { error: { message: "الرد جه بدون خطة حل صالحة. جرّب تاني.", code: "LAB_PLAN_INVALID" } },
+            { status: 502 }
+          );
+        }
+
+        void recordAiOperation(supabase, {
+          userId: user.id,
+          provider: completion.provider,
+          model: completion.model,
+          taskType: "chat",
+          status: "completed",
+          usage: completion.usage,
+          contentLength: (completion.content ?? "").length,
+        });
+
+        const now = new Date().toISOString();
+        const session: LabSession = {
+          id: `lab-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+          problem,
+          understanding: plan.understanding,
+          steps: plan.steps,
+          attempts: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        const labs = upsertLabSession(storedLabs, session);
+        try {
+          await supabase
+            .from("lesson_content")
+            .upsert({ user_id: user.id, day_id: dayId, labs, updated_at: now }, { onConflict: "user_id,day_id" });
+        } catch (saveError) {
+          console.warn("lesson-content: حفظ جلسة المختبر فشل (best-effort):", saveError);
+        }
+        return NextResponse.json({ ok: true, session });
+      }
+
+      /* تقييم محاولة خطوة — الجلسة لازم تكون مخزّنة. */
+      const limited = await checkRateLimit(`lesson-content-lab-step:${user.id}`, 40, 60_000, "message");
+      if (limited) return limited;
+
+      const sessionId = typeof body.sessionId === "string" ? clampText(body.sessionId, 64).trim() : "";
+      const stepIndex = typeof body.stepIndex === "number" ? body.stepIndex : -1;
+      const attempt = typeof body.attempt === "string" ? clampText(body.attempt, MAX_LAB_ATTEMPT_CHARS).trim() : "";
+      if (!sessionId || stepIndex < 0 || !attempt) {
+        return badRequest("بيانات الخطوة ناقصة.", "BAD_STEP");
+      }
+
+      const session = readLabs(storedLabs).find((lab) => lab.id === sessionId);
+      if (!session || !session.steps[stepIndex]) {
+        return badRequest("جلسة المختبر مش موجودة — ابدأ جلسة جديدة.", "SESSION_NOT_FOUND");
+      }
+      const step = session.steps[stepIndex];
+
+      let completion;
+      try {
+        completion = await aiRouter.completeChat("chat", {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+              role: "user",
+              content:
+                `المسألة: ${session.problem}\nفهم المسألة: ${session.understanding}\n\n` +
+                `الخطوة (${stepIndex + 1} من ${session.steps.length}): ${step.title}\nتوجيه الخطوة: ${step.guidance}\n\n` +
+                `محاولة الطالب:\n${attempt}\n\n` +
+                `قيّم المحاولة **توجيهيًا** (مش بحلها له). ارجع JSON فقط بالشكل ده:\n` +
+                `{ "verdict": "correct" | "partial" | "wrong", "feedback": "فيدباك محدد: إيه الصح، وإيه الناقص، وإيه الخطوة الجاية — بالعربي والمصطلحات بالإنجليزية" }`,
+            },
+          ],
+          temperature: 0.2,
+          maxTokens: 900,
+          usage,
+        });
+      } catch (error) {
+        if (!(error instanceof AiProviderError)) throw error;
+        const isRate = error.status === 429;
+        return NextResponse.json(
+          { error: { message: isRate ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.", code: isRate ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" } },
+          { status: isRate ? 429 : 502 }
+        );
+      }
+
+      const verdict = parseLabVerdict(completion.content ?? "");
+      if (!verdict) {
+        return NextResponse.json(
+          { error: { message: "تقييم الخطوة جه بشكل غير صالح. جرّب تاني.", code: "LAB_VERDICT_INVALID" } },
+          { status: 502 }
+        );
+      }
+
+      void recordAiOperation(supabase, {
+        userId: user.id,
+        provider: completion.provider,
+        model: completion.model,
+        taskType: "chat",
+        status: "completed",
+        usage: completion.usage,
+        contentLength: (completion.content ?? "").length,
+      });
+
+      const now = new Date().toISOString();
+      const updatedSession: LabSession = {
+        ...session,
+        attempts: [
+          ...session.attempts.filter((a) => a.stepIndex !== stepIndex),
+          { stepIndex, attempt, verdict: verdict.verdict, feedback: verdict.feedback, at: now },
+        ].sort((a, b) => a.stepIndex - b.stepIndex),
+        updatedAt: now,
+      };
+      const labs = upsertLabSession(storedLabs, updatedSession);
+      try {
+        await supabase
+          .from("lesson_content")
+          .upsert({ user_id: user.id, day_id: dayId, labs, updated_at: now }, { onConflict: "user_id,day_id" });
+      } catch (saveError) {
+        console.warn("lesson-content: تحديث جلسة المختبر فشل (best-effort):", saveError);
+      }
+      return NextResponse.json({ ok: true, session: updatedSession });
     }
 
     /* ── المسار المربوط: شرح + ملخص مبنيّين على التفريغ ── */
