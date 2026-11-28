@@ -7,6 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { getAuthedClient, socialNotify } from "@/lib/community/handlers";
+import { scanCommunityText, logBlockedContent } from "@/lib/community/moderation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,14 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json({ success: false, error: "Invalid body." }, { status: 400 });
+    }
+
+    // 🛡️ C4: فحص المحتوى بالـAI قبل النشر (fail-open)
+    const textToScan = typeof body.body === "string" ? body.body : "";
+    const scan = await scanCommunityText(textToScan);
+    if (scan.violation) {
+      void logBlockedContent(auth.user.id, "post", textToScan, scan.category);
+      return NextResponse.json({ success: false, code: "content_blocked", error: "Rejected." }, { status: 409 });
     }
 
     const { data, error } = await auth.client.rpc("create_community_post", {

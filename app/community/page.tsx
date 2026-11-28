@@ -13,6 +13,7 @@ import { Search, UserPlus, Users, Bell, User as UserIcon, Trophy, Check, X, Mess
 import type { SocialProfileSummary, CommunityPostRow } from "@/lib/community/types";
 import { relationErrorAr, postErrorAr, POST_KIND_AR } from "@/lib/community/types";
 import PostCard from "@/components/community/PostCard";
+import ModerationStatus from "@/components/community/ModerationStatus";
 
 type LeaderRow = {
   rank: number;
@@ -475,6 +476,9 @@ export default function CommunityHubPage() {
           </button>
         ))}
       </nav>
+
+      {/* 🛡️ C4 — لافتة حالة الإشراف (عقوبة نشطة / اعتراض) */}
+      <ModerationStatus />
 
       {/* -------------------------------------------------------- الفيد --- */}
       {tab === "feed" && (

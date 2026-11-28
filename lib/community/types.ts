@@ -105,6 +105,8 @@ export const POST_ERROR_AR: Record<string, string> = {
   invalid_poll: "الاستطلاع لازم يكون من خيارين لأربعة.",
   invalid_option: "اختيار غير موجود في الاستطلاع.",
   already_reposted: "أعدت نشر المنشور ده بالفعل.",
+  restricted: "حسابك مقيّد حاليًا في المجتمع — تقدر تقدّم اعتراض.",
+  content_blocked: "المنشور مخالف لقواعد المجتمع وما اتنشرش.",
 };
 
 export function postErrorAr(code: string | undefined, fallback: string): string {
@@ -122,4 +124,67 @@ export const POST_KIND_AR: Record<PostKind, string> = {
   challenge: "تحدي",
   poll: "استطلاع رأي",
   repost: "إعادة نشر",
+};
+
+// ===========================================================================
+// C4 — الإشراف والحماية: أسباب الإبلاغ + رسائل الأخطاء
+// ===========================================================================
+
+export type ReportTargetType = "post" | "comment" | "user";
+
+export const REPORT_REASONS: { id: string; label: string }[] = [
+  { id: "harassment", label: "تحرّش أو مضايقات" },
+  { id: "hate", label: "خطاب كراهية" },
+  { id: "bullying", label: "تنمّر أو إهانة" },
+  { id: "spam", label: "سبام أو إعلانات مزعجة" },
+  { id: "doxxing", label: "نشر بيانات شخصية" },
+  { id: "impersonation", label: "انتحال شخصية" },
+  { id: "threat", label: "تهديد أو عنف" },
+  { id: "illegal", label: "محتوى غير قانوني" },
+  { id: "other", label: "سبب آخر" },
+];
+
+export const MOD_ERROR_AR: Record<string, string> = {
+  auth_required: "محتاج تسجّل دخولك الأول.",
+  invalid_target_type: "نوع الهدف غير صالح.",
+  invalid_reason: "اختر سبب إبلاغ صحيح.",
+  invalid_details: "التفاصيل أطول من اللازم (حتى 500 حرف).",
+  invalid_target: "الهدف غير صالح.",
+  not_found: "المنشور أو الحساب مش موجود.",
+  cannot_report_self: "مش ممكن تُبلّغ عن نفسك.",
+  rate_limited: "بعتّ إبلاغات كتير — استنى شوية.",
+  already_reported: "أبلّغت عن ده قبل كده وهو لسه تحت المراجعة.",
+  invalid_message: "اكتب سبب الاعتراض (10–1000 حرف).",
+  already_appealed: "قدّمت اعتراض على الإجراء ده بالفعل.",
+  restricted: "حسابك مقيّد حاليًا في المجتمع — تقدر تقدّم اعتراض.",
+  content_blocked: "المنشور مخالف لقواعد المجتمع وما اتنشرش.",
+};
+
+export function modErrorAr(code: string | undefined, fallback: string): string {
+  if (code && MOD_ERROR_AR[code]) return MOD_ERROR_AR[code];
+  return fallback;
+}
+
+/** حالة الإشراف للطالب (من community_my_moderation_status). */
+export type ModerationStatus = {
+  ok: boolean;
+  banned: boolean;
+  ban_reason?: string | null;
+  restricted_until?: string | null;
+  warning_count?: number;
+  active_action?: {
+    id: string;
+    action_type: string;
+    reason: string;
+    expires_at?: string | null;
+    created_at?: string;
+  } | null;
+  my_appeals?: {
+    id: string;
+    action_id: string;
+    status: "pending" | "approved" | "rejected";
+    message: string;
+    review_notes?: string | null;
+    created_at?: string;
+  }[];
 };

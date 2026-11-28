@@ -9,9 +9,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Heart, MessageCircle, Bookmark, Trash2, Send, Loader2, Repeat2, Quote } from "lucide-react";
+import { Heart, MessageCircle, Bookmark, Trash2, Send, Loader2, Repeat2, Quote, Flag } from "lucide-react";
 import type { CommunityCommentRow, CommunityPostRow } from "@/lib/community/types";
-import { postErrorAr, POST_KIND_AR } from "@/lib/community/types";
+import { postErrorAr, modErrorAr, POST_KIND_AR, REPORT_REASONS } from "@/lib/community/types";
 
 const KIND_BADGE: Record<string, string> = {
   text: "bg-paper-3 text-ink-soft",
@@ -185,6 +185,35 @@ export default function PostCard({
 
   const isMine = currentUserId !== null && post.author_id === currentUserId;
 
+  // 🛡️ C4: الإبلاغ عن المنشور
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+  const submitReport = async () => {
+    if (!reportReason) return;
+    setReportBusy(true);
+    try {
+      const res = await fetch("/api/community/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType: "post", targetId: post.post_id, reason: reportReason, details: reportDetails || null }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setReportDone(true);
+        setShowReport(false);
+      } else {
+        setError(modErrorAr(d.code, "تعذّر إرسال الإبلاغ."));
+      }
+    } catch {
+      setError("مشكلة شبكة — حاول تاني.");
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
   const toggleLike = async () => {
     if (busy) return;
     setBusy(true);
@@ -319,6 +348,16 @@ export default function PostCard({
               {POST_KIND_AR[post.kind] ?? post.kind}
             </span>
           )}
+          {!isMine && currentUserId !== null && (
+            <button
+              onClick={() => setShowReport((v) => !v)}
+              aria-label="الإبلاغ عن المنشور"
+              title="الإبلاغ عن المنشور"
+              className="text-ink-soft transition hover:text-amber-600"
+            >
+              <Flag className="h-4 w-4" />
+            </button>
+          )}
           {isMine && (
             <button
               onClick={() => void deletePost()}
@@ -330,6 +369,54 @@ export default function PostCard({
           )}
         </div>
       </div>
+
+      {/* 🛡️ لوحة الإبلاغ */}
+      {showReport && !reportDone && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+          <p className="text-xs font-semibold text-amber-800">الإبلاغ عن المنشور — اختار السبب:</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {REPORT_REASONS.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setReportReason(r.id)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  reportReason === r.id
+                    ? "border-amber-500 bg-amber-500/10 font-semibold text-amber-800"
+                    : "border-slate-200 bg-white text-ink-soft hover:border-amber-300"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={reportDetails}
+            onChange={(e) => setReportDetails(e.target.value)}
+            placeholder="تفاصيل إضافية (اختياري، حتى 500 حرف)"
+            rows={2}
+            maxLength={500}
+            className="mt-2 w-full rounded border border-amber-200 bg-white p-2 text-xs"
+          />
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <button onClick={() => setShowReport(false)} className="rounded px-3 py-1 text-xs text-ink-soft hover:bg-amber-100">
+              إلغاء
+            </button>
+            <button
+              onClick={() => void submitReport()}
+              disabled={!reportReason || reportBusy}
+              className="inline-flex items-center gap-1 rounded bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {reportBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              إرسال الإبلاغ
+            </button>
+          </div>
+        </div>
+      )}
+      {reportDone && (
+        <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-700">
+          تم إرسال الإبلاغ — فريق الإشراف هيراجعه ويتخذ الإجراء المناسب. شكرًا لمساعدتك في حماية المجتمع.
+        </p>
+      )}
 
       {/* المحتوى */}
       {post.kind !== "repost" && (
