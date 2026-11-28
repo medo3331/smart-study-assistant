@@ -114,8 +114,8 @@ describe("Community C4 API contract", () => {
     expect(postsRoute).toContain("logBlockedContent");
   });
 
-  it("permission community.moderate exists for owner/admin/support and is sensitive", () => {
-    expect(authRoles).toContain('"community.moderate": { key: "community.moderate", allowed_roles: ["owner","admin","support"], is_sensitive: true }');
+  it("permission community.moderate exists for owner/admin/support/moderator and is sensitive", () => {
+    expect(authRoles).toContain('"community.moderate": { key: "community.moderate", allowed_roles: ["owner","admin","support","moderator"], is_sensitive: true }');
     expect(authRoles).toContain('"community.moderate",');
   });
 });

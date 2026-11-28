@@ -6,7 +6,7 @@
 // ===========================================================================
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X } from "lucide-react";
+import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X, Users, UserPlus, Trash2 } from "lucide-react";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
 
 type Report = {
@@ -48,13 +48,16 @@ function dt(iso: string | null): string {
 }
 
 export default function AdminModerationClient() {
-  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit" | "words">("reports");
+  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit" | "words" | "team">("reports");
   const [reports, setReports] = useState<Report[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [blockedWords, setBlockedWords] = useState<{ id: string; word: string; created_at: string }[]>([]);
   const [newWord, setNewWord] = useState("");
+  const [moderators, setModerators] = useState<{ user_id: string; display_name: string | null; email: string | null }[]>([]);
+  const [canManageTeam, setCanManageTeam] = useState(false);
+  const [moderatorInput, setModeratorInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +84,8 @@ export default function AdminModerationClient() {
         setAppeals(d.appeals ?? []);
         setAudit(d.audit ?? []);
         setBlockedWords(d.blockedWords ?? []);
+        setModerators(d.moderators ?? []);
+        setCanManageTeam(d.canManageTeam === true);
       } else {
         setError(d.error || "فشل تحميل البيانات.");
       }
@@ -148,6 +153,7 @@ export default function AdminModerationClient() {
     { id: "appeals" as const, label: `الاعتراضات (${appeals.length})`, icon: Gavel },
     { id: "actions" as const, label: "العقوبات", icon: ShieldAlert },
     { id: "words" as const, label: `الكلمات الممنوعة (${blockedWords.length})`, icon: Ban },
+    { id: "team" as const, label: `فريق الإشراف (${moderators.length})`, icon: Users },
     { id: "audit" as const, label: "سجل التدقيق", icon: ScrollText },
   ];
 
@@ -226,6 +232,65 @@ export default function AdminModerationClient() {
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+      )}
+
+      {/* ------------------------------------------------- فريق الإشراف */}
+      {tab === "team" && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-bold text-slate-800">فريق إشراف المجتمع</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            المشرف بيدخل لوحة الإشراف دي مباشرة بصلاحية community.moderate — من غير ما يفتح حساب أي طالب من صفحات الأدمن.
+          </p>
+          {moderators.length === 0 && !loading ? (
+            <p className="text-sm text-slate-500">مفيش مشرفين معيّنين — ضيف أول مشرف من تحت.</p>
+          ) : (
+            <ul className="mb-4 divide-y divide-slate-100">
+              {moderators.map((m) => (
+                <li key={m.user_id} className="flex items-center justify-between gap-2 py-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{m.display_name || "بدون اسم"}</p>
+                    {m.email ? <p className="text-[11px] text-slate-500" dir="ltr">{m.email}</p> : null}
+                  </div>
+                  {canManageTeam ? (
+                    <button
+                      onClick={() => void post({ action: "remove_moderator", userId: m.user_id }, `rm-mod-${m.user_id}`).then((ok) => { if (ok) void load(); })}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> إزالة
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canManageTeam ? (
+            <div className="flex gap-2 border-t border-slate-100 pt-3">
+              <input
+                value={moderatorInput}
+                onChange={(e) => setModeratorInput(e.target.value)}
+                placeholder="إيميل الطالب أو كود MAG أو الـUUID…"
+                className="w-full max-w-sm rounded border border-slate-200 px-3 py-1.5 text-sm"
+                dir="ltr"
+              />
+              <button
+                onClick={() => {
+                  const idf = moderatorInput.trim();
+                  if (!idf) return;
+                  void post({ action: "add_moderator", identifier: idf }, "add-mod").then((ok) => {
+                    if (ok) { setModeratorInput(""); void load(); }
+                  });
+                }}
+                disabled={busy !== null || !moderatorInput.trim()}
+                className="inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
+              >
+                <UserPlus className="h-4 w-4" /> تعيين مشرف
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">إدارة الفريق متاحة للمالك والأدمن فقط.</p>
           )}
         </section>
       )}

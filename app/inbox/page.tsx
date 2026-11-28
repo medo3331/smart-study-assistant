@@ -15,6 +15,8 @@ type Conversation = {
   unread_count: number;
   last_message_at: string | null;
   message_count: number;
+  other_avatar?: string | null;
+  last_message_body?: string | null;
 };
 
 type Message = {
@@ -66,9 +68,9 @@ export default function InboxPage() {
     if (query.length < 2) { setUserSearchResults([]); return; }
     setUserSearchLoading(true);
     try {
-      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/users/search?query=${encodeURIComponent(query)}`);
       const data = await res.json();
-      setUserSearchResults(data.success ? (data.users || []) : []);
+      setUserSearchResults(data.success ? (data.profiles || data.users || []) : []);
     } catch {
       setUserSearchResults([]);
     } finally {
@@ -525,9 +527,14 @@ export default function InboxPage() {
                       : "hover:bg-paper/40 border-border/30"
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-rose-500 flex-shrink-0 flex items-center justify-center text-white font-bold text-sm">
-                    {conv.participant_count > 0 ? conv.participant_count : "●"}
-                  </div>
+                  {conv.other_avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={conv.other_avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-rose-500 flex-shrink-0 flex items-center justify-center text-white font-bold text-sm">
+                      {(conv.title || "؟").trim().charAt(0)}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-semibold text-ink truncate">{conv.title}</h3>
@@ -538,7 +545,7 @@ export default function InboxPage() {
                       )}
                     </div>
                     <p className="text-sm text-slate-400 truncate">
-                      {conv.message_count} رسالة
+                      {conv.last_message_body || `${conv.message_count} رسالة`}
                       {conv.unread_count > 0 && <span className="text-amber-500 font-medium">({conv.unread_count} غير مقروء)</span>}
                     </p>
                   </div>

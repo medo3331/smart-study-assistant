@@ -37,7 +37,27 @@ type SocialProfileData = {
 
 export default async function UserPublicPage({ params }: { params: Promise<{ code?: string }> }) {
   const sp = await params;
-  const code = sp?.code || "";
+  let code = sp?.code || "";
+
+  // 1) لو الرابط جاي بالـUUID (روابط قديمة أو fallback) — نجيب كود MAG الكانوني
+  //    ونرديركت له، بدل ما الصفحة ترمّي «كود غير صالح» على الرئيسية.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {
+    const boot = await createClient();
+    const { data: { user: bootUser } } = await boot.auth.getUser();
+    if (!bootUser) {
+      redirect("/login?next=" + encodeURIComponent(`/u/${code}`));
+    }
+    const { data: row } = await boot
+      .from("profiles")
+      .select("public_user_code")
+      .eq("id", code)
+      .maybeSingle();
+    const canonical = row?.public_user_code as string | null;
+    if (canonical && /^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(canonical)) {
+      redirect(`/u/${canonical}`);
+    }
+    redirect("/community?error=الحساب_مش_متاح");
+  }
 
   // نفس تحقق النسخة السابقة — الصيغة الكانونية الوحيدة (db/epic6-user-code.sql)
   if (!/^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(code)) {

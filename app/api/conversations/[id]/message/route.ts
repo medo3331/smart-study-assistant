@@ -85,7 +85,7 @@ export async function POST(
         p.participant_id,
         "رسالة جديدة",
         messageBody.trim().slice(0, 120),
-        `/inbox?conversation=${params.id}`,
+        `/inbox?category=conversations`,
       );
     }
 

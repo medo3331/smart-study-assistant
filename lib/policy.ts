@@ -7,7 +7,7 @@ import {
   ADMIN_PERMISSION_MAP,
 } from "@/lib/auth-roles";
 
-export type ActorRole = "owner" | "admin" | "support" | null;
+export type ActorRole = "owner" | "admin" | "support" | "moderator" | null;
 
 export interface ActorContext {
   /** معرف المستخدم من الجلسة (null للزائر) */

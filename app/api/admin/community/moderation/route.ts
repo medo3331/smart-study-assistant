@@ -27,7 +27,7 @@ async function guard() {
   if (!user || user.is_anonymous) return null;
   const actor = await resolveActor(supabase, user.id, user.email ?? null);
   if (!actorHasPermission(actor, "community.moderate")) return null;
-  return { userId: user.id, service: createServiceClient() };
+  return { userId: user.id, role: actor.role, service: createServiceClient() };
 }
 
 export async function GET(req: Request) {
@@ -37,13 +37,29 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") === "all" ? null : (url.searchParams.get("status") ?? "pending");
 
-  const [reports, actions, appeals, audit, blockedWords] = await Promise.all([
+  const [reports, actions, appeals, audit, blockedWords, moderators] = await Promise.all([
     g.service.rpc("mod_list_reports", { p_status: status ?? "pending", p_limit: 100 }),
     g.service.rpc("mod_list_actions", { p_active_only: false, p_limit: 100 }),
     g.service.rpc("mod_list_appeals", { p_status: status ?? "pending", p_limit: 100 }),
     g.service.rpc("mod_list_audit", { p_limit: 80 }),
     g.service.from("moderation_blocked_words").select("id, word, created_at").order("created_at", { ascending: false }).limit(300),
+    // إدارة الفريق للمالك/الأدمن فقط — المشرف العادي يشوف الفريق من غير إيميلات
+    (g.role === "owner" || g.role === "admin")
+      ? g.service.from("site_admins").select("user_id, role, permissions").eq("role", "moderator").order("user_id").limit(100)
+      : Promise.resolve({ data: [], error: null }),
   ]);
+
+  // أسماء المشرفين للعرض
+  const moderatorRows = ((moderators.data ?? []) as { user_id: string; role: string }[]);
+  let moderatorProfiles: { user_id: string; display_name: string | null; email: string | null }[] = [];
+  if (moderatorRows.length > 0) {
+    const { data: profs } = await g.service
+      .from("profiles")
+      .select("id, display_name, email")
+      .in("id", moderatorRows.map((m) => m.user_id));
+    moderatorProfiles = ((profs ?? []) as { id: string; display_name: string | null; email: string | null }[])
+      .map((p) => ({ user_id: p.id, display_name: p.display_name, email: g.role === "owner" || g.role === "admin" ? p.email : null }));
+  }
 
   type ListPayload = { ok?: boolean; code?: string; reports?: unknown[]; actions?: unknown[]; appeals?: unknown[]; entries?: unknown[] };
   const pick = (r: { data?: unknown; error?: unknown }): ListPayload => {
@@ -62,6 +78,8 @@ export async function GET(req: Request) {
     appeals: pick(appeals).appeals ?? [],
     audit: pick(audit).entries ?? [],
     blockedWords: (blockedWords.data ?? []) as unknown[],
+    moderators: moderatorProfiles,
+    canManageTeam: g.role === "owner" || g.role === "admin",
   });}
 
 export async function POST(req: Request) {
@@ -160,6 +178,62 @@ export async function POST(req: Request) {
         .eq("id", body.wordId);
       if (delErr) {
         console.error("[admin/moderation] remove_blocked_word error:", delErr);
+        return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+    case "add_moderator": {
+      // المالك/الأدمن فقط — مشرف المجتمع جديد ياخد دور moderator بصلاحية community.moderate
+      if (g.role !== "owner" && g.role !== "admin") {
+        return NextResponse.json({ success: false, error: "Forbidden." }, { status: 403 });
+      }
+      const identifier = typeof body.identifier === "string" ? body.identifier.trim() : "";
+      if (!identifier || identifier.length > 200) {
+        return NextResponse.json({ success: false, error: "اكتب إيميل الطالب أو كود MAG أو الـUUID." }, { status: 400 });
+      }
+      let targetId: string | null = null;
+      if (UUID_RE.test(identifier)) {
+        targetId = identifier;
+      } else if (/^MAG-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(identifier)) {
+        const { data } = await g.service.from("profiles").select("id").eq("public_user_code", identifier.toUpperCase()).maybeSingle();
+        targetId = (data?.id as string) ?? null;
+      } else {
+        const { data } = await g.service.from("profiles").select("id").eq("email", identifier.toLowerCase()).maybeSingle();
+        targetId = (data?.id as string) ?? null;
+      }
+      if (!targetId) {
+        return NextResponse.json({ success: false, error: "مفيش حساب بالمعرّف ده." }, { status: 404 });
+      }
+      // منع ترقية أدوار موجودة — المودريتور دور مستقل
+      const { data: existing } = await g.service.from("site_admins").select("role").eq("user_id", targetId).maybeSingle();
+      if (existing?.role === "owner" || existing?.role === "admin" || existing?.role === "support") {
+        return NextResponse.json({ success: false, error: "الحساب ده له دور إداري بالفعل." }, { status: 409 });
+      }
+      const { error: upErr } = await g.service
+        .from("site_admins")
+        .upsert({ user_id: targetId, role: "moderator", permissions: ["community.moderate"] }, { onConflict: "user_id" });
+      if (upErr) {
+        console.error("[admin/moderation] add_moderator error:", upErr);
+        return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
+      }
+      const { socialNotify } = await import("@/lib/community/handlers");
+      void socialNotify(g.service, targetId, "تم تعيينك مشرفًا في المجتمع", "دخول لوحة الإشراف: /admin/community/moderation", "/admin/community/moderation");
+      return NextResponse.json({ success: true });
+    }
+    case "remove_moderator": {
+      if (g.role !== "owner" && g.role !== "admin") {
+        return NextResponse.json({ success: false, error: "Forbidden." }, { status: 403 });
+      }
+      if (typeof body.userId !== "string" || !UUID_RE.test(body.userId)) {
+        return NextResponse.json({ success: false, error: "Invalid userId." }, { status: 400 });
+      }
+      const { error: rmErr } = await g.service
+        .from("site_admins")
+        .delete()
+        .eq("user_id", body.userId)
+        .eq("role", "moderator");
+      if (rmErr) {
+        console.error("[admin/moderation] remove_moderator error:", rmErr);
         return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
       }
       return NextResponse.json({ success: true });

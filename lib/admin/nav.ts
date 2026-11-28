@@ -21,7 +21,7 @@ export interface AdminNavItem {
   /** الصلاحية اللي لازمها لدخول الصفحة (server-side) */
   permission: AdminPermissionKey;
   /** أيقونة lucide (اسم المكوّن) */
-  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy";
+  icon: "Users" | "CreditCard" | "Layers" | "Cpu" | "Gift" | "ScrollText" | "FolderOpen" | "Settings" | "Megaphone" | "LifeBuoy" | "ShieldAlert";
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -178,6 +178,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "إرسال إعلانات أو رسائل للمستخدمين",
     permission: "announcements.manage",
     icon: "Megaphone",
+  },
+  {
+    href: "/admin/community/moderation",
+    label: "إشراف المجتمع",
+    description: "تقارير المجتمع والعقوبات والاعتراضات والكلمات الممنوعة وفريق الإشراف",
+    permission: "community.moderate",
+    icon: "ShieldAlert",
   },
 ];
 

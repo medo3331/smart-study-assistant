@@ -93,7 +93,7 @@ export function isOwnerEmail(email: string | null | undefined): boolean {
   return allowed.includes(normalized);
 }
 
-export type AdminRole = "owner" | "admin" | "support" | null;
+export type AdminRole = "owner" | "admin" | "support" | "moderator" | null;
 
 /**
  * دالة فحص مستوى صلاحية الأدمن (Owner vs Admin)
@@ -172,7 +172,7 @@ export const SENSITIVE_ACTIONS: AdminPermissionKey[] = [
 
 export interface AdminPermissionRecord {
   key: AdminPermissionKey;
-  allowed_roles: ("owner" | "admin" | "support")[];
+  allowed_roles: ("owner" | "admin" | "support" | "moderator")[];
   is_sensitive: boolean;
 }
 
@@ -197,7 +197,7 @@ export const ADMIN_PERMISSION_MAP: Record<AdminPermissionKey, AdminPermissionRec
   "support.reply": { key: "support.reply", allowed_roles: ["owner","admin","support"], is_sensitive: false },
   "support.assign": { key: "support.assign", allowed_roles: ["owner","admin","support"], is_sensitive: false },
   "site.owner": { key: "site.owner", allowed_roles: ["owner"], is_sensitive: true },
-  "community.moderate": { key: "community.moderate", allowed_roles: ["owner","admin","support"], is_sensitive: true },
+  "community.moderate": { key: "community.moderate", allowed_roles: ["owner","admin","support","moderator"], is_sensitive: true },
 };
 
 /** الصلاحيات الافتراضية للأدوار عند غياب قائمة صريحة في قاعدة البيانات. */
@@ -208,7 +208,9 @@ function defaultPermissionsForRole(role: Exclude<AdminRole, "owner" | null>): Ad
     );
   }
   // Support: صلاحيات قراءة محدودة وإدارة صندوق الدعم فقط.
-  return ["users.read", "files.moderate", "audit.read", "support.manage"];
+  if (role === "support") return ["users.read", "files.moderate", "audit.read", "support.manage"];
+  // Moderator (مشرف مجتمع): إشراف المجتمع فقط — بدون وصول لباقي اللوحة.
+  return ["community.moderate"];
 }
 
 /** قراءة الصلاحيات مع تمييز القائمة الصريحة الفارغة عن غياب إعداد الصلاحيات. */

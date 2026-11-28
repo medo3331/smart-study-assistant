@@ -97,7 +97,7 @@ export async function POST(
         request.sender_id,
         "تم قبول طلب المراسلة",
         "يمكنكما الآن المحادثة.",
-        `/inbox?conversation=${result.conversation_id}`,
+        `/inbox?category=conversations`,
       );
     }
 

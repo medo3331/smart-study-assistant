@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     ...allowedItems.map((item) => ({ href: item.href, label: item.label })),
   ];
 
-  const roleLabel = isOwner ? "المالك (Owner)" : role === "admin" ? "أدمن (Admin)" : role === "support" ? "الدعم (Support)" : "غير مصرّح";
+  const roleLabel = isOwner ? "المالك (Owner)" : role === "admin" ? "أدمن (Admin)" : role === "support" ? "الدعم (Support)" : role === "moderator" ? "مشرف مجتمع (Moderator)" : "غير مصرّح";
 
   return (
     <div className="min-h-screen bg-[var(--app-bg,#090d16)] text-white" dir="rtl">
