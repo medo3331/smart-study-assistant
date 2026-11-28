@@ -15,6 +15,7 @@ import type { User } from "@supabase/supabase-js";
 import { PERSONA_NAME } from "@/lib/persona";
 import { MagicAvatar } from "@/components/MagicAvatar";
 import { MagicWelcome } from "@/components/magic/MagicWelcome";
+import { OnboardingTour } from "@/components/magic/OnboardingTour";
 import { awardCoins } from "@/lib/shop/shop-data";
 import { levelFromXp, XP_PER_LEVEL, STUDY_DAY_XP_REWARD } from "@/lib/shop/economy";
 
@@ -1521,6 +1522,7 @@ export default function DashboardPage() {
         />
 
         {/* ⚡ Magic — ترحيب واقتراح اليوم (Next Best Action من بيانات حقيقية) */}
+        <OnboardingTour />
         <MagicWelcome />
 
 
