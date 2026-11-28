@@ -8,7 +8,7 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { TopControls } from "@/components/TopControls";
 import { BrandLock } from "@/components/BrandLogo";
 import { ProviderRow } from "@/components/AuthProviders";
-import { readStoredReferralCode, clearStoredReferralCode } from "@/lib/referral/client";
+import { isValidReferralCode, readStoredReferralCode, clearStoredReferralCode } from "@/lib/referral/client";
 import { saveLastAccount } from "@/lib/auth/last-account";
 
 /**
@@ -52,6 +52,15 @@ export default function RegisterPage() {
   /** OTP معلّق بعد signUp أو ترقية حساب زائر — نوع التأكيد بيحدد verifyOtp وresend. */
   const [pendingVerify, setPendingVerify] = useState<"signup" | "email_change" | null>(null);
   const [otpCode, setOtpCode] = useState("");
+  /** كود دعوة/برومو — متعبّي مسبقًا من ?ref= في الرابط، وممكن المستخدم يكتبه بإيده. */
+  const [promoCode, setPromoCode] = useState("");
+
+  useEffect(() => {
+    const stored = readStoredReferralCode();
+    if (!stored) return;
+    const id = setTimeout(() => setPromoCode(stored), 0);
+    return () => clearTimeout(id);
+  }, []);
 
   /* حساب حقيقي داخل بالفعل؟ ملوش شغل هنا (تأكيد إضافي فوق شغل الـproxy). */
   useEffect(() => {
@@ -74,6 +83,24 @@ export default function RegisterPage() {
     if (value.length >= 10) score++;
     if (value.length >= 6 && /\d/.test(value) && /[^\d]/.test(value)) score++;
     return score;
+  }
+
+  /** تسجيل إحالة الصديق — الكود المكتوب يدويًا أولًا ثم ?ref= المحفوظ من الرابط.
+   *  فشلها لا يعطّل التسجيل أبدًا؛ الكريدت بينزل للداعي تلقائيًا عبر /api/referrals/entry. */
+  async function attributeReferral(): Promise<void> {
+    const code = promoCode.trim().toUpperCase() || readStoredReferralCode() || "";
+    if (!isValidReferralCode(code)) return;
+    try {
+      await fetch("/api/referrals/attribute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+    } catch {}
+    try {
+      await fetch("/api/referrals/entry", { method: "POST" });
+    } catch {}
+    clearStoredReferralCode();
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
@@ -133,6 +160,8 @@ export default function RegisterPage() {
       // اللي بعده. بنستخدم تحميل كامل (full reload) هنا عشان نضمن إن الكوكي اتكتبت
       // فعلًا قبل ما أي صفحة تحاول تقرا الجلسة.
       saveLastAccount({ email, name: fullName });
+      // تأكيد الإيميل متجاوز → الجلسة جاهزة: نسجّل إحالة الصديق قبل الانتقال.
+      await attributeReferral();
       window.location.href = currentNext();
       return;
     }
@@ -160,21 +189,8 @@ export default function RegisterPage() {
       setMessage({ type: "error", text: t.login_otp_err });
       return;
     }
-    // referral attribution after successful verification
-    const stored = readStoredReferralCode();
-    if (stored) {
-      try {
-        await fetch("/api/referrals/attribute", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: stored }),
-        });
-      } catch {}
-    }
-    try {
-      await fetch("/api/referrals/entry", { method: "POST" });
-    } catch {}
-    clearStoredReferralCode();
+    // تسجيل إحالة الصديق بعد تأكيد الحساب بنجاح
+    await attributeReferral();
     saveLastAccount({ email, name: fullName });
     window.location.href = currentNext();
   };
@@ -380,6 +396,26 @@ export default function RegisterPage() {
                 {pwText}
               </span>
             </div>
+          </div>
+
+          <div>
+            <label className="field-label" htmlFor="reg-referral">
+              {t.register_referral_label}
+            </label>
+            <input
+              id="reg-referral"
+              className="field"
+              type="text"
+              dir="ltr"
+              maxLength={32}
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z2-9-]/g, ""))}
+              placeholder="MAGIC-XXXX"
+              style={{ textTransform: "uppercase" }}
+            />
+            <p className="muted small" style={{ margin: 0 }}>
+              {t.register_referral_hint}
+            </p>
           </div>
 
           <button type="submit" className="btn btn-marker btn-block" disabled={loading}>
