@@ -916,12 +916,38 @@ export async function POST(req: Request) {
         }
       }
     }
+    // ---- Phase 3.2e: فحص الرصيد بعد التسوية (expected by billing lifecycle tests) ----
+    // الحجز = الاستهلاك (1:1)؛ نقرأ الرصيد النهائي من الـ ledger لنعكسه في
+    // الرد ونتحقق أن الحالة المالية للمستخدم متسقة. best-effort — فشل القراءة
+    // لا يكسر رد الطالب.
+    let creditBalance: number | null = null;
+    if (userId && supabase && !isAnonymous) {
+      try {
+        const { data: balanceData, error: balanceError } = await supabase.rpc(
+          "ai_credit_balance",
+          { p_user_id: userId },
+        );
+        if (!balanceError && typeof balanceData === "number") {
+          creditBalance = balanceData;
+        } else if (balanceError) {
+          console.warn("[unified-ai] balance check failed (non-blocking):", balanceError.message);
+        }
+      } catch (balanceError) {
+        console.warn("[unified-ai] balance check failed (non-blocking):", balanceError);
+      }
+    }
+
     const uiResponse = {
       ok: true,
       answer: result.answer,
       agentUsed: result.agentUsed,
       extractedText: result.extractedText,
-      metadata: { ...result.metadata, modelUsed: modelToUse, resolvedVia },
+      metadata: {
+        ...result.metadata,
+        modelUsed: modelToUse,
+        resolvedVia,
+        ...(creditBalance !== null ? { balance: creditBalance } : {}),
+      },
       reasoning: result.reasoning,
       conversationId: savedConversationId || undefined,
     };

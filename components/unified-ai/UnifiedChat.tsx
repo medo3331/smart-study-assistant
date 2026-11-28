@@ -77,6 +77,8 @@ export function UnifiedChat({
   const [renameValue, setRenameValue] = useState("");
   const [studyMode, setStudyMode] = useState<"explain" | "quiz" | "summarize" | "review">("explain");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // رصيد الكريدت بعد آخر طلب — السيرفر هو مصدره الوحيد (metadata.balance)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     error: string;
@@ -303,6 +305,8 @@ export function UnifiedChat({
 
        // Show assistant response
        const assistantText = data?.answer || "Unified AI.";
+      // تحديث رصيد الكريدت من السيرفر (بعد التسوية) — best-effort
+      if (typeof data?.metadata?.balance === "number") setCreditBalance(data.metadata.balance);
       // ⚡ إجراءات من السيرفر (مثال: طلب امتحان مكتمل ⇒ رابط المولّد).
       const replyActions = Array.isArray(data?.actions)
         ? (data.actions as { label: string; href: string; external?: boolean }[])
@@ -437,6 +441,15 @@ export function UnifiedChat({
             {m.label}
           </button>
         ))}
+        {creditBalance !== null && (
+          <Link
+            href="/store"
+            className="text-xs font-bold px-3 py-1.5 rounded-full border border-rule bg-paper text-ink-soft hover:bg-paper-3 transition"
+            aria-label={isAr ? `رصيدك الحالي ${creditBalance} كريدت — اذهب إلى المتجر` : `Current balance ${creditBalance} credits — go to store`}
+          >
+            {isAr ? `رصيدك: ${creditBalance} كريدت` : `Balance: ${creditBalance} credits`}
+          </Link>
+        )}
       </div>
 
       {/* Chat messages */}

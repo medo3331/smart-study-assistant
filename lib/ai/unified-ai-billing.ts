@@ -12,7 +12,10 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { createClient } from "@/lib/supabase/server";
-import { getPricingPolicy, convertProviderCostToCredits, CREDIT_CONVERSION } from "./pricing-config";
+import { getPricingPolicy, convertProviderCostToCredits, PROVIDER_COST_RATES, CREDIT_CONVERSION } from "./pricing-config";
+import type { AiProviderName } from "./types";
+import { recordAiUsage } from "./usage-accounting";
+import type { UsageStatus } from "./usage-accounting";
 import type { AiUsageContext, UsageRequestContext } from "./usage-context";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -105,6 +108,7 @@ export async function settleUnifiedAiUsage(
   lastSuccessfulAttemptIndex: number,
   operationId: string,
   model: string,
+  userId: string | null = null,
 ): Promise<UsageSummary> {
   const successfulAttempt = attempts[lastSuccessfulAttemptIndex];
   const allAttempts = attempts;
@@ -138,8 +142,8 @@ export async function settleUnifiedAiUsage(
   const totalOutput = allAttempts.reduce((sum, a) => sum + (a.outputTokens ?? 0), 0);
   const totalCached = allAttempts.reduce((sum, a) => sum + (a.cachedTokens ?? 0), 0);
 
-  // Build cost estimate
-  const costEstimate = buildCostEstimate(allAttempts);
+  // Build cost estimate — المحاولة الناجحة تُمرَّر صراحةً بدل شرط find المكسور
+  const costEstimate = buildCostEstimate(allAttempts, successfulAttempt);
 
   // Apply margin (store as rate, e.g., 0.20 for 20%)
   const marginRate = CREDIT_CONVERSION.margin ?? 0.20;
@@ -161,11 +165,11 @@ export async function settleUnifiedAiUsage(
     credits = Math.round(computedCredits * 10 ** decimals) / 10 ** decimals;
   }
 
-  // Record usage events (shadow — non-blocking)
+  // Record usage events (shadow — non-blocking) — عبر recordAiUsage الحقيقي
   if (supabase) {
-    for (const attempt of allAttempts) {
-      void recordUsageEvent(supabase, operationContext, attempt);
-    }
+    allAttempts.forEach((attempt, index) => {
+      void recordUsageEvent(supabase, operationContext, userId, attempt, index);
+    });
   }
 
   // CRITICAL: Unknown cost = pending_reconcile, NOT zero-charge settlement.
@@ -197,13 +201,17 @@ export async function settleUnifiedAiUsage(
  * Build the cost estimate from attempts.
  *
  * States:
- *   - unknownCost: rates not available AND no estimate possible
- *   - estimatedCost: usage known but rates missing (best-effort)
- *   - confirmedCost: rates available and applied
+ *   - confirmedCost: rates verified in PROVIDER_COST_RATES and applied
+ *   - unknownCost: rates not available OR no usage — no fabricated fallbacks.
+ *     (per pricing-config contract: never invent rates; pending_reconcile instead)
  */
-function buildCostEstimate(attempts: UsageAttempt[]): UsageCostEstimate {
-  // Find a successful attempt (any attempt that proceeded to the provider)
-  const successful = attempts.find(a => a.attemptStatus !== "initial" || a.attemptStatus !== "fallback" || a.attemptStatus !== "retried" || a.attemptStatus !== "timeout_unknown");
+function buildCostEstimate(
+  attempts: UsageAttempt[],
+  successfulAttempt?: UsageAttempt,
+): UsageCostEstimate {
+  // المحاولة الناجحة تُمرَّر من settleUnifiedAiUsage (فهرسها معروف هناك).
+  // الـ fallback القديم كان شرط OR دائمًا true — أي attempt كانت "تنجح".
+  const successful = successfulAttempt ?? attempts.find((a) => Boolean(a.provider));
 
   if (!successful || !successful.provider) {
     return {
@@ -212,96 +220,116 @@ function buildCostEstimate(attempts: UsageAttempt[]): UsageCostEstimate {
       unknownCost: true,
       provider: null,
       model: null,
-      inputTokens: successful?.inputTokens,
-      outputTokens: successful?.outputTokens,
-      cachedTokens: successful?.cachedTokens,
+      inputTokens: successful?.inputTokens ?? null,
+      outputTokens: successful?.outputTokens ?? null,
+      cachedTokens: successful?.cachedTokens ?? null,
     };
   }
 
-  // If provider rates are not configured, use best-effort estimate
-  // This is NOT a confirmed cost — it's an estimate
-  // In production: check PROVIDER_COST_RATES in pricing-config.ts
-  const hasKnownRates = false; // Placeholder
+  const inputTokens = successful.inputTokens ?? null;
+  const outputTokens = successful.outputTokens ?? null;
 
-  if (hasKnownRates) {
-    // In production: apply verified provider rates
-    // cost = inputTokens/1M * inputRate + outputTokens/1M * outputRate
-    // cached tokens should not be double-counted
+  // لا usage إطلاقًا ⇒ لا يمكن تسعير العملية
+  if (inputTokens === null && outputTokens === null) {
     return {
-      confirmedCost: 0, // placeholder
+      confirmedCost: undefined,
+      estimatedCost: undefined,
+      unknownCost: true,
+      provider: successful.provider,
+      model: successful.model,
+      inputTokens,
+      outputTokens,
+      cachedTokens: successful.cachedTokens ?? null,
+    };
+  }
+
+  // استخدم الأسعار المُوثّقة فقط — لا fallback مُختلق (عقد pricing-config).
+  const rates = PROVIDER_COST_RATES[successful.provider as AiProviderName];
+  const inputRate = rates ? rates.input_tokens : null;
+  const outputRate = rates ? rates.output_tokens : null;
+
+  if (typeof inputRate === "number" && typeof outputRate === "number") {
+    // cached tokens جزء أصلاً من input — لا تُحتسب مرتين؛ تُبلَّغ للأمانة فقط
+    const input = Math.max(0, inputTokens ?? 0);
+    const output = Math.max(0, outputTokens ?? 0);
+    const confirmedCost =
+      (input / 1_000_000) * inputRate + (output / 1_000_000) * outputRate;
+
+    return {
+      confirmedCost,
       estimatedCost: undefined,
       unknownCost: false,
       provider: successful.provider,
       model: successful.model,
-      inputTokens: successful.inputTokens,
-      outputTokens: successful.outputTokens,
-      cachedTokens: successful.cachedTokens,
+      inputTokens,
+      outputTokens,
+      cachedTokens: successful.cachedTokens ?? null,
     };
   }
 
-  // No known rates → best-effort estimate (NOT confirmed)
+  // usage معروف لكن أسعار المزوّد غير مُوثّقة ⇒ pending_reconcile
   return {
     confirmedCost: undefined,
-    estimatedCost: 0, // placeholder — would use estimated rate
-    unknownCost: false,
+    estimatedCost: undefined,
+    unknownCost: true,
     provider: successful.provider,
     model: successful.model,
-    inputTokens: successful.inputTokens,
-    outputTokens: successful.outputTokens,
-    cachedTokens: successful.cachedTokens,
+    inputTokens,
+    outputTokens,
+    cachedTokens: successful.cachedTokens ?? null,
   };
 }
 
 /**
- * Estimate provider cost from attempt usage.
+ * Record a usage event — تسجيل حقيقي عبر usage-accounting.recordAiUsage
+ * (shadow — لا يرمي أبدًا، فشل التسجيل لا يكسر الطلب).
  *
- * Uses configured provider rates when available.
- * When rates are unknown (null), returns 0 and marks as estimated.
- *
- * @param attempt Provider attempt
- * @returns Estimated provider cost in currency units
- */
-function estimatedUsageCost(attempt: UsageAttempt): number {
-  // In production, this uses VERIFIED provider rates:
-  //   inputCost = inputTokens / 1_000_000 × inputRate
-  //   outputCost = outputTokens / 1_000_000 × outputRate
-  // But since no rates are configured yet, return 0.
-  // DO NOT invent rates. Return 0 and mark as estimated.
-  return 0;
-}
-
-/**
- * Record a usage event (shadow recording — non-blocking).
- *
- * This is a placeholder for the actual usage-accounting integration.
- * In production, this should call usage-accounting.ts:recordAiUsage.
- *
- * @param supabase Supabase server client
+ * @param supabase Supabase server client (null = shadow-only، اختبارات)
  * @param context Usage request context
+ * @param userId صاحب الطلب (null للزائر)
  * @param attempt Provider attempt
+ * @param attemptNo ترتيب المحاولة (0 = الأولى)
  */
 async function recordUsageEvent(
   supabase: Awaited<ReturnType<typeof createClient>>,
   context: UsageRequestContext,
+  userId: string | null,
   attempt: UsageAttempt,
+  attemptNo: number,
 ): Promise<void> {
-  // Placeholder — real implementation would call usage-accounting.ts:recordAiUsage
-  // with:
-  //   - userId: context.userId
-  //   - operationId: context.operationId
-  //   - idempotencyKey: context.idempotencyKey
-  //   - feature: "unified_ai"
-  //   - provider: attempt.provider
-  //   - model: attempt.model
-  //   - status: attempt.status
-  //   - units: 1 (per successful execution)
-  //   - promptTokens: attempt.inputTokens
-  //   - completionTokens: attempt.outputTokens
-  //   - cachedTokens: attempt.cachedTokens
-  //   - metadata: { attemptId, estimated }
-  void supabase; // unused — placeholder
-  const _ctx = context; // unused — placeholder
-  const _att = attempt; // unused — placeholder
+  if (!supabase) return;
+
+  const status: UsageStatus =
+    attempt.attemptStatus === "timeout_unknown"
+      ? "failed_no_response"
+      : attempt.error
+        ? "error"
+        : "completed";
+
+  try {
+    await recordAiUsage({
+      userId,
+      feature: "unified_ai",
+      operationId: context.operationId,
+      idempotencyKey: context.idempotencyKey,
+      attemptNo,
+      provider: attempt.provider,
+      model: attempt.model,
+      status,
+      units: 1,
+      promptTokens: attempt.inputTokens ?? null,
+      completionTokens: attempt.outputTokens ?? null,
+      latencyMs: attempt.latencyMs ?? null,
+      metadata: {
+        attemptId: attempt.attemptId,
+        estimated: attempt.estimated,
+        operation: attempt.operationId,
+        attemptStatus: attempt.attemptStatus,
+      },
+    });
+  } catch (error) {
+    console.warn("[unified-ai-billing] usage event record failed (non-blocking):", error);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────

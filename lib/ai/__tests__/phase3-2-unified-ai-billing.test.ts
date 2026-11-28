@@ -21,7 +21,6 @@ function createUsageContext(overrides?: Partial<UsageRequestContext>): UsageRequ
     operationId: "op-test-1",
     idempotencyKey: "idem-key-1",
     source: "server",
-    userId: null,
     ...overrides,
   };
 }
@@ -79,7 +78,7 @@ describe("Unified AI Billing & Settlement", () => {
     // First attempt failed (fallback to second) with 10 cached tokens
     const attempt1 = createAttempt({ attemptId: "attempt-1", attemptStatus: "fallback", provider: "groq", inputTokens: 50, outputTokens: 25, cachedTokens: 10 });
     // Second attempt succeeded (final) with no cached tokens
-    const attempt2 = createAttempt({ attemptId: "attempt-2", attemptStatus: "completed", provider: "nvidia", inputTokens: 100, outputTokens: 75, cachedTokens: undefined });
+    const attempt2 = createAttempt({ attemptId: "attempt-2", attemptStatus: "retried", provider: "nvidia", inputTokens: 100, outputTokens: 75, cachedTokens: undefined });
     const attempts = [attempt1, attempt2];
 
     const result = await settleUnifiedAiUsage(
@@ -163,7 +162,8 @@ describe("Settlement Safety", () => {
     const key1 = getSettlementKey("op-1");
     const key2 = getSettlementKey("op-1");
     const key3 = getSettlementKey("op-2");
-    const key4 = getSettlementKey("op-1", "settled");
+    // الحالة مش جزء من المفتاح — التوقيع بياخد operationId فقط
+    const key4 = getSettlementKey("op-1");
 
     // Same operationId → same key (regardless of status)
     expect(key1).toBe(key2);

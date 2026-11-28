@@ -239,84 +239,93 @@ export interface PricingPolicy {
 /**
  * Central operation catalog — all AI operations with billing classification.
  *
- * Note: These are the CONFIGURATION values. The business owner must
- * approve the actual pricing before production use.
+ * ⚠️ **محاذاة مع الإنتاج**: الأسعار الثابتة هنا تحاكي `lib/ai/credit-pricing.ts`
+ * (CREDIT_COSTS) — مصدر التسعير المعتمد فعليًا في الإنتاج. استراتيجيات
+ * `perUnit` (تسعير بالتوكن) لا تُفعّل قبل التحقق من PROVIDER_COST_RATES،
+ * لأن الحساب فيها يتطلب أسعار مزوّدين مُوثّقة — لا تقديرات مُختلقة.
  */
 export const OPERATION_CATALOG: PricingPolicy[] = [
   // ── Chat / Question AI ──────────────────────────────────────────
+  // CREDIT_COSTS: chat = 1 (طلب واحد = كريدت واحد)
   {
     operationId: "ai_chat",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "tokens", rate: 0.0001, usageField: "input_tokens" },
+    strategy: { type: "fixed", credits: 1 },
     usageInputs: ["tokens_used", "model_type"],
     providerDependency: null,
-    costCalculation: "Input tokens × conversion factor × margin",
+    costCalculation: "Fixed 1 credit per request (per-unit token metering deferred until provider rates verified)",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── AI Explanation ─────────────────────────────────────────────
+  // CREDIT_COSTS: explain = 1
   {
     operationId: "ai_explain",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "tokens", rate: 0.0001, usageField: "input_tokens" },
+    strategy: { type: "fixed", credits: 1 },
     usageInputs: ["tokens_used", "model_type"],
     providerDependency: null,
-    costCalculation: "Input tokens × conversion factor × margin",
+    costCalculation: "Fixed 1 credit per request",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── AI Tutor ───────────────────────────────────────────────────
+  // CREDIT_COSTS: tutor = 1 (كان 2 هنا — تضارب مع الإنتاج)
   {
     operationId: "ai_tutor",
     classification: "CREDIT_BILLED",
-    strategy: { type: "fixed", credits: 2 },
+    strategy: { type: "fixed", credits: 1 },
     usageInputs: ["model_type"],
     providerDependency: null,
-    costCalculation: "Fixed 2 credits per tutor session",
+    costCalculation: "Fixed 1 credit per tutor session",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── Summarization ──────────────────────────────────────────────
+  // CREDIT_COSTS: summarize = 1
   {
     operationId: "ai_summarize",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "tokens", rate: 0.00015, usageField: "input_tokens" },
+    strategy: { type: "fixed", credits: 1 },
     usageInputs: ["input_tokens", "output_tokens"],
     providerDependency: null,
-    costCalculation: "(input + output tokens) × conversion factor × margin",
+    costCalculation: "Fixed 1 credit per summarization request",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── Lecture Analysis ───────────────────────────────────────────
+  // CREDIT_COSTS: file-analysis = 2
   {
     operationId: "lecture_analysis",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "content_size", rate: 0.0005, usageField: "content_size_bytes" },
+    strategy: { type: "fixed", credits: 2 },
     usageInputs: ["content_size_bytes", "model_type"],
     providerDependency: null,
-    costCalculation: "Content size × conversion factor × margin",
+    costCalculation: "Fixed 2 credits per lecture analysis",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── MCQ Generation ─────────────────────────────────────────────
+  // CREDIT_COSTS: quiz = 1 (كان 2 هنا — تضارب مع الإنتاج)
   {
     operationId: "ai_mcq",
     classification: "CREDIT_BILLED",
-    strategy: { type: "fixed", credits: 2 },
+    strategy: { type: "fixed", credits: 1 },
     usageInputs: ["question_count", "analysis_level"],
     providerDependency: null,
-    costCalculation: "Fixed 2 credits per MCQ batch",
+    costCalculation: "Fixed 1 credit per MCQ batch",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
     maxCost: 5,
   },
   // ── Study-Plan Generation ──────────────────────────────────────
+  // CREDIT_COSTS: generate-plan = 5
   {
     operationId: "study_plan",
     classification: "CREDIT_BILLED",
@@ -329,50 +338,54 @@ export const OPERATION_CATALOG: PricingPolicy[] = [
     usageMetadata: "mandatory",
   },
   // ── File Question Answering ────────────────────────────────────
+  // CREDIT_COSTS: file-analysis = 2
   {
     operationId: "file_qa",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "content_size", rate: 0.0005, usageField: "content_size_bytes" },
+    strategy: { type: "fixed", credits: 2 },
     usageInputs: ["content_size_bytes", "model_type"],
     providerDependency: null,
-    costCalculation: "Content size × conversion factor × margin",
+    costCalculation: "Fixed 2 credits per file analysis",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── Lecture Question Answering ─────────────────────────────────
+  // CREDIT_COSTS: unified-ai = 1 (سؤال محاضرة يمر عبر unified-ai)
   {
     operationId: "lecture_question",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "content_size", rate: 0.0005, usageField: "content_size_bytes" },
+    strategy: { type: "fixed", credits: 1 },
     usageInputs: ["content_size_bytes", "model_type"],
     providerDependency: null,
-    costCalculation: "Content size × conversion factor × margin",
+    costCalculation: "Fixed 1 credit per lecture question (unified-ai rate)",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
   },
   // ── AI Agents ──────────────────────────────────────────────────
+  // CREDIT_COSTS: agents-generate = 3
   {
     operationId: "ai_agent",
     classification: "CREDIT_BILLED",
-    strategy: { type: "perUnit", unit: "steps", rate: 1, usageField: "agent_steps" },
+    strategy: { type: "fixed", credits: 3 },
     usageInputs: ["agent_steps", "model_type"],
     providerDependency: null,
-    costCalculation: "Sum of all agent step costs + per-step credit charge",
+    costCalculation: "Fixed 3 credits per agent generation",
     fallbackBehavior: "charge",
     refundBehavior: "fullRefund",
     usageMetadata: "mandatory",
     maxCost: 20,
   },
   // ── Image Generation ───────────────────────────────────────────
+  // CREDIT_COSTS: image-gen = 1 / sd = 3 / premium = 5
   {
     operationId: "image_generation",
     classification: "CREDIT_BILLED",
-    strategy: { type: "fixed", credits: 3 },
-    usageInputs: ["model_type"],
+    strategy: { type: "fixed", credits: 1 },
+    usageInputs: ["model_type", "image_tier"],
     providerDependency: null,
-    costCalculation: "Fixed 3 credits per image generation",
+    costCalculation: "Fixed 1 credit (standard) — SD = 3, Premium = 5 per CREDIT_COSTS",
     fallbackBehavior: "charge",
     refundBehavior: "idempotent",
     usageMetadata: "mandatory",
@@ -384,7 +397,7 @@ export const OPERATION_CATALOG: PricingPolicy[] = [
     strategy: { type: "perUnit", unit: "minutes", rate: 0.5, usageField: "duration_minutes" },
     usageInputs: ["duration_minutes", "provider", "model"],
     providerDependency: null,
-    costCalculation: "Duration (minutes) × rate × conversion factor × margin",
+    costCalculation: "Duration (minutes) × rate — per-unit metering deferred until provider rates verified",
     fallbackBehavior: "charge",
     refundBehavior: "fullRefund",
     usageMetadata: "mandatory",

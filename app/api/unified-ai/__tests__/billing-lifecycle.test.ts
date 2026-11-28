@@ -33,9 +33,16 @@ vi.mock("@/lib/supabase/server", () => {
 // MOCKED UNIFIED AI MODULE
 // ─────────────────────────────────────────────────────────────────────
 
-let testUnifiedAI = vi.fn((input) => {
+let testUnifiedAI = vi.fn((input?: unknown): {
+  ok: boolean;
+  answer?: string;
+  attempts?: unknown[];
+  metadata?: Record<string, unknown>;
+  reasoning?: string | null;
+  error?: string | null;
+} => {
   // Default: return success
-  console.log('[DEBUG] testUnifiedAI called with', input?.prompt?.slice(0, 30));
+  console.log('[DEBUG] testUnifiedAI called with', (input as { prompt?: string })?.prompt?.slice(0, 30));
   return {
     ok: true,
     answer: "Mocked AI response",
@@ -71,6 +78,16 @@ function getMockRpc() {
 describe("Phase 3.2d — Route Billing Lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // ⚠️ clearAllMocks يمسح الاستدعاءات فقط ولا يمسح الـ implementations —
+    // فبدون السطر ده mockResolvedValue({ok:false}) من اختبار فاشل بيفضل
+    // عالقًا في كل الاختبارات اللي بعده (سبب فشل 11/17 في الـ baseline).
+    testUnifiedAI.mockImplementation((input) => ({
+      ok: true,
+      answer: "Mocked AI response",
+      attempts: [],
+      metadata: {},
+      reasoning: null,
+    }));
   });
 
   afterEach(() => {
