@@ -111,7 +111,7 @@ describe("Community C4 API contract", () => {
     expect(postsRoute).toContain("scanCommunityText");
     expect(postsRoute).toContain('"content_blocked"');
     expect(commentsRoute).toContain("scanCommunityText");
-    expect(postsRoute).toContain("logBlockedContent");
+    expect(postsRoute).toContain("enforceContentViolation");
   });
 
   it("permission community.moderate exists for owner/admin/support/moderator and is sensitive", () => {

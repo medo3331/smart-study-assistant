@@ -71,6 +71,7 @@ export default function CommunityComposer({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const [pendingNote, setPendingNote] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const firstName = (displayName || "").trim().split(/\s+/)[0] || "";
@@ -149,6 +150,7 @@ export default function CommunityComposer({
         setPollOptions(["", ""]);
         setOpen(false);
         setAiNote(null);
+        setPendingNote(true); // C15 — المنشور الجديد بينزل بعد موافقة الإشراف
         onPublished?.();
       } else {
         setError(postErrorAr(data.code, data.error || "تعذّر النشر."));
@@ -166,8 +168,13 @@ export default function CommunityComposer({
   if (!open) {
     return (
       <div className="rounded-2xl border border-rule bg-paper-2 p-4">
+        {pendingNote ? (
+          <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700" role="status">
+            تم استلام منشورك — هيظهر في المجتمع بعد موافقة الإشراف ✅
+          </p>
+        ) : null}
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => { setOpen(true); setPendingNote(false); }}
           className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-start transition hover:bg-paper"
           aria-expanded={false}
           aria-label="اكتب منشورًا جديدًا"

@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") === "all" ? null : (url.searchParams.get("status") ?? "pending");
 
-  const [reports, actions, appeals, audit, blockedWords, moderators, bannedProfiles] = await Promise.all([
+  const [reports, actions, appeals, audit, blockedWords, moderators, bannedProfiles, pendingPosts] = await Promise.all([
     g.service.rpc("mod_list_reports", { p_status: status ?? "pending", p_limit: 100 }),
     g.service.rpc("mod_list_actions", { p_active_only: false, p_limit: 100 }),
     g.service.rpc("mod_list_appeals", { p_status: status ?? "pending", p_limit: 100 }),
@@ -54,6 +54,8 @@ export async function GET(req: Request) {
       .or("is_banned.eq.true,restriction_until.gt.now()")
       .order("banned_at", { ascending: false, nullsFirst: false })
       .limit(200),
+    // طابور الموافقات (C15): المنشورات المنتظرة مراجعة الإشراف
+    g.service.rpc("mod_list_pending_posts", { p_limit: 100 }),
   ]);
 
   // أسماء المشرفين للعرض
@@ -85,6 +87,7 @@ export async function GET(req: Request) {
     appeals: pick(appeals).appeals ?? [],
     audit: pick(audit).entries ?? [],
     blockedWords: (blockedWords.data ?? []) as unknown[],
+    pendingPosts: pick(pendingPosts).entries ?? [],
     moderators: moderatorProfiles,
     bannedProfiles: (bannedProfiles.data ?? []) as unknown[],
     canManageTeam: g.role === "owner" || g.role === "admin",
@@ -160,6 +163,18 @@ export async function POST(req: Request) {
         p_approve: body.approve,
         p_notes: typeof body.notes === "string" ? body.notes : null,
       };
+      break;
+    }
+    case "review_post": {
+      // C15 — موافقة/رفض منشور من طابور الموافقات
+      if (
+        typeof body.postId !== "string" || !UUID_RE.test(body.postId) ||
+        typeof body.approve !== "boolean"
+      ) {
+        return NextResponse.json({ success: false, error: "Invalid body." }, { status: 400 });
+      }
+      rpcName = "mod_review_post";
+      args = { p_post_id: body.postId, p_approve: body.approve };
       break;
     }
     case "add_blocked_word": {

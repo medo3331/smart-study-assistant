@@ -430,15 +430,15 @@ describe("🔥 تخصيص الموديل لكل ميزة (Task-Specific Models)"
     expect(engine).toContain("محاولتين");
   });
 
-  it("السجل: llama-3.3-70b مسجّل بس **معطّل** لحد الفحص الحي", () => {
+  it("السجل: qwen/qwen3.8-27b (بديل llama المحجوب) مسجّل بس **معطّل** لحد الفحص الحي", () => {
     const models = read("lib/ai/models.ts");
-    expect(models).toContain("llama-3.3-70b-versatile");
-    // ⚠️ موديل محجوب (404) في التفضيلات = كل نداء بيضيع وقته.
-    expect(models).toMatch(/id: "llama-3\.3-70b-versatile"[\s\S]{0,600}?enabled: false/);
+    expect(models).toContain("qwen/qwen3.8-27b");
+    // ⚠️ موديل محتاج فحص حي في التفضيلات = كل نداء بيضيع وقته.
+    expect(models).toMatch(/id: "qwen\/qwen3\.8-27b"[\s\S]{0,600}?enabled: false/);
     const routing = read("lib/ai/routing.ts");
-    // ⚠️ قائمة تفضيلات التوليد ما فيهاش الموديل المحجوب.
+    // ⚠️ قائمة تفضيلات التوليد ما فيهاش الموديل غير المتحقق منه.
     const block = routing.slice(routing.indexOf("exam_generation: ["), routing.indexOf("]", routing.indexOf("exam_generation: [")));
-    expect(block).not.toContain("llama-3.3-70b-versatile");
+    expect(block).not.toContain("qwen/qwen3.8-27b");
   });
 
   it("الـ404 المؤقت (تأخّر الـreplica) بيتعالج، مش خطأ نهائي", () => {

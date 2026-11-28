@@ -6,7 +6,7 @@
 // ===========================================================================
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X, Users, UserPlus, Trash2, Sparkles } from "lucide-react";
+import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X, Users, UserPlus, Trash2, Sparkles, Inbox } from "lucide-react";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
 
 type Report = {
@@ -38,6 +38,11 @@ type BannedProfile = {
   banned_at: string | null; ban_reason: string | null;
   restriction_until: string | null; warning_count: number;
 };
+type PendingPost = {
+  post_id: string; author_id: string; author_name: string | null;
+  author_code: string | null; kind: string; body: string;
+  image_url: string | null; visibility: string; created_at: string;
+};
 type AiSuggestion = {
   recommended_action: "dismiss" | "warning" | "restrict" | "suspend";
   explanation_ar: string;
@@ -61,8 +66,9 @@ function dt(iso: string | null): string {
 }
 
 export default function AdminModerationClient() {
-  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit" | "words" | "team" | "bans">("reports");
+  const [tab, setTab] = useState<"queue" | "reports" | "actions" | "appeals" | "audit" | "words" | "team" | "bans">("queue");
   const [reports, setReports] = useState<Report[]>([]);
+  const [pendingPosts, setPendingPosts] = useState<PendingPost[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -95,6 +101,7 @@ export default function AdminModerationClient() {
       const d = await res.json();
       if (d.success) {
         setReports(d.reports ?? []);
+        setPendingPosts(d.pendingPosts ?? []);
         setActions(d.actions ?? []);
         setAppeals(d.appeals ?? []);
         setAudit(d.audit ?? []);
@@ -165,6 +172,7 @@ export default function AdminModerationClient() {
   };
 
   const tabs = [
+    { id: "queue" as const, label: `بانتظار الموافقة (${pendingPosts.length})`, icon: Inbox },
     { id: "reports" as const, label: `التقارير (${reports.length})`, icon: MessageSquareWarning },
     { id: "appeals" as const, label: `الاعتراضات (${appeals.length})`, icon: Gavel },
     { id: "actions" as const, label: "العقوبات", icon: ShieldAlert },
@@ -208,20 +216,79 @@ export default function AdminModerationClient() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-              tab === t.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+              tab === t.id
+                ? "border-violet-500 bg-gradient-to-l from-violet-600 to-indigo-600 text-white shadow-sm shadow-violet-200"
+                : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
             }`}
           >
             <t.icon className="h-4 w-4" />
             {t.label}
           </button>
         ))}
-        <button onClick={() => void load()} className="mr-auto inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3.5 py-1.5 text-sm hover:bg-slate-200">
+        <button onClick={() => void load()} className="mr-auto inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "تحديث"}
         </button>
+        <a
+          href="/community/moderation/competitions"
+          className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-sm font-bold text-amber-700 hover:bg-amber-100"
+        >
+          🏆 بانى المسابقات
+        </a>
       </div>
 
       {error ? <AdminNotice tone="rose">{error}</AdminNotice> : null}
+
+      {/* ------------------------------------------------- طابور موافقة المنشورات */}
+      {tab === "queue" && (
+        <AdminCard title="منشورات بانتظار موافقة الإشراف" tone="default">
+          <p className="mb-3 text-xs text-slate-500">
+            كل منشور جديد بينزل بعد موافقة المشرف. الموافقة بينشره في المجتمع فورًا، والرفض بيبلّغ صاحبه بإشعار.
+          </p>
+          {pendingPosts.length === 0 && !loading ? (
+            <p className="text-sm text-slate-500">مفيش منشورات مستنية — كل المنشورات اتنشرت.</p>
+          ) : (
+            <ul className="space-y-3">
+              {pendingPosts.map((p) => (
+                <li key={p.post_id} className="rounded-lg border border-slate-200 p-3.5">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-bold text-slate-800">{p.author_name || "بدون اسم"}</span>
+                    {p.author_code ? <span className="font-mono text-[10px] text-slate-400" dir="ltr">{p.author_code}</span> : null}
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
+                      {p.kind === "text" ? "نصي" : p.kind === "achievement" ? "إنجاز" : p.kind === "question" ? "سؤال" : p.kind === "tip" ? "معلومة" : p.kind === "summary" ? "ملخص" : p.kind}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                      {p.visibility === "public" ? "عام" : p.visibility === "friends" ? "الأصدقاء" : "خاص"}
+                    </span>
+                    <span className="text-xs text-slate-500">{dt(p.created_at)}</span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm text-slate-700">{p.body}</p>
+                  {p.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.image_url} alt="مرفق المنشور" className="mt-2 max-h-48 rounded-lg border border-slate-200 object-cover" />
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => void post({ action: "review_post", postId: p.post_id, approve: true }, `rev-${p.post_id}`).then((ok) => { if (ok) void load(); })}
+                      disabled={busy !== null}
+                      className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {busy === `rev-${p.post_id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "موافقة ونشر"}
+                    </button>
+                    <button
+                      onClick={() => void post({ action: "review_post", postId: p.post_id, approve: false }, `rev-${p.post_id}`).then((ok) => { if (ok) void load(); })}
+                      disabled={busy !== null}
+                      className="rounded bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      رفض
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </AdminCard>
+      )}
 
       {/* ------------------------------------------------- الكلمات الممنوعة */}
       {tab === "words" && (

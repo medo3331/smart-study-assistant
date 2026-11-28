@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { publishMessageNew, publishTypingIndicator } from "@/lib/messaging/realtime-publish";
+import { enforceContentViolation } from "@/lib/community/content-enforcement";
 
 export async function POST(
   req: Request,
@@ -42,6 +43,22 @@ export async function POST(
 
     if (partError || !participant) {
       return NextResponse.json({ success: false, error: "You are not a participant of this conversation." }, { status: 403 });
+    }
+
+    // 1.5 🛡️ C16: فحص المحتوى قبل الإرسال — كلمات ممنوعة ثم فحص AI
+    const { data: hasBlockedWord, error: bwError } = await serverClient.rpc(
+      "community_text_has_blocked_word",
+      { p_text: messageBody },
+    );
+    if (!bwError && hasBlockedWord === true) {
+      void enforceContentViolation(user.id, "message", messageBody, "blocked_word");
+      return NextResponse.json({ success: false, error: "رسالتك تحتوي عبارة مخالفة لقواعد المجتمع فما ابعتتش." }, { status: 409 });
+    }
+    const { scanCommunityText } = await import("@/lib/community/moderation");
+    const scan = await scanCommunityText(messageBody);
+    if (scan.violation) {
+      void enforceContentViolation(user.id, "message", messageBody, scan.category);
+      return NextResponse.json({ success: false, error: "رسالتك تحتوي محتوى مخالف لقواعد المجتمع فما ابعتتش." }, { status: 409 });
     }
 
     // 2. Insert message

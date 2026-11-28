@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { CommunityQuiz, type QuizResult } from "@/components/CommunityQuiz";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { CommunityInvite } from "@/components/CommunityInvite";
+import CustomCompetitions from "@/components/community/CustomCompetitions";
 
 interface LeaderboardEntry {
   id: string;
@@ -60,7 +61,7 @@ export default function CommunityPage() {
   const [streak, setStreak] = useState(1);
   const [quizSubject, setQuizSubject] = useState("مراجعة عامة");
 
-  const [activeTab, setActiveTab] = useState<"leaderboard" | "competition" | "challenges">("leaderboard");
+  const [activeTab, setActiveTab] = useState<"leaderboard" | "competition" | "challenges" | "customs">("leaderboard");
   const [timeLeft, setTimeLeft] = useState(getTimeUntilWeekEnd());
 
   // لوحة الصدارة الرئيسية (XP) — مستخدمين حقيقيين من profiles
@@ -312,6 +313,7 @@ export default function CommunityPage() {
             { id: "leaderboard", label: "الصدارة" },
             { id: "competition", label: "المسابقة" },
             { id: "challenges", label: "التحديات" },
+            { id: "customs", label: "مسابقات المجتمع" },
           ] as const).map((t) => (
             <button
               key={t.id}
@@ -498,6 +500,15 @@ export default function CommunityPage() {
                   );
                 })
               )}
+            </motion.div>
+          ) : activeTab === "customs" ? (
+            <motion.div
+              key="customs"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+            >
+              <CustomCompetitions />
             </motion.div>
           ) : (
             <motion.div

@@ -7,7 +7,8 @@
 
 import { NextResponse } from "next/server";
 import { getAuthedClient, socialNotify } from "@/lib/community/handlers";
-import { scanCommunityText, logBlockedContent } from "@/lib/community/moderation";
+import { scanCommunityText } from "@/lib/community/moderation";
+import { enforceContentViolation } from "@/lib/community/content-enforcement";
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +26,15 @@ export async function POST(req: Request) {
     // 🛡️ C4: فحص المحتوى بالـAI قبل النشر (fail-open)
     const textToScan = typeof body.body === "string" ? body.body : "";
     // 🛡️ C6: فلترة حتمية للكلمات الممنوعة (أسرع وأثبت من الـAI)
+    // 🛡️ C16: تحذير + تقييد تلقائي حسب نوع الإساءة
     const { data: hasBlockedWord, error: bwError } = await auth.client.rpc("community_text_has_blocked_word", { p_text: textToScan });
     if (!bwError && hasBlockedWord === true) {
-      void logBlockedContent(auth.user.id, "post", textToScan, "blocked_word");
+      void enforceContentViolation(auth.user.id, "post", textToScan, "blocked_word");
       return NextResponse.json({ success: false, code: "content_blocked", error: "يحتوي النص على عبارة مخالفة لقواعد المجتمع." }, { status: 409 });
     }
     const scan = await scanCommunityText(textToScan);
     if (scan.violation) {
-      void logBlockedContent(auth.user.id, "post", textToScan, scan.category);
+      void enforceContentViolation(auth.user.id, "post", textToScan, scan.category);
       return NextResponse.json({ success: false, code: "content_blocked", error: "Rejected." }, { status: 409 });
     }
 

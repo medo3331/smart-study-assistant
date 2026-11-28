@@ -69,7 +69,7 @@ const smallBtn = "inline-flex items-center gap-1.5 rounded-lg border border-rule
 const inputCls = "w-full rounded-xl border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-marker";
 
 const TABS: { id: Tab; label: string; icon: typeof Search }[] = [
-  { id: "feed", label: "الفيد", icon: Rss },
+  { id: "feed", label: "المنشورات", icon: Rss },
   { id: "discover", label: "اكتشف", icon: Search },
   { id: "friends", label: "الأصدقاء", icon: Users },
   { id: "requests", label: "الطلبات", icon: Bell },

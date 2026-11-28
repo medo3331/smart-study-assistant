@@ -72,7 +72,7 @@ export async function scanCommunityText(text: string): Promise<ScanVerdict> {
 /** تسجيل محتوى حجبه الفحص الآلي في سجل التدقيق (للمراجعة البشرية). */
 export async function logBlockedContent(
   userId: string,
-  kind: "post" | "comment",
+  kind: "post" | "comment" | "message",
   text: string,
   category?: string,
 ): Promise<void> {
