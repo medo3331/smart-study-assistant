@@ -10,7 +10,7 @@ import {
 } from "@/components/worship/WorshipChrome";
 import { SoundLibrary } from "@/app/dashboard/components/SoundLibrary";
 import { THEME_STYLES } from "@/app/dashboard/components/theme-helpers";
-import { todayUtc } from "@/lib/worship-data";
+import { localWorshipDate } from "@/lib/islamic/worship-progress";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
@@ -43,7 +43,7 @@ function QuranHome() {
 
     void (async () => {
       if (cancelled || target <= 0 || readToday < target) return;
-      const day = todayUtc();
+      const day = localWorshipDate(new Date(), shared.settings.timezone);
       await shared.recordEvent(
         () => shared.progress,
         "worship_quran",

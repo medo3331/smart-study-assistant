@@ -18,6 +18,7 @@ import { MISSING_TABLE, toDataError, type DataError, type Result } from "@/lib/p
 import { SLOTS, type Slot, type ShopItem } from "./types";
 import type { Rarity } from "./rarity";
 import { DEFAULT_ITEMS, itemById, slotOf } from "./catalog";
+import { fetchCustomCatalogItems } from "./custom-catalog";
 import { leagueFromXp, levelFromXp, hasLeague, type League, type EconomyContext } from "./economy";
 
 /* --------------------------------------------------------------------------
@@ -121,6 +122,11 @@ export interface ShopState {
    * السبب المكتوب على `{ kind: "badges" }` في types.ts.
    */
   badgeCount: number;
+  /**
+   * عناصر الأدمن من shop_catalog (metadata.custom) — اختيارية عشان
+   * المكوّنات اللي بتبني حالة جزئية تشتغل من غيرها.
+   */
+  customItems?: readonly ShopItem[];
 }
 
 /** Alias موثّق: نفس بيانات EconomyContext لكن مع المخزن — للتوافق مع spec §7 */
@@ -184,7 +190,7 @@ export async function fetchShopState(
   const grantRes = await supabase.rpc("grant_default_items");
   if (grantRes.error) return fail(grantRes.error);
 
-  const [balanceRes, profileRes, invRes, eqRes, sessionRes, badgeRes] = await Promise.all([
+  const [balanceRes, profileRes, invRes, eqRes, sessionRes, badgeRes, customRes] = await Promise.all([
     supabase.rpc("coin_balance"),
     supabase
       .from("profiles")
@@ -208,6 +214,8 @@ export async function fetchShopState(
       .from("badges")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId),
+    // عناصر الأدمن — فشلها مش بيوقف التحميل (هترجع فاضية)
+    fetchCustomCatalogItems(supabase),
   ]);
 
   if (balanceRes.error) return fail(balanceRes.error);
@@ -242,6 +250,7 @@ export async function fetchShopState(
     ownedIds,
     equipped,
     badgeCount,
+    customItems: Array.isArray(customRes) ? customRes : [],
   });
 }
 
@@ -610,11 +619,13 @@ const DEFAULT_BY_SLOT: Partial<Record<Slot, ShopItem>> = (() => {
 
 /** العنصر الملبوس في خانة — والافتراضي المجاني لو مفيش. */
 export function equippedItem(
-  state: Pick<ShopState, "equipped">,
+  state: Pick<ShopState, "equipped" | "customItems">,
   slot: Slot,
 ): ShopItem | undefined {
   const id = state.equipped[slot];
-  return (id ? itemById(id) : undefined) ?? DEFAULT_BY_SLOT[slot];
+  if (!id) return DEFAULT_BY_SLOT[slot];
+  const custom = (state.customItems ?? []).find((i) => i.id === id);
+  return custom ?? itemById(id) ?? DEFAULT_BY_SLOT[slot];
 }
 
 /**

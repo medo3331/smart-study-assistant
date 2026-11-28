@@ -10,6 +10,7 @@ import {
   updateCoinSourceRule,
   updateExchangeSettings,
   updatePackPrice,
+  grantUserBalance,
   type BalancingActionResult,
 } from "@/app/admin/actions/economy-balancing";
 import type { CoinSourceRuleRow, ExchangeSettingsRow, PackRow } from "@/lib/admin/economy-balancing";
@@ -85,7 +86,78 @@ export function EconomyBalancingClient({
         onSave={(packId, price, isActive) => run(() => updatePackPrice({ kind: "coins", packId, price, isActive }))} />
       <PacksForm title="باقات الكريدت (credit_packs)" packs={creditPacks} kind="credits" busy={pending}
         onSave={(packId, price, isActive) => run(() => updatePackPrice({ kind: "credits", packId, price, isActive }))} />
+
+      {/* إضافة رصيد يدوي لمستخدم */}
+      <GrantBalanceForm busy={pending} onGrant={(input) => run(() => grantUserBalance(input))} />
     </div>
+  );
+}
+
+function GrantBalanceForm({ busy, onGrant }: {
+  busy: boolean;
+  onGrant: (input: { userId: string; kind: "coins" | "credits"; amount: number; note?: string }) => void;
+}) {
+  const [userId, setUserId] = useState("");
+  const [kind, setKind] = useState<"coins" | "credits">("coins");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+
+  const amt = parseInt(amount, 10);
+  const valid = userId.trim().length === 36 && Number.isInteger(amt) && amt > 0 && amt <= 10000;
+
+  return (
+    <section className="rounded-2xl border border-slate-700 p-4">
+      <h2 className="text-sm font-extrabold text-amber-300 mb-1">إضافة رصيد لمستخدم</h2>
+      <p className="text-[10px] text-slate-400 mb-3">
+        الكوينز تُضف من المسار المركزي (admin_grant) والكريدت من نظام الكريدت — والعملية بتتسجل في سجل العمليات.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="block text-[11px] text-slate-300">
+          معرّف المستخدم (UUID)
+          <input
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            dir="ltr"
+            className={inputCls}
+          />
+        </label>
+        <div className="flex gap-3">
+          <label className="block text-[11px] text-slate-300 flex-1">
+            النوع
+            <select value={kind} onChange={(e) => setKind(e.target.value as "coins" | "credits")} className={inputCls}>
+              <option value="coins">Magic Coins 🪙</option>
+              <option value="credits">Magic Credits 💎</option>
+            </select>
+          </label>
+          <label className="block text-[11px] text-slate-300 flex-1">
+            المبلغ
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="numeric"
+              placeholder="1 - 10000"
+              className={inputCls}
+            />
+          </label>
+        </div>
+        <label className="block text-[11px] text-slate-300 sm:col-span-2">
+          ملاحظة (اختياري — بتظهر في السجل)
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} className={inputCls} />
+        </label>
+      </div>
+      <button
+        type="button"
+        disabled={busy || !valid}
+        onClick={() => {
+          onGrant({ userId: userId.trim(), kind, amount: amt, note: note.trim() || undefined });
+          setUserId(""); setAmount(""); setNote("");
+        }}
+        className={`${btnCls} mt-3`}
+      >
+        إضافة الرصيد
+      </button>
+    </section>
   );
 }
 

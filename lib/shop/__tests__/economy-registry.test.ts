@@ -43,8 +43,9 @@ describe("economy registry — canonical contract (db/113)", () => {
   });
 
   it("snapshot — السقف اليومي النظري (يتراجع مع أي تعديل مبالغ)", () => {
-    // الأساس القائم + مصادر الألعاب (G0-B) — التغيير هنا مقصود يتراجع مع D-M
-    expect(maxDailyCoins()).toBe(652);
+    // الأساس القائم + مصادر الألعاب (G0-B) + اختبار الدرس (db/118 — D-M-04:
+    // ٥ كوينز × سقف ٥/يوم = ٢٥ إضافة) — التغيير هنا مقصود يتراجع مع D-M
+    expect(maxDailyCoins()).toBe(677);
   });
 
   it("escape_room = 25 (قرار D-1 — مش 60)", () => {
@@ -59,10 +60,13 @@ describe("economy registry — canonical contract (db/113)", () => {
     }
   });
 
-  it("مصادر DEV-M1 الجديدة (اختبار الدرس/المراجعة/الامتحان) مش live لحد إثبات سيرفري", () => {
-    for (const id of ["lesson_quiz_passed", "review_done", "exam_passed"] as const) {
-      expect(COIN_SOURCES[id].live).toBe(false);
-    }
+  it("lesson_quiz_passed شغّال بعد الإثبات السيرفري (db/118) — والباقي معلّق", () => {
+    // الإثبات: تصحيح سيرفري في /api/lesson-quiz/submit + فرع داخل award_coins
+    expect(COIN_SOURCES.lesson_quiz_passed.live).toBe(true);
+    expect(COIN_SOURCES.lesson_quiz_passed.dailyCap).toBe(5);
+    // review_done/exam_passed: لسه مفيش إثبات سيرفري — والامتحانات محمية (D-DEV-02)
+    expect(COIN_SOURCES.review_done.live).toBe(false);
+    expect(COIN_SOURCES.exam_passed.live).toBe(false);
   });
 
   it("مصادر المنح (شراء/إعلانات/إداري) منفصلة عن مصادر الكسب", () => {

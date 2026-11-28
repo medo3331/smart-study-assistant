@@ -15,6 +15,8 @@ interface QuranWirdCardProps {
   totalAyahs: number;
   progress: number;
   juzNumber: number;
+  /** موضع القراءة الحالي بنص مقروء (من مزامنة موضع القرآن — مرحلة العبادات ١). */
+  readingPosition?: string;
   onContinue: () => void;
   index: number;
 }
@@ -31,6 +33,7 @@ export function QuranWirdCard({
   totalAyahs,
   progress,
   juzNumber,
+  readingPosition,
   onContinue,
   index,
 }: QuranWirdCardProps) {
@@ -58,6 +61,9 @@ export function QuranWirdCard({
               <p className="text-xs text-[#10B981] font-medium">{surahName}</p>
             </div>
           </div>
+          {readingPosition && (
+            <p className="mb-3 text-xs text-[#9AA0C0]">{readingPosition}</p>
+          )}
 
           {/* Ayah Range */}
           <div className="mb-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">

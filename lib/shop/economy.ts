@@ -252,8 +252,10 @@ export const COIN_SOURCES = {
     id: "lesson_quiz_passed",
     label: "اختبار الدرس",
     amount: 5,
-    live: false,
-    dailyCap: 1,
+    // db/118: التفعيل بعد مسار التصحيح السيرفري (/api/lesson-quiz/submit
+    // + جدول lesson_quiz_attempts) — الإثبات فرع داخل award_coins.
+    live: true,
+    dailyCap: 5,
     sourceClass: "study",
   },
   review_done: {
@@ -317,7 +319,7 @@ export const COIN_SOURCES = {
  * ماتدخلش في حسابات الكسب اليومي ولا في سييد المتجر.
  * التفعيل الفعلي: DEV-M4 (شراء بالفلوس / إعلانات SSV).
  */
-export const COIN_GRANT_SOURCES = ["purchase", "ad_reward", "admin_grant"] as const;
+export const COIN_GRANT_SOURCES = ["purchase", "ad_reward", "admin_grant", "champion_weekly"] as const;
 export type CoinGrantSourceId = (typeof COIN_GRANT_SOURCES)[number];
 
 export type CoinSourceId = keyof typeof COIN_SOURCES;

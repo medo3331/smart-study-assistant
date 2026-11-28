@@ -18,26 +18,22 @@ import { Check, ChevronDown, Loader2, Search, Sparkles } from "lucide-react";
 export function ReciterSelector() {
   const { reciters, selectedReciter, isLoading, error, selectReciter } =
     useReciters();
-  // Fallback reciters when API load fails (matches image state)
-  const fallbackReciters = [
-    { id: 1, name: "Abdul Basit", arabicName: "عبد الباسط", server: "mp3quran.net", surahs: [1], rewaya: "hafs", language: "ar" },
-    { id: 2, name: "Mishari", arabicName: "مشاري العفاسي", server: "mp3quran.net", surahs: [1], rewaya: "hafs", language: "ar" },
-    { id: 3, name: "Saad", arabicName: "سعد الغامدي", server: "mp3quran.net", surahs: [1], rewaya: "hafs", language: "ar" },
-  ];
-  const displayReciters = (isLoading || error || !reciters?.length) ? fallbackReciters : reciters;
+  // الهوك نفسه بيرجّع ليستة احتياطية بروابط حقيقية لو الـ API وقع —
+  // الـ fallback الوهمي القديم (server: "mp3quran.net" من غير مسار)
+  // كان بيختار قارئ بروابط مكسورة والصوت ميشتغلش.
+  const displayReciters = reciters;
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   const filtered = displayReciters.filter(
     (r) =>
-      r.arabicName.includes(search) ||
-      r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.rewaya.includes(search)
+      (r.arabicName ?? "").includes(search) ||
+      (r.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (r.rewaya ?? "").includes(search)
   );
 
-  const selected = selectedReciter ??
-    (displayReciters.find((r) => r.id === 1) || null);
+  const selected = selectedReciter ?? displayReciters[0] ?? null;
 
   return (
     <div className="relative">

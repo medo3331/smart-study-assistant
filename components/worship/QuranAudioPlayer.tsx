@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useQuranAudio } from "@/hooks/useQuranAudio";
 import { useReciters } from "@/hooks/useReciters";
+import { SURAH_NAMES } from "@/app/dashboard/components/audio-library";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { IconBadge } from "@/components/ui/IconBadge";
 import {
@@ -62,19 +63,8 @@ export function QuranAudioPlayer() {
   const reciter =
     reciters.find((r) => r.id === currentReciterId) || selectedReciter;
 
-  const getSurahName = (id: number): string => {
-    // We don't have the full surah list here; use a minimal lookup
-    // for display. The full list is fetched in QuranReader/QuranPage.
-    const names: Record<number, string> = {
-      1: "الفاتحة",
-      2: "البقرة",
-      3: "آل عمران",
-      4: "النساء",
-      5: "المائدة",
-      // ... we'll get the rest from the Quran service
-    };
-    return names[id] || `سورة ${id}`;
-  };
+  const getSurahName = (id: number): string =>
+    SURAH_NAMES[id - 1] || `سورة ${id}`;
 
   const formatTime = (seconds: number): string => {
     if (!isFinite(seconds) || seconds < 0) return "00:00";
@@ -294,7 +284,7 @@ export function QuranAudioPlayer() {
                         className={cn(
                           "p-2 text-[#9AA0C0] hover:text-white disabled:opacity-30"
                         )}
-                        aria-label="السورة التاليةة"
+                        aria-label="السورة التالية"
                       >
                         <SkipForward size={20} />
                       </button>

@@ -61,6 +61,30 @@ function SettingsHome() {
     value: IslamicSettings[K],
   ) => update({ [key]: value } as Partial<IslamicSettings>);
 
+  // تحديد الموقع تلقائيًا بموافقة المستخدم — الرفض يرجّع الوضع اليدوي بدون إيقاف الصفحة.
+  const requestCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      shared.updateSettingsLocal({ locationMode: "manual" });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        const nextLocation = {
+          ...settings.location,
+          city: "",
+          country: "",
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          timezone,
+        };
+        update({ location: nextLocation, latitude: nextLocation.latitude, longitude: nextLocation.longitude, timezone, locationMode: "automatic" });
+      },
+      () => shared.updateSettingsLocal({ locationMode: "manual" }),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+  };
+
   return (
     <>
       {/* Header */}
@@ -151,6 +175,11 @@ function SettingsHome() {
                   className={inputClass}
                 />
               </Field>
+
+              <button type="button" onClick={requestCurrentLocation} className="rounded-xl border border-[#10B981]/30 px-4 py-2 text-sm text-[#6EE7B7] hover:bg-[#10B981]/10">
+                استخدام موقعي الحالي بموافقتي
+              </button>
+              <p className="text-xs text-[#9AA0C0]">يمكنك رفض إذن الموقع والاستمرار بإدخال المدينة والإحداثيات يدويًا.</p>
             </div>
           </GlassCard>
         </Reveal>

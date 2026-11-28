@@ -22,7 +22,9 @@ import {
 interface AdhkarReaderProps {
   adhkar: Dhikr[];
   category: AdhkarCategory;
-  onComplete?: () => void;
+  initialCounts?: Record<string, number>;
+  onProgressChange?: (counts: Record<string, number>, completed: boolean) => void;
+  onComplete?: (counts: Record<string, number>) => void;
   onBack?: () => void;
 }
 
@@ -37,9 +39,9 @@ const CATEGORY_ICONS: Record<AdhkarCategory, any> = {
 const CATEGORY_COLORS: Record<AdhkarCategory, { color: string; bg: string }> = {
   morning: { color: "text-[#FB923C]", bg: "bg-[#FB923C]/15" },
   evening: { color: "text-[#F97316]", bg: "bg-[#F97316]/15" },
-  "after-prayer": { color: "text-[#34D399]", bg: "bg-[#34D399]/15" },
-  sleep: { color: "text-[#10B981]", bg: "bg-[#10B981]/15" },
-  general: { color: "text-[#6EE7B7]", bg: "bg-[#10B981]/15" },
+  "after-prayer": { color: "text-[#2DD4BF]", bg: "bg-[#2DD4BF]/15" },
+  sleep: { color: "text-[#7C5CFF]", bg: "bg-[#7C5CFF]/15" },
+  general: { color: "text-[#B69CFF]", bg: "bg-[#7C5CFF]/15" },
 };
 
 const CATEGORY_LABELS: Record<AdhkarCategory, string> = {
@@ -56,13 +58,16 @@ const CATEGORY_LABELS: Record<AdhkarCategory, string> = {
  */
 export function AdhkarReader({ 
   adhkar, 
-  category, 
+  category,
+  initialCounts = {},
+  onProgressChange,
   onComplete,
-  onBack 
+  onBack,
 }: AdhkarReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [counts, setCounts] = useState<number[]>(() => adhkar.map(() => 0));
-  const [completed, setCompleted] = useState<boolean[]>(() => adhkar.map(() => false));
+  const [counts, setCounts] = useState<number[]>(() =>
+    adhkar.map((item) => Math.min(Math.max(initialCounts[item.id] ?? 0, 0), item.repeatCount)),
+  );
   const [showCelebration, setShowCelebration] = useState(false);
 
   const CategoryIcon = CATEGORY_ICONS[category];
@@ -70,30 +75,22 @@ export function AdhkarReader({
 
   const currentDhikr = adhkar[currentIndex];
   const isLast = currentIndex === adhkar.length - 1;
-  const allCompleted = completed.every(c => c);
+  const completed = counts.map((count, index) => count >= adhkar[index].repeatCount);
+  const allCompleted = completed.length > 0 && completed.every(Boolean);
 
   const incrementCount = useCallback((index: number) => {
-    setCounts(prev => {
-      const newCounts = [...prev];
-      newCounts[index] = Math.min(newCounts[index] + 1, adhkar[index].repeatCount);
-      
-      // Check if this dhikr is now complete
-      if (newCounts[index] >= adhkar[index].repeatCount && !completed[index]) {
-        setCompleted(prev => {
-          const newCompleted = [...prev];
-          newCompleted[index] = true;
-          
-          // Check if all are complete
-          if (newCompleted.every(c => c)) {
-            setTimeout(() => setShowCelebration(true), 300);
-            setTimeout(() => onComplete?.(), 1000);
-          }
-          return newCompleted;
-        });
-      }
-      return newCounts;
-    });
-  }, [adhkar, completed, onComplete]);
+    if (!adhkar[index] || counts[index] >= adhkar[index].repeatCount) return;
+    const nextCounts = [...counts];
+    nextCounts[index] = Math.min(nextCounts[index] + 1, adhkar[index].repeatCount);
+    setCounts(nextCounts);
+    const itemCounts = Object.fromEntries(adhkar.map((item, itemIndex) => [item.id, nextCounts[itemIndex]]));
+    const completedAll = nextCounts.every((count, itemIndex) => count >= adhkar[itemIndex].repeatCount);
+    onProgressChange?.(itemCounts, completedAll);
+    if (completedAll) {
+      setTimeout(() => setShowCelebration(true), 300);
+      onComplete?.(itemCounts);
+    }
+  }, [adhkar, counts, onComplete, onProgressChange]);
 
   const goNext = useCallback(() => {
     if (currentIndex < adhkar.length - 1) {
@@ -108,17 +105,14 @@ export function AdhkarReader({
   }, [currentIndex]);
 
   const resetDhikr = useCallback((index: number) => {
-    setCounts(prev => {
-      const newCounts = [...prev];
-      newCounts[index] = 0;
-      return newCounts;
-    });
-    setCompleted(prev => {
-      const newCompleted = [...prev];
-      newCompleted[index] = false;
-      return newCompleted;
-    });
-  }, []);
+    const nextCounts = [...counts];
+    nextCounts[index] = 0;
+    setCounts(nextCounts);
+    onProgressChange?.(
+      Object.fromEntries(adhkar.map((item, itemIndex) => [item.id, nextCounts[itemIndex]])),
+      false,
+    );
+  }, [adhkar, counts, onProgressChange]);
 
   const progress = adhkar.length > 0 
     ? (completed.filter(c => c).length / adhkar.length) * 100 
@@ -154,14 +148,14 @@ export function AdhkarReader({
           </div>
           <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
+              className="h-full bg-gradient-to-r from-[#7C5CFF] to-[#2DD4BF] rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.8, ease: "easeOut" }}
             />
           </div>
           <p className="text-xs text-[#9AA0C0] mt-2 text-center">
-            {completed.filter(c => c).length} من {adhkar.length} أذكار مكتملة
+            {completed.filter(Boolean).length} من {adhkar.length} أذكار مكتملة
           </p>
         </GlassCard>
       </Reveal>
@@ -190,6 +184,7 @@ export function AdhkarReader({
                       variant="ghost"
                       icon={RotateCcw}
                       onClick={() => resetDhikr(currentIndex)}
+                      disabled={allCompleted}
                       className="h-10 w-10 p-0"
                       aria-label="إعادة العداد"
                     >
@@ -225,7 +220,7 @@ export function AdhkarReader({
                       {currentIndex + 1} / {adhkar.length}
                     </span>
                     {completed[currentIndex] && (
-                      <IconBadge icon={CheckCircle} color="text-[#34D399]" bg="bg-[#34D399]/15" size={28} />
+                      <IconBadge icon={CheckCircle} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={28} />
                     )}
                   </div>
                   
@@ -240,8 +235,14 @@ export function AdhkarReader({
                   )}
 
                   {currentDhikr?.source && (
-                    <p className="mt-2 text-xs text-[#10B981] text-center">
-                      المصدر: {currentDhikr.source}
+                    <p className="mt-2 text-xs text-[#7C5CFF] text-center">
+                      {currentDhikr.sourceUrl ? (
+                        <a href={currentDhikr.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-[#B69CFF]">
+                          المصدر: {currentDhikr.source}
+                        </a>
+                      ) : (
+                        <>المصدر: {currentDhikr.source}</>
+                      )}
                     </p>
                   )}
                 </div>
@@ -251,10 +252,10 @@ export function AdhkarReader({
                   <motion.div
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="mb-4 p-3 rounded-xl bg-[#34D399]/10 border border-[#34D399]/30 flex items-center justify-center gap-2"
+                    className="mb-4 p-3 rounded-xl bg-[#2DD4BF]/10 border border-[#2DD4BF]/30 flex items-center justify-center gap-2"
                   >
-                    <CheckCircle size={20} className="text-[#34D399]" aria-hidden />
-                    <span className="text-sm font-medium text-[#34D399]">اكتمل هذا الذكر، اضغط للسؤال</span>
+                    <CheckCircle size={20} className="text-[#2DD4BF]" aria-hidden />
+                    <span className="text-sm font-medium text-[#2DD4BF]">اكتمل هذا الذكر، اضغط للسؤال</span>
                   </motion.div>
                 )}
 
@@ -279,9 +280,9 @@ export function AdhkarReader({
                         className={cn(
                           "h-2 w-2 rounded-full transition-all",
                           i === currentIndex
-                            ? "bg-[#10B981] w-6"
+                            ? "bg-[#7C5CFF] w-6"
                             : completed[i]
-                              ? "bg-[#34D399]"
+                              ? "bg-[#2DD4BF]"
                               : "bg-white/[0.1] hover:bg-white/[0.2]"
                         )}
                         aria-label={`الذكر ${i + 1}`}
@@ -323,7 +324,7 @@ export function AdhkarReader({
               onClick={e => e.stopPropagation()}
             >
               <div className="mb-4">
-                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-[#34D399]/20 text-[#34D399] mb-4">
+                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-[#2DD4BF]/20 text-[#2DD4BF] mb-4">
                   <CheckCircle size={40} aria-hidden />
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">مبارك! 🎉</h3>

@@ -10,10 +10,11 @@ import {
   useSharedWorshipData,
   useWorshipReward,
 } from "@/components/worship/WorshipChrome";
-import { mockAdhkar } from "@/lib/islamic/mock-data";
+import { ADHKAR_BY_CATEGORY, getAdhkarTotal } from "@/lib/islamic/adhkar-data";
 import { ADHKAR_CATEGORY_INFO } from "@/lib/islamic/adhkar";
-import { todayUtc } from "@/lib/worship-data";
-import type { AdhkarCategory, Dhikr } from "@/lib/islamic/types";
+import { localWorshipDate } from "@/lib/islamic/worship-progress";
+import type { WorshipDayRecord } from "@/lib/islamic/worship-progress";
+import type { AdhkarCategory } from "@/lib/islamic/types";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -69,21 +70,43 @@ function AdhkarHome() {
     "general",
   ] as const;
 
-  const handleComplete = useCallback(
-    (category: AdhkarCategory, totalCount: number) => {
-      if (!shared || !shared.user || shared.user.is_anonymous) return;
-      const day = todayUtc();
-      void shared.recordEvent(
-        (d) => ({
-          ...d,
+  const saveCategoryProgress = useCallback(
+    (category: AdhkarCategory, itemCounts: Record<string, number>, completed: boolean) => {
+      shared?.updateProgress((day) => {
+        const count = Object.values(itemCounts).reduce((sum, value) => sum + value, 0);
+        return {
+          ...day,
           adhkar: {
-            ...d.adhkar,
-            [category]: { completed: true, count: totalCount },
+            ...day.adhkar,
+            [category]: { completed, count, itemCounts },
           },
-        }),
+        };
+      });
+    },
+    [shared],
+  );
+
+  const handleComplete = useCallback(
+    (category: AdhkarCategory, itemCounts: Record<string, number>) => {
+      if (!shared) return;
+      const localDay = localWorshipDate(new Date(), shared.settings.timezone);
+      const totalCount = Object.values(itemCounts).reduce((sum, value) => sum + value, 0);
+      const mutator = (record: WorshipDayRecord) => ({
+        ...record,
+        adhkar: {
+          ...record.adhkar,
+          [category]: { completed: true, count: totalCount, itemCounts },
+        },
+      });
+      if (!shared.user || shared.user.is_anonymous) {
+        shared.updateProgress(mutator);
+        return;
+      }
+      void shared.recordEvent(
+        mutator,
         "worship_adhkar",
-        `${day}-${category}`,
-        { activity: "adhkar", category, date: day },
+        `${localDay}-${category}`,
+        { activity: "adhkar", category, date: localDay },
         (reward) => showReward(reward.coins),
       );
     },
@@ -95,9 +118,13 @@ function AdhkarHome() {
       <Reveal index={0}>
         <div className="flex flex-col">
           <AdhkarReader
-            adhkar={mockAdhkar[openCategory]}
+            adhkar={ADHKAR_BY_CATEGORY[openCategory]}
             category={openCategory}
-            onComplete={() => handleComplete(openCategory, totalFor(openCategory))}
+            initialCounts={shared?.progress.adhkar[openCategory]?.itemCounts}
+            onProgressChange={(itemCounts, completed) =>
+              saveCategoryProgress(openCategory, itemCounts, completed)
+            }
+            onComplete={(itemCounts) => handleComplete(openCategory, itemCounts)}
             onBack={() => setOpenCategory(null)}
           />
         </div>
@@ -127,12 +154,9 @@ function AdhkarHome() {
       <Reveal index={1}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((cat, index) => {
-            const adhkar = mockAdhkar[cat];
+            const adhkar = ADHKAR_BY_CATEGORY[cat];
             const info = ADHKAR_CATEGORY_INFO[cat];
-            const totalCounts = adhkar.reduce(
-              (sum: number, d: Dhikr) => sum + d.repeatCount,
-              0,
-            );
+            const totalCounts = getAdhkarTotal(cat);
             const completedCounts = counts[cat];
             const isDone =
               completedCounts >= totalCounts && totalCounts > 0;
@@ -209,14 +233,6 @@ function AdhkarHome() {
         </GlassCard>
       </Reveal>
     </>
-  );
-}
-
-function totalFor(category: AdhkarCategory): number {
-  const list = mockAdhkar[category];
-  return list.reduce(
-    (sum: number, d: Dhikr) => sum + d.repeatCount,
-    0,
   );
 }
 

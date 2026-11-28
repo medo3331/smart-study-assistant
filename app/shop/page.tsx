@@ -3,7 +3,7 @@
 /* ==========================================================================
    المتجر
 
-   ٩٣ عنصر (٩٠ تجميلي + ٣ مفيدة) في ٩ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
+   ١١٤ عنصر (١١١ تجميلي + ٣ مفيدة) في ١٠ أقسام. المشكلة التصميمية الوحيدة الحقيقية هنا: إزاي المستخدم
    يلاقي حاجة في كومة زي دي. الحل تلات طبقات — قسم، وبحث، وترتيب — وكلهم
    بيشتغلوا مع بعض على نفس القايمة.
 
@@ -38,6 +38,7 @@ import { BOXES, type BoxTier } from "@/lib/shop/boxes";
 import { useShop } from "@/lib/shop/use-shop";
 import { BoxPanel } from "@/components/shop/BoxPanel";
 import { BoxSheet } from "@/components/shop/BoxSheet";
+import { ChampionsPanel } from "@/components/shop/ChampionsPanel";
 import { CreditPacksPanel } from "@/components/shop/CreditPacksPanel";
 import { CoinPacksPanel } from "@/components/shop/CoinPacksPanel";
 import { ExchangeWidget } from "@/components/shop/ExchangeWidget";
@@ -187,10 +188,14 @@ export default function ShopPage() {
     say(interests.length ? "المتجر اتظبط على ذوقك" : "تمام، هنسيب الاختيارات عامة دلوقتي", true);
   };
 
-  /* القايمة المعروضة: قسم ← بحث ← ترتيب. الحساب مرة واحدة لكل تغيير
+  /* القايمة المعروضة: ثابت + عناصر الأدمن من الجدول. الحساب مرة واحدة لكل تغيير
      مش لكل كارت — ٨٤ عنصر × إعادة رسم بيبان. */
+  const catalog = useMemo(
+    () => (state ? [...CATALOG, ...(state.customItems ?? [])] : CATALOG),
+    [state],
+  );
   const shown = useMemo(() => {
-    let list = CATALOG.filter((i) => (cat === "all" ? true : i.category === cat));
+    let list = catalog.filter((i) => (cat === "all" ? true : i.category === cat));
 
     const q = query.trim();
     if (q) {
@@ -234,12 +239,12 @@ export default function ShopPage() {
   }, [cat, query, sort, hideLocked, state]);
 
   const ownedItems = useMemo(
-    () => (state ? CATALOG.filter((item) => state.ownedIds.has(item.id)) : []),
+    () => (state ? catalog.filter((item) => state.ownedIds.has(item.id)) : []),
     [state],
   );
   const recommended = useMemo(
     () => state && personalization?.completed
-      ? recommendationsFor(CATALOG, personalization.interests, ownedItems, state.ownedIds)
+      ? recommendationsFor(catalog, personalization.interests, ownedItems, state.ownedIds)
       : [],
     [state, personalization, ownedItems],
   );
@@ -248,7 +253,7 @@ export default function ShopPage() {
     [personalization, ownedItems],
   );
 
-  const open = openId ? CATALOG.find((i) => i.id === openId) : undefined;
+  const open = openId ? catalog.find((i) => i.id === openId) : undefined;
   const box: BoxTier | undefined = boxId ? BOXES.find((b) => b.id === boxId) : undefined;
 
   /* عرض النهارده على العنصر المفتوح — بيدّي الورقة السعر المخفّض ويفتح
@@ -401,6 +406,7 @@ export default function ShopPage() {
             onChanged={shop.reload}
           />
           <PurchaseHistoryPanel supabase={supabase} />
+          <ChampionsPanel supabase={supabase} />
           <FreeRewardsPanel />
           <DailyStrip
             offers={shop.daily}
@@ -422,7 +428,7 @@ export default function ShopPage() {
           )}
           {/* المفيدة — Phase E: 3 منتجات تُشترى بـ Coins وتُحفظ (لا AiRouter) */}
           {(() => {
-            const useful = CATALOG.filter((i) => i.category === "useful");
+            const useful = catalog.filter((i) => i.category === "useful");
             if (useful.length === 0) return null;
             return (
               <section className="space-y-3" aria-labelledby="useful-title">
@@ -498,7 +504,7 @@ export default function ShopPage() {
           </div>
 
           <p className="text-[11px] text-ink-soft tnum ltr-num">
-            {shown.length} من {CATALOG.length} عنصر
+            {shown.length} من {catalog.length} عنصر
           </p>
 
           {shown.length === 0 ? (

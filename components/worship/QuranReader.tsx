@@ -12,6 +12,8 @@ import { useQuranAudio } from "@/hooks/useQuranAudio";
 import { ReciterSelector } from "@/components/worship/ReciterSelector";
 import { useReciters } from "@/hooks/useReciters";
 import { useQuranProgress } from "@/hooks/useQuranProgress";
+import { useSharedWorshipData } from "@/components/worship/WorshipChrome";
+import { fetchCloudQuranPosition, saveCloudQuranPosition } from "@/lib/worship-data";
 import {
   BookOpen,
   ChevronLeft,
@@ -20,6 +22,7 @@ import {
   Menu,
   Play,
   Pause,
+  Bookmark,
   Loader2,
 } from "lucide-react";
 
@@ -28,6 +31,8 @@ interface QuranReaderProps {
   onProgressUpdate?: (surahId: number, ayahId: number) => void;
 }
 
+const BOOKMARKS_KEY = "magicly-quran-bookmarks";
+
 /**
  * Quran Reader Component
  * - Surah list with search
@@ -35,6 +40,7 @@ interface QuranReaderProps {
  *   from the API) with page navigation
  * - Reading progress + daily ayah counter update as the user pages forward
  * - Real audio playback via QuranAudioContext + reciter selector
+ * - علامات مرجعية محلية + مزامنة موضع القرآن السحابية مع الحساب (مرحلة العبادات ١)
  */
 export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReaderProps) {
   const [surahs, setSurahs] = useState<Surah[]>([]);
@@ -44,17 +50,37 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
   const [showSurahList, setShowSurahList] = useState(true);
   const [loading, setLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
+  const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const [currentAnchorAyah, setCurrentAnchorAyah] = useState<Ayah | null>(null);
+  const [cloudPositionReadyFor, setCloudPositionReadyFor] = useState<string | null>(null);
+  const [positionSync, setPositionSync] = useState<"local" | "saving" | "saved" | "error">("local");
+  const lastSavedPosition = useRef("");
 
   // Real audio integration
   const { state: audioState, currentSurahId, play, pause } = useQuranAudio();
   const { selectedReciter, isLoading: recitersLoading } = useReciters();
-  const { progress: readProgress, updatePosition } = useQuranProgress();
+  const shared = useSharedWorshipData();
+  const { progress: readProgress, updatePosition, isLoaded: progressLoaded } = useQuranProgress(
+    shared?.settings.quranDailyTarget ?? 10,
+    shared?.settings.timezone,
+  );
+  const progressRef = useRef(readProgress);
+  const updatePositionRef = useRef(updatePosition);
+  progressRef.current = readProgress;
+  updatePositionRef.current = updatePosition;
 
   const isPlaying = audioState === "playing";
   const isLoadingAudio = audioState === "loading";
 
-  // Resume position is read once at mount
-  const resumeRef = useRef({ surahId: readProgress.surahId, ayahId: readProgress.ayahId });
+  // علامات مرجعية محلية — تُقرأ مرة واحدة عند التركيب.
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(BOOKMARKS_KEY) ?? "[]");
+      if (Array.isArray(stored)) setBookmarks(stored.filter((item) => typeof item === "string"));
+    } catch {
+      setBookmarks([]);
+    }
+  }, []);
 
   // Pages = ayahs grouped by mushaf page number (from the API).
   const pages = useMemo(() => {
@@ -90,6 +116,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         if (i === 0 || data[i].pageNumber !== data[i - 1].pageNumber) idx++;
       }
       setPageIndex(startIdx < 0 ? 0 : idx);
+      setCurrentAnchorAyah(data[startIdx >= 0 ? startIdx : 0] ?? null);
     } catch (error) {
       console.error("Failed to load ayahs:", error);
       setAyahs([]);
@@ -97,14 +124,34 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     }
   };
 
+  // Restore the newest account position when available; otherwise use local storage.
   useEffect(() => {
-    async function loadSurahs() {
-      setLoading(true);
+    if (!progressLoaded || shared?.authStatus === "loading") return;
+    let cancelled = false;
+    void (async () => {
+      const localProgress = progressRef.current;
+      let resume = {
+        surahId: localProgress.surahId,
+        ayahId: localProgress.ayahId,
+        updatedAt: localProgress.updatedAt ?? "",
+      };
+      if (shared?.user && !shared.user.is_anonymous) {
+        try {
+          const cloudPosition = await fetchCloudQuranPosition(shared.supabase, shared.user.id);
+          if (cloudPosition && Date.parse(cloudPosition.updatedAt) > Date.parse(resume.updatedAt || "1970-01-01")) {
+            resume = cloudPosition;
+            updatePositionRef.current(resume.surahId, resume.ayahId, undefined, resume.updatedAt, false);
+          }
+        } catch {
+          // Keep the local position if account sync is unavailable.
+        }
+      }
+      if (cancelled) return;
       try {
         const data = await getAllSurahs();
+        if (cancelled) return;
         setSurahs(data);
-
-        const resumeSurah = resumeRef.current.surahId;
+        const resumeSurah = resume.updatedAt ? resume.surahId : initialSurahId;
         const initial =
           data.find((s) => s.id === resumeSurah) ||
           data.find((s) => s.id === initialSurahId) ||
@@ -113,16 +160,49 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
         if (initial) {
           setSelectedSurah(initial);
           setShowSurahList(false);
-          await loadAyahs(initial.id, resumeRef.current.ayahId);
+          await loadAyahs(initial.id, resume.updatedAt ? resume.ayahId : undefined);
+          if (!cancelled) {
+            setCloudPositionReadyFor(shared?.user && !shared.user.is_anonymous ? shared.user.id : "guest");
+          }
         }
       } catch (error) {
         console.error("Failed to load surahs:", error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [progressLoaded, shared?.authStatus, shared?.user, shared?.supabase, initialSurahId]);
+
+  // مزامنة سحابية مؤجَّلة لموضع القراءة؛ الحفظ المحلي يبقى متاحاً إذا فشلت المزامنة.
+  useEffect(() => {
+    const ownerId = shared?.user && !shared.user.is_anonymous ? shared.user.id : "guest";
+    if (cloudPositionReadyFor !== ownerId || !selectedSurah || !currentAnchorAyah) return;
+    const position = {
+      surahId: selectedSurah.id,
+      ayahId: currentAnchorAyah.number,
+      updatedAt: readProgress.updatedAt ?? new Date().toISOString(),
+    };
+    const key = `${shared?.user?.id ?? "guest"}:${position.surahId}:${position.ayahId}:${position.updatedAt}`;
+    if (lastSavedPosition.current === key) return;
+    if (!shared?.user || shared.user.is_anonymous) {
+      lastSavedPosition.current = key;
+      return;
     }
-    loadSurahs();
-  }, [initialSurahId]);
+    if (lastSavedPosition.current.startsWith("guest:")) lastSavedPosition.current = "";
+
+    setPositionSync("saving");
+    const timeout = window.setTimeout(() => {
+      lastSavedPosition.current = key;
+      void saveCloudQuranPosition(shared.supabase, shared.user!.id, position).then((saved) => {
+        if (lastSavedPosition.current !== key) return;
+        setPositionSync(saved ? "saved" : "error");
+      });
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [cloudPositionReadyFor, selectedSurah, currentAnchorAyah, readProgress.updatedAt, shared?.user, shared?.supabase]);
 
   const handleSurahSelect = async (surah: Surah) => {
     setSelectedSurah(surah);
@@ -143,6 +223,7 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
       const anchorAyah = movingForward
         ? targetPage.ayahs[targetPage.ayahs.length - 1]
         : targetPage.ayahs[0];
+      setCurrentAnchorAyah(anchorAyah);
       onProgressUpdate?.(selectedSurah.id, anchorAyah.number);
 
       if (movingForward) {
@@ -191,6 +272,21 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
     }
   }, [selectedSurah, selectedReciter, isPlaying, currentSurahId, audioState, play, pause]);
 
+  const toggleBookmark = () => {
+    if (!selectedSurah || !currentAnchorAyah) return;
+    const key = `${selectedSurah.id}:${currentAnchorAyah.number}`;
+    const next = bookmarks.includes(key) ? bookmarks.filter((item) => item !== key) : [...bookmarks, key];
+    setBookmarks(next);
+    try {
+      localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next));
+    } catch {
+      /* local fallback unavailable */
+    }
+  };
+
+  const isBookmarked =
+    !!selectedSurah && !!currentAnchorAyah && bookmarks.includes(`${selectedSurah.id}:${currentAnchorAyah.number}`);
+
   const filteredSurahs = surahs.filter(
     (s) =>
       s.arabicName.includes(searchQuery) ||
@@ -232,7 +328,17 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
             </div>
           )}
 
-          <div className="w-[72px] flex-shrink-0" />
+          <div className="w-[72px] flex-shrink-0 flex items-center justify-end">
+            <Button
+              variant="ghost"
+              icon={Bookmark}
+              aria-label={isBookmarked ? "إزالة العلامة المرجعية" : "حفظ علامة مرجعية"}
+              onClick={toggleBookmark}
+              disabled={!currentPage}
+            >
+              <span className="sr-only">{isBookmarked ? "إزالة العلامة المرجعية" : "حفظ علامة مرجعية"}</span>
+            </Button>
+          </div>
         </div>
       </Reveal>
 
@@ -416,6 +522,17 @@ export function QuranReader({ initialSurahId = 1, onProgressUpdate }: QuranReade
                     {selectedReciter && (
                       <p className="text-xs text-[#9AA0C0]">
                         {selectedReciter.arabicName} • {selectedReciter.rewaya}
+                      </p>
+                    )}
+                    {shared?.user && !shared.user.is_anonymous && (
+                      <p className="text-xs text-[#9AA0C0]" role="status">
+                        {positionSync === "saving"
+                          ? "جاري مزامنة موضع القراءة..."
+                          : positionSync === "saved"
+                            ? "تمت مزامنة موضع القراءة مع حسابك"
+                            : positionSync === "error"
+                              ? "تم الحفظ على هذا الجهاز؛ تعذرت المزامنة السحابية"
+                              : "يُحفظ موضع القراءة على هذا الجهاز"}
                       </p>
                     )}
                   </div>

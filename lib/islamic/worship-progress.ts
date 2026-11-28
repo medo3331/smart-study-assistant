@@ -23,13 +23,14 @@ export type WorshipCategory =
 
 /** Shape of a single day's worship record. */
 export interface WorshipDayRecord {
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD in the device's local timezone
   prayers: Record<string, boolean>; // e.g. { fajr: true, dhuhr: false }
-  adhkar: Record<string, { completed: boolean; count: number }>;
+  adhkar: Record<string, { completed: boolean; count: number; itemCounts?: Record<string, number> }>;
   quran: {
     surahId: number;
     ayahId: number;
     dailyCount: number; // ayahs read today
+    updatedAt?: string;
   };
   tasbih: {
     count: number;
@@ -37,7 +38,31 @@ export interface WorshipDayRecord {
 }
 
 const STORAGE_KEY = "magicly-worship-progress";
+const QURAN_POSITION_KEY = "magicly-quran-reading-position";
 const SETTINGS_KEY = "islamic-settings";
+
+/** Local calendar date; daily worship must not roll over at UTC midnight. */
+export function localWorshipDate(
+  now = new Date(),
+  preferredTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+): string {
+  let timeZone = preferredTimeZone || "UTC";
+  try {
+    new Intl.DateTimeFormat("en", { timeZone }).format(now);
+  } catch {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    calendar: "gregory",
+    numberingSystem: "latn",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 /** Safe default for a fresh day. */
 function createEmptyDay(date: string): WorshipDayRecord {
@@ -84,7 +109,7 @@ function writeAll(data: Record<string, WorshipDayRecord>): void {
  * Returns today's record (creating an empty one in storage if missing).
  */
 export function getTodayWorship(dateStr?: string): WorshipDayRecord {
-  const today = dateStr ?? new Date().toISOString().split("T")[0];
+  const today = dateStr ?? localWorshipDate();
   const all = readAll();
   if (!all[today]) {
     all[today] = createEmptyDay(today);
@@ -92,6 +117,12 @@ export function getTodayWorship(dateStr?: string): WorshipDayRecord {
     return all[today];
   }
   return all[today];
+}
+
+/** Persist one daily record locally and notify mounted worship surfaces. */
+export function saveWorshipDay(record: WorshipDayRecord): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date)) return;
+  writeAll({ ...readAll(), [record.date]: record });
 }
 
 /** Mark a prayer as completed for today. */
@@ -121,6 +152,27 @@ export function markAdhkarCompleted(
   return today;
 }
 
+/** Save per-item recitation counts locally while keeping a category total for cloud sync. */
+export function setAdhkarItemCounts(
+  category: string,
+  itemCounts: Record<string, number>,
+  dateStr?: string,
+): WorshipDayRecord {
+  const today = getTodayWorship(dateStr);
+  const safeCounts = Object.fromEntries(
+    Object.entries(itemCounts).filter(([, count]) => Number.isInteger(count) && count >= 0),
+  );
+  const count = Object.values(safeCounts).reduce((sum, value) => sum + value, 0);
+  const previous = today.adhkar[category];
+  today.adhkar[category] = {
+    completed: previous?.completed ?? false,
+    count,
+    itemCounts: safeCounts,
+  };
+  writeAll({ ...readAll(), [today.date]: today });
+  return today;
+}
+
 /** Update the running adhkar count (does not mark complete). */
 export function setAdhkarCount(
   category: string,
@@ -128,7 +180,11 @@ export function setAdhkarCount(
   dateStr?: string
 ): WorshipDayRecord {
   const today = getTodayWorship(dateStr);
-  today.adhkar[category] = { completed: count > 0, count };
+  today.adhkar[category] = {
+    ...today.adhkar[category],
+    completed: count > 0,
+    count,
+  };
   writeAll({ ...readAll(), [today.date]: today });
   return today;
 }
@@ -144,17 +200,42 @@ export function setQuranPosition(
   surahId: number,
   ayahId: number,
   dailyCount: number,
-  dateStr?: string
+  dateStr?: string,
+  updatedAt = new Date().toISOString(),
 ): WorshipDayRecord {
   const today = getTodayWorship(dateStr);
-  today.quran = { surahId, ayahId, dailyCount };
+  today.quran = { surahId, ayahId, dailyCount, updatedAt };
   writeAll({ ...readAll(), [today.date]: today });
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(QURAN_POSITION_KEY, JSON.stringify({ surahId, ayahId, updatedAt }));
+    } catch { /* local fallback unavailable */ }
+  }
   return today;
 }
 
-/** Get today's Quran progress. */
+/** Daily count resets by day; the reading position persists across days. */
 export function getQuranProgress(dateStr?: string) {
-  return getTodayWorship(dateStr).quran;
+  const daily = getTodayWorship(dateStr).quran;
+  const position = getQuranReadingPosition();
+  return position ? { ...daily, ...position } : daily;
+}
+
+export function getQuranReadingPosition(): { surahId: number; ayahId: number; updatedAt?: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = window.localStorage.getItem(QURAN_POSITION_KEY);
+    if (!saved) return null;
+    const position = JSON.parse(saved) as { surahId?: number; ayahId?: number; updatedAt?: string };
+    if (
+      Number.isInteger(position.surahId) && position.surahId! >= 1 && position.surahId! <= 114 &&
+      Number.isInteger(position.ayahId) && position.ayahId! >= 1 &&
+      typeof position.updatedAt === "string"
+    ) {
+      return { surahId: position.surahId!, ayahId: position.ayahId!, updatedAt: position.updatedAt };
+    }
+  } catch { /* no saved reading position */ }
+  return null;
 }
 
 /** Set the tasbih session count for today. */
@@ -212,6 +293,7 @@ export interface IslamicSettings {
     longitude: number;
     timezone: string;
   };
+  locationMode?: "automatic" | "manual";
   latitude: number;
   longitude: number;
   timezone: string;
@@ -262,16 +344,17 @@ export const DEFAULT_ISLAMIC_SETTINGS: IslamicSettings = {
   latitude: 30.0444,
   longitude: 31.2357,
   timezone: "Africa/Cairo",
+  locationMode: "manual",
   calculationMethod: "egyptian",
   madhab: "shafi",
   quranDailyTarget: 10,
   selectedReciterId: 1, // Al-Afasy
-  prayerNotifications: true,
-  adhanEnabled: true,
+  prayerNotifications: false,
+  adhanEnabled: false,
   reminderMinutes: 10,
-  morningAdhkarReminder: true,
-  eveningAdhkarReminder: true,
-  sleepAdhkarReminder: true,
+  morningAdhkarReminder: false,
+  eveningAdhkarReminder: false,
+  sleepAdhkarReminder: false,
 };
 
 export function loadSettings(): IslamicSettings {
@@ -331,7 +414,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export async function getWorshipProgressDB(userId: string, day?: string): Promise<any> {
   const supabase = createClient();
-  const targetDay = day || new Date().toISOString().slice(0, 10);
+  const targetDay = day || localWorshipDate(new Date(), loadSettings().timezone);
   const { data, error } = await supabase
     .from("worship_progress")
     .select("*")
@@ -349,12 +432,12 @@ export async function upsertWorshipProgressDB(
   quranAyahs?: number
 ): Promise<void> {
   const supabase = createClient();
-  const today = new Date().toISOString().slice(0, 10);
-  void today;
+  const day = localWorshipDate(new Date(), loadSettings().timezone);
   const { error } = await supabase.rpc("upsert_worship_progress", {
     p_prayers: prayers ?? {},
     p_adhkar: adhkar ?? {},
     p_quran_ayahs: quranAyahs ?? 0,
+    p_day: day,
   });
   if (error) console.error("worship-progress DB upsert failed:", error);
 }

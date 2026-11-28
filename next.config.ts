@@ -37,6 +37,10 @@ const connectSrc = [
   "https://api.groq.com",
   "https://openrouter.ai",
   "https://api.openai.com",
+  // نص القرآن في /worship/quran — النداء بيحصل من المتصفح مباشرة
+  // (lib/islamic/quran.ts)، فمن غير السطر ده الـ CSP بيمنعه وبيقع
+  // الكومبوننت على بيانات وهمية والصفحة تبان فاضية.
+  "https://api.alquran.cloud",
   "https://*.vercel-insights.com",
 ]
   .filter(Boolean)
@@ -50,7 +54,10 @@ const csp = [
   // عشان لو الـ https: العام اتشال بعدين، المصغّرات ما تبقاش broken.
   "img-src 'self' data: blob: https: https://i.ytimg.com https://img.youtube.com",
   "font-src 'self' data:",
-  "media-src 'self' blob: data:",
+  // ✅ التلاوات (mp3quran.net) والموسيقى (Pixabay) و«صوتياتي» (روابط
+  // المستخدم على أي نطاق) — كلها `<audio src>` خارجي، فـ https: مطلوب.
+  // من غيرها الـ CSP يمنع الصوت والمكتبة الصوتية تبان شغّالة وصامتة.
+  "media-src 'self' blob: data: https:",
   `connect-src ${connectSrc}`,
   "worker-src 'self' blob:",
   // ✅ مشغّل يوتيوب داخل الصفحة (LessonVideoPlayer + HowItWorksVideo).

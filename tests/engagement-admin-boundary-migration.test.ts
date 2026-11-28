@@ -58,7 +58,8 @@ describe("G0-E migration contract (db/64)", () => {
   });
 
   it("admin announcement access in app code is service-client only", () => {
-    // الملف الوحيد في app/ الذي يلمس admin_announcements هو مسار البث الإداري
+    // الملفات اللي بتلمس admin_announcements: مسار البث الإداري (actions)
+    // وصفحة عرض سجل البريد (page) — الاتنين service client بس.
     const messaging = readFileSync(
       join(root, "app", "admin", "actions", "messaging.ts"),
       "utf8",
@@ -66,11 +67,14 @@ describe("G0-E migration contract (db/64)", () => {
     expect(messaging).toContain("admin_announcements");
     expect(messaging).toContain("createServiceClient()");
     expect(messaging).toContain('requireAdminPermission("announcements.manage")');
-    // لا ملفات عميل أخرى تقرأه (البحث في app/ كله)
+    // أي ملف تاني في app/ بيقراه لازم يكون service client — ممنوع عميل المتصفح
     const hits = walk(join(root, "app"), []).filter(
       (f) => /admin_announcements/.test(readFileSync(f, "utf8")),
     );
-    expect(hits.length).toBe(1);
+    for (const f of hits) {
+      expect(readFileSync(f, "utf8")).toContain("createServiceClient()");
+    }
+    expect(hits.length).toBe(2);
   });
 
   it("mark-as-read is server-side and owner-scoped (PATCH /api/notifications updates only read_at/is_read)", () => {

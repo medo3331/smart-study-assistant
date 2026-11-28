@@ -69,9 +69,13 @@ export default function InventoryPage() {
 
   /* المملوك مرتّب: الملبوس الأول، وبعدين المفضّل، وبعدين الأندر.
      المنطق: اللي بتلبسه دلوقتي هو أول حاجة بتدوّر عليها لما تفتح المخزن. */
+  const catalog = useMemo(
+    () => (state ? [...CATALOG, ...(state.customItems ?? [])] : CATALOG),
+    [state],
+  );
   const shown = useMemo(() => {
     if (!state) return [];
-    let list = CATALOG.filter((i) => state.ownedIds.has(i.id));
+    let list = catalog.filter((i) => state.ownedIds.has(i.id));
 
     if (cat !== "all") list = list.filter((i) => i.category === cat);
     if (favOnly) list = list.filter((i) => favIds.has(i.id));
@@ -91,7 +95,7 @@ export default function InventoryPage() {
     );
   }, [state, cat, query, favOnly, favIds]);
 
-  const open = openId ? CATALOG.find((i) => i.id === openId) : undefined;
+  const open = openId ? catalog.find((i) => i.id === openId) : undefined;
 
   if (session.status === "loading" || shop.phase === "loading") {
     return (
@@ -110,11 +114,11 @@ export default function InventoryPage() {
   }
 
   const avatarEmoji = equippedValue(state, "avatar");
-  const ownedCount = CATALOG.filter((i) => state.ownedIds.has(i.id)).length;
+  const ownedCount = catalog.filter((i) => state.ownedIds.has(i.id)).length;
 
   // الأقسام اللي فيها حاجة فعلاً — مالوش لازمة نوري تبويب فاضي
   const liveCats = CATEGORIES.filter((c) =>
-    CATALOG.some((i) => i.category === c && state.ownedIds.has(i.id)),
+    catalog.some((i) => i.category === c && state.ownedIds.has(i.id)),
   );
 
   return (
@@ -189,7 +193,7 @@ export default function InventoryPage() {
         </button>
 
         <p className="text-[11px] text-ink-soft tnum ltr-num">
-          {ownedCount} من {CATALOG.length} عنصر
+          {ownedCount} من {catalog.length} عنصر
         </p>
       </div>
 

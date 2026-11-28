@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   NextPrayerCard,
@@ -20,7 +20,9 @@ import { Reveal } from "@/components/ui/Reveal";
 import { useTodayPrayerTimes } from "@/hooks/usePrayerTimes";
 import { generateDailyProgressItems } from "@/lib/islamic/utils";
 import type { DailyProgressItem } from "@/lib/islamic/types";
-import { todayUtc } from "@/lib/worship-data";
+import type { Surah } from "@/lib/islamic/types";
+import { getAllSurahs } from "@/lib/islamic/quran";
+import { localWorshipDate } from "@/lib/islamic/worship-progress";
 import {
   WORSHIP_REWARD_LABELS,
 } from "@/lib/worship-rewards";
@@ -33,6 +35,7 @@ import {
  * • المواقيت من AlAdhan بإعدادات المستخدم المحفوظة.
  * • التقدّم من worship-progress المحلي مدموج مع worship_progress في الداتابيز.
  * • الكوينز والسلسلة من الداتابيز، والمكافأة بتظهر بعد تأكيد السيرفر فقط.
+ * • مراجع أيام المكافآت بيوم المستخدم المحلي (منطقة زمنية) — مرحلة العبادات ١.
  */
 export default function WorshipPage() {
   return (
@@ -45,6 +48,17 @@ export default function WorshipPage() {
 function WorshipHome() {
   const shared = useSharedWorshipData();
   const { showReward } = useWorshipReward();
+  const [surahs, setSurahs] = useState<Surah[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAllSurahs().then((data) => {
+      if (!cancelled) setSurahs(data);
+    }).catch(() => {
+      if (!cancelled) setSurahs([]);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const settings = shared?.settings;
   const settingsLoaded = !!settings;
@@ -57,13 +71,13 @@ function WorshipHome() {
     settings?.madhab,
   );
 
-  /* ── أحداث العبادة → مكافآت award_coins (مراجع حتمية يوم UTC) ────────── */
+  /* ── أحداث العبادة → مكافآت award_coins (مراجع يوم المستخدم المحلي) ──── */
 
   /** إتمام صلاة مفروضة: +٣ لكل صلاة (سقف ٥/يوم من قواعد الداتابيز). */
   const completePrayer = useCallback(
     async (prayerId: string) => {
       if (!shared || !shared.user || shared.user.is_anonymous) return;
-      const day = todayUtc();
+      const day = localWorshipDate(new Date(), settings!.timezone);
       await shared.recordEvent(
         (d) => ({ ...d, prayers: { ...d.prayers, [prayerId]: true } }),
         "worship_prayer",
@@ -72,14 +86,14 @@ function WorshipHome() {
         (reward) => showReward(reward.coins),
       );
     },
-    [shared, showReward],
+    [shared, showReward, settings?.timezone],
   );
 
   /** إتمام هدف ذكر (تصنيف كامل): +٣ لكل تصنيف (سقف ٣/يوم). */
   const completeDhikrTarget = useCallback(
     async (category: string, count: number) => {
       if (!shared || !shared.user || shared.user.is_anonymous) return;
-      const day = todayUtc();
+      const day = localWorshipDate(new Date(), settings!.timezone);
       await shared.recordEvent(
         (day2) => ({
           ...day2,
@@ -94,14 +108,14 @@ function WorshipHome() {
         (reward) => showReward(reward.coins),
       );
     },
-    [shared, showReward],
+    [shared, showReward, settings?.timezone],
   );
 
   /** إكمال ورد القرآن من قائمة المهام — نفس مرجع اليوم عشان مفيش صرف مزدوج. */
   const completeQuranWird = useCallback(
     async () => {
       if (!shared || !shared.user || shared.user.is_anonymous) return;
-      const day = todayUtc();
+      const day = localWorshipDate(new Date(), settings!.timezone);
       const target = settings?.quranDailyTarget ?? 10;
       await shared.recordEvent(
         (d) => ({
@@ -117,7 +131,7 @@ function WorshipHome() {
         (reward) => showReward(reward.coins),
       );
     },
-    [shared, showReward, settings?.quranDailyTarget],
+    [shared, showReward, settings?.quranDailyTarget, settings?.timezone],
   );
 
   /** معالج الأزرار في «إنجازاتك اليوم». */
@@ -184,11 +198,22 @@ function WorshipHome() {
   const quranDailyCount = progress.quran.dailyCount;
   const quranTarget = settings!.quranDailyTarget;
   const quranWirdDone = quranDailyCount >= quranTarget && quranTarget > 0;
+  const readingSurah = surahs.find((surah) => surah.id === progress.quran.surahId);
+  const readingPosition = progress.quran.updatedAt
+    ? `${readingSurah?.arabicName ?? `السورة ${progress.quran.surahId}`} — الآية ${progress.quran.ayahId}${readingSurah ? ` من ${readingSurah.ayahCount}` : ""}`
+    : "افتح المصحف لتسجيل موضع القراءة";
 
-  const nextPrayerIndex = prayerTimes?.times?.findIndex((p) => p.isNext) ?? 0;
+  // قائمة المهام بتعرض الصلوات المفروضة فقط — الشروق مش صلاة.
+  const prayerOnlyTimes = prayerTimes?.times.filter((prayer) => prayer.name !== "Sunrise") ?? [];
+  const nextPrayerOnlyIndex = prayerOnlyTimes.findIndex((prayer) => prayer.isNext);
+  const effectiveNextPrayerIndex = nextPrayerOnlyIndex >= 0
+    ? nextPrayerOnlyIndex
+    : prayerTimes?.times.find((prayer) => prayer.name === "Sunrise" && prayer.isNext)
+      ? 1
+      : 0;
   const dailyProgressItems = generateDailyProgressItems(
-    prayerTimes?.times?.map((p) => p.time) ?? [],
-    nextPrayerIndex >= 0 ? nextPrayerIndex : 0,
+    prayerOnlyTimes.map((prayer) => prayer.time),
+    effectiveNextPrayerIndex,
     completedPrayers,
     new Set<string>(
       [
@@ -196,6 +221,8 @@ function WorshipHome() {
         eveningCompleted ? "evening" : null,
       ].filter((x): x is string => !!x),
     ),
+    quranWirdDone,
+    `${Math.min(quranDailyCount, quranTarget)}/${quranTarget} آية`,
   );
 
   const currentDate = new Date().toLocaleDateString("ar-EG", {
@@ -203,6 +230,7 @@ function WorshipHome() {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: settings!.timezone,
   });
 
   const prayersDoneCount = ["fajr", "dhuhr", "asr", "maghrib", "isha"].filter(
@@ -295,7 +323,7 @@ function WorshipHome() {
             current: quranDailyCount,
             target: quranTarget,
             completed: quranWirdDone,
-            surahName: "البقرة",
+            surahName: readingSurah?.arabicName ?? `السورة ${progress.quran.surahId}`,
           }}
         />
       </Reveal>
@@ -303,15 +331,16 @@ function WorshipHome() {
       {/* Quran Daily Wird Card */}
       <Reveal index={4}>
         <QuranWirdCard
-          surahName="Al-Baqarah"
-          arabicSurahName="سورة البقرة"
+          surahName={readingSurah?.name ?? "Al-Fatihah"}
+          arabicSurahName={readingSurah?.arabicName ?? `السورة ${progress.quran.surahId}`}
           currentAyah={quranDailyCount}
           targetAyah={quranTarget}
-          totalAyahs={286}
+          totalAyahs={readingSurah?.ayahCount ?? 286}
           progress={
             quranTarget > 0 ? (quranDailyCount / quranTarget) * 100 : 0
           }
-          juzNumber={1}
+          juzNumber={readingSurah?.juzNumber ? readingSurah.juzNumber : 1}
+          readingPosition={readingPosition}
           onContinue={() => {
             window.location.href = "/worship/quran";
           }}
@@ -334,6 +363,26 @@ function WorshipHome() {
         {prayerTimes && (
           <PrayerTimesList
             data={prayerTimes}
+            completedPrayers={completedPrayers}
+            onCompletePrayer={(prayer) => {
+              if (!shared || completedPrayers.has(prayer)) return;
+              const day = localWorshipDate(new Date(), settings!.timezone);
+              const updatePrayer = (record: typeof progress) => ({
+                ...record,
+                prayers: { ...record.prayers, [prayer]: true },
+              });
+              if (!shared.user || shared.user.is_anonymous) {
+                shared.updateProgress(updatePrayer);
+                return;
+              }
+              void shared.recordEvent(
+                updatePrayer,
+                "worship_prayer",
+                `${day}-${prayer}`,
+                { activity: "prayer", prayer, date: day },
+                (reward) => showReward(reward.coins),
+              );
+            }}
             onSettingsClick={() => {
               window.location.href = "/worship/settings";
             }}
