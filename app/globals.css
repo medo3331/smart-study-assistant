@@ -7069,6 +7069,17 @@ html {
   }
 }
 
+/* على الموبايل: النص هو الأولوية — نكبّر الاسم العربي ونخفي اللاتيني
+   عشان الكلام يفضل ظاهر وواضح جوه عقدة أصغر. */
+@container (max-width: 430px) {
+  .mw-node-latin {
+    display: none;
+  }
+  .mw-node-label {
+    font-size: 0.64rem;
+  }
+}
+
 .mw-ring {
   position: absolute;
   border-radius: 9999px;
@@ -7185,7 +7196,12 @@ html {
 .mw-theme-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
 .mw-theme-btn:focus-visible { outline: 2px solid var(--accent-highlight); outline-offset: 3px; }
 
-.mw-glyph-m { animation: mw-glyph-draw 2s ease-out 0.3s forwards; }
+.mw-glyph-m {
+  animation:
+    mw-glyph-draw 2s ease-out 0.3s forwards,
+    mw-glyph-breathe 4.2s ease-in-out 2.4s infinite,
+    mw-ignite 1.15s ease-in-out 2.35s 2;
+}
 .mw-glyph-star { animation: mw-star-pulse 3s ease-in-out infinite; transform-origin: center; }
 
 @keyframes mw-rotate-dash { to { transform: rotate(360deg); } }
@@ -7209,6 +7225,16 @@ html {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 @keyframes mw-glyph-draw { to { stroke-dashoffset: 0; } }
+@keyframes mw-glyph-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes mw-ignite {
+  0%, 100% { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent-highlight) 40%, transparent)); }
+  25% { filter: drop-shadow(0 0 13px #ff9d2e) drop-shadow(0 0 24px rgba(255, 77, 32, 0.55)); }
+  50% { filter: drop-shadow(0 0 8px #ffc24d); }
+  75% { filter: drop-shadow(0 0 17px #ff7a1f) drop-shadow(0 0 28px rgba(255, 177, 59, 0.5)); }
+}
 @keyframes mw-star-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.15); opacity: 0.85; }
@@ -7397,6 +7423,39 @@ html {
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--burst-a, 0deg)) translateX(min(31cqw, 250px)) scale(1); }
 }
 
+/* — شريط التنقل السفلي: مسار واحد بيتحرك — الصفحات بتلف ورا بعض بالترتيب —
+   وقفة عند اللمس/الفوكس، وثبات كامل مع Reduce Motion. */
+.mw-nav-viewport {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
+.mw-nav-track {
+  animation: mw-nav-marquee 30s linear infinite;
+  will-change: transform;
+}
+.mw-bottom-nav:hover .mw-nav-track,
+.mw-bottom-nav:focus-within .mw-nav-track {
+  animation-play-state: paused;
+}
+@keyframes mw-nav-marquee {
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mw-nav-track { animation: none !important; }
+}
+
 /* احترام تقليل الحركة: لا دوران، لا طَفْو، لا رسم تدريجي — كل حاجة تثبت */
 @media (prefers-reduced-motion: reduce) {
   .mw-root .mw-ring-dash,
@@ -7417,6 +7476,7 @@ html {
   }
   .mw-root .mw-shimmer-band { opacity: 0 !important; }
   .mw-line { animation: none !important; stroke-dashoffset: 0 !important; }
+  .mw-glyph-m { stroke-dashoffset: 0 !important; }
   .mw-node,
   .mw-node-card,
   .mw-center,
