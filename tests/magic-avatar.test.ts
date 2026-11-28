@@ -27,4 +27,17 @@ describe("MagicAvatar (static checks)", () => {
   it("supports sizes sm/md/lg", () => {
     for (const s of ["sm", "md", "lg"]) expect(file).toContain(s);
   });
+
+  it("ماسكوت كامل: جسم + عيون كبيرة + هوائي بنجمة + لمعات", () => {
+    expect(file).toContain("magic-avatar__body");
+    expect(file).toContain("magic-avatar__eyes");
+    expect(file).toContain("magic-avatar__star");
+    expect(file).toContain("magic-avatar__sparkle");
+    expect(file).toContain("magic-avatar__antenna");
+  });
+
+  it("بيرمش وبيتحرك بـ CSS keyframes بدون مكتبات خارجية", () => {
+    expect(file).toContain("@keyframes");
+    expect(file).toContain("magic-blink");
+  });
 });

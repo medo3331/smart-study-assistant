@@ -74,14 +74,14 @@ export const MAX_IMAGE_DIMENSION = 1400;
 
 export const TOOL_OPTIONS: { id: Tool; label: string; icon: string; key: string }[] = [
   { id: "select", label: "تحديد", icon: "⬚", key: "v" },
-  { id: "lasso", label: "حبل تحديد (تحديد متعدد)", icon: "⌇", key: "l" },
+  { id: "lasso", label: "تحديد حر", icon: "⌇", key: "l" },
   { id: "pen", label: "قلم", icon: "🖊️", key: "1" },
   { id: "ink", label: "حبر", icon: "🖋️", key: "2" },
-  { id: "pencil", label: "رصاص", icon: "✏️", key: "3" },
+  { id: "pencil", label: "قلم رصاص", icon: "✏️", key: "3" },
   { id: "brush", label: "فرشاة", icon: "🖌️", key: "6" },
-  { id: "crayon", label: "شمعي", icon: "🟫", key: "7" },
+  { id: "crayon", label: "شمعي (كريون)", icon: "🟫", key: "7" },
   { id: "neon", label: "نيون", icon: "✨", key: "8" },
-  { id: "highlighter", label: "تظليل", icon: "🖍️", key: "4" },
+  { id: "highlighter", label: "فوسفوري", icon: "🖍️", key: "4" },
   { id: "eraser", label: "ممحاة", icon: "🧽", key: "5" },
 ];
 

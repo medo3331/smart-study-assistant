@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MIcon from './MIcon';
 import PreviewCard from './PreviewCard';
 import { TopControls } from '@/components/TopControls';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
+import { createClient } from '@/lib/supabase/client';
 import styles from './Hero.module.css';
 
 export default function Hero() {
@@ -14,6 +15,50 @@ export default function Hero() {
   /* نقطة الدخول الحقيقية: الزائر يسجّل الأول، وبعد التسجيل يروح للـwizard
      في /assessment اللي بيجمّع بياناته وهدفه ومذكرته ويبنيله الخطة. */
   const startHref = '/welcome?next=/assessment';
+
+  /* الدخول السريع: حساب حقيقي عنده جلسة شغّالة → زر بصورة البروفايل يدخّله
+     على طول /dashboard من غير ما يعدّي على /assessment تاني. */
+  const [quick, setQuick] = useState<{ name: string; initial: string; avatarSrc: string | null; avatarEmoji: string | null } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.auth.getUser();
+        const user = data.user;
+        if (cancelled || !user || user.is_anonymous) return;
+        const metaName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
+        const name = metaName || user.email || 'صاحبي';
+        let avatarSrc: string | null = null;
+        let avatarEmoji: string | null = null;
+        try {
+          const localAvatar = window.localStorage.getItem('magicly_avatar');
+          if (localAvatar && localAvatar.startsWith('data:image')) avatarSrc = localAvatar;
+          else if (localAvatar) avatarEmoji = localAvatar;
+        } catch {}
+        if (!avatarSrc) {
+          const metaAvatar = typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : '';
+          if (metaAvatar) avatarSrc = metaAvatar;
+        }
+        if (!avatarSrc) {
+          const { data: row } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (!cancelled && row && typeof row.avatar_url === 'string' && row.avatar_url) {
+            avatarSrc = row.avatar_url;
+          }
+        }
+        if (cancelled) return;
+        setQuick({ name, initial: name.trim().charAt(0) || 'ص', avatarSrc, avatarEmoji });
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* روابط النافبار: مراسي جوّه اللاندينج نفسها (تنقّل في صفحة واحدة).
      بنفس ترتيب الموكاب: الرئيسية/المميزات/كيف تعمل؟/مساعدة. */
@@ -50,6 +95,23 @@ export default function Hero() {
           <Link href="/login" className={`${styles.btnGhost} ${styles.navSignin}`}>
             {t.nav_login}
           </Link>
+          {quick && (
+            <Link href="/dashboard" className={`${styles.btnGhost} ${styles.quickUser}`}>
+              <span className={styles.quickAvatar} aria-hidden="true">
+                {quick.avatarSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- صورة البروفايل من جهاز المستخدم أو مزوّد تسجيل الدخول
+                  <img src={quick.avatarSrc} alt="" className={styles.quickAvatarImg} />
+                ) : quick.avatarEmoji ? (
+                  <span className={styles.quickAvatarEmoji}>{quick.avatarEmoji}</span>
+                ) : (
+                  <span className={styles.quickAvatarInitial}>{quick.initial}</span>
+                )}
+              </span>
+              <span className={styles.quickName}>
+                {t.landing_continue_as} {quick.name}
+              </span>
+            </Link>
+          )}
           <TopControls />
           {/* زر الهامبرجر — يظهر على الموبايل بس (CSS). */}
           <button

@@ -56,6 +56,11 @@ export async function POST(req: Request) {
       await service.from("support_tickets").delete().eq("id", ticket.id).eq("user_id", user.id);
       return NextResponse.json({ success: false, error: "تعذر حفظ أول رسالة. لم يتم إنشاء التذكرة." }, { status: 500 });
     }
+
+    // رد تلقائي من مساعد الدعم الفني (Magic AI) — fail-safe
+    const { insertSupportAutoReply } = await import("@/lib/support/auto-reply");
+    await insertSupportAutoReply(ticket.id, user.id, message);
+
     return NextResponse.json({ success: true, ticket, reference: ticket.id }, { status: 201 });
   } catch (error) {
     console.error("[support] POST", error instanceof Error ? error.message : error);

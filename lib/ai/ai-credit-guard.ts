@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getModelAccessPolicy } from "./model-access";
+import { isAiOpenTrialActive } from "./trial";
 import {
   checkAiRateLimit,
   buildRateLimitBody,
@@ -107,6 +108,9 @@ async function checkAiSubscriptionGate(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<GuardResult | null> {
+  // 🎁 الفترة التجريبية المفتوحة (شهر): كل حاجة مفتوحة للجميع — من غير
+  // حتى قراءة الخطة (فتشيل الـ 503 لو السيرفر بطّأ). بعدها البوابة ترجع.
+  if (isAiOpenTrialActive()) return null;
   const { plan, failed } = await readUserPlan(supabase, userId);
   if (failed) {
     return {

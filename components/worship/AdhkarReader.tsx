@@ -37,9 +37,9 @@ const CATEGORY_ICONS: Record<AdhkarCategory, any> = {
 const CATEGORY_COLORS: Record<AdhkarCategory, { color: string; bg: string }> = {
   morning: { color: "text-[#FB923C]", bg: "bg-[#FB923C]/15" },
   evening: { color: "text-[#F97316]", bg: "bg-[#F97316]/15" },
-  "after-prayer": { color: "text-[#2DD4BF]", bg: "bg-[#2DD4BF]/15" },
-  sleep: { color: "text-[#7C5CFF]", bg: "bg-[#7C5CFF]/15" },
-  general: { color: "text-[#B69CFF]", bg: "bg-[#7C5CFF]/15" },
+  "after-prayer": { color: "text-[#34D399]", bg: "bg-[#34D399]/15" },
+  sleep: { color: "text-[#10B981]", bg: "bg-[#10B981]/15" },
+  general: { color: "text-[#6EE7B7]", bg: "bg-[#10B981]/15" },
 };
 
 const CATEGORY_LABELS: Record<AdhkarCategory, string> = {
@@ -154,7 +154,7 @@ export function AdhkarReader({
           </div>
           <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-gradient-to-r from-[#7C5CFF] to-[#2DD4BF] rounded-full"
+              className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.8, ease: "easeOut" }}
@@ -225,7 +225,7 @@ export function AdhkarReader({
                       {currentIndex + 1} / {adhkar.length}
                     </span>
                     {completed[currentIndex] && (
-                      <IconBadge icon={CheckCircle} color="text-[#2DD4BF]" bg="bg-[#2DD4BF]/15" size={28} />
+                      <IconBadge icon={CheckCircle} color="text-[#34D399]" bg="bg-[#34D399]/15" size={28} />
                     )}
                   </div>
                   
@@ -240,7 +240,7 @@ export function AdhkarReader({
                   )}
 
                   {currentDhikr?.source && (
-                    <p className="mt-2 text-xs text-[#7C5CFF] text-center">
+                    <p className="mt-2 text-xs text-[#10B981] text-center">
                       المصدر: {currentDhikr.source}
                     </p>
                   )}
@@ -251,10 +251,10 @@ export function AdhkarReader({
                   <motion.div
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="mb-4 p-3 rounded-xl bg-[#2DD4BF]/10 border border-[#2DD4BF]/30 flex items-center justify-center gap-2"
+                    className="mb-4 p-3 rounded-xl bg-[#34D399]/10 border border-[#34D399]/30 flex items-center justify-center gap-2"
                   >
-                    <CheckCircle size={20} className="text-[#2DD4BF]" aria-hidden />
-                    <span className="text-sm font-medium text-[#2DD4BF]">اكتمل هذا الذكر، اضغط للسؤال</span>
+                    <CheckCircle size={20} className="text-[#34D399]" aria-hidden />
+                    <span className="text-sm font-medium text-[#34D399]">اكتمل هذا الذكر، اضغط للسؤال</span>
                   </motion.div>
                 )}
 
@@ -279,9 +279,9 @@ export function AdhkarReader({
                         className={cn(
                           "h-2 w-2 rounded-full transition-all",
                           i === currentIndex
-                            ? "bg-[#7C5CFF] w-6"
+                            ? "bg-[#10B981] w-6"
                             : completed[i]
-                              ? "bg-[#2DD4BF]"
+                              ? "bg-[#34D399]"
                               : "bg-white/[0.1] hover:bg-white/[0.2]"
                         )}
                         aria-label={`الذكر ${i + 1}`}
@@ -323,7 +323,7 @@ export function AdhkarReader({
               onClick={e => e.stopPropagation()}
             >
               <div className="mb-4">
-                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-[#2DD4BF]/20 text-[#2DD4BF] mb-4">
+                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-[#34D399]/20 text-[#34D399] mb-4">
                   <CheckCircle size={40} aria-hidden />
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">مبارك! 🎉</h3>

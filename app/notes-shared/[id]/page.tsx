@@ -1,6 +1,6 @@
 // app/notes-shared/[id]/page.tsx
 //
-// 📖 لينك مشاركة الدفتر للقراءة فقط — /notes-shared/<shareId>.
+// 📖 لينك مشاركة النوتة للقراءة فقط — /notes-shared/<shareId>.
 
 "use client";
 

@@ -1,14 +1,16 @@
 // app/api/notes/share/route.ts
 //
-// 📤 إنشاء لينك مشاركة دفتر للقراءة فقط.
+// 📤 إنشاء لينك مشاركة نوتة للقراءة فقط.
 //
-// العميل بيبعت عنوان الدفتر + صفحاته كـ snapshot JSON (بدون originalStrokes).
+// العميل بيبعت عنوان النوتة + صفحاته كـ snapshot JSON (بدون originalStrokes).
 // اللينك بيبقى /notes-shared/<uuid> — الـ id عشوائي وغير قابل للتخمين.
 // القراءة العامة عبر GET /api/notes/share/[id] (service-role).
 
 import { NextResponse, type NextRequest } from "next/server";
 
 import { checkRateLimit, requireUser } from "@/lib/api-guard";
+import { VALID_PAGE_FORMATS } from "@/lib/notes/validation";
+import type { PageFormat } from "@/lib/notes/types";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 /** أقصى حجم للحمولة (JSON) — حماية من التخزين الضخم. */
@@ -52,22 +54,27 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    const serialized = JSON.stringify({ pages });
+    // مقاس الصفحة اختياري — النوتات القديمة من غيره بتتعرض A4.
+    let pageFormat: PageFormat | undefined;
+    if (typeof payload.pageFormat === "string" && VALID_PAGE_FORMATS.includes(payload.pageFormat as PageFormat)) {
+      pageFormat = payload.pageFormat as PageFormat;
+    }
+    const serialized = JSON.stringify({ pages, pageFormat });
     if (Buffer.byteLength(serialized) > MAX_PAYLOAD_BYTES) {
       return NextResponse.json(
-        { error: { code: "PAYLOAD_TOO_LARGE", message: "الدفتر كبير جداً للمشاركة (حد 4MB). جرّب تصدّر PDF بدلها." } },
+        { error: { code: "PAYLOAD_TOO_LARGE", message: "النوتة كبيرة جداً للمشاركة (حد 4MB). جرّب تصدّر PDF بدلها." } },
         { status: 413 },
       );
     }
     const title = typeof body.title === "string" && body.title.trim()
       ? body.title.trim().slice(0, 120)
-      : "دفتر";
+      : "النوتة";
     const pageCount = pages.length;
 
     const admin = createServiceClient();
     const { data, error } = await admin
       .from("shared_notebooks")
-      .insert({ owner_id: user.id, title, payload: { pages }, page_count: pageCount })
+      .insert({ owner_id: user.id, title, payload: { pages, pageFormat }, page_count: pageCount })
       .select("id")
       .single();
     if (error || !data) {

@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch prayer times
-    const prayerTimes = await getTodayPrayerTimes(lat, lng, timezone, calculationMethod, madhab);
+    // Fetch prayer times — honor the requested date instead of ignoring it
+    const prayerTimes = await getTodayPrayerTimes(lat, lng, timezone, calculationMethod, madhab, date);
 
     // Return as JSON
     return NextResponse.json({

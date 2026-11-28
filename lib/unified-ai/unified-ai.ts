@@ -14,12 +14,13 @@
  *   �¢ Router choice logged server-side only; never shown as picker to user.
  *   �¢ OCR failure → continue with prompt only (resilient), log low confidence.
  */
-import type { UnifiedAIInput, UnifiedAIResult } from "./types";
+import type { UnifiedAIInput, UnifiedAIResult, UnifiedChatTurn } from "./types";
 import { routerSelectAgent } from "./router";
 import { extractTextFromFile, ExtractError } from "../extract-text";
 import { GeminiProvider } from "../ai/gemini";
 import { GroqProvider } from "../ai/groq";
 import { OpenRouterProvider } from "../ai/openrouter";
+import { NvidiaProvider } from "../ai/nvidia";
 import { detectFileKind } from "../extract-text";
 import { selectModelForTask, getModelCapability } from "../ai/capabilities";
 import { DIAGRAM_GUIDELINES } from "@/lib/ai/prompt-engine";
@@ -27,27 +28,79 @@ import { CURRENT_AI_MODEL } from "@/lib/ai/model-access";
 import { recordAiUsage, type UsageStatus } from "@/lib/ai/usage-accounting";
 import { scheduleUsageRecording } from "@/lib/ai/usage-scheduler";
 import type { AiUsageContext } from "@/lib/ai/usage-context";
+import { MODEL_REGISTRY } from "@/lib/ai/models";
 
 // Groq adapter — verified working (key from env, HTTP 200)
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = CURRENT_AI_MODEL;
+
+// ═══ التوصيل التدريجي — شرح طويل على أجزاء بدل رد واحد ضخم ═══
+// 💡 **ليه:** الرد الواحد الطويل بياخد توكنز كتير (TPM) ووقت تفكير طويل —
+//    فبيضرب حدود المزوّد المجاني (429) أو مهلة الدالة (maxDuration 60s).
+//    بتقسيم الشرح لأجزاء، كل طلب صغير وسريع والواجهة تعرض جزء جزء ورا بعض.
+export const CONTINUE_MARKER = "[[متابعة]]";
+const SEGMENTATION_DIRECTIVE = `تقسيم الردود الطويلة (مهم جدًا): لو الإجابة محتاجة شرح طويل — شرح درس أو محاضرة كاملة أو مراجعة مطوّلة — لا تخرج كل شيء في رد واحد. قدّم الجزء الأول فقط بعمق ووضوح (نحو 300–500 كلمة)، ثم اختمه بسطر منفرد يحتوي فقط: ${CONTINUE_MARKER} وسيُطلب منك التكملة تلقائيًا في رد تالٍ. إذا اكتملت الإجابة فعلًا فلا تضع العلامة إطلاقًا.`;
+
+// 💡 ميزانية إجمالية لسجل المحادثة — 12 دور × 3000 حرف = 36k حرف كانت بتسحب
+//    الـ prompt بعيد عن حدود TPM للموديلات المجانية (سبب رئيسي للـ 429 في الشرح الطويل).
+const HISTORY_TOTAL_BUDGET = 9000;
+const HISTORY_TURN_CAP = 3000;
+
+/**
+ * 🛡️ سلسلة fallback من MODEL_REGISTRY — ممنوع hard-code موديلات خارج السجل.
+ *
+ * 💡 **ليه:** عند 429 من موديل Groq الأساسي، نفس المزوّد عنده موديل تاني في
+ *    سلة rate-limit منفصلة (gpt-oss-20b)، وعند إنهاك Groq كله NVIDIA متاح.
+ *    كل المرشحين من السجل + متحقَّق منهم حيًّا (بروب VALID) + freeEndpoint فقط.
+ */
+function modelFallbackChain(primary: string): Array<{ provider: "groq" | "nvidia"; model: string }> {
+  const primaryDef = MODEL_REGISTRY.find((m) => m.id === primary);
+  const primaryProvider = primaryDef?.provider;
+  const chain: Array<{ provider: "groq" | "nvidia"; model: string }> = [];
+  const push = (provider: "groq" | "nvidia", model: string) => {
+    if (model !== primary && !chain.some((c) => c.model === model)) chain.push({ provider, model });
+  };
+  if (primaryProvider === "groq" || primaryProvider === "nvidia") {
+    for (const m of MODEL_REGISTRY) {
+      // موديلات الرؤية مستبعدة من fallback النص — أرخص موديل نصي متحقَّق أفضل
+      // من موديل رؤية (واحد منهم متقاعد من Groq فبرجّع 404 مضيّع للوقت).
+      if (m.provider === primaryProvider && m.enabled && m.freeEndpoint && m.capabilities.includes("text") && !m.capabilities.includes("vision")) {
+        push(primaryProvider, m.id);
+      }
+    }
+  }
+  // عبور المزوّدين: Groq ⟷ NVIDIA — بشرط وجود المفتاح (isConfigured يدويًا هنا
+  // لأن unified-ai مش ماشي عبر الراوتر — الراوتر اختار primary خلاص).
+  const crossProvider = primaryProvider === "groq" ? "nvidia" : "groq";
+  const crossKey = crossProvider === "nvidia" ? (process.env.NVIDIA_API_KEY?.trim() || "") : (process.env.GROQ_API_KEY?.trim() || "");
+  if (crossKey) {
+    for (const m of MODEL_REGISTRY) {
+      if (m.provider === crossProvider && m.enabled && m.freeEndpoint && m.capabilities.includes("text") && !m.capabilities.includes("vision")) {
+        push(crossProvider, m.id);
+      }
+    }
+  }
+  return chain.slice(0, 2);
+}
 
 async function callGroqWithModel(
   prompt: string,
   model: string,
   _language: string = "ar",
   system?: string,
-  usage?: AiUsageContext
-): Promise<{ ok: true; content: string; model: string } | { ok: false; error: string }> {
+  usage?: AiUsageContext,
+  history?: UnifiedChatTurn[],
+  timeoutMs: number = 25000
+): Promise<{ ok: true; content: string; model: string; finishReason?: string } | { ok: false; error: string; rateLimited?: boolean }> {
   const key = process.env.GROQ_API_KEY || "";
   if (!key) return { ok: false, error: "AI provider temporarily unavailable." };
 
   // ًںŒگ Language handling: honour the requested language instead of discarding it.
   const langDirective =
     _language === "ar"
-      ? "أجب باللغة العربية (Arabic) إلا إذا طلب المستخدم غير ذلك."
+      ? "اللغة: اتبع لغة سؤال الطالب — سؤال عربي يُجاب بالعربية، وسؤال إنجليزي يُجاب بالإنجليزية أولاً ثم أضف في نهاية الرد قسم قصير بعنوان «الملخص بالعربية» يشرح نفس الفكرة بالعربية."
       : _language === "en"
-        ? "Respond in English unless the user explicitly asks otherwise."
+        ? "Respond in the student's language: an English question gets an English answer followed by a short Arabic summary section titled «الملخص بالعربية»."
         : "";
   const fullSystem = [langDirective, system]
     .filter((s) => typeof s === "string" && s.trim().length > 0)
@@ -64,14 +117,23 @@ async function callGroqWithModel(
   //    الكود المتزامن، مش على `onFinish`.
   const startedAt = Date.now();
 
+  type GroqAttempt =
+    | { ok: true; content: string; model: string; finishReason?: string }
+    | { ok: false; error: string; rateLimited?: boolean };
+
   /**
    * ًں§¾ سطر shadow واحد لكل محاولة مزوّد فعلية.
    *
-   * âڑ ï¸ڈ **`await` إجباري:** مافيش `after()` ولا fire-and-forget. لو الكتابة
+   * ⚠️ **`await` إجباري:** مافيش `after()` ولا fire-and-forget. لو الكتابة
    *   اتفلتت كـ floating promise، السيرفر المجمّد بيقتلها — وده بالظبط
    *   اللي خلّى `max(created_at)` يتجمّد في C4.1.
    */
-  const recordAttempt = async (status: UsageStatus, tokens?: { prompt?: number; completion?: number }) => {
+  const recordAttempt = async (
+    status: UsageStatus,
+    tokens?: { prompt?: number; completion?: number },
+    attemptProvider: string = "groq",
+    attemptModel: string = model
+  ) => {
     if (!usage) return;
     await scheduleUsageRecording(() =>
       recordAiUsage({
@@ -80,8 +142,8 @@ async function callGroqWithModel(
         operationId: usage.operationId,
         idempotencyKey: usage.idempotencyKey,
         attemptNo: 0,
-        provider: "groq",
-        model,
+        provider: attemptProvider as "groq",
+        model: attemptModel,
         status,
         units: 1,
         promptTokens: tokens?.prompt ?? null,
@@ -92,54 +154,96 @@ async function callGroqWithModel(
     );
   };
 
-  try {
-    const messages = [
+  // 🤎 ميزانية إجمالية لسجل المحادثة: بناخد الأدوار من الآخر (الأحدث أمهم)
+  //    لحد ما نمللئ الميزانية. من غيرها 12 دور × 3000 حرف = 36k حرف
+  //    كانوا بيضربوا حدود TPM للموديلات المجانية → 429 في الشرح الطويل.
+  const buildMessages = (turns: UnifiedChatTurn[] | undefined) => {
+    const picked: UnifiedChatTurn[] = [];
+    let used = 0;
+    const list = turns ?? [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const len = Math.min(list[i].content.length, HISTORY_TURN_CAP);
+      if (picked.length > 0 && used + len > HISTORY_TOTAL_BUDGET) break;
+      picked.unshift({ role: list[i].role, content: list[i].content.slice(0, HISTORY_TURN_CAP) });
+      used += len;
+    }
+    return [
       ...(fullSystem ? [{ role: "system", content: fullSystem }] : []),
+      ...picked.map((t) => ({ role: t.role, content: t.content })),
       { role: "user", content: prompt },
     ];
-    const res = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.7,
-        // 2048 بدل 1200 — المخططات (Mermaid) والردود الطويلة محتاجة مساحة
-        max_tokens: 2048,
-      }),
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      console.error("Groq error", res.status, detail.slice(0, 200));
-      await recordAttempt("failed_no_response");
-      // تمييز رفض استدعاء أداة مُحَال (tool_use_failed) — السبب الأشهر: مستوى
-      // في الـ system prompt بيحرّض على أداة مش مسجّلة، فالموديل بتخيّل تدعية.
-      // الرسالة للعميل تفضل عامة بدون حقن رد المزوّد الخام (تجنّب تسريب).
-      const toolHallucination = res.status === 400 && /tool[_ ]choice|tool_use_failed|called a tool/i.test(detail);
-      return {
-        ok: false,
-        error: toolHallucination
-          ? "AI provider rejected an invalid tool call. Please try again."
-          : "AI provider temporarily unavailable. Please try again.",
-      };
+  };
+
+  /**
+   * 🛡️ محاولة Groq واحدة مع إعادة محاولة على 429 — الحدود دقيقة-دقيقة،
+   *    وانتظار قصير (Retry-After) كتير بيحلها من غير ما نحرق مرشّح
+   *    الـ fallback. الـ timeout خطأ مكلّف زمنيًا — مفيش retry عليه.
+   */
+  const attemptGroq = async (groqModel: string): Promise<GroqAttempt> => {
+    const messages = buildMessages(history);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(GROQ_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: groqModel,
+            messages,
+            temperature: 0.7,
+            // 2048 بدل 1200 — المخططات (Mermaid) والردود الطويلة محتاجة مساحة
+            max_tokens: 2048,
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          console.error("Groq error", res.status, detail.slice(0, 200));
+          if (res.status === 429 && attempt === 0) {
+            const rawRetry = res.headers.get("retry-after");
+            const parsed = rawRetry === null ? NaN : Number(rawRetry);
+            const delayMs = Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed * 1000, 6000) : 2500;
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+          await recordAttempt("failed_no_response", undefined, "groq", groqModel);
+          // تمييز رفض استدعاء أداة مُحَال (tool_use_failed) — السبب الأشهر: مستوى
+          // في الـ system prompt بيحرّض على أداة مش مسجّلة، فالموديل بتخيّل تدعية.
+          // الرسالة للعميل تفضل عامة بدون حقن رد المزوّد الخام (تجنّب تسريب).
+          const toolHallucination = res.status === 400 && /tool[_ ]choice|tool_use_failed|called a tool/i.test(detail);
+          return {
+            ok: false,
+            error: toolHallucination
+              ? "AI provider rejected an invalid tool call. Please try again."
+              : "AI provider temporarily unavailable. Please try again.",
+            rateLimited: res.status === 429,
+          };
+        }
+        const data = await res.json().catch(() => null);
+        const content = data?.choices?.[0]?.message?.content;
+        if (typeof content !== "string" || !content.trim()) {
+          await recordAttempt("failed_after_response", undefined, "groq", groqModel);
+          return { ok: false, error: "AI returned an empty response. Please try again." };
+        }
+        await recordAttempt("completed", {
+          prompt: data?.usage?.prompt_tokens,
+          completion: data?.usage?.completion_tokens,
+        }, "groq", groqModel);
+        return {
+          ok: true,
+          content,
+          model: groqModel,
+          finishReason: String(data?.choices?.[0]?.finish_reason ?? ""),
+        };
+      } catch (e: unknown) {
+        console.error("Groq exception:", e instanceof Error ? e.message : String(e));
+        await recordAttempt("failed_no_response", undefined, "groq", groqModel);
+        return { ok: false, error: "AI request failed. Please try again." };
+      }
     }
-    const data = await res.json().catch(() => null);
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || !content.trim()) {
-      await recordAttempt("failed_after_response");
-      return { ok: false, error: "AI returned an empty response. Please try again." };
-    }
-    await recordAttempt("completed", {
-      prompt: data?.usage?.prompt_tokens,
-      completion: data?.usage?.completion_tokens,
-    });
-    return { ok: true, content, model };
-  } catch (e: unknown) {
-    console.error("Groq exception:", e instanceof Error ? e.message : String(e));
-    await recordAttempt("failed_no_response");
-    return { ok: false, error: "AI request failed. Please try again." };
-  }
+    return { ok: false, error: "AI provider temporarily unavailable. Please try again.", rateLimited: true };
+  };
+
+  return attemptGroq(model);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- legacy wrapper kept for external callers
@@ -147,6 +251,38 @@ async function callGroq(prompt: string, _language: string = "ar"): Promise<{ ok:
   const r = await callGroqWithModel(prompt, GROQ_MODEL, _language);
   if (!r.ok) return r;
   return { ok: true, content: r.content };
+}
+
+/**
+ * 🔄 محاولة NVIDIA كـ fallback عابر المزوّدين — لما Groq كله مشغول (429).
+ * نفس ترتيب الرسائل ونفس الميزانية اللي يستخدمها مسار Groq.
+ */
+async function attemptNvidiaFallback(
+  prompt: string,
+  model: string,
+  _language: string,
+  system?: string,
+  history?: UnifiedChatTurn[]
+): Promise<{ ok: true; content: string; model: string; finishReason?: string } | { ok: false; error: string }> {
+  try {
+    const provider = new NvidiaProvider();
+    const res = await provider.completeChat({
+      model,
+      messages: [
+        ...(system ? [{ role: "system" as const, content: system }] : []),
+        ...(history ?? []).map((t) => ({
+          role: t.role as "user" | "assistant",
+          content: t.content.slice(0, HISTORY_TURN_CAP),
+        })),
+        { role: "user" as const, content: prompt },
+      ],
+      maxTokens: 2048,
+    });
+    return { ok: true, content: res.content, model };
+  } catch (e: unknown) {
+    console.error("NVIDIA fallback failed:", e instanceof Error ? e.message : String(e));
+    return { ok: false, error: "AI provider temporarily unavailable. Please try again." };
+  }
 }
 
 export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult> {
@@ -212,7 +348,8 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         const base64 = Buffer.from(buffer).toString('base64');
         const candidates = [
           { modelId: "gemini-3.6-flash", available: !!process.env.GEMINI_API_KEY?.trim(), create: () => new GeminiProvider() },
-          { modelId: "llama-3.2-11b-vision-preview", available: !!process.env.GROQ_API_KEY?.trim(), create: () => new GroqProvider() },
+          // llama-3.2-11b-vision-preview اتشالت من Groq (تأكيد 2026-11-06) — كانت بتضيّع
+          // محاولة 404 مضمونة قبل البديل؛ super-vl:free متحقّق حيًّا (VALID ✓).
           { modelId: "nvidia/nemotron-3.5-super-vl:free", available: !!process.env.OPENROUTER_API_KEY?.trim(), create: () => new OpenRouterProvider() },
         ].filter((c) => c.available);
         // Prefer the selected model first, then the rest as fallback chain.
@@ -254,7 +391,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
             const text = await extractTextFromFile(fileForVision as File, {
               maxFileBytes: 10 * 1024 * 1024,
               maxImageBytes: 2 * 1024 * 1024,
-              maxTextChars: 8000,
+              maxTextChars: 24_000,
             });
             extractedText = (text || '').trim();
             ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? 'high' : 'medium' };
@@ -293,7 +430,7 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
         const text = await extractTextFromFile(file, {
           maxFileBytes: 10 * 1024 * 1024,
           maxImageBytes: 2 * 1024 * 1024,
-          maxTextChars: 8000,
+          maxTextChars: 24_000,
         });
         extractedText = text.trim();
         ocrMeta = { engineUsed: 1, confidence: extractedText.length > 50 ? "high" : "medium" };
@@ -374,24 +511,62 @@ export async function unifiedAI(input: UnifiedAIInput): Promise<UnifiedAIResult>
     // Unified brain: system من السيرفر (شخصية + سياق الطالب) + إرشادات المخططات.
     const serverSystem = typeof input.system === "string" ? input.system.trim() : "";
     const systemPrompt = serverSystem ? `${serverSystem}\n\n${DIAGRAM_GUIDELINES}` : DIAGRAM_GUIDELINES;
-    const providerResult = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemPrompt, input.usage);
-    if (!providerResult.ok) {
+    // 📡 تعليمات التقسيم دائمًا — الردود القصيرة ماتتأسرش (العلامة للردود الطويلة فقط).
+    const systemWithSegmentation = `${systemPrompt}\n\n${SEGMENTATION_DIRECTIVE}`;
+
+    // 🛡️ سلسلة المرشّحين: الموديل المختار أولًا ثم بدائل السجل (Groq 20b → NVIDIA)
+    // — عند 429/فشل المزوّد الأساسي بدل ما الخطأ يرجع للطالب فورًا.
+    const chain = modelFallbackChain(modelToUse);
+    type ProviderAttempt =
+      | { ok: true; content: string; model: string; finishReason?: string }
+      | { ok: false; error: string };
+    let providerResult: Extract<ProviderAttempt, { ok: true }> | null = null;
+    let lastFailure = "";
+    {
+      const primary = await callGroqWithModel(combinedPrompt, modelToUse, lang, systemWithSegmentation, input.usage, input.history);
+      if (primary.ok) providerResult = primary;
+      else lastFailure = primary.error;
+    }
+    if (!providerResult) {
+      for (const candidate of chain) {
+        console.warn(`[UnifiedAI] fallback → ${candidate.provider}/${candidate.model} (سبب فشل السابق: ${lastFailure})`);
+        const r =
+          candidate.provider === "groq"
+            ? await callGroqWithModel(combinedPrompt, candidate.model, lang, systemWithSegmentation, input.usage, input.history, 20000)
+            : await attemptNvidiaFallback(combinedPrompt, candidate.model, lang, systemWithSegmentation, input.history);
+        if (r.ok) { providerResult = r; break; }
+        lastFailure = r.error;
+      }
+    }
+    if (!providerResult) {
       return {
         ok: false,
         agentUsed: decision.agentId,
         answer: "",
-        error: providerResult.error,
+        error: lastFailure || "AI provider temporarily unavailable.",
         extractedText: extractedText || undefined,
         metadata: { ocrEngine: ocrMeta.engineUsed, confidence: ocrMeta.confidence, languageDetected: lang === "ar" ? "ar" : lang === "en" ? "en" : "mixed", imageProcessed: hasImage, visionFallback },
         reasoning: decision.reason,
       };
     }
 
+    // 📡 تحليل علامة المتابعة — الشرح المستمر يرجع للواجهة كـ hasMore
+    // علاوة على دا finish_reason=length (الرد اتقطع على سقف التوكنز).
+    let answer = providerResult.content;
+    let hasMore = false;
+    if (answer.includes(CONTINUE_MARKER)) {
+      answer = answer.split(CONTINUE_MARKER).join("").trimEnd();
+      hasMore = true;
+    } else if (providerResult.finishReason === "length") {
+      hasMore = true;
+    }
+
     // 5. Return real dynamic answer (no mock — answer changes with prompt)
     return {
       ok: true,
       agentUsed: decision.agentId,
-      answer: providerResult.content,
+      answer,
+      hasMore,
       extractedText: extractedText || undefined,
       metadata: {
         ocrEngine: ocrMeta.engineUsed,

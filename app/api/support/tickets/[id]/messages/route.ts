@@ -19,6 +19,9 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   const {data:msg,error}=await service.from("support_messages").insert({ticket_id:id,author_id:user.id,author_role:"user",body:text}).select("*").single();
   if(error||!msg){console.error("[support reply]",error?.message);return NextResponse.json({success:false,error:"Failed to reply."},{status:500});}
   await service.from("support_tickets").update({status:"open",updated_at:new Date().toISOString()}).eq("id",id);
+  // رد تلقائي من مساعد الدعم الفني (Magic AI) — fail-safe
+  const {insertSupportAutoReply}=await import("@/lib/support/auto-reply");
+  await insertSupportAutoReply(id,user.id,text);
   return NextResponse.json({success:true,message:msg},{status:201});
  }catch(e){console.error("[support reply]",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
 }

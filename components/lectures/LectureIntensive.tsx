@@ -547,6 +547,9 @@ function CitationPeek({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // 🎧 استوديو: لو في مشغّل صوت مسجّل — قفزة مباشرة في التسجيل من هنا.
+  const { seekTo } = useLectureCitation();
+
   // ⚠️ **الـ portal محتاج DOM** — فبنستنى الـ mount.
   //    `useSyncExternalStore` هو الطريقة المعتمدة (من غير setState في effect
   //    — اللي `react-hooks/set-state-in-effect` بيمنعه).
@@ -582,6 +585,15 @@ function CitationPeek({
         >
           <ArrowUpLeft size={13} aria-hidden />
           <span>اذهب للمصدر</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => seekTo(start)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-[var(--card-secondary)] px-2.5 py-1 text-xs font-semibold text-ink transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          aria-label={`استمع من الدقيقة ${formatTimestamp(start)}`}
+        >
+          <span aria-hidden>▶</span>
+          <span>استمع من هنا</span>
         </button>
         {quote && (
           <button

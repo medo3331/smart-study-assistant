@@ -21,6 +21,9 @@ const CANDIDATES = [
   { id: "nvidia/nemotron-3-ultra-550b-a55b", kind: "chat" },
   { id: "deepseek-ai/deepseek-v4-flash-0731", kind: "chat" },
   { id: "nvidia/nemotron-3-embed-1b", kind: "embeddings" },
+  // الجيل الجديد من embeds — ظهروا في قائمة الحساب 2026-11-06.
+  { id: "nvidia/nemotron-3.5-embed-1b", kind: "embeddings" },
+  { id: "nvidia/nemotron-3.5-embed-8b", kind: "embeddings" },
 ];
 
 const apiKey = process.env.NVIDIA_API_KEY?.trim();
@@ -43,6 +46,10 @@ async function listModels() {
     const data = await res.json();
     const ids = Array.isArray(data?.data) ? data.data.map((m) => m?.id).filter(Boolean) : [];
     console.log(`/v1/models -> HTTP 200، عدد الموديلات المتاحة: ${ids.length}`);
+    // تشخيص: الكتالوج بيتغيّر من NVIDIA — بنعرض المرشّحين المتعلّقين عشان
+    // نعرف "غير موجود في قائمة حسابك" تغيّر حقيقي ولا مرشّح اتسمّى غيره.
+    const relevant = ids.filter((id) => /nemotron|embed|deepseek/i.test(id));
+    if (relevant.length) console.log(`  متاح من عايلة المرشّحين: ${relevant.join(" · ")}`);
     return new Set(ids);
   } catch (error) {
     console.log(`/v1/models -> NETWORK ERROR (${error?.cause?.code ?? error?.name ?? "unknown"})`);
@@ -62,8 +69,10 @@ async function probeChat(modelId) {
       body: JSON.stringify({
         model: modelId,
         messages: [{ role: "user", content: 'Say "OK"' }],
-        max_tokens: 8,
         temperature: 0,
+        // ⚠️ من غير قيد max_tokens — موديلات الاستدلال (nemotron) لو اتقيدت
+        //    بميزانية صغيرة بتحرقها كلها في التفكير و`content` بترجع فاضية
+        //    (نفس ملاحظة lib/ai/nvidia.ts). الـ production بيبعت 2048+ أو مفيش.
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -74,8 +83,12 @@ async function probeChat(modelId) {
     }
     const body = await res.json();
     const content = body?.choices?.[0]?.message?.content;
+    const reasoning = body?.choices?.[0]?.message?.reasoning_content;
     const ok = typeof content === "string" && content.trim().length > 0;
-    console.log(`  ${modelId} -> HTTP 200 (${latency}ms) ${ok ? "VALID ✓" : "EMPTY_RESPONSE ✗"}`);
+    // تشخيص: تفكير من غير محتوى = نفس سلوك الـ app (فشل EMPTY_RESPONSE) —
+    // بس بنميّزه هنا عشان ماتتلخبطش مع موديل ميّت.
+    const note = !ok && typeof reasoning === "string" && reasoning.trim() ? " REASONING_ONLY (فكّر من غير ما يرد)" : "";
+    console.log(`  ${modelId} -> HTTP 200 (${latency}ms) ${ok ? "VALID ✓" : `EMPTY_RESPONSE ✗${note}`}`);
     return ok;
   } catch (error) {
     const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
@@ -86,26 +99,40 @@ async function probeChat(modelId) {
 
 async function probeEmbedding(modelId) {
   const startedAt = Date.now();
+  // الجيل الجديد من embeds (nemotron-3.5) بيرفض الصيغة العادية بـ 400 —
+  // بنجرّب الأشكال المعروفة بالترتيب وبنطبع اللي نجح عشان الـ production يمشي عليه.
+  const variants = [
+    { name: "plain", body: { input: ["ok"], model: modelId, encoding_format: "float" } },
+    { name: "input_type=query", body: { input: ["ok"], model: modelId, encoding_format: "float", input_type: "query" } },
+    { name: "input_type=query+truncate", body: { input: ["ok"], model: modelId, encoding_format: "float", input_type: "query", truncate: "END" } },
+  ];
   try {
-    const res = await fetch("https://integrate.api.nvidia.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ input: ["ok"], model: modelId, encoding_format: "float" }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    const latency = Date.now() - startedAt;
-    if (!res.ok) {
-      console.log(`  ${modelId} -> HTTP ${res.status} (${latency}ms)`);
-      return false;
+    let lastStatus = "?";
+    let lastDetail = "";
+    for (const variant of variants) {
+      const res = await fetch("https://integrate.api.nvidia.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(variant.body),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const latency = Date.now() - startedAt;
+      if (!res.ok) {
+        lastStatus = res.status;
+        lastDetail = (await res.text().catch(() => "")).slice(0, 200);
+        continue;
+      }
+      const body = await res.json();
+      const vector = body?.data?.[0]?.embedding;
+      const ok = Array.isArray(vector) && vector.length > 0 && typeof vector[0] === "number";
+      console.log(`  ${modelId} -> HTTP 200 (${latency}ms) ${ok ? `VALID ✓ dim=${vector.length} (payload: ${variant.name})` : "EMPTY_RESPONSE ✗"}`);
+      return ok;
     }
-    const body = await res.json();
-    const vector = body?.data?.[0]?.embedding;
-    const ok = Array.isArray(vector) && vector.length > 0 && typeof vector[0] === "number";
-    console.log(`  ${modelId} -> HTTP 200 (${latency}ms) ${ok ? `VALID ✓ dim=${vector.length}` : "EMPTY_RESPONSE ✗"}`);
-    return ok;
+    console.log(`  ${modelId} -> HTTP ${lastStatus} (${Date.now() - startedAt}ms) — كل صيغ الـ payload فشلت${lastDetail ? `: ${lastDetail}` : ""}`);
+    return false;
   } catch (error) {
     const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
     console.log(`  ${modelId} -> ${timedOut ? "TIMEOUT" : `NETWORK ERROR (${error?.cause?.code ?? error?.name ?? "unknown"})`}`);

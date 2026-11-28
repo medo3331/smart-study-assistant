@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { isNotificationsSchemaMissing, NOTIFICATIONS_SCHEMA_MISSING_MESSAGE } from "@/lib/notifications/schema";
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(v:any){return typeof v==="string"&&UUID_RE.test(v);}
@@ -29,51 +30,41 @@ export async function GET(){
 
   // Integrate published announcements into notifications (admin-only, read-only)
   const now=new Date().toISOString();
-  const {data:anns=[],error:annErr}=await supabase
-    .from("announcements")
-    .select("*")
-    .eq("status","published")
-    .or(`publish_at.is.null,publish_at.lte.${now}`)
-    .or(`expires_at.is.null,expires_at.gt.${now}`);
-
+  // توصيل الإعلانات المنشورة: service-role لمحتوى إداري عام مع فلترة persona (من main)
+  const service = createServiceClient();
+  const {data:anns,error:annErr}=await service.from("announcements").select("id,title,body,audience").eq("status","published").or(`publish_at.is.null,publish_at.lte.${now}`).or(`expires_at.is.null,expires_at.gt.${now}`);
   if(annErr){console.error("[notifications] announcements",annErr.message);}
-
-  // Check for existing notifications and insert new announcement notifications (owner: the user)
-  if(anns?.length){
-    for(const a of anns){
-      const {data:existing}=await supabase
-        .from("notifications")
-        .select("id")
-        .eq("recipient_id",user.id)
-        .eq("type","announcement")
-        .eq("title",a.title)
-        .maybeSingle();
-      if(!existing){
-        await supabase.from("notifications").insert({
-          recipient_id:user.id,
-          type:"announcement",
-          title:a.title,
-          body:a.body,
-          link_url:a.link_url??null
-        });
-      }
-    }
+  const {data:profile}=await service.from("profiles").select("persona").eq("id",user.id).maybeSingle();
+  let existingNotifications: any[] = [];
+  const {data:modernNotifications,error:modernError}=await supabase.from("notifications").select("announcement_id").eq("recipient_id",user.id).not("announcement_id","is",null);
+  if (!modernError) existingNotifications = modernNotifications ?? [];
+  else {
+   const {data:legacyNotifications}=await supabase.from("notifications").select("announcement_id").eq("user_id",user.id).not("announcement_id","is",null);
+   existingNotifications = legacyNotifications ?? [];
   }
-
-  // Load user's own notifications (RLS-enforced via server client)
-  const {data,error}=await supabase
-    .from("notifications")
-    .select("*")
-    .eq("recipient_id",user.id)
-    .order("created_at",{ascending:false})
-    .limit(50);
+  const delivered = new Set(existingNotifications.map((row: any) => row.announcement_id).filter(Boolean));
+  for(const a of anns??[]){
+   if (delivered.has(a.id)) continue;
+   const audience = a.audience ?? "all";
+   if (audience !== "all" && (!profile?.persona || (audience === "student" && profile.persona !== "student") || (audience === "graduate" && profile.persona !== "grad") || (audience === "freelancer" && profile.persona !== "freelancer"))) continue;
+   const {error:deliveryError}=await service.from("notifications").upsert({recipient_id:user.id,type:"announcement",title:a.title,body:a.body,announcement_id:a.id}, {onConflict:"announcement_id,recipient_id",ignoreDuplicates:true});
+   if(deliveryError) console.error("[notifications] announcement delivery",deliveryError.message);
+   else delivered.add(a.id);
+  }
+  // قراءة إشعارات المستخدم نفسه: server client يفرض RLS (إصلاح أمني من البرانش) مع fallback للسكيما القديمة
+  let {data,error}=await supabase.from("notifications").select("*").eq("recipient_id",user.id).order("created_at",{ascending:false}).limit(50);
+  if(error) {
+   const legacy = await supabase.from("notifications").select("*").eq("user_id",user.id).order("created_at",{ascending:false}).limit(50);
+   data = legacy.data; error = legacy.error;
+  }
   if(error){
     if(isNotificationsSchemaMissing(error)){return NextResponse.json({success:false,error:NOTIFICATIONS_SCHEMA_MISSING_MESSAGE,schemaMissing:true,notifications:[],unread:0},{status:503})}
     console.error("[notifications] GET",error.message);
     return NextResponse.json({success:false,error:"Failed to load."},{status:500});
   }
-  return NextResponse.json({success:true,notifications:data??[],unread:(data??[]).filter((n:any)=>!n.read_at).length});
-}catch(e){console.error("[notifications] GET",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
+  const notifications=(data??[]).map((n:any)=>({...n,read_at:n.read_at??(n.is_read? n.created_at : null),body:n.body??n.message??""}));
+  return NextResponse.json({success:true,notifications,unread:notifications.filter((n:any)=>!n.read_at).length});
+ }catch(e){console.error("[notifications] GET",e);return NextResponse.json({success:false,error:"Unexpected error."},{status:500});}
 }
 
 export async function PATCH(req:Request){
@@ -84,12 +75,8 @@ export async function PATCH(req:Request){
 
   const body=await req.json().catch(()=>null);
   if(body?.all===true){
-   // Mark ALL user's notifications as read (RLS-enforced via server client)
-   const {error}=await supabase
-     .from("notifications")
-     .update({read_at:new Date().toISOString()})
-     .eq("recipient_id",user.id)
-     .is("read_at",null);
+   let {error}=await supabase.from("notifications").update({read_at:new Date().toISOString()}).eq("recipient_id",user.id).is("read_at",null);
+   if(error) ({error}=await supabase.from("notifications").update({is_read:true}).eq("user_id",user.id).eq("is_read",false));
    if(error){
     if(isNotificationsSchemaMissing(error)){return NextResponse.json({success:false,error:NOTIFICATIONS_SCHEMA_MISSING_MESSAGE,schemaMissing:true},{status:503})}
     console.error("[notifications] PATCH all",error.message);
@@ -100,13 +87,9 @@ export async function PATCH(req:Request){
 
   const id=body?.id;
   if(!isUuid(id))return NextResponse.json({success:false,error:"Invalid id."},{status:400});
-
-  // Mark single notification as read — MUST enforce recipient ownership
-  const {error}=await supabase
-    .from("notifications")
-    .update({read_at:new Date().toISOString()})
-    .eq("id",id)
-    .eq("recipient_id",user.id); // This is a guaranteed filter on the authenticated user — no other user's notifications can be touched.
+  // تحديد إشعار واحد كمقروء — فرض ملكية المستلم إجباريًا (إصلاح أمني) مع fallback للسكيما القديمة
+  let {error}=await supabase.from("notifications").update({read_at:new Date().toISOString()}).eq("id",id).eq("recipient_id",user.id);
+  if(error) ({error}=await supabase.from("notifications").update({is_read:true}).eq("id",id).eq("user_id",user.id));
   if(error){
     if(isNotificationsSchemaMissing(error)){return NextResponse.json({success:false,error:NOTIFICATIONS_SCHEMA_MISSING_MESSAGE,schemaMissing:true},{status:503})}
     console.error("[notifications] PATCH id",error.message);

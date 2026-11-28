@@ -105,8 +105,10 @@ export type StorageNotebook = {
   ownerId: string;
   title: string;
   pageIds: string[];
-  /** أسماء الصفحات الاختيارية (pageId → اسم) — غايبة في الدفاتر القديمة. */
+  /** أسماء الصفحات الاختيارية (pageId → اسم) — غايبة في النوتات القديمة. */
   pageNames?: Record<string, string>;
+  /** مقاس الصفحات — غايب في النوتات القديمة (بيُقرأ "a4"). */
+  pageFormat?: PageFormat;
   currentPageId: string | null;
   /**
    * Monotonic revision of this record.
@@ -127,6 +129,16 @@ export type StorageNotebook = {
  * records written with an older variant keep validating.
  */
 export type NotesTemplate = "lined" | "grid" | "dotted" | "blank" | "cornell" | "arabic" | "columns" | "planner";
+
+/**
+ * Page size/orientation for the whole notebook.
+ *
+ * `a4` is the classic A4 portrait sheet. `wide` is the same A4 paper in
+ * landscape — wider, more room per line. `slide` is a 16:9 presentation
+ * sheet that doubles as a slide in presentation mode and PPTX export.
+ * Stored at notebook level; absent in older records (read as "a4").
+ */
+export type PageFormat = "a4" | "wide" | "slide";
 
 /** Storage record for a page. */
 export type StoragePage = {

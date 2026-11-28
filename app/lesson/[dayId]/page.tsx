@@ -14,6 +14,23 @@ import { awardCoins } from "@/lib/shop/shop-data";
 import { buildLessonSequence } from "@/lib/learning/lesson-sequence";
 import { fetchUnlockedDayIds } from "@/lib/pages-data";
 
+/**
+ * الشرح المربوط بالتسجيل — جوّه LectureCitationProvider: زر «استمع من هنا»
+ * في أي مرجع بيشغّل التسجيل من اللحظة المرتبطة (لو مفيش صوت يبقى الزر مش بيظهر).
+ */
+function LinkedCitedView({
+  cited,
+  lectureId,
+  summary,
+}: {
+  cited: LessonCitedExplanation;
+  lectureId: string;
+  summary: string | null;
+}) {
+  const { seekTo } = useLectureCitation();
+  return <LessonCitedExplanationView cited={cited} lectureId={lectureId} summary={summary} onSeek={seekTo} />;
+}
+
 // 🎴 إعادة تصميم صفحة الدرس — نفس نظام الداشبورد المنفَّذ (بنفسجي/تيل/عنبري على داكن)
 // كل الأرقام من نفس حالة الصفحة الحقيقية؛ مفيش مصدر بيانات جديد ولا منطق بديل.
 import { LessonShell, GlassCard, Reveal } from "./components/LessonChrome";
@@ -26,7 +43,9 @@ import { VideoCandidate } from "@/lib/lesson/video-server";
 import { SpecializationTools } from "@/components/lesson/SpecializationTools";
 import { LectureLinkModal, type LinkLectureOption, type LinkSuggestion } from "@/components/lesson/LectureLinkModal";
 import { LessonCitedExplanationView } from "@/components/lesson/LessonCitations";
-import type { LessonCitedExplanation } from "@/lib/lesson/citations";
+import type { LessonCitedExplanation, TimedSegment } from "@/lib/lesson/citations";
+import { LectureCitationProvider, useLectureCitation } from "@/components/lectures/lecture-citation-context";
+import { LectureAudioPlayer } from "@/components/lectures/LectureAudioPlayer";
 import OpenNotesBeside from "@/components/notes/OpenNotesBeside";
 import NotesSplitToggle from "@/components/notes/NotesSplitPanel";
 
@@ -155,7 +174,10 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   // 🔗 ربط المحاضرة بالدرس (الخطوة 3) — الحالة بتيجي من GET مباشرة.
   const [link, setLink] = useState<{ lectureId: string; lectureTitle: string } | null>(null);
   const [lectureOptions, setLectureOptions] = useState<LinkLectureOption[]>([]);
+  const [otherLectures, setOtherLectures] = useState<LinkLectureOption[]>([]);
   const [suggestion, setSuggestion] = useState<LinkSuggestion | null>(null);
+  // مشغّل التسجيل المرتبط — بنجيب مقاطعه لما الربط يتحدد (24ب).
+  const [linkedAudio, setLinkedAudio] = useState<{ lectureId: string; hasAudio: boolean; segments: TimedSegment[] } | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -167,8 +189,33 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
   const applyLinkState = (data: any) => {
     setLink(data?.link ?? null);
     setLectureOptions(Array.isArray(data?.lectures) ? data.lectures : []);
+    setOtherLectures(Array.isArray(data?.otherLectures) ? data.otherLectures : []);
     setSuggestion(data?.suggestion ?? null);
   };
+
+  // مقاطع التسجيل المرتبط — best-effort: لو فشل الدرس يشتغل من غير مشغّل.
+  useEffect(() => {
+    const lectureId = link?.lectureId;
+    if (!lectureId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/lectures/${lectureId}/segments`);
+        const data = await res.json().catch(() => null);
+        if (cancelled || !res.ok || !data?.ok) return;
+        setLinkedAudio({
+          lectureId,
+          hasAudio: Boolean(data.hasAudio),
+          segments: Array.isArray(data.segments) ? data.segments : [],
+        });
+      } catch {
+        // الاستماع ميزة إضافية — مش بنعطل الدرس لو فشلت.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [link?.lectureId]);
 
   /** جلب وضع واحد — السيرفر بيرجعه من الكاش أو بيولّده ويحفظه في lesson_content. */
   const fetchContent = async (mode: NonNullable<SmartViewMode>) => {
@@ -431,7 +478,20 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
               </div>
             ) : link ? (
               cited ? (
-                <LessonCitedExplanationView cited={cited} lectureId={link.lectureId} summary={summary} />
+                linkedAudio?.lectureId === link.lectureId && linkedAudio.hasAudio ? (
+                  <LectureCitationProvider>
+                    <div className="space-y-3">
+                      <LectureAudioPlayer
+                        lectureId={link.lectureId}
+                        durationSeconds={null}
+                        segments={linkedAudio.segments}
+                      />
+                      <LinkedCitedView cited={cited} lectureId={link.lectureId} summary={summary} />
+                    </div>
+                  </LectureCitationProvider>
+                ) : (
+                  <LessonCitedExplanationView cited={cited} lectureId={link.lectureId} summary={summary} />
+                )
               ) : contentError ? (
                 <div className="py-6 text-center space-y-3">
                   <p className="text-[12.5px] text-ink-soft">{contentError}</p>
@@ -488,6 +548,7 @@ function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; sub
         }}
         subjectName={subject}
         lectures={lectureOptions}
+        otherLectures={otherLectures}
         suggestion={suggestion}
         currentLectureId={link?.lectureId ?? null}
         onLink={(lectureId) => void handleLink(lectureId)}

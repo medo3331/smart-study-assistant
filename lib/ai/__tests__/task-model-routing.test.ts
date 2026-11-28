@@ -3,9 +3,11 @@ import { describe, it, expect } from "vitest";
 import {
   AI_PROVIDER_BY_TASK,
   TASK_MODEL_PREFERENCE,
+  capabilitiesForTask,
   preferenceForTask,
   primaryProviderForTask,
 } from "../routing";
+import type { AiTaskType } from "../types";
 import { MODEL_REGISTRY, getModel } from "../models";
 
 /**
@@ -72,6 +74,68 @@ describe("خريطة توجيه الموديلات حسب المهمة", () => {
       const primary = getModel(list![0]);
       expect(primary.enabled, `${task} → ${primary.id} must be enabled`).toBe(true);
     }
+  });
+});
+
+describe("عقد الترتيب المجاني — مفيش موديل معطّل في أي مصفوفة", () => {
+  it("مفيش موديل `enabled: false` مرشّح في أي مهمة (المعطّل مكانُه مش في المصفوفات)", () => {
+    // ⚠️ الراوتر بيتخطّى المعطّل ديناميكيًا — وجوده هنا = محاولة فاشلة مضمونة
+    //    قبل المرشّح التاني. لو موديل اتعطّل، يتشال من المصفوفة في نفس الوقت.
+    for (const [task, list] of Object.entries(TASK_MODEL_PREFERENCE)) {
+      for (const id of list ?? []) {
+        expect(getModel(id).enabled, `${task} → ${id} معطّل في السجل`).toBe(true);
+      }
+    }
+  });
+
+  it("deepseek-v4-flash المعطّل (404 ×2) مش مرشّح في أي مهمة", () => {
+    for (const [task, list] of Object.entries(TASK_MODEL_PREFERENCE)) {
+      expect(list ?? [], task).not.toContain("deepseek-ai/deepseek-v4-flash-0731");
+    }
+  });
+
+  it("كل مرشّح بيحقق قدرات مهمته — المصفوفة ما بتعدّيش بوابة القدرات", () => {
+    for (const [task, list] of Object.entries(TASK_MODEL_PREFERENCE)) {
+      const required = capabilitiesForTask(task as AiTaskType);
+      for (const id of list ?? []) {
+        const model = getModel(id);
+        for (const capability of required) {
+          expect(model.capabilities, `${task} → ${id} ناقصه ${capability}`).toContain(capability);
+        }
+      }
+    }
+  });
+
+  it("مهام structured_output الضيقة ليها 3 مرشّحين متحقّقين (عمق fallback كافٍ)", () => {
+    for (const task of ["quiz", "flashcards", "mind_map", "data_analysis"] as const) {
+      const list = TASK_MODEL_PREFERENCE[task]!;
+      expect(list.length, `${task}: ${list.length} مرشّحين بس`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("nemotron-3-ultra (المتحقّق 2026-11-06) احتياطي في chat/quiz/flashcards/agent/study_plan", () => {
+    for (const task of ["chat", "quiz", "flashcards", "agent", "study_plan"] as const) {
+      expect(TASK_MODEL_PREFERENCE[task], task).toContain("nvidia/nemotron-3-ultra-550b-a55b");
+    }
+  });
+
+  it("nemotron-3-super (المؤكد اختفاؤه من الحساب) مش مرشّح ولا مفعّل", () => {
+    for (const [task, list] of Object.entries(TASK_MODEL_PREFERENCE)) {
+      expect(list ?? [], task).not.toContain("nvidia/nemotron-3-super-120b-a12b");
+    }
+    expect(getModel("nvidia/nemotron-3-super-120b-a12b").enabled).toBe(false);
+  });
+
+  it("embed-1b القديم معطّل والبديل 3.5 مسجّل — ومفيش مصفوفة تفضيل للـ RAG لحين البروب", () => {
+    expect(getModel("nvidia/nemotron-3-embed-1b").enabled).toBe(false);
+    expect(getModel("nvidia/nemotron-3.5-embed-1b").capabilities).toContain("embeddings");
+    expect(TASK_MODEL_PREFERENCE.rag_embeddings).toBeUndefined();
+  });
+
+  it("الشرح والخطط بتبدأ بالموديل القوي (استدلال) — الشات بالسريع", () => {
+    expect(getModel(TASK_MODEL_PREFERENCE.explain![0]).capabilities).toContain("reasoning");
+    expect(getModel(TASK_MODEL_PREFERENCE.study_plan![0]).capabilities).toContain("reasoning");
+    expect(getModel(TASK_MODEL_PREFERENCE.chat![0]).capabilities).not.toContain("reasoning");
   });
 });
 

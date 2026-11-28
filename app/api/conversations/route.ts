@@ -49,16 +49,60 @@ export async function GET(req: Request) {
     }
 
     // Attach participant count + unread count per conversation
+    const convIds = conversations.map((c: any) => c.id);
+
+    // أسماء المشاركين الآخرين (RLS: قراءة عضويات محادثاتي فقط)
+    let otherByConv = new Map<string, { display_name: string | null; avatar_url: string | null }>();
+    let lastMsgByConv = new Map<string, string>();
+    if (convIds.length > 0) {
+      const [partsRes, msgsRes] = await Promise.all([
+        serverClient
+          .from("conversation_participants")
+          .select("conversation_id, participant_id")
+          .in("conversation_id", convIds),
+        serverClient
+          .from("messages")
+          .select("conversation_id, body, created_at")
+          .in("conversation_id", convIds)
+          .order("created_at", { ascending: false })
+          .limit(convIds.length * 20),
+      ]);
+      const parts = (partsRes.data ?? []) as { conversation_id: string; participant_id: string }[];
+      const otherIds = [...new Set(parts.filter((p) => p.participant_id !== user.id).map((p) => p.participant_id))];
+      const profsRes = otherIds.length > 0
+        ? await serverClient
+            .from("social_profiles")
+            .select("user_id, display_name, avatar_url")
+            .in("user_id", otherIds)
+        : { data: [] as any[] | null };
+      const profs = ((profsRes.data ?? []) as { user_id: string; display_name: string | null; avatar_url: string | null }[]);
+      const profById = new Map(profs.map((p) => [p.user_id, p]));
+      for (const p of parts) {
+        if (p.participant_id === user.id) continue;
+        const prof = profById.get(p.participant_id);
+        otherByConv.set(p.conversation_id, {
+          display_name: prof?.display_name ?? null,
+          avatar_url: prof?.avatar_url ?? null,
+        });
+      }
+      for (const m of (msgsRes.data ?? []) as { conversation_id: string; body: string }[]) {
+        if (!lastMsgByConv.has(m.conversation_id)) lastMsgByConv.set(m.conversation_id, m.body);
+      }
+    }
+
     const result = conversations.map((c: any) => {
+      const other = otherByConv.get(c.id);
       const msgCount = c.messages?.length || 0;
       return {
         id: c.id,
-        title: c.title,
+        title: other?.display_name || c.title || "محادثة",
+        other_avatar: other?.avatar_url ?? null,
         status: c.status,
         participant_count: 0,
         unread_count: 0,
         last_message_at: c.updated_at,
         last_message_id: null,
+        last_message_body: lastMsgByConv.get(c.id) ?? null,
         message_count: msgCount,
       };
     });

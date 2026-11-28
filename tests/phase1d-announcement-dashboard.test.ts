@@ -7,12 +7,17 @@ const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 const toast = read("components/AnnouncementToast.tsx");
 const layout = read("app/layout.tsx");
+const deferredOverlays = read("components/layout/DeferredOverlays.tsx");
 const bell = read("components/NotificationBell.tsx");
 
 describe("Phase 1D announcement global presentation", () => {
   it("registers the automatic announcement toast globally", () => {
-    expect(layout).toContain("import AnnouncementToast from '@/components/AnnouncementToast'");
-    expect(layout).toContain("<AnnouncementToast />");
+    // التحديث: الودجتس العائمة (دعم/إشعارات/إعلانات/مساعد) انتقلت إلى
+    // DeferredOverlays — بتتحمّل dynamic بعد الترطيب بدل الحزمة المشتركة.
+    expect(layout).toContain('import { DeferredOverlays } from \'@/components/layout/DeferredOverlays\'');
+    expect(layout).toContain("<DeferredOverlays />");
+    expect(deferredOverlays).toContain('import("@/components/AnnouncementToast")');
+    expect(deferredOverlays).toContain("<AnnouncementToast />");
   });
 
   it("uses readable explicit colors for announcement content", () => {

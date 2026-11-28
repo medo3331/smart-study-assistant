@@ -59,7 +59,7 @@ export function DailyProgress({
             {subtitle && <p className="text-sm text-[#9AA0C0] mt-1">{subtitle}</p>}
           </div>
           <div className="text-left">
-            <p className="text-lg font-mono font-bold text-[#2DD4BF]">{completedCount} / {totalCount}</p>
+            <p className="text-lg font-mono font-bold text-[#34D399]">{completedCount} / {totalCount}</p>
             <p className="text-xs text-[#9AA0C0]">مكتمل</p>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function DailyProgress({
         <GlassCard className="p-4">
           <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden mb-4">
             <motion.div
-              className="h-full bg-gradient-to-r from-[#7C5CFF] to-[#2DD4BF] rounded-full"
+              className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 1, ease: "easeOut" }}
@@ -97,9 +97,9 @@ export function DailyProgress({
                 className={cn(
                   "flex w-full items-center gap-4 rounded-2xl p-4 text-right transition-colors",
                   item.completed 
-                    ? "border border-[#2DD4BF]/20 bg-white/[0.02]" 
+                    ? "border border-[#34D399]/20 bg-white/[0.02]" 
                     : item.current 
-                      ? "border border-[#7C5CFF]/20 bg-[#7C5CFF]/5" 
+                      ? "border border-[#10B981]/20 bg-[#10B981]/5" 
                       : "border border-white/[0.04] bg-white/[0.02]",
                   interactive && "hover:bg-white/[0.04] cursor-pointer",
                   !interactive && "cursor-default"
@@ -108,9 +108,9 @@ export function DailyProgress({
                 <div className={cn(
                   "flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-xl",
                   item.completed 
-                    ? "bg-[#2DD4BF]/15 text-[#2DD4BF]" 
+                    ? "bg-[#34D399]/15 text-[#34D399]" 
                     : item.current 
-                      ? "bg-[#7C5CFF]/15 text-[#7C5CFF]" 
+                      ? "bg-[#10B981]/15 text-[#10B981]" 
                       : "bg-white/[0.04] text-[#9AA0C0]"
                 )}>
                   {item.completed ? (
@@ -123,8 +123,8 @@ export function DailyProgress({
                 {/* Icon */}
                 <div className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04]">
                   <Icon size={20} className={cn(
-                    item.completed ? "text-[#2DD4BF]" : 
-                    item.current ? "text-[#7C5CFF]" : "text-[#9AA0C0]"
+                    item.completed ? "text-[#34D399]" : 
+                    item.current ? "text-[#10B981]" : "text-[#9AA0C0]"
                   )} aria-hidden />
                 </div>
 
@@ -133,7 +133,7 @@ export function DailyProgress({
                   <p className={cn(
                     "font-medium truncate",
                     item.completed ? "text-white" : 
-                    item.current ? "text-[#B69CFF]" : "text-[#C7CBE6]"
+                    item.current ? "text-[#6EE7B7]" : "text-[#C7CBE6]"
                   )}>
                     {item.arabicLabel}
                   </p>
@@ -143,7 +143,7 @@ export function DailyProgress({
                 {/* Time */}
                 {item.time && (
                   <div className="flex-shrink-0 text-right">
-                    <p className="text-sm font-mono font-medium text-[#B69CFF]">{item.time}</p>
+                    <p className="text-sm font-mono font-medium text-[#6EE7B7]">{item.time}</p>
                   </div>
                 )}
               </button>

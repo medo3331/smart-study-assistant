@@ -186,7 +186,6 @@ export const NAV_GROUPS: NavGroupDef[] = [
     icon: "aiMentor",
     items: [
       { id: "ai_chat", icon: "aiMentor", label: "المعلم الشخصي", latin: "AI Mentor", href: "/chat" },
-      { id: "agents", icon: "agents", label: "وكلاء الذكاء", latin: "AI Agents", href: "/dashboard/agents" },
       { id: "ai", icon: "assistant", label: "المساعد الذكي", latin: "AI Assistant", signal: "ai" },
       { id: "create", icon: "create", label: "إنشاء خطة", latin: "Create", href: "/dashboard/create" },
     ],
@@ -200,11 +199,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
       { id: "planner", icon: "planner", label: "المخطط", latin: "Planner", href: "/dashboard/planner" },
       { id: "calendar", icon: "calendar", label: "التقويم", latin: "Calendar", href: "/dashboard/calendar" },
       { id: "missions", icon: "missions", label: "المهام اليومية", latin: "Daily Missions", href: "/missions" },
-      { id: "notes", icon: "notes", label: "الملاحظات", latin: "Notes", scrollTo: "notes" },
-      // 📓 دفتر الملاحظات — صفحة كاملة (/notes)، مش قسم في الداشبورد.
-      // الاتنين مقصودين: «الملاحظات» بتوديك لكارت الملاحظات المختصر جوه
-      // الداشبورد، و«دفتر الملاحظات» بتفتح المحرر نفسه بخط اليد.
-      { id: "notebook", icon: "notes", label: "دفتر الملاحظات", latin: "Notebook", href: "/notes" },
+      // 📓 النوتة — الصفحة الكاملة (/notes) لتحرير الملاحظات بخط اليد.
+      { id: "notebook", icon: "notes", label: "النوتة", latin: "Notes", href: "/notes" },
       // الطوارئ مفتاح مش صفحة: بيقلب شكل قايمة الأيام لخطة امتحان قريب.
       { id: "emergency", icon: "emergency", label: "وضع الطوارئ", latin: "Emergency" },
       // 🗓️ ١٢ أغسطس: القرآن كان مدفون جوه درج الإعدادات — البند ده بينزّل
@@ -522,6 +518,7 @@ export interface RailAccount {
   displayName: string;
   displayEmail: string;
   avatarInitial: string;
+  avatarUrl: string | null;
   isGuest: boolean;
 }
 
@@ -530,7 +527,15 @@ export interface RailAccount {
 interface AuthUserLike {
   email?: string | null;
   is_anonymous?: boolean;
-  user_metadata?: { full_name?: unknown } | null;
+  user_metadata?: { full_name?: unknown; avatar_url?: unknown; picture?: unknown } | null;
+}
+
+function accountAvatarUrl(user: AuthUserLike): string | null {
+  const candidates = [user.user_metadata?.avatar_url, user.user_metadata?.picture];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().startsWith("http")) return c.trim();
+  }
+  return null;
 }
 
 export function railAccountFromUser(user: AuthUserLike | null | undefined): RailAccount | null {
@@ -542,6 +547,7 @@ export function railAccountFromUser(user: AuthUserLike | null | undefined): Rail
     displayName,
     displayEmail: user.email || (isGuest ? "حساب زائر (غير مسجل)" : ""),
     avatarInitial: displayName.trim().charAt(0).toUpperCase() || "؟",
+    avatarUrl: accountAvatarUrl(user),
     isGuest,
   };
 }

@@ -139,7 +139,7 @@ function SegmentTimeline({ segments }: { segments: TimedSegment[] }) {
   //
   //    ⭐ والربط **في الاتجاهين**: hover على المقطع ⇒ الجمل اللي
   //    بتستشهد بيه في الشرح تتلوّن (بتقرأ `hoverSeg` من نفس الـ context).
-  const { activeSeg, hoverSeg, setHoverSeg } = useLectureCitation();
+  const { activeSeg, hoverSeg, setHoverSeg, seekTo } = useLectureCitation();
 
   if (segments.length === 0) {
     return (
@@ -166,6 +166,9 @@ function SegmentTimeline({ segments }: { segments: TimedSegment[] }) {
               title={`⏱ ${formatTimestamp(segment.start)}`}
               onMouseEnter={() => setHoverSeg(segment.index)}
               onMouseLeave={() => setHoverSeg(null)}
+              onClick={() => seekTo(segment.start)}
+              style={{ cursor: "pointer" }}
+              aria-label={`تشغيل من الدقيقة ${formatTimestamp(segment.start)}`}
               className={
                 isActive
                   ? "rounded bg-[var(--accent)]/20 px-0.5 outline outline-2 outline-[var(--accent)]"

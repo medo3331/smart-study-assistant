@@ -10,6 +10,10 @@ import { db } from '@/lib/db';
 import { support_tickets, support_ticket_attachments, support_ticket_events, support_ticket_ratings, support_messages, support_ticket_assignments } from '@/lib/db/schema';
 import { eq, desc, and, or, sql } from 'drizzle-orm';
 
+// هذه اختبارات تكاملية تحتاج قاعدة بيانات حقيقية (DATABASE_URL) —
+// من غير DB بنعمل skip عشان ماتلوّش نتيجة الـ CI في البيئات من غير قاعدة.
+const hasDatabase = Boolean(process.env.DATABASE_URL);
+
 // Helper to create a test ticket
 async function createTestTicket(overrides: Partial<typeof support_tickets.$inferInsert> = {}) {
   const data: typeof support_tickets.$inferInsert = {
@@ -25,7 +29,7 @@ async function createTestTicket(overrides: Partial<typeof support_tickets.$infer
   return ticket;
 }
 
-describe('Support Tickets API', () => {
+describe.skipIf(!hasDatabase)('Support Tickets API', () => {
   describe('GET /api/tickets', () => {
     it('should return tickets for authorized user', async () => {
       // Create test tickets

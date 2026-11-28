@@ -151,8 +151,8 @@ export function QuranAudioPlayer() {
                   <div className="flex-shrink-0">
                     <IconBadge
                       icon={BookOpen}
-                      color="text-[#2DD4BF]"
-                      bg="bg-[#2DD4BF]/15"
+                      color="text-[#34D399]"
+                      bg="bg-[#34D399]/15"
                       size={40}
                     />
                   </div>
@@ -170,9 +170,9 @@ export function QuranAudioPlayer() {
                     {isLoading ? (
                       <Loader2 size={20} className="text-[#9AA0C0] animate-spin" />
                     ) : isPlaying ? (
-                      <Pause size={20} onClick={pause} className="cursor-pointer text-[#B69CFF]" />
+                      <Pause size={20} onClick={pause} className="cursor-pointer text-[#6EE7B7]" />
                     ) : (
-                      <Play size={20} onClick={handlePlayPause} className="cursor-pointer text-[#B69CFF]" />
+                      <Play size={20} onClick={handlePlayPause} className="cursor-pointer text-[#6EE7B7]" />
                     )}
                   </div>
                 </div>
@@ -186,8 +186,8 @@ export function QuranAudioPlayer() {
                     <div className="flex items-center gap-3 min-w-0">
                       <IconBadge
                         icon={BookOpen}
-                        color="text-[#2DD4BF]"
-                        bg="bg-[#2DD4BF]/15"
+                        color="text-[#34D399]"
+                        bg="bg-[#34D399]/15"
                         size={44}
                       />
                       <div className="min-w-0">
@@ -220,7 +220,7 @@ export function QuranAudioPlayer() {
                       style={{ width: `${progress * 100}%` }}
                     >
                       <motion.div
-                        className="h-full bg-gradient-to-r from-[#7C5CFF] to-[#2DD4BF] rounded-full"
+                        className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
                         style={{ width: `${progress * 100}%` }}
                         layout={reduceMotion ? false : undefined}
                       />
@@ -254,7 +254,7 @@ export function QuranAudioPlayer() {
                         step={0.01}
                         value={volume}
                         onChange={(e) => setVolume(parseFloat(e.target.value))}
-                        className="w-20 accent-[#7C5CFF]"
+                        className="w-20 accent-[#10B981]"
                         aria-label="مستوى الصوت"
                       />
                     </div>
@@ -272,15 +272,15 @@ export function QuranAudioPlayer() {
                       </button>
 
                       {isLoading ? (
-                        <Loader2 size={22} className="animate-spin text-[#7C5CFF]" />
+                        <Loader2 size={22} className="animate-spin text-[#10B981]" />
                       ) : (
                         <button
                           onClick={handlePlayPause}
                           className={cn(
                             "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
                             isPlaying
-                              ? "bg-[#7C5CFF]/15 text-[#B69CFF]"
-                              : "bg-[#7C5CFF] text-white hover:bg-[#8E72FF]"
+                              ? "bg-[#10B981]/15 text-[#6EE7B7]"
+                              : "bg-[#10B981] text-white hover:bg-[#8E72FF]"
                           )}
                           aria-label={isPlaying ? "إيقاف" : "تشغيل"}
                         >

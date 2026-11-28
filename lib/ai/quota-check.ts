@@ -15,6 +15,7 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/admin";
+import { isAiOpenTrialActive } from "@/lib/ai/trial";
 
 export type QuotaKind = "message" | "upload" | "page";
 
@@ -102,6 +103,20 @@ export async function checkSubscriptionQuota(
       resetAt: null,
       reasonAr: "المالك — تجاوز الحدود الداخلية (لا يوجد استهلاك كوتة)",
       ownerBypass: true,
+    };
+  }
+
+  // 🎁 الفترة التجريبية المفتوحة (شهر): مفيش أي استهلاك أو حد — كل أنواع
+  // الكوتة مفتوحة (نوته + AI + رفع). بعد التجربة يرجع الحد الطبيعي.
+  if (isAiOpenTrialActive()) {
+    return {
+      allowed: true,
+      kind,
+      planKey: "trial",
+      used: 0,
+      limit: -1,
+      resetAt: null,
+      reasonAr: "الفترة التجريبية المفتوحة — بلا حدود",
     };
   }
 
@@ -209,6 +224,9 @@ export async function refundSubscriptionQuota(
   kind: QuotaKind,
   idempotencyKey?: string | null
 ): Promise<void> {
+  // 🎁 في التجربة المفتوحة مفيش استهلاك أصلاً — والـ refund ممكن ينقص
+  // عدّادات لم تُستهلك، فبنوقفه.
+  if (isAiOpenTrialActive()) return;
   if (!idempotencyKey) return;
   try {
     const privileged = createServiceClient();

@@ -8,6 +8,7 @@ import { regenerateUserCodeFormAction } from "@/app/admin/actions/user-code-form
 import { AdminCard, AdminNotice, AdminPageHeader } from "@/components/admin/ui";
 import { getUserConsumption } from "@/lib/admin/user-consumption";
 import { getUserProfileInsights } from "@/lib/admin/user-profile-insights";
+import { UserModerationPanel, type ActiveAction } from "./ModerationPanel";
 import { SITE_URL } from "@/lib/seo";
 
 /** تنسيق حجم الملف بالبايت لوحدة مقروءة */
@@ -55,18 +56,20 @@ export default async function AdminUserDetailsPage({
   const service = createServiceClient();
   const { data: profile } = await service
     .from("profiles")
-    .select("id, display_name, email, persona, role, public_user_code, education_stage_id, education_grade_id, education_track_id, created_at")
+    .select("id, display_name, email, persona, role, public_user_code, education_stage_id, education_grade_id, education_track_id, created_at, is_banned, banned_at, ban_reason, restriction_until, warning_count")
     .eq("id", id)
     .maybeSingle();
 
-  const [canRegenerate, consumption, insights, authUserResult, stageResult, gradeResult, trackResult] = await Promise.all([
+  const [canRegenerate, canModerate, consumption, insights, authUserResult, stageResult, gradeResult, trackResult, activeActionsResult] = await Promise.all([
     hasPermission(supabase, user.id, user.email ?? null, "users.regenerate_code"),
+    hasPermission(supabase, user.id, user.email ?? null, "community.moderate"),
     profile ? getUserConsumption(id) : Promise.resolve(null),
     profile ? getUserProfileInsights(id) : Promise.resolve(null),
     service.auth.admin.getUserById(id),
     profile?.education_stage_id ? service.from("education_stages").select("name").eq("id", profile.education_stage_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
     profile?.education_grade_id ? service.from("education_grades").select("name").eq("id", profile.education_grade_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
     profile?.education_track_id ? service.from("education_tracks").select("name").eq("id", profile.education_track_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    service.from("moderation_actions").select("id, action_type, reason, expires_at, created_at").eq("user_id", id).eq("active", true).order("created_at", { ascending: false }).limit(20),
   ]);
   const profileEmail = (profile?.email as string | null) || authUserResult.data.user?.email || null;
   const education = [stageResult.data?.name, gradeResult.data?.name, trackResult.data?.name].filter(Boolean).join(" · ");
@@ -136,6 +139,21 @@ export default async function AdminUserDetailsPage({
                 <dd className="text-slate-200">{profile.created_at ? new Date(profile.created_at).toLocaleDateString("ar-EG") : "—"}</dd>
               </div>
             </dl>
+          </AdminCard>
+
+          <AdminCard title="الإشراف والحظر (المجتمع)" tone="rose">
+            <UserModerationPanel
+              userId={profile.id}
+              status={{
+                is_banned: (profile.is_banned as boolean) ?? false,
+                banned_at: (profile.banned_at as string | null) ?? null,
+                ban_reason: (profile.ban_reason as string | null) ?? null,
+                restriction_until: (profile.restriction_until as string | null) ?? null,
+                warning_count: (profile.warning_count as number) ?? 0,
+              }}
+              activeActions={((activeActionsResult.data ?? []) as ActiveAction[])}
+              canModerate={canModerate}
+            />
           </AdminCard>
 
           <AdminCard title="الاستهلاك والمزايا" tone="purple">

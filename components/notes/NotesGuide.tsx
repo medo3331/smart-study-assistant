@@ -7,7 +7,7 @@ import React from "react";
  *
  * Two audiences:
  *  • `library` — a student opening the notebook area for the first time needs
- *    to know what a "دفتر" is and that nothing is uploaded anywhere.
+ *    to know what a "نوتة" is and that nothing is uploaded anywhere.
  *  • `editor`  — a student already drawing needs the shortcuts and the rules
  *    that keep their work from being lost.
  *
@@ -29,14 +29,14 @@ export default function NotesGuide({
       <details className="notes-help" open={defaultOpen || undefined}>
         <summary>
           <span aria-hidden="true">💡</span>
-          <span>إزاي تستخدم دفتر الملاحظات</span>
+          <span>إزاي تستخدم النوتة</span>
           <span className="notes-help-tag">دليل سريع</span>
         </summary>
 
         <ol className="notes-steps">
           <li>
-            <strong>١. اعمل دفتر</strong> — اكتب اسم زي «تشريح — المحاضرة ٣» واضغط
-            «دفتر جديد». الدفتر بيتفتح على أول صفحة جاهزة للرسم.
+            <strong>١. اعمل نوتة</strong> — اكتب اسم زي «تشريح — المحاضرة ٣» واضغط
+            «نوتة جديدة». النوتة بتتفتح على أول صفحة جاهزة للرسم.
           </li>
           <li>
             <strong>٢. اختار القالب</strong> — مسطّر للملاحظات العادية، مربعات
@@ -52,7 +52,7 @@ export default function NotesGuide({
           </li>
           <li>
             <strong>٥. متقلقش على الشغل</strong> — الحفظ تلقائي بعد ما تسيب القلم،
-            وكمان لما تقفل التبويب. الدفاتر متخزنة <em>على جهازك</em> (IndexedDB)
+            وكمان لما تقفل التبويب. النوتات متخزنة <em>على جهازك</em> (IndexedDB)
             ومش مرفوعة لأي سيرفر.
           </li>
           <li>
@@ -63,7 +63,7 @@ export default function NotesGuide({
           </li>
           <li>
             <strong>٧. صدّر لما تحتاج</strong> — «تصدير PNG» بيحفظ الصفحة كصورة،
-            و«تصدير PDF» بيخليك تختار صفحات معينة من الدفتر ويطلعهم ملف PDF واحد
+            و«تصدير PDF» بيخليك تختار صفحات معينة من النوتة ويطلعهم ملف PDF واحد
             تقدر تشاركه أو تطبعه.
           </li>
           <li>
@@ -76,13 +76,13 @@ export default function NotesGuide({
           </li>
           <li>
             <strong>١٠. ذاكر وانت بتكتب</strong> — من صفحة الدرس اضغط «📝 نوت
-            جانبية» عشان الدفتر يفتح في نص الشاشة جنب الدرس.
+            جانبية» عشان النوتة تفتح في نص الشاشة جنب الدرس.
           </li>
         </ol>
 
         <p className="notes-help-note">
-          ⚠️ الدفاتر مربوطة بالمتصفح والجهاز. لو مسحت بيانات الموقع أو غيّرت
-          المتصفح، الدفاتر مش هتظهر — صدّر الصفحات المهمة كصور للاحتياط.
+          ⚠️ النوتات مربوطة بالمتصفح والجهاز. لو مسحت بيانات الموقع أو غيّرت
+          المتصفح، النوتات مش هتظهر — صدّر الصفحات المهمة كصور للاحتياط.
         </p>
       </details>
     );

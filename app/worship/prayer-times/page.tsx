@@ -41,7 +41,7 @@ function PrayerTimesHome() {
   if (!settings || isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#7C5CFF]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#10B981]" />
         <span className="ml-3 text-[#9AA0C0]">جاري تحميل مواقيت الصلاة…</span>
       </div>
     );
@@ -53,7 +53,7 @@ function PrayerTimesHome() {
         <p className="text-[#FB923C]">⚠️ {error}</p>
         <button
           onClick={() => void refetch()}
-          className="mt-4 rounded-lg bg-[#7C5CFF] px-4 py-2 text-white transition-colors hover:bg-[#6A4CE8]"
+          className="mt-4 rounded-lg bg-[#10B981] px-4 py-2 text-white transition-colors hover:bg-[#059669]"
         >
           إعادة المحاولة
         </button>
@@ -78,7 +78,7 @@ function PrayerTimesHome() {
           </div>
           <Link
             href="/worship"
-            className="flex items-center gap-1 text-sm text-[#B69CFF] transition-colors hover:text-[#7C5CFF]"
+            className="flex items-center gap-1 text-sm text-[#6EE7B7] transition-colors hover:text-[#10B981]"
           >
             <ArrowLeft size={18} aria-hidden />
             <span>عباداتي</span>
@@ -119,16 +119,16 @@ function PrayerTimesHome() {
               يُنصح بتفعيل الإشعارات لتلقي تنبيهات قبل كل صلاة.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full bg-[#7C5CFF]/15 px-3 py-1 text-xs text-[#B69CFF]">
+              <span className="rounded-full bg-[#10B981]/15 px-3 py-1 text-xs text-[#6EE7B7]">
                 تنبيهات الصلاة
               </span>
-              <span className="rounded-full bg-[#2DD4BF]/15 px-3 py-1 text-xs text-[#2DD4BF]">
+              <span className="rounded-full bg-[#34D399]/15 px-3 py-1 text-xs text-[#34D399]">
                 صوت الأذان
               </span>
               <span className="rounded-full bg-[#FB923C]/15 px-3 py-1 text-xs text-[#FB923C]">
                 تعديل يدوي
               </span>
-              <span className="rounded-full bg-[#B69CFF]/15 px-3 py-1 text-xs text-[#B69CFF]">
+              <span className="rounded-full bg-[#6EE7B7]/15 px-3 py-1 text-xs text-[#6EE7B7]">
                 طريقة الحساب
               </span>
             </div>

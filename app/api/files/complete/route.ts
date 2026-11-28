@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { verifyUploadedObject } from "@/lib/files/storage";
+import { FILE_BUCKET, verifyUploadedObject } from "@/lib/files/storage";
+import { detectFileKind, extractTextFromFile } from "@/lib/extract-text";
+import { syncMaterialToWorkspace } from "@/lib/ai/library-sync";
 
 /* ==========================================================================
    📁 /api/files/complete — إقرار الرفع بعد ما الملف وصل التخزين
@@ -82,7 +84,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, size: verified.size });
+    // 📚 دمج المكتبات — الملف بيتسجّل كمان كـ material في مساحة العمل
+    //    (نفس مصدر الحقيقة اللي بيشوفه الـ AI) — best-effort: فشله ما يفشّلش الرفع.
+    let materialSynced = false;
+    try {
+      const { data: meta } = await privileged
+        .from("files")
+        .select("profile_id, original_name, file_type")
+        .eq("id", fileId)
+        .maybeSingle();
+      const metaRow = meta as { profile_id?: string; original_name?: string; file_type?: string } | null;
+      if (metaRow?.profile_id && metaRow.original_name) {
+        const { data: blobData } = await privileged.storage.from(FILE_BUCKET).download(record.storage_path);
+        if (blobData) {
+          const kind = detectFileKind(metaRow.file_type ?? "", metaRow.original_name);
+          let content: string | null = null;
+          if (kind === "pdf" || kind === "docx" || kind === "pptx" || kind === "text") {
+            const f = new File([blobData], metaRow.original_name);
+            content = await extractTextFromFile(f, {
+              maxFileBytes: 50 * 1024 * 1024,
+              maxImageBytes: 1024 * 1024,
+              maxTextChars: 200_000,
+            });
+          }
+          const sync = await syncMaterialToWorkspace(privileged, {
+            userId: metaRow.profile_id,
+            title: metaRow.original_name,
+            fileType: metaRow.file_type ?? null,
+            fileSize: verified.size,
+            content,
+          });
+          materialSynced = sync.ok;
+        }
+      }
+    } catch (e) {
+      console.warn("files/complete: material sync failed (non-blocking):", e);
+    }
+
+    return NextResponse.json({ ok: true, size: verified.size, materialSynced });
   } catch (error) {
     console.error("files/complete:", error);
     return NextResponse.json(
