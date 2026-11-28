@@ -1,10 +1,11 @@
 "use client";
 
 import LessonQuiz from "../practice/LessonQuiz";
+import FlashcardsPractice from "../practice/FlashcardsPractice";
 
 /**
- * تاب Practice Lab — يلفّ LessonQuiz (المنقول حرفيًا من page.tsx في P1-1)
- * زي ما هو: الاختبار بوابة الإكمال الوحيدة.
+ * تاب Practice Lab (P5) — فلاش كاردز الدرس (من الشرح المخزّن) + LessonQuiz
+ * (المنقول حرفيًا من page.tsx في P1-1): الاختبار بوابة الإكمال الوحيدة.
  */
 export default function PracticeLabTab({
   dayId,
@@ -30,7 +31,8 @@ export default function PracticeLabTab({
   onCelebrationToggle?: (open: boolean) => void;
 }) {
   return (
-    <div dir="rtl">
+    <div dir="rtl" className="space-y-5">
+      <FlashcardsPractice dayId={dayId} topic={topic} />
       <LessonQuiz
         dayId={dayId}
         topic={topic}

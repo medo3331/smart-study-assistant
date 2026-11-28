@@ -422,7 +422,8 @@ alter table public.lesson_content
 |---|---|
 | **الاختبار** | نفس المنطق الحالي: `POST /api/lesson-quiz` → `lesson_quiz_attempts` → `POST /api/lesson-quiz/submit` → `complete_study_day`. مكوّن `LessonQuiz` بينقل الكود كما هو. |
 | **G7 — الكاش** | `/api/lesson-quiz` يبقى: hash(المعاملات) → قراية `lesson_quiz_cache` → hit ⇒ رجّع `questions` + `cached: true` (من غير احتياطي كريدت) → miss ⇒ ولّد ⇒ اكتب الكاش ⇒ كمّل مسار الـ attempts زي ما هو. **مايغيرش شكل الرد** — الكلاينت يفضل شغال بلو كود. |
-| **Flashcards** | `study_days.flashcards` موجود فاضي (٠/٩٨٢). P1: مش بيتلمس. P5: التوليد من الشرح المخزّن ويخزّن في `lesson_content.questions`/flashcards. |
+| **Flashcards** | **P5 — منفَّذ:** التوليد من الشرح المخزّن (cited الأول) بنداء AI واحد مجمّع — `action: "flashcards"` في `/api/lesson-content` — ويخزّن في `lesson_content.questions` jsonb (عمود جاهز من db/46): `{ flashcards: [{front, back}], generatedAt }`. العرض في تاب التطبيق (`FlashcardsPractice`): كارت يتقلب بضغطة + «للنوتة» كنص منسق بدون AI + «كروت جديدة» (إعادة توليد صريحة). |
+| **نقاط التحسين (P5)** | من `lesson_quiz_attempts` (جدول موجود) — حساب **نقّي على الكلاينت** (`extractWeakQuestions` في `lib/lesson/weaknesses.ts`): آخر ٥ محاولات للدرس، الأسئلة اللي إجابتها غلط بتظهر في الـ Navigator (حد أقصى ٤) مع زر رايح لتاب التطبيق — بدون أي endpoint جديد. |
 | **البوابة** | الاختبار يفضل بوابة الإكمال (يوم الوحيد الإجباري) — checkpoints اختيارية (قرار التدقيق §5-5). |
 
 ### 4.5 Progress — study_days + Smart Resume

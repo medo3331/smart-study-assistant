@@ -1,13 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { LessonProgressPanel } from "../../components/LessonProgressPanel";
+import { extractWeakQuestions, MAX_WEAK_POINTS, type QuizAttemptLite } from "@/lib/lesson/weaknesses";
 import { useLessonStudio, type StudioTab } from "../LessonStudioProvider";
 
 /* ==========================================================================
    StudyNavigator (P1-4) — أداة التنقل الدائمة:
    أقسام الدرس (extractOutline) + حالتها + Smart Resume (localStorage)
-   + نقاط الدرس (بيانات LessonProgressPanel الموجودة).
-   صفر نداء شبكة — كل حاجة من الحالة المحلية.
+   + نقاط الدرس (بيانات LessonProgressPanel الموجودة)
+   + 📉 نقاط التحسين من نتايج اختبار الدرس (P5 — lesson_quiz_attempts،
+     حساب نقّي على الكلاينت بدون endpoint جديد).
+   صفر نداء شبكة للتنقل نفسه — كل حاجة من الحالة المحلية.
    ========================================================================== */
 
 const TAB_LABELS: Record<StudioTab, string> = {
@@ -59,6 +64,31 @@ export default function StudyNavigator({
 
   const hasResume = Boolean(progress.updatedAt && (progress.lastTab || progress.lastSectionId));
 
+  // ── 📉 نقاط التحسين (P5): آخر محاولات اختبار الدرس — الأسئلة الغلط بترجع نقاط ──
+  const [weakPoints, setWeakPoints] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("lesson_quiz_attempts")
+          .select("questions, answers")
+          .eq("day_id", lesson.dayId)
+          .not("answers", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(5);
+        if (cancelled || !data) return;
+        setWeakPoints(extractWeakQuestions(data as unknown as QuizAttemptLite[], MAX_WEAK_POINTS));
+      } catch {
+        // التحليل ميزة إضافية — فشله صامت.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lesson.dayId]);
+
   return (
     <div className="space-y-3" dir="rtl">
       {/* ─── Smart Resume: كمّل من حيث وقفت ─── */}
@@ -91,6 +121,27 @@ export default function StudyNavigator({
           },
         ]}
       />
+
+      {/* ── 📉 نقاط التحسين (P5) — أسئلة غلطت في آخر المحاولات ── */}
+      {weakPoints.length > 0 && (
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--redpen)_35%,transparent)] bg-[color-mix(in_srgb,var(--redpen)_6%,transparent)] p-3.5 space-y-2">
+          <p className="eyebrow eyebrow-flush mb-0">نقاط تحسين من اختباراتك</p>
+          <ul className="space-y-1.5">
+            {weakPoints.map((point, i) => (
+              <li key={i} className="text-[11.5px] text-ink leading-relaxed flex gap-1.5">
+                <span aria-hidden className="shrink-0">•</span>
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={() => setActiveTab("practice")}
+            className="btn btn-quiet text-[11px] px-2.5 py-1.5 w-full"
+          >
+            راجعها في تاب التطبيق
+          </button>
+        </div>
+      )}
 
       {/* ─── أقسام الدرس ─── */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-primary)]/70 p-3.5">

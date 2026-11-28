@@ -25,6 +25,7 @@ import {
 } from "@/lib/lesson/cited-derive";
 import { parseJsonPayload } from "@/lib/ai/lecture-intensive";
 import { SUMMARY_KINDS, type LessonSummaries } from "@/lib/lesson/summaries";
+import { parseFlashcards, readFlashcards } from "@/lib/lesson/flashcards";
 import { subjectMatches } from "@/lib/academics/subject-match";
 import { extractOutline } from "@/lib/lesson/outline";
 import { alignHeadingsToTranscript } from "@/lib/lesson/video-align";
@@ -545,9 +546,10 @@ export async function GET(req: Request) {
     const videoTByHeading = transcriptSegments.length
       ? alignHeadingsToTranscript(outlineSections.map((s) => s.heading), transcriptSegments)
       : {};
-    // الملخصات بأشكالها + النوتة المربوطة بالدرس (P4).
+    // الملخصات بأشكالها + النوتة المربوطة بالدرس + الفلاش كاردز (P4/P5).
     const storedSummaries = readStoredSummaries(row?.summaries);
     const storedNote = readStoredNote(row?.notes);
+    const storedFlashcards = readFlashcards(row?.questions);
     // الأوضاع الم citied فوق التفريغ (general/detailed) — كائنات جوّه explanation jsonb.
     const citedModes =
       storedContent.rawExplanation
@@ -566,6 +568,7 @@ export async function GET(req: Request) {
       videoTByHeading,
       summaries: storedSummaries,
       notes: storedNote,
+      flashcards: storedFlashcards,
       // إصدارات الأوضاع الثلاثة (شرح عام/تلخيصي/تفصيلي) — لعرض الإصدارات السابقة.
       explanationVersions: collectExplanationVersions(storedContent.rawExplanation),
       // إصدارات الأوضاع الم citied — بتترجع كنص للمعاينة.
@@ -730,7 +733,7 @@ export async function POST(req: Request) {
 
     const { data: row } = await supabase
       .from("lesson_content")
-      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at, video, resume, notes, summaries")
+      .select("explanation, cited_explanation, summary, source_lecture_id, transcript, generated_at, video, resume, notes, summaries, questions")
       .eq("user_id", user.id)
       .eq("day_id", dayId)
       .maybeSingle();
@@ -937,6 +940,90 @@ export async function POST(req: Request) {
 
       CONVERSION_CACHE.set(conversionCacheKey, { body: converted, ts: Date.now() });
       return NextResponse.json({ ok: true, cached: false, body: converted });
+    }
+
+    /* ── فلاش كاردز من الشرح المخزّن (P5 — نداء AI واحد، تخزين مرة في questions jsonb) ── */
+    if (body.action === "flashcards") {
+      const limited = await checkRateLimit(`lesson-content-flashcards:${user.id}`, 15, 60_000, "message");
+      if (limited) return limited;
+
+      const forceFlash = body.force === true;
+      const existingCards = readFlashcards(row?.questions);
+      if (existingCards.length > 0 && !forceFlash) {
+        return NextResponse.json({ ok: true, cached: true, flashcards: existingCards });
+      }
+
+      const sourceText = (
+        stored.cited
+          ? citedToText(stored.cited)
+          : Object.values(stored.modes).filter((v) => typeof v === "string" && v.trim()).join("\n\n")
+      ).slice(0, 12_000);
+      if (!sourceText.trim()) {
+        return badRequest("مفيش شرح مخزّن — ولّد الشرح الأول.", "NO_SOURCE");
+      }
+
+      let completion;
+      try {
+        completion = await aiRouter.completeChat("chat", {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+              role: "user",
+              content:
+                `اعمل من محتوى الدرس «${topic}» (مادة ${subjectName}) الآتي **فلاش كاردز للمراجعة**: من ٦ لـ ١٠ كروت، كل كارت فكرة واحدة مستقلة. ` +
+                `ارجع JSON مصفوفة فقط بالشكل ده بلا أي شرح: [{"front": "سؤال/وجه الكارت", "back": "الإجابة/ظهر الكارت"}] — بالعربي والمصطلحات التقنية بالإنجليزية، والإجابات من المحتوى نفسه.\n\nمحتوى الدرس:\n${sourceText}`,
+            },
+          ],
+          temperature: 0.4,
+          maxTokens: 2500,
+          usage,
+        });
+      } catch (error) {
+        if (!(error instanceof AiProviderError)) throw error;
+        const isRate = error.status === 429;
+        return NextResponse.json(
+          { error: { message: isRate ? "الخدمة مشغولة دلوقتي. حاول تاني بعد شوية." : "حصل خطأ أثناء الاتصال بالمساعد. حاول تاني.", code: isRate ? "PROVIDER_RATE_LIMIT" : "PROVIDER_ERROR" } },
+          { status: isRate ? 429 : 502 }
+        );
+      }
+
+      const cards = parseFlashcards(completion.content ?? "");
+      if (!cards) {
+        return NextResponse.json(
+          { error: { message: "الرد جه بدون فلاش كاردز صالحة. جرّب تاني.", code: "FLASHCARDS_INVALID" } },
+          { status: 502 }
+        );
+      }
+
+      void recordAiOperation(supabase, {
+        userId: user.id,
+        provider: completion.provider,
+        model: completion.model,
+        taskType: "chat",
+        status: "completed",
+        usage: completion.usage,
+        contentLength: (completion.content ?? "").length,
+      });
+
+      let saved = false;
+      try {
+        const now = new Date().toISOString();
+        const { error: upsertError } = await supabase
+          .from("lesson_content")
+          .upsert(
+            { user_id: user.id, day_id: dayId, questions: { flashcards: cards, generatedAt: now }, updated_at: now },
+            { onConflict: "user_id,day_id" }
+          );
+        if (upsertError) {
+          console.warn("lesson-content: حفظ الفلاش كاردز فشل (migration ناقصة؟):", upsertError.message);
+        } else {
+          saved = true;
+        }
+      } catch (saveError) {
+        console.warn("lesson-content: حفظ الفلاش كاردز فشل:", saveError);
+      }
+
+      return NextResponse.json({ ok: true, cached: false, saved, flashcards: cards });
     }
 
     /* ── المسار المربوط: شرح + ملخص مبنيّين على التفريغ ── */
