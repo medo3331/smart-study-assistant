@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { IconBadge } from "@/components/ui/IconBadge";
@@ -53,6 +53,9 @@ export function QuizGame({
     details: ApiDetail[];
   } | null>(null);
 
+  /** قفل generate — نداء واحد في كل مرة (منع الضغط المتكرر). */
+  const startLockRef = useRef(false);
+
   const [leaderboard, setLeaderboard] = useState<QuizLeaderboardRow[] | null>(null);
   const [leaderboardState, setLeaderboardState] = useState<"loading" | "ready" | "empty">("loading");
 
@@ -88,6 +91,9 @@ export function QuizGame({
 
   /** جلسة جديدة — generate من السيرفر (بالإجابات الصحيحة محفوظة عنده بس). */
   const startSession = useCallback(async () => {
+    // منع الضغط المتكرر — نداء generate واحد شغّال في كل لحظة.
+    if (startLockRef.current) return;
+    startLockRef.current = true;
     setStage("loading");
     setError(null);
     setResult(null);
@@ -117,6 +123,8 @@ export function QuizGame({
     } catch {
       setError("تعذّر الاتصال بالسيرفر — اتأكد من الشبكة وجرّب تاني.");
       setStage("result");
+    } finally {
+      startLockRef.current = false;
     }
   }, []);
 
@@ -185,8 +193,15 @@ export function QuizGame({
       {/* ── اللعبة ── */}
       {stage === "loading" && (
         <GlassCard className="p-8 text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-[#10B981]/30 border-t-[#10B981]" />
-          <p className="text-[#9AA0C0]">بنجهّز أسئلتك…</p>
+          <div
+            className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-[#10B981]/30 border-t-[#10B981]"
+            role="status"
+            aria-label="جاري تحضير الأسئلة"
+          />
+          <p className="font-bold text-white">جاري تحضير الأسئلة…</p>
+          <p className="mt-2 text-sm text-[#9AA0C0]">
+            لو أول مرة تتولد الأسئلة ممكن تاخد لحد دقيقة — سيبها تخلص
+          </p>
         </GlassCard>
       )}
 
@@ -241,7 +256,7 @@ export function QuizGame({
           <h2 className="mb-2 text-xl font-bold text-white">حصلت مشكلة</h2>
           <p className="mb-6 text-[#9AA0C0]">{error}</p>
           <Button onClick={() => void startSession()} icon={RotateCcw}>
-            جلسة جديدة
+            حاول تاني
           </Button>
         </GlassCard>
       )}

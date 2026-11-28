@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useQuranAudio } from "@/hooks/useQuranAudio";
 import { useReciters } from "@/hooks/useReciters";
+import { useAudio } from "@/components/audio/AudioProvider";
 import { SURAH_NAMES } from "@/app/dashboard/components/audio-library";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { IconBadge } from "@/components/ui/IconBadge";
@@ -52,11 +53,29 @@ export function QuranAudioPlayer() {
   } = useQuranAudio();
 
   const { reciters, selectedReciter } = useReciters();
+  // حالة مشغّل المكتبة الصوتية (FloatingAudioPlayer) — بنستخدمها بس عشان
+  // نتزحزح لفوق لما الاتنين شغّالين بدل ما يتغطّوا على بعض (شوف التعليق
+  // في app/layout.tsx). مش بنقرا أي حاجة تانية منه.
+  const { activeTrack: libraryTrack } = useAudio();
   const reduceMotion = useReducedMotion();
   const [expanded, setExpanded] = useState(false);
+  // الإغلاق بـ X = إيقاف + إخفاء. تراك جديد بيرجّع المشغّل لوحده.
+  const [dismissed, setDismissed] = useState(false);
+  const trackKey = currentReciterId
+    ? `${currentReciterId}-${currentSurahId}`
+    : null;
+  useEffect(() => {
+    setDismissed(false);
+  }, [trackKey]);
+
+  const handleClose = () => {
+    // الإغلاق بيفصل الصوت فعلاً: إيقاف + إخفاء — مش إخفاء بس.
+    pause();
+    setDismissed(true);
+  };
 
   // Don't render anything in idle state.
-  if (audioState === "idle" || !currentSurahId || !currentReciterId) {
+  if (audioState === "idle" || dismissed || !currentSurahId || !currentReciterId) {
     return null;
   }
 
@@ -103,7 +122,10 @@ export function QuranAudioPlayer() {
         exit={{ y: 100, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-40 pb-[env(safe-area-inset-bottom,0px)]",
+          "fixed inset-x-0 z-40 pb-[env(safe-area-inset-bottom,0px)]",
+          // لما فيه تراك من المكتبة الصوتية شغّال (مشغّل عائم تاني في
+          // الأسفل)، نتزحزح لفوق عشان ميتغطّوش على بعض.
+          libraryTrack ? "bottom-24" : "bottom-0",
           expanded ? "p-4" : "p-2"
         )}
       >
@@ -156,7 +178,7 @@ export function QuranAudioPlayer() {
                     </p>
                   </div>
 
-                  <div className="flex-shrink-0">
+                  <div className="flex flex-shrink-0 items-center gap-2">
                     {isLoading ? (
                       <Loader2 size={20} className="text-[#9AA0C0] animate-spin" />
                     ) : isPlaying ? (
@@ -164,6 +186,14 @@ export function QuranAudioPlayer() {
                     ) : (
                       <Play size={20} onClick={handlePlayPause} className="cursor-pointer text-[#6EE7B7]" />
                     )}
+                    {/* إغلاق سريع من الشريط المصغّر — نفس سلوك الـ X الموسّع. */}
+                    <button
+                      onClick={handleClose}
+                      className="text-[#9AA0C0] hover:text-white"
+                      aria-label="إغلاق المشغل"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
                 </div>
               )}
@@ -292,7 +322,7 @@ export function QuranAudioPlayer() {
 
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => pause()}
+                        onClick={handleClose}
                         className="text-xs text-[#9AA0C0] hover:text-white"
                         aria-label="إغلاق المشغل"
                       >

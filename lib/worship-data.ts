@@ -214,6 +214,10 @@ export interface CloudIslamicSettings {
   calculation_method: string;
   madhab: string;
   quran_daily_target: number;
+  /** وحدة ورد القرآن اليومي (db/122) — «ayat» افتراضي متوافق. */
+  quran_word_unit?: string;
+  /** كمية الورد بالوحدة المختارة. */
+  quran_word_amount?: number;
 }
 
 interface SettingsRow {
@@ -244,6 +248,24 @@ export async function fetchCloudSettings(
     if (s.madhab === "shafi" || s.madhab === "hanafi") out.madhab = s.madhab;
     if (typeof s.quran_daily_target === "number")
       out.quranDailyTarget = s.quran_daily_target;
+    // وحدة ورد القرآن (db/122) — قيم غير معروفة تتجاهل بهدوء والافتراضي محلي.
+    if (
+      s.quran_word_unit === "ayat" ||
+      s.quran_word_unit === "pages" ||
+      s.quran_word_unit === "quarters" ||
+      s.quran_word_unit === "ahzab" ||
+      s.quran_word_unit === "ajzaa"
+    ) {
+      out.quranWordUnit = s.quran_word_unit;
+    }
+    if (
+      typeof s.quran_word_amount === "number" &&
+      Number.isInteger(s.quran_word_amount) &&
+      s.quran_word_amount >= 1 &&
+      s.quran_word_amount <= 240
+    ) {
+      out.quranWordAmount = s.quran_word_amount;
+    }
     if (typeof s.city === "string" && typeof s.country === "string") {
       out.location = {
         city: s.city,
@@ -277,6 +299,9 @@ export async function saveCloudSettings(
       calculation_method: settings.calculationMethod,
       madhab: settings.madhab,
       quran_daily_target: settings.quranDailyTarget,
+      // ورد القرآن (db/122) — آيات على العدّاد القديم، وباقي الوحدات كمية مستقلة.
+      quran_word_unit: settings.quranWordUnit,
+      quran_word_amount: settings.quranWordAmount,
     };
     const { error } = await supabase.rpc("save_worship_settings", {
       p_settings: payload,
@@ -333,5 +358,100 @@ export async function fetchWorshipQuizLeaderboard(
   } catch (err) {
     console.warn("fetchWorshipQuizLeaderboard failed:", err);
     return null;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* العلامات المرجعية للقرآن — حساب المستخدم (db/122) مع localStorage كاحتياطي   */
+/* -------------------------------------------------------------------------- */
+
+export interface QuranBookmark {
+  surahId: number;
+  ayahId: number;
+}
+
+function isValidBookmark(b: unknown): b is QuranBookmark {
+  if (!b || typeof b !== "object") return false;
+  const candidate = b as { surah_id?: unknown; ayah_id?: unknown };
+  return (
+    Number.isInteger(candidate.surah_id) && (candidate.surah_id as number) >= 1 && (candidate.surah_id as number) <= 114 &&
+    Number.isInteger(candidate.ayah_id) && (candidate.ayah_id as number) >= 1 && (candidate.ayah_id as number) <= 286
+  );
+}
+
+/**
+ * العلامات المرجعية المحفوظة على الحساب — `null` لو الجدول مش متعمول بعد
+ * أو فشل النداء (وضع متوقع للزوار/قبل تطبيق db/122 — مش عطل).
+ */
+export async function fetchCloudQuranBookmarks(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<QuranBookmark[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("quran_bookmarks")
+      .select("surah_id, ayah_id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      console.warn("fetchCloudQuranBookmarks:", error.message);
+      return null;
+    }
+    if (!Array.isArray(data)) return null;
+    return (data as { surah_id: number; ayah_id: number }[]).filter(isValidBookmark).map((row) => ({
+      surahId: row.surah_id,
+      ayahId: row.ayah_id,
+    }));
+  } catch (err) {
+    console.warn("fetchCloudQuranBookmarks failed:", err);
+    return null;
+  }
+}
+
+/** إضافة علامة مرجعية على الحساب — fire-and-forget، الفشل مسموح (المحلي شغّال). */
+export async function addCloudQuranBookmark(
+  supabase: SupabaseClient,
+  userId: string,
+  bookmark: QuranBookmark,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("quran_bookmarks")
+      .upsert(
+        { user_id: userId, surah_id: bookmark.surahId, ayah_id: bookmark.ayahId },
+        { onConflict: "user_id,surah_id,ayah_id" },
+      );
+    if (error) {
+      console.warn("addCloudQuranBookmark:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("addCloudQuranBookmark failed:", err);
+    return false;
+  }
+}
+
+/** حذف علامة مرجعية من الحساب — fire-and-forget. */
+export async function removeCloudQuranBookmark(
+  supabase: SupabaseClient,
+  userId: string,
+  bookmark: QuranBookmark,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("quran_bookmarks")
+      .delete()
+      .eq("user_id", userId)
+      .eq("surah_id", bookmark.surahId)
+      .eq("ayah_id", bookmark.ayahId);
+    if (error) {
+      console.warn("removeCloudQuranBookmark:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("removeCloudQuranBookmark failed:", err);
+    return false;
   }
 }

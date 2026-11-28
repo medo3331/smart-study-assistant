@@ -33,7 +33,12 @@ export type BankCandidateRow = {
 };
 
 export const QUIZ_TOTAL_QUESTIONS = 10;
-export const QUIZ_MODEL_GROQ = "qwen/qwen3.8-27b";
+// ⚠️ llama-3.3-70b-versatile اتشال من Groq (model_not_found 404) — وqwen/
+//    qwen3.8-27b بيضرب OTPM 429 ("Requested 1239 > Limit 1000") على دفعة
+//    ١٠ أسئلة عربية. openai/gpt-oss-120b متحقق منه فعلياً (٢٠٠ + ١٠ أسئلة
+//    صالحة) ومتطابق مع QUIZ_CREDIT_MODEL في route.ts — محاسبة الكريديت
+//    أصلاً على الموديل ده.
+export const QUIZ_MODEL_GROQ = "openai/gpt-oss-120b";
 
 /** الحد اللي تحته بنطلّب إعادة تعبئة خلفية بعد التقديم. */
 export const QUIZ_BANK_MIN_ROWS = 5;

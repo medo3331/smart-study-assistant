@@ -133,6 +133,27 @@ export async function getAyah(surahId: number, ayahNumber: number): Promise<Ayah
   return ayahs.find((ayah) => ayah.number === ayahNumber) ?? null;
 }
 
+/**
+ * موقع آية واحدة في المصحف (رقم الصفحة + الجزء) — نداء خفيف بآية واحدة
+ * بدون تحميل السورة كاملة؛ يُستخدم في شريط «متابعة القراءة» (٢/…).
+ */
+export async function getAyahLocation(
+  surahId: number,
+  ayahNumber: number,
+): Promise<{ pageNumber: number; juzNumber: number } | null> {
+  if (!Number.isInteger(surahId) || surahId < 1 || surahId > 114) return null;
+  if (!Number.isInteger(ayahNumber) || ayahNumber < 1 || ayahNumber > 286) return null;
+  try {
+    const data = await fetchJson<ApiAyah & { number: number }>(
+      `/ayah/${surahId}:${ayahNumber}/${QURAN_EDITION}`,
+    );
+    if (!Number.isInteger(data.page) || !Number.isInteger(data.juz)) return null;
+    return { pageNumber: data.page, juzNumber: data.juz };
+  } catch {
+    return null;
+  }
+}
+
 export async function searchQuran(_query: string): Promise<Ayah[]> {
   void _query;
   return [];

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Reveal } from "@/components/ui/Reveal";
 import { PrayerTimesList } from "@/components/worship/PrayerTimesList";
@@ -28,6 +29,9 @@ export default function PrayerTimesPage() {
 function PrayerTimesHome() {
   const shared = useSharedWorshipData();
   const settings = shared?.settings;
+  // تنقّل client-side — window.location.href كان بيعمل full page reload
+  // وبيقطع التلاوة الشغّالة (المشغّل معاه في الذاكرة بيفضى).
+  const router = useRouter();
 
   const { data: prayerTimes, isLoading, error, refetch } = usePrayerTimes({
     latitude: settings?.latitude,
@@ -92,7 +96,7 @@ function PrayerTimesHome() {
           <PrayerTimesList
             data={prayerTimes}
             onSettingsClick={() => {
-              window.location.href = "/worship/settings";
+              router.push("/worship/settings");
             }}
           />
         ) : (

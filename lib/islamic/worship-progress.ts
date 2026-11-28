@@ -281,6 +281,133 @@ export function getDailyWorshipProgress(dateStr?: string): number {
 }
 
 /* ------------------------------------------------------------------ */
+/* ورد القرآن اليومي — وحدات القياس (آيات | صفحات | أرباع | أحزاب | أجزاء) */
+/* طبقة عرض/تخطيط نقية فوق عدّاد الآيات: عدّاد quran.dailyCount بالآيات    */
+/* يفضل هو مصدر الحقيقة (ومكافأة worship_quran عليه)، والوحدات هنا بس      */
+/* بتحوّل العدّاد لشكل الورد اللي المستخدم مختاره.                        */
+/* ------------------------------------------------------------------ */
+
+/** وحدات ورد القرآن المدعومة. */
+export type QuranWordUnit = "ayat" | "pages" | "quarters" | "ahzab" | "ajzaa";
+
+/** ثوابت المصحف المعتمدة في التحويل. */
+export const QURAN_TOTAL_AYAHS = 6236;
+export const QURAN_TOTAL_PAGES = 604;
+export const QURAN_TOTAL_AJZAA = 30;
+export const QURAN_TOTAL_AHZAB = 60; // حزبان لكل جزء
+export const QURAN_TOTAL_QUARTERS = 240; // أربعة أرباع لكل جزء
+
+/** متوسط الآيات في الصفحة — التقدير المعتمد لتحويل الآيات لصفحات. */
+export const AYAHS_PER_PAGE = QURAN_TOTAL_AYAHS / QURAN_TOTAL_PAGES; // ≈ 10.32
+
+/** عدد الصفحات التقريبي للوحدة — الجزء ≈ 20 صفحة، الحزب ≈ 10، الربع ≈ 2.5. */
+export const PAGES_PER_JUZ = QURAN_TOTAL_PAGES / QURAN_TOTAL_AJZAA; // ≈ 20.13
+export const PAGES_PER_HIZB = QURAN_TOTAL_PAGES / QURAN_TOTAL_AHZAB; // ≈ 10.07
+export const PAGES_PER_QUARTER = QURAN_TOTAL_PAGES / QURAN_TOTAL_QUARTERS; // ≈ 2.52
+
+/** الكمية الافتراضية لكل وحدة عند اختيارها أول مرة (الآيات بتاخد الهدف الموجود). */
+export const DEFAULT_WORD_AMOUNT: Record<QuranWordUnit, number> = {
+  ayat: 10,
+  pages: 1,
+  quarters: 4,
+  ahzab: 2,
+  ajzaa: 1,
+};
+
+const UNIT_META: Record<QuranWordUnit, { singular: string; dual: string; plural: string; pagesPerUnit: number }> = {
+  ayat: { singular: "آية", dual: "آيتين", plural: "آيات", pagesPerUnit: 1 / AYAHS_PER_PAGE },
+  pages: { singular: "صفحة", dual: "صفحتين", plural: "صفحات", pagesPerUnit: 1 },
+  quarters: { singular: "ربع", dual: "ربعين", plural: "أرباع", pagesPerUnit: PAGES_PER_QUARTER },
+  ahzab: { singular: "حِزب", dual: "حزبين", plural: "أحزاب", pagesPerUnit: PAGES_PER_HIZB },
+  ajzaa: { singular: "جزء", dual: "جزئين", plural: "أجزاء", pagesPerUnit: PAGES_PER_JUZ },
+};
+
+/** قائمة الوحدات للعرض في الإعدادات. */
+export const QURAN_WORD_UNIT_OPTIONS: { id: QuranWordUnit; label: string }[] = [
+  { id: "ayat", label: "آيات" },
+  { id: "pages", label: "صفحات" },
+  { id: "quarters", label: "أرباع" },
+  { id: "ahzab", label: "أحزاب" },
+  { id: "ajzaa", label: "أجزاء" },
+];
+
+/** التحقق من قيمة وحدة قادمة من تخزين/سحابة غير موثوقة. */
+export function isQuranWordUnit(value: unknown): value is QuranWordUnit {
+  return value === "ayat" || value === "pages" || value === "quarters" || value === "ahzab" || value === "ajzaa";
+}
+
+/** تنسيق كمية الورد بصيغة عربية سليمة (١ جزء / ٢ جزئين / ٣ أجزاء). */
+export function formatWordAmount(unit: QuranWordUnit, amount: number): string {
+  const meta = UNIT_META[unit];
+  const rounded = Math.round(amount * 100) / 100;
+  if (rounded === 1) return meta.singular;
+  if (rounded === 2) return meta.dual;
+  if (Number.isInteger(rounded) && rounded >= 3 && rounded <= 10) return `${rounded} ${meta.plural}`;
+  return `${rounded} ${meta.singular}`;
+}
+
+/**
+ * تحويل عدد آيات مقروءة إلى كميات الورد المختارة — نقية بلا أي I/O.
+ * التقدير: الآيات ← صفحات (بمتوسط AYAHS_PER_PAGE) ← الوحدة.
+ */
+export function ayahsToWordAmount(ayahsRead: number, unit: QuranWordUnit): number {
+  const safeAyahs = Math.max(0, ayahsRead);
+  if (unit === "ayat") return safeAyahs;
+  const pages = (safeAyahs * QURAN_TOTAL_PAGES) / QURAN_TOTAL_AYAHS;
+  return pages / UNIT_META[unit].pagesPerUnit;
+}
+
+/** التحويل العكسي: كمية بالوحدة ← تقدير بعدد الآيات (للعرض فقط). */
+export function wordAmountToAyahs(amount: number, unit: QuranWordUnit): number {
+  const safeAmount = Math.max(0, amount);
+  if (unit === "ayat") return safeAmount;
+  const pages = safeAmount * UNIT_META[unit].pagesPerUnit;
+  return (pages * QURAN_TOTAL_AYAHS) / QURAN_TOTAL_PAGES;
+}
+
+/** شكل تقدم الورد الجاهز للعرض. */
+export interface QuranWordProgress {
+  unit: QuranWordUnit;
+  targetAmount: number;
+  completedAmount: number;
+  /** نسبة إنجاز 0..100. */
+  percent: number;
+  /** نصوص جاهزة: «٠٫٥ جزء من ١ جزء». */
+  completedLabel: string;
+  targetLabel: string;
+  /** تقدير الهدف بعدد الآيات (طبقة العرض فقط — المكافأة على العدّاد الحقيقي). */
+  ayahsEquivalent: number;
+}
+
+/**
+ * حساب تقدم ورد اليوم بالوحدة المختارة من عدد الآيات المقروءة.
+ * نقية بالكامل — تُختبر في lib/islamic/__tests__ وتُستخدم في القارئ والإعدادات.
+ */
+export function computeQuranWordProgress(
+  ayahsRead: number,
+  unit: QuranWordUnit,
+  targetAmount: number,
+): QuranWordProgress {
+  const safeTarget = Math.max(0, targetAmount);
+  const completedAmount = ayahsToWordAmount(ayahsRead, unit);
+  const percent = safeTarget > 0 ? Math.min((completedAmount / safeTarget) * 100, 100) : 0;
+  return {
+    unit,
+    targetAmount: safeTarget,
+    completedAmount,
+    percent: Math.round(percent * 10) / 10,
+    completedLabel: formatWordAmount(unit, completedAmount),
+    targetLabel: formatWordAmount(unit, safeTarget),
+    ayahsEquivalent: Math.round(wordAmountToAyahs(safeTarget, unit)),
+  };
+}
+
+/** تحديد الكمية الافتراضية المناسبة عند تبديل الوحدة (للإعدادات). */
+export function defaultAmountForUnit(unit: QuranWordUnit): number {
+  return DEFAULT_WORD_AMOUNT[unit];
+}
+
+/* ------------------------------------------------------------------ */
 /* Settings — also centralized here so no scattered localStorage calls */
 /* ------------------------------------------------------------------ */
 
@@ -300,6 +427,10 @@ export interface IslamicSettings {
   calculationMethod: string;
   madhab: "shafi" | "hanafi";
   quranDailyTarget: number;
+  /** وحدة ورد القرآن اليومي — الافتراضي «آيات» (نفس الهدف القديم). */
+  quranWordUnit: QuranWordUnit;
+  /** كمية الورد بالوحدة المختارة (للوحدات غير الآيات — الآيات على quranDailyTarget). */
+  quranWordAmount: number;
   selectedReciterId: number | null;
   prayerNotifications: boolean;
   adhanEnabled: boolean;
@@ -348,6 +479,8 @@ export const DEFAULT_ISLAMIC_SETTINGS: IslamicSettings = {
   calculationMethod: "egyptian",
   madhab: "shafi",
   quranDailyTarget: 10,
+  quranWordUnit: "ayat",
+  quranWordAmount: 10,
   selectedReciterId: 1, // Al-Afasy
   prayerNotifications: false,
   adhanEnabled: false,
@@ -381,6 +514,15 @@ export function loadSettings(): IslamicSettings {
 
     // Normalize calculation method (fixes legacy name-value bug).
     merged.calculationMethod = normalizeCalculationMethod(merged.calculationMethod);
+
+    // Normalize وحدة الورد — قيم قديمة/تالفة ترجع للافتراضي المتوافق.
+    if (!isQuranWordUnit(merged.quranWordUnit)) {
+      merged.quranWordUnit = DEFAULT_ISLAMIC_SETTINGS.quranWordUnit;
+    }
+    const wordUnit: QuranWordUnit = merged.quranWordUnit;
+    if (!Number.isFinite(merged.quranWordAmount) || (merged.quranWordAmount ?? 0) < 1) {
+      merged.quranWordAmount = DEFAULT_WORD_AMOUNT[wordUnit];
+    }
 
     return merged;
   } catch {

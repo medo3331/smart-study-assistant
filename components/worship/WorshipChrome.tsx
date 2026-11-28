@@ -4,7 +4,9 @@ import { useMemo, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";
-import { QuranAudioPlayer } from "@/components/worship/QuranAudioPlayer";
+// المشغّل العائم (QuranAudioPlayer) اتنقل لـ app/layout.tsx جوّه
+// QuranAudioProvider — عشان يفضل ظاهر وبيتحكّم في الصوت في كل التطبيق
+// مش صفحات العبادات بس.
 import { WorshipReminders } from "@/components/worship/WorshipReminders";
 import { RewardToast, useRewardToast, type RewardToastState } from "./RewardToast";
 import {
@@ -80,7 +82,8 @@ export function WorshipChrome({
             {children}
           </div>
         </main>
-        <QuranAudioPlayer />
+        {/* ملاحظة: QuranAudioPlayer مش هنا — اتركّب على مستوى الـ root
+            في app/layout.tsx عشان الصوت يفضل له كنترولز في أي صفحة. */}
       </div>
     </WorshipDataProvider>
   );
