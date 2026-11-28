@@ -43,6 +43,13 @@
 | **DEV-08** | Community DEV เล็ก — بناءاً على قرار التقسيم (**D-DEV-010**): (أ) هوية عامة اختيارية · (ب) posts/reactions · (ج) moderation · (د) specialized communities · (Study Rooms مؤجلة) | AREA-09 | DEV-01 |
 | **DEV-09** | Store: قرار `/store` مقابل `/shop` (**D-DEV-008**) + صفحة تاريخ مشتريات | AREA-08 | DEV-06 |
 | **DEV-10** | Personas: توحيد الشخصيات 4-persona registry موثّق من Personas الحالية (**D-DEV-016**) | AREA-03 | DEV-05 |
+| **DEV-M1** | Market: Economy Foundation — P0-B/C/G (توحيد award_coins + سجل المصادر + source_class + حارس) + مصادر الإنجاز الجديدة + مسار المنح الداخلي | AREA-06 · 07 · 08 | **قرارات D-M-01..07 معتمدة** · تشغيل db/113→114 على الإنتاج (بيد المالك) |
+| **DEV-M2** | Market: Magicly Market — أقسام عشرة + تسعير ثلاثي (Coins/Credits/Hybrid ذرّي) + تاريخ مشتريات + حسم `/store` (D-M-02) + إصلاح `CURRENCY_META` | AREA-08 · 06 | DEV-M1 |
+| **DEV-M3** | Market: Rewards Engine — مكافآت الإنجاز الفعلي (D-M-04) + ترتيب أسبوعي سيرفري + Free Rewards (واجهة، بدون شبكة — D-M-05) | AREA-07 · 09 | DEV-M1 |
+| **DEV-M4** | Market: Monetization — حزم شراء Coins + بوابة دفع + Refunds + فك قفل `purchase`/`ad_reward` (D-M-01) | AREA-08 · 06 | DEV-M2 + قرار بوابة الدفع |
+| **DEV-M5** | Market: Economy Balancing — داشبورد التضخم + تعديل الأسعار/المكافآت من اللوحة (D-M-06) | AREA-10 · 07 | DEV-M1 (تدريجي) |
+
+> المرجع الكامل: `docs/STORE_GAMES_REBUILD_PROPOSAL.md` (Audit + قرارات D-M + اعتماديات).
 
 ## قواعد التنفيذ
 1. **واحدة فقط مطبقة في أي وقت** — الـPhase Lock.
