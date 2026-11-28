@@ -1,53 +1,21 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any -- TODO: proper typing requires architecture change, tracked separately */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { ReadAloud } from "@/components/ReadAloud";
-import { setSlidesSeed } from "@/app/dashboard/components/nav-config";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
-import { StudyTutorWidget } from "@/components/StudyTutorWidget";
-import { UnifiedChat } from "@/components/unified-ai/UnifiedChat";
-import { awardCoins } from "@/lib/shop/shop-data";
 import { buildLessonSequence } from "@/lib/learning/lesson-sequence";
 import { fetchUnlockedDayIds } from "@/lib/pages-data";
 
-/**
- * الشرح المربوط بالتسجيل — جوّه LectureCitationProvider: زر «استمع من هنا»
- * في أي مرجع بيشغّل التسجيل من اللحظة المرتبطة (لو مفيش صوت يبقى الزر مش بيظهر).
- */
-function LinkedCitedView({
-  cited,
-  lectureId,
-  summary,
-}: {
-  cited: LessonCitedExplanation;
-  lectureId: string;
-  summary: string | null;
-}) {
-  const { seekTo } = useLectureCitation();
-  return <LessonCitedExplanationView cited={cited} lectureId={lectureId} summary={summary} onSeek={seekTo} />;
-}
-
-// 🎴 إعادة تصميم صفحة الدرس — نفس نظام الداشبورد المنفَّذ (بنفسجي/تيل/عنبري على داكن)
-// كل الأرقام من نفس حالة الصفحة الحقيقية؛ مفيش مصدر بيانات جديد ولا منطق بديل.
-import { LessonShell, GlassCard, Reveal } from "./components/LessonChrome";
-import { LessonBreadcrumb, LessonUnitProgress } from "./components/LessonBreadcrumb";
-import { LessonHero } from "./components/LessonHero";
-import { LessonModeTabs } from "./components/LessonModeTabs";
-import { LessonProgressPanel } from "./components/LessonProgressPanel";
-import LessonVideoPlayer from "@/components/lesson/LessonVideoPlayer";
-import { VideoCandidate } from "@/lib/lesson/video-server";
-import { SpecializationTools } from "@/components/lesson/SpecializationTools";
-import { LectureLinkModal, type LinkLectureOption, type LinkSuggestion } from "@/components/lesson/LectureLinkModal";
-import { LessonCitedExplanationView } from "@/components/lesson/LessonCitations";
-import type { LessonCitedExplanation, TimedSegment } from "@/lib/lesson/citations";
-import { LectureCitationProvider, useLectureCitation } from "@/components/lectures/lecture-citation-context";
-import { LectureAudioPlayer } from "@/components/lectures/LectureAudioPlayer";
-import OpenNotesBeside from "@/components/notes/OpenNotesBeside";
-import NotesSplitToggle from "@/components/notes/NotesSplitPanel";
+// ✅ P1 — Unified Workspace: الصفحة shell بسيط — تحميل الداتا + Provider + Shell.
+// كل الـ Studio في studio/ (التابات والـ Navigator والفيديو والنوتة والمساعد).
+import { LessonShell } from "./components/LessonChrome";
+import { LessonStudioProvider, type LessonStudioLesson } from "./studio/LessonStudioProvider";
+import StudioShell from "./studio/StudioShell";
+import { LessonLoadingScreen, LessonLockedScreen, LessonNotFoundScreen } from "./studio/LessonGateStates";
+import type { LearningStyle, ResourceLink } from "./studio/tabs/LearnTab";
+import type { SpecializationContext } from "@/lib/education/specialization";
 
 /** صفّ مبسّط لأيام الخطة — من استعلام study_days الموجود أصلًا. */
 interface UnitDayLite {
@@ -55,15 +23,7 @@ interface UnitDayLite {
   is_completed: boolean;
 }
 
-// --- Types ---
 type CategoryType = "عمل ومشاريع" | "تعلم مهارة" | "دراسة أكاديمية" | "تطوير شخصي";
-type LearningStyle = "practical" | "visual" | "academic";
-type SmartViewMode = "simple" | "academic" | "visual" | "practical" | null;
-
-interface ResourceLink {
-  title: string;
-  url: string;
-}
 
 interface DayRow {
   id: string;
@@ -84,482 +44,6 @@ interface ConfigRow {
   category: CategoryType;
 }
 
-interface QuizQuestion {
-  question: string;
-  options: string[];
-  correctIndex: number;
-}
-
-// ✅ عنصر الظهور الموحّد اتقفل من مكوّن LessonChrome المشترك (نفس السلوك: Fade+Slide مرة واحدة)
-
-// ✅ إضافة: عارض Markdown بسيط - بيحوّل **نص عريض** وقوائم النقاط (- / *) والعناوين (##)
-// لعناصر HTML حقيقية بدل ما تظهر كرموز خام (** و * ظاهرة كنص) زي ما كان بيحصل قبل كده
-function renderMarkdownLite(text: string) {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let listBuffer: string[] = [];
-
-  const flushList = (key: string) => {
-    if (listBuffer.length === 0) return;
-    elements.push(
-      <ul key={key} className="list-disc pr-5 space-y-1 my-1">
-        {listBuffer.map((item, i) => (
-          <li key={i}>{renderInline(item)}</li>
-        ))}
-      </ul>
-    );
-    listBuffer = [];
-  };
-
-  const renderInline = (line: string): React.ReactNode => {
-    // يحوّل **bold** لـ <strong>، وباقي النص زي ما هو
-    const parts = line.split(/(\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith("**") && part.endsWith("**")) {
-        return (
-          // المصطلح المهم بيتعلّم بالحبر التقيل مش بلون تاني — الأصفر محجوز للضربة الواحدة في الصفحة
-          <strong key={i} className="font-bold text-ink">
-            {part.slice(2, -2)}
-          </strong>
-        );
-      }
-      return <React.Fragment key={i}>{part}</React.Fragment>;
-    });
-  };
-
-  lines.forEach((rawLine, idx) => {
-    const line = rawLine.trim();
-    if (!line) {
-      flushList(`list-${idx}`);
-      elements.push(<div key={`sp-${idx}`} className="h-2" />);
-      return;
-    }
-    if (line.startsWith("## ")) {
-      flushList(`list-${idx}`);
-      elements.push(
-        <h4 key={idx} className="h3 text-[13px] mt-3 mb-1.5">
-          {renderInline(line.replace(/^##\s*/, ""))}
-        </h4>
-      );
-      return;
-    }
-    if (line.startsWith("- ") || line.startsWith("* ")) {
-      listBuffer.push(line.replace(/^[-*]\s*/, ""));
-      return;
-    }
-    flushList(`list-${idx}`);
-    elements.push(
-      <p key={idx} className="leading-relaxed">
-        {renderInline(line)}
-      </p>
-    );
-  });
-  flushList("list-end");
-
-  return <div className="space-y-1">{elements}</div>;
-}
-
-
-function SmartContentViewer({ topic, subject, edu, dayId }: { topic: string; subject: string; edu?: { stage?: string; grade?: string; track?: string; faculty?: string }; dayId: string }) {
-  const router = useRouter();
-  const [activeMode, setActiveMode] = useState<SmartViewMode>(null);
-  const [loading, setLoading] = useState(false);
-  // كاش الزيارة الحالية — الحفظ الدائم في `lesson_content` على السيرفر
-  // (نفس الوضع بيتعاد عرضه فورًا من غير أي نداء).
-  const [modeContent, setModeContent] = useState<Partial<Record<NonNullable<SmartViewMode>, string>>>({});
-  const [contentError, setContentError] = useState<string | null>(null);
-  // حماية من تشغيل مزدوج (StrictMode في dev) — التوليد لازم يحصل مرة واحدة.
-  const bootRef = useRef(false);
-
-  // 🔗 ربط المحاضرة بالدرس (الخطوة 3) — الحالة بتيجي من GET مباشرة.
-  const [link, setLink] = useState<{ lectureId: string; lectureTitle: string } | null>(null);
-  const [lectureOptions, setLectureOptions] = useState<LinkLectureOption[]>([]);
-  const [otherLectures, setOtherLectures] = useState<LinkLectureOption[]>([]);
-  const [suggestion, setSuggestion] = useState<LinkSuggestion | null>(null);
-  // مشغّل التسجيل المرتبط — بنجيب مقاطعه لما الربط يتحدد (24ب).
-  const [linkedAudio, setLinkedAudio] = useState<{ lectureId: string; hasAudio: boolean; segments: TimedSegment[] } | null>(null);
-  const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [linkBusy, setLinkBusy] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
-  // الشرح المبني على التفريغ (citations) — جاهز من الكاش أو بييتولّد.
-  const [cited, setCited] = useState<LessonCitedExplanation | null>(null);
-  const [summary, setSummary] = useState<string | null>(null);
-
-  /** تطبيق حالة الربط من رد الراوت (GET أو فعل الربط/الفصل). */
-  const applyLinkState = (data: any) => {
-    setLink(data?.link ?? null);
-    setLectureOptions(Array.isArray(data?.lectures) ? data.lectures : []);
-    setOtherLectures(Array.isArray(data?.otherLectures) ? data.otherLectures : []);
-    setSuggestion(data?.suggestion ?? null);
-  };
-
-  // مقاطع التسجيل المرتبط — best-effort: لو فشل الدرس يشتغل من غير مشغّل.
-  useEffect(() => {
-    const lectureId = link?.lectureId;
-    if (!lectureId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(`/api/lectures/${lectureId}/segments`);
-        const data = await res.json().catch(() => null);
-        if (cancelled || !res.ok || !data?.ok) return;
-        setLinkedAudio({
-          lectureId,
-          hasAudio: Boolean(data.hasAudio),
-          segments: Array.isArray(data.segments) ? data.segments : [],
-        });
-      } catch {
-        // الاستماع ميزة إضافية — مش بنعطل الدرس لو فشلت.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [link?.lectureId]);
-
-  /** جلب وضع واحد — السيرفر بيرجعه من الكاش أو بيولّده ويحفظه في lesson_content. */
-  const fetchContent = async (mode: NonNullable<SmartViewMode>) => {
-    setActiveMode(mode);
-    setContentError(null);
-    setLoading(true);
-    try {
-      const response = await fetch("/api/lesson-content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dayId, mode, edu }),
-      });
-      const data = await response.json().catch(() => null);
-      const text = typeof data?.content === "string" && data.content.trim() ? data.content : null;
-      if (!response.ok || !text) {
-        throw new Error(data?.error?.message || "لم نتمكن من توليد المحتوى، حاول تاني.");
-      }
-      setModeContent((prev) => ({ ...prev, [mode]: text }));
-    } catch (error) {
-      setContentError(error instanceof Error ? error.message : "حصل خطأ أثناء توليد المحتوى، حاول تاني.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /** توليد الشرح المبني على التفريغ + الملخص (لما الدرس يكون مربوط). */
-  const generateCited = async (force = false) => {
-    setContentError(null);
-    setLoading(true);
-    try {
-      const response = await fetch("/api/lesson-content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dayId, force }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error?.message || "لم نتمكن من توليد الشرح، حاول تاني.");
-      }
-      if (data.linked && data.cited) {
-        setCited(data.cited);
-        setSummary(typeof data.summary === "string" ? data.summary : null);
-      } else if (data.noTranscript) {
-        setContentError("المحاضرة المرتبطة مالهاش تفريغ — افصلها أو فرّغها الأول.");
-      } else {
-        throw new Error("الرد جه بدون شرح مرتبط بالتفريغ. حاول تاني.");
-      }
-    } catch (error) {
-      setContentError(error instanceof Error ? error.message : "حصل خطأ أثناء توليد الشرح، حاول تاني.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /** ربط المحاضرة بالدرس — الراوت بيحفظ التفريغ وينفي أي محتوى قديم. */
-  const handleLink = async (lectureId: string) => {
-    setLinkBusy(true);
-    setLinkError(null);
-    try {
-      const response = await fetch("/api/lesson-content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dayId, action: "link", lectureId }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error?.message || "مقدرنش نربط المحاضرة، حاول تاني.");
-      }
-      applyLinkState(data);
-      setCited(null);
-      setSummary(null);
-      setLinkModalOpen(false);
-      // توليد فوري للشرح الجديد من التفريغ المرتبط.
-      void generateCited();
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : "حصل خطأ أثناء الربط.");
-    } finally {
-      setLinkBusy(false);
-    }
-  };
-
-  /** فصل المحاضرة — الدرس يرجع لمسار الأوضاع الأربعة القديم. */
-  const handleUnlink = async () => {
-    setLinkBusy(true);
-    setLinkError(null);
-    try {
-      const response = await fetch("/api/lesson-content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dayId, action: "link", lectureId: null }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error?.message || "مقدرنش نفصل المحاضرة، حاول تاني.");
-      }
-      applyLinkState(data);
-      setCited(null);
-      setSummary(null);
-      setLinkModalOpen(false);
-      // نرجع لمسار الأوضاع — لو مفيش محتوى محلي نجيب «الشرح» الأساسي.
-      if (modeContent.simple) {
-        setActiveMode("simple");
-        setContentError(null);
-      } else {
-        void fetchContent("simple");
-      }
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : "حصل خطأ أثناء الفصل.");
-    } finally {
-      setLinkBusy(false);
-    }
-  };
-
-  const handleModeClick = (mode: NonNullable<SmartViewMode>) => {
-    // اتحمّل قبل كده في نفس الزيارة → عرض فوري من الكاش المحلي.
-    if (modeContent[mode]) {
-      setActiveMode(mode);
-      setContentError(null);
-      return;
-    }
-    void fetchContent(mode);
-  };
-
-  const retryFetch = () => {
-    void fetchContent(activeMode ?? "simple");
-  };
-
-  // أول فتح للدرس: نجيب حالة الربط + المحتوى المحفوظ (مرة واحدة)، وبعدها
-  // نقرر: مربوط ⇒ الشرح المبني على التفريغ، غير مربوط ⇒ «الشرح» الأساسي.
-  useEffect(() => {
-    if (!dayId || bootRef.current) return;
-    bootRef.current = true;
-    void (async () => {
-      try {
-        const response = await fetch(`/api/lesson-content?dayId=${encodeURIComponent(dayId)}`);
-        const data = await response.json().catch(() => null);
-        if (!response.ok || !data?.ok) throw new Error("READ_FAILED");
-        applyLinkState(data);
-        const stored = data.content ?? {};
-        if (data.link) {
-          if (stored.cited) {
-            setCited(stored.cited);
-            setSummary(typeof stored.summary === "string" ? stored.summary : null);
-          } else {
-            void generateCited();
-          }
-        } else if (typeof stored.modes?.simple === "string") {
-          setModeContent({ simple: stored.modes.simple });
-          setActiveMode("simple");
-        } else {
-          void fetchContent("simple");
-        }
-      } catch {
-        // فشل قراءة الحالة — نرجع لسلوك المحتوى العادي (كاش محلي/توليد).
-        void fetchContent("simple");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- كل الدوال بتتغير هوية كل رندر؛ التشغيل المقصود مرة واحدة عند فتح الدرس.
-  }, [dayId]);
-
-  const content = activeMode ? (modeContent[activeMode] ?? null) : null;
-
-  // أربع طرق لشرح نفس الحاجة — مش تسلسل، فمفيش أرقام ولا أيقونات، الاسم لوحده كفاية
-  const tabs: { id: NonNullable<SmartViewMode>; label: string }[] = [
-    { id: "simple", label: "شرح" },
-    { id: "practical", label: "عملي" },
-    { id: "visual", label: "مرئي" },
-    { id: "academic", label: "أكاديمي" },
-  ];
-
-  const panelVisible = link
-    ? Boolean(cited || contentError || loading)
-    : Boolean(activeMode);
-
-  return (
-    <div dir="rtl">
-      <div className="flex justify-end mb-1 gap-1.5">
-        <NotesSplitToggle
-          className="btn btn-quiet text-xs px-2.5 py-1.5"
-          label="🖥️ نوت جانبية — تقسيم الشاشة"
-        />
-        <OpenNotesBeside
-          className="btn btn-quiet text-xs px-2.5 py-1.5"
-          label="📝 نوت في نافذة"
-        />
-      </div>
-      {link ? (
-        /* 🔗 الدرس مربوط بمحاضرة — بديل التابات: مصدر واحد + إجراءاته */
-        <div className="flex flex-wrap items-center gap-2 bg-paper border border-rule p-2 rounded-[var(--r-sm)]">
-          <span className="tag tag-quiet inline-flex items-center gap-1.5 min-w-0">
-            <span aria-hidden>🎙️</span>
-            <span className="truncate max-w-[14rem]">مبني على: {link.lectureTitle}</span>
-          </span>
-          <div className="flex items-center gap-1.5 ms-auto">
-            <button
-              onClick={() => setLinkModalOpen(true)}
-              disabled={loading || linkBusy}
-              className="btn btn-quiet text-xs px-2.5 py-1.5"
-            >
-              غيّر المحاضرة
-            </button>
-            <button
-              onClick={() => void generateCited(true)}
-              disabled={loading || linkBusy}
-              className="btn btn-quiet text-xs px-2.5 py-1.5"
-            >
-              أعد التوليد
-            </button>
-            <button
-              onClick={() => void handleUnlink()}
-              disabled={loading || linkBusy}
-              className="btn btn-quiet text-xs px-2.5 py-1.5"
-            >
-              افصل
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* التاب المفتوح بيتعلّم بالحبر: bg-ink — الأصفر مش لون "المختار" */
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-paper border border-rule p-1 rounded-[var(--r-sm)] flex-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleModeClick(tab.id)}
-                aria-pressed={activeMode === tab.id}
-                className={`mono flex-1 px-2 py-2 rounded-[6px] transition ${
-                  activeMode === tab.id ? "bg-ink text-paper-2" : "text-ink-soft hover:text-ink hover:bg-paper-3"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => setLinkModalOpen(true)}
-            disabled={loading}
-            className="btn btn-quiet text-xs px-3 py-2 shrink-0"
-            title="اربط المحاضرة بالدرس"
-          >
-            🔗 اربط بمحاضرة
-          </button>
-        </div>
-      )}
-
-      <AnimatePresence mode="wait">
-        {panelVisible && (
-          <motion.div
-            key={link ? "cited" : activeMode}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
-            className="mt-3 bg-paper border border-rule p-4 rounded-[var(--r-sm)]"
-          >
-            {loading ? (
-              <div className="py-8 text-center flex flex-col items-center gap-2.5">
-                <span className="w-4 h-4 border-2 border-rule border-t-redpen rounded-full animate-spin" />
-                <p className="tag justify-center">{link ? "بيجهّز الشرح من التفريغ" : "بيجهّز الشرح"}</p>
-              </div>
-            ) : link ? (
-              cited ? (
-                linkedAudio?.lectureId === link.lectureId && linkedAudio.hasAudio ? (
-                  <LectureCitationProvider>
-                    <div className="space-y-3">
-                      <LectureAudioPlayer
-                        lectureId={link.lectureId}
-                        durationSeconds={null}
-                        segments={linkedAudio.segments}
-                      />
-                      <LinkedCitedView cited={cited} lectureId={link.lectureId} summary={summary} />
-                    </div>
-                  </LectureCitationProvider>
-                ) : (
-                  <LessonCitedExplanationView cited={cited} lectureId={link.lectureId} summary={summary} />
-                )
-              ) : contentError ? (
-                <div className="py-6 text-center space-y-3">
-                  <p className="text-[12.5px] text-ink-soft">{contentError}</p>
-                  <div className="flex items-center justify-center gap-2">
-                    <button onClick={() => void generateCited()} className="btn btn-quiet text-xs px-3.5 py-2">
-                      جرّب تاني
-                    </button>
-                    <button onClick={() => setLinkModalOpen(true)} className="btn btn-quiet text-xs px-3.5 py-2">
-                      غيّر المحاضرة
-                    </button>
-                  </div>
-                </div>
-              ) : null
-            ) : contentError && !content ? (
-              <div className="py-6 text-center space-y-3">
-                <p className="text-[12.5px] text-ink-soft">{contentError}</p>
-                <button onClick={retryFetch} className="btn btn-quiet text-xs px-3.5 py-2">
-                  جرّب تاني
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="text-[12.5px] text-ink-soft leading-relaxed">{content && renderMarkdownLite(content)}</div>
-                {/* القراءة بصوت عالي: مفيدة وإنت بتكتب كود وعينك على الإيديتور.
-                    resetKey = التاب، فلو بدّلت النمط القراءة القديمة تقف. */}
-                {content && (
-                  <div className="mt-4 pt-3.5 border-t border-rule space-y-2.5">
-                    <ReadAloud text={content} resetKey={activeMode ?? ""} />
-                    {/* الشرح ده يبقى عرض شرائح — الشرح نفسه بيتبعت كمصدر
-                        عشان الشرائح تطلع من كلام الدرس مش من معرفة عامة. */}
-                    <button
-                      onClick={() => {
-                        setSlidesSeed(`${topic}${subject ? ` — ${subject}` : ""}`, content);
-                        router.push("/dashboard/slides");
-                      }}
-                      className="btn btn-quiet text-xs px-3.5 py-2"
-                    >
-                      <span aria-hidden>🖥️</span>
-                      اعمل عرض من الشرح ده
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <LectureLinkModal
-        open={linkModalOpen}
-        onClose={() => {
-          setLinkModalOpen(false);
-          setLinkError(null);
-        }}
-        subjectName={subject}
-        lectures={lectureOptions}
-        otherLectures={otherLectures}
-        suggestion={suggestion}
-        currentLectureId={link?.lectureId ?? null}
-        onLink={(lectureId) => void handleLink(lectureId)}
-        onUnlink={() => void handleUnlink()}
-        busy={linkBusy}
-        error={linkError}
-      />
-    </div>
-  );
-}
-
 export default function LessonDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -570,99 +54,25 @@ export default function LessonDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [dayRow, setDayRow] = useState<DayRow | null>(null);
   const [config, setConfig] = useState<ConfigRow | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [profileXp, setProfileXp] = useState(0);
 
-  // ✅ إضافة: تقدم الخطة الكلي (بيظهر فوق الصفحة) + رابط الدرس التالي (لزر "الدرس التالي" بعد الاحتفال)
+  // تقدم الخطة الكلي + أيام الخطة (لشريط الوحدة) + روابط الدرس التالي/السابق
   const [planProgress, setPlanProgress] = useState<{ completed: number; total: number } | null>(null);
-  // 🧩 أيام الخطة (id/day_number/is_completed) لتقدّم الوحدة المجزّأ — نفس الاستعلام الموجود
   const [planDays, setPlanDays] = useState<UnitDayLite[]>([]);
   const [nextDayId, setNextDayId] = useState<string | null>(null);
   const [previousDayId, setPreviousDayId] = useState<string | null>(null);
-  // القفل التسلسلي: بيتحسب بعد تحميل أيام الخطة + study_day_unlocks.
   const [isLockedBySequence, setIsLockedBySequence] = useState(false);
 
-  // ✅ إضافة: حالة محلية لأزرار الإجراءات السريعة (حفظ/مفضلة) - بصرية بحتة
+  // حالة أزرار الإجراءات السريعة (حفظ/مفضلة) - بصرية بحتة
   const [isSaved, setIsSaved] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
 
-  // 🗃️ مستودع الموارد (Vault)
-  const [newLinkTitle, setNewLinkTitle] = useState("");
-  const [newLinkUrl, setNewLinkUrl] = useState("");
-  const [savingLink, setSavingLink] = useState(false);
-  // ✅ إضافة: إظهار فورم إضافة مورد جديد بدل ما يكون ظاهر طول الوقت (شكل Google Drive)
-  const [showAddResourceForm, setShowAddResourceForm] = useState(false);
-
-  // Phase 1.4 — Smart Video Foundation variables (must come before useEffect using them)
-  const [videoCandidates, setVideoCandidates] = useState<VideoCandidate[]>([]);
-  const [videoLoading, setVideoLoading] = useState(false);
-  // Step 3 — education context for smart video (stage + grade + track/faculty → query = مادة + شعبة/مسار + درس)
+  // سياق التعليم (stage/grade/track/faculty) — لبحث الفيديو lazy
   const [eduVideoCtx, setEduVideoCtx] = useState<{ stage?: string; grade?: string; track?: string; faculty?: string }>({});
   const [userProfileField, setUserProfileField] = useState<string | null>(null);
+  // مودال الاحتفال مفتوح ⇒ الـ FeedbackWidget يتعطّل (نفس السلوك القديم)
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
 
-  // Phase 1.4 — Independent video load (never blocks page render)
-  useEffect(() => {
-    if (!dayRow || !config) return;
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- independent async video load (not render-cascade)
-    setVideoLoading(true);
-    const payload = {
-      subject: config?.subject || dayRow.topic || "",
-      lesson: dayRow.topic || dayRow.title || "",
-      topic: dayRow.topic || "",
-      stage: eduVideoCtx.stage || "",
-      grade: eduVideoCtx.grade || "",
-      track: eduVideoCtx.track || "",
-      faculty: eduVideoCtx.faculty || "",
-      curriculum: config?.category || "",
-      unit: dayRow.topic || "",
-      country: "Egypt",
-      language: "arabic",
-    };
-    fetch("/api/lesson/video", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d.ok && Array.isArray(d.candidates)) setVideoCandidates(d.candidates);
-      })
-      .catch(() => {
-        // Video failure must not break page (rule 12 / 15)
-      })
-      .finally(() => {
-        if (!cancelled) setVideoLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [dayRow?.id, config?.subject, config?.category, dayRow?.topic, dayRow?.title, dayRow?.learning_style, eduVideoCtx.stage, eduVideoCtx.grade, eduVideoCtx.track, eduVideoCtx.faculty]);
-
-  // 🧠 الاختبار الذكي
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
-  const [quizLoading, setQuizLoading] = useState(false);
-  const [quizStarted, setQuizStarted] = useState(false);
-  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
-  const [quizScore, setQuizScore] = useState(0);
-  // إثبات سيرفري (D-M-04): معرّف المحاولة من التوليد — التسليم بيتصحّح في
-  // /api/lesson-quiz/submit والمكافأة منه، مش من الدرجة المحلية.
-  const [quizAttemptId, setQuizAttemptId] = useState<string | null>(null);
-  const [completing, setCompleting] = useState(false);
-  const [justCompleted, setJustCompleted] = useState(false);
-
-  // ✅ إضافة: مودال الاحتفال بعد إنهاء الدرس بنجاح
-  const [showCelebration, setShowCelebration] = useState(false);
-  /* 🪙 الكوينز اللي اتكسبت من الدرس ده. صفر = ماحصلش (سقف يومي، أو جداول
-     المتجر لسه ما اتعملتش) — والاحتفال ساعتها بيعدّي من غير ما يذكرها. */
-  const [coinsWon, setCoinsWon] = useState(0);
-
-  // ✅ إضافة: مرجع لقسم العارض الذكي عشان زر "ابدأ الدرس" في الـ Hero يعمل scroll ليه
-  const smartViewerRef = useRef<HTMLDivElement | null>(null);
-
-  // القلم المختار للصفحة دي: الأصفر بيستخدم للفعل الأساسي بس (ابدأ الدرس / أنهِ الدرس)
-
-  // 🔴 تحميل بيانات الدرس والمادة والبروفايل
+  // 🔴 تحميل بيانات الدرس والمادة والبروفايل — نفس الاستعلامات القديمة بالحرف
   useEffect(() => {
     const load = async () => {
       const {
@@ -672,7 +82,6 @@ export default function LessonDetailPage() {
         router.push("/login");
         return;
       }
-      setUserId(user.id);
 
       const { data: day, error: dayError } = await supabase
         .from("study_days")
@@ -698,7 +107,6 @@ export default function LessonDetailPage() {
       if (cfg) setConfig(cfg as ConfigRow);
 
       const { data: profile } = await supabase.from("profiles").select("xp, education_stage_id, education_grade_id, education_track_id, faculty_name, edu_year, field").eq("id", user.id).maybeSingle();
-      setProfileXp((profile as { xp?: number } | null)?.xp || 0);
       setUserProfileField((profile as { field?: string | null } | null)?.field ?? null);
       // Step 3 — resolve education labels for smart video (مادة + شعبة/مسار + درس)
       try {
@@ -725,8 +133,7 @@ export default function LessonDetailPage() {
         if (Object.keys(nextCtx).length > 0) setEduVideoCtx(nextCtx);
       } catch {}
 
-      // ✅ إضافة: جلب كل أيام الخطة عشان نحسب التقدم الكلي (Progress Bar فوق الصفحة)
-      // ونحدد id الدرس التالي (لزر "الدرس التالي" في شاشة الاحتفال)
+      // جلب كل أيام الخطة: التقدم الكلي + أيام الوحدة + التالي/السابق + القفل التسلسلي
       const { data: allDays } = await supabase
         .from("study_days")
         .select("id, day_number, is_completed")
@@ -737,7 +144,6 @@ export default function LessonDetailPage() {
       if (allDays) {
         const completed = allDays.filter((d: { is_completed: boolean }) => d.is_completed).length;
         setPlanProgress({ completed, total: allDays.length });
-        // 🧩 حفظ أيام الخطة للشريط المجزّأ (نفس البيانات، صفر استعلامات إضافية)
         setPlanDays(
           allDays.map((d: { day_number: number; is_completed: boolean }) => ({
             day_number: d.day_number,
@@ -746,9 +152,7 @@ export default function LessonDetailPage() {
         );
         const next = allDays.find((d: { day_number: number }) => d.day_number === typedDay.day_number + 1);
         setNextDayId(next ? (next as any).id : null);
-        const previous = allDays.find(
-          (d: { day_number: number }) => d.day_number === typedDay.day_number - 1
-        );
+        const previous = allDays.find((d: { day_number: number }) => d.day_number === typedDay.day_number - 1);
         setPreviousDayId(previous ? (previous as any).id : null);
 
         // 🔓 الفتح المبكر بقى من الداتابيز — نفس المصدر اللي صفحة الدروس بتقرأ منه.
@@ -783,205 +187,6 @@ export default function LessonDetailPage() {
     await supabase.from("study_days").update({ learning_style: style }).eq("id", dayRow.id);
   };
 
-  // 🗃️ إضافة رابط جديد للمستودع
-  const handleAddLink = async () => {
-    if (!dayRow || !newLinkTitle.trim() || !newLinkUrl.trim()) return;
-    setSavingLink(true);
-    let cleanUrl = newLinkUrl.trim();
-    if (!/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`;
-
-    const updatedLinks = [...dayRow.resource_links, { title: newLinkTitle.trim(), url: cleanUrl }];
-    const { error } = await supabase.from("study_days").update({ resource_links: updatedLinks }).eq("id", dayRow.id);
-    if (!error) {
-      setDayRow({ ...dayRow, resource_links: updatedLinks });
-      setNewLinkTitle("");
-      setNewLinkUrl("");
-      setShowAddResourceForm(false);
-    }
-    setSavingLink(false);
-  };
-
-  // 🗃️ حذف رابط من المستودع
-  const handleRemoveLink = async (index: number) => {
-    if (!dayRow) return;
-    const updatedLinks = dayRow.resource_links.filter((_, i) => i !== index);
-    setDayRow({ ...dayRow, resource_links: updatedLinks });
-    await supabase.from("study_days").update({ resource_links: updatedLinks }).eq("id", dayRow.id);
-  };
-
-  // 📚 روابط مقترحة تلقائيًا حسب النمط (خارجية، للقراءة فقط)
-  const getSuggestedResources = (topic: string, subject: string, style: LearningStyle) => {
-    const query = encodeURIComponent(`${topic} ${subject}`);
-    if (style === "visual") {
-      return [
-        { title: "خرائط ذهنية", icon: "🖼️", url: `https://www.google.com/search?tbm=isch&q=${query}+diagram` },
-      ];
-    } else if (style === "academic") {
-      return [
-        { title: "ملخصات PDF", icon: "📄", url: `https://www.google.com/search?q=${query}+filetype:pdf` },
-        { title: "مراجع علمية", icon: "🏛️", url: `https://scholar.google.com/scholar?q=${query}` },
-      ];
-    }
-    return [
-      { title: "تمارين وتطبيقات", icon: "🖥️", url: `https://www.google.com/search?q=${query}+practical+exercises` },
-    ];
-  };
-
-  // 🧠 توليد اختبار ذكي عبر الـ AI
-  const handleStartQuiz = async () => {
-    if (!dayRow || !config) return;
-    setQuizLoading(true);
-    setQuizSubmitted(false);
-    setQuizScore(0);
-    setQuizAttemptId(null);
-    setSelectedAnswers([]);
-
-    try {
-      const response = await fetch("/api/lesson-quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: dayRow.topic,
-          subject: config.subject,
-          description: dayRow.description,
-          count: 4,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || "فشل توليد الاختبار");
-      const parsed: QuizQuestion[] = data?.questions || [];
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("empty");
-        setQuizQuestions(parsed);
-        setQuizAttemptId(typeof data?.attemptId === "string" ? data.attemptId : null);
-        setSelectedAnswers(new Array(parsed.length).fill(-1));
-        setQuizStarted(true);
-    } catch {
-      setQuizQuestions([]);
-      setQuizStarted(false);
-      alert("حصل خطأ أثناء توليد الاختبار، حاول تاني.");
-    } finally {
-      setQuizLoading(false);
-    }
-  };
-
-  const handleSelectAnswer = (qIndex: number, optIndex: number) => {
-    if (quizSubmitted) return;
-    setSelectedAnswers((prev) => {
-      const next = [...prev];
-      next[qIndex] = optIndex;
-      return next;
-    });
-  };
-
-  const handleSubmitQuiz = () => {
-    if (quizSubmitted) return;
-    let correct = 0;
-    quizQuestions.forEach((q, i) => {
-      if (selectedAnswers[i] === q.correctIndex) correct++;
-    });
-    setQuizScore(correct);
-    setQuizSubmitted(true);
-
-    // التصحيح الرسمي على السيرفر (D-M-04) — الدرجة المحلية عرض مؤقت،
-    // ولو السيرفر اختلف بنأخذ درجته. المكافأة صامتة الفشل: الاختبار
-    // شغّال حتى لو جداول الاقتصاد لسه مش متطبقة.
-    if (!quizAttemptId) return;
-    void (async () => {
-      try {
-        const res = await fetch("/api/lesson-quiz/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ attemptId: quizAttemptId, answers: selectedAnswers }),
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data) return;
-        if (typeof data.score === "number") setQuizScore(data.score);
-        if (typeof data.awarded === "number" && data.awarded > 0) setCoinsWon(data.awarded);
-      } catch (err) {
-        console.warn("lesson-quiz submit failed (متجاهَل):", err);
-      }
-    })();
-  };
-
-  const passThreshold = Math.ceil(quizQuestions.length * 0.6);
-  const quizPassed = quizSubmitted && quizScore >= passThreshold;
-
-  // 🏁 إنهاء الدرس رسميًا بعد نجاح الاختبار: يعلّم الدرس كمكتمل + يضيف XP + يسجل نشاط اليوم
-  // ✅ تعديل: بعد النجاح بيظهر مودال احتفال (🎉 أحسنت! + XP + زر الدرس التالي) بدل ما تفضل رسالة نص بسيطة
-  const handleCompleteLesson = async () => {
-    if (!dayRow || !userId || completing) return;
-    setCompleting(true);
-
-    // Phase C: مسار موحد — إكمال اليوم + XP + Coins في معاملة واحدة validated
-    const { data, error } = await supabase.rpc("complete_study_day", { p_day_id: dayRow.id });
-
-    if (error) {
-      // fallback للتوافق مع DB قديمة لم تُطبق Phase C بعد
-      console.warn("complete_study_day failed — fallback to legacy:", error.message);
-      await supabase.from("study_days").update({ is_completed: true }).eq("id", dayRow.id);
-      const { error: xpError } = await supabase.rpc("increment_xp", { p_delta: dayRow.xp_reward });
-      if (xpError) {
-        console.warn("increment_xp fallback failed:", xpError.message);
-        await supabase.from("profiles").update({ xp: profileXp + dayRow.xp_reward }).eq("id", userId);
-      }
-      try {
-        const res = await awardCoins(supabase, "day_done", dayRow.id);
-        if (res.data && res.data.awarded > 0) setCoinsWon(res.data.awarded);
-      } catch (err) {
-        console.error("award day_done failed (متجاهَل):", err);
-      }
-      setDayRow({ ...dayRow, is_completed: true });
-      setProfileXp((prev) => prev + dayRow.xp_reward);
-    } else {
-      const row: any = Array.isArray(data) ? data[0] : data;
-      const xpAwarded = row?.xp_awarded ?? dayRow.xp_reward;
-      const coinsAwarded = row?.coins_awarded ?? 0;
-      if (xpAwarded > 0) setProfileXp((prev) => prev + xpAwarded);
-      if (coinsAwarded > 0) setCoinsWon(coinsAwarded);
-      // لو اليوم كان مكتملاً بالفعل (idempotency)، لا نضيف XP مرة أخرى
-      if (row && row.xp_awarded === 0 && dayRow.is_completed) {
-        // لا شيء
-      }
-      setDayRow({ ...dayRow, is_completed: true });
-    }
-
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const { data: existingActivity } = await supabase
-      .from("activity_log")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("activity_date", todayKey)
-      .maybeSingle();
-
-    if (existingActivity) {
-      await supabase
-        .from("activity_log")
-        .update({ tasks_completed: (existingActivity.tasks_completed || 0) + 1 })
-        .eq("user_id", userId)
-        .eq("activity_date", todayKey);
-    } else {
-      await supabase.from("activity_log").insert({
-        user_id: userId,
-        activity_date: todayKey,
-        focus_minutes: 0,
-        tasks_completed: 1,
-      });
-    }
-
-    setPlanProgress((prev) => (prev ? { ...prev, completed: Math.min(prev.completed + 1, prev.total) } : prev));
-    setJustCompleted(true);
-    setCompleting(false);
-    setShowCelebration(true);
-
-    /* 🪙 كوينز المتجر — بعد كل حاجة، وفي try مستقل.
-       الترتيب مقصود: الـ XP والنشاط والاحتفال كلهم خلصوا فوق. لو جداول
-       المتجر لسه ما اتعملتش (db/shop.sql) النداء ده بيفشل — ولازم يفضل
-       فشل صامت مايلمسش إنهاء الدرس. الكوينز إضافة على الموجود مش شرط فيه.
-
-       ⚠️ المبلغ والسقف اليومي من السيرفر (`award_coins`)، مش من هنا —
-       الكلاينت مابيبعتش رقم خالص. */
-  };
-
   const handleShareLesson = async () => {
     const text = `📚 بذاكر "${dayRow?.topic}" في ${config?.subject}! 🔥`;
     if (typeof navigator !== "undefined" && (navigator as any).share) {
@@ -1000,84 +205,15 @@ export default function LessonDetailPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <LessonShell>
-        <div className="flex min-h-screen items-center justify-center" dir="rtl">
-          <p className="text-sm text-[var(--muted)]">بيحمّل الدرس…</p>
-        </div>
-      </LessonShell>
-    );
-  }
+  if (loading) return <LessonLoadingScreen />;
 
-  if (notFound || !dayRow) {
-    return (
-      <LessonShell>
-        <div className="flex min-h-screen items-center justify-center p-4" dir="rtl">
-          <GlassCard className="w-full max-w-sm space-y-4 p-6">
-            <div>
-              <p className="mb-1.5 text-xs font-bold tracking-wide text-[var(--accent-highlight)]">مش موجود</p>
-              <h1 className="text-lg font-bold text-[var(--text)]">الدرس ده مش متاح</h1>
-            </div>
-            <p className="text-xs leading-relaxed text-[var(--muted)]">
-              الدرس ده مش موجود، أو معندكش صلاحية توصله من الحساب ده.
-            </p>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-semibold transition-colors hover:brightness-110"
-            >
-              الرجوع للداشبورد
-            </button>
-          </GlassCard>
-        </div>
-      </LessonShell>
-    );
-  }
+  if (notFound || !dayRow) return <LessonNotFoundScreen />;
 
   if (isLockedBySequence) {
-    return (
-      <LessonShell>
-        <div className="flex min-h-screen items-center justify-center p-4" dir="rtl">
-          <GlassCard className="w-full max-w-sm space-y-4 p-6">
-            <div>
-              <p className="mb-1.5 text-xs font-bold tracking-wide text-[var(--accent-highlight)]">
-                مقفول
-              </p>
-              <h1 className="text-lg font-bold text-[var(--text)]">الدرس ده لسه مقفول</h1>
-            </div>
-            <p className="text-xs leading-relaxed text-[var(--muted)]">
-              خلّص الدرس اللي قبله الأول عشان يفتح. تقدر كمان تفتحه بدري من الداشبورد
-              مقابل 150 XP.
-            </p>
-            <div className="flex flex-col gap-2">
-              {previousDayId && (
-                <button
-                  onClick={() => router.push(`/lesson/${previousDayId}`)}
-                  className="inline-flex h-10 w-full items-center justify-center rounded-2xl bg-[var(--accent)] text-[var(--on-marker)] text-sm font-semibold transition-colors hover:brightness-110"
-                >
-                  افتح الدرس السابق
-                </button>
-              )}
-              <button
-                onClick={() => router.push(`/lessons/${dayRow.config_id}`)}
-                className="inline-flex h-10 w-full items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--text)] text-sm font-semibold transition-colors hover:bg-[var(--card-secondary)]"
-              >
-                كل دروس المادة
-              </button>
-            </div>
-          </GlassCard>
-        </div>
-      </LessonShell>
-    );
+    return <LessonLockedScreen previousDayId={previousDayId} configId={dayRow.config_id} />;
   }
 
-  const suggestedResources = getSuggestedResources(dayRow.topic, config?.subject || "", dayRow.learning_style);
-  const overallPercent = planProgress && planProgress.total > 0 ? Math.round((planProgress.completed / planProgress.total) * 100) : 0;
-  // 🧩 أيام نفس الخطة للشريط المجزّأ — من حالة الصفحة المحفوظة (مفيش استعلام جديد)
-  const unitDays: UnitDayLite[] = (planDays ?? [])
-    .slice()
-    .sort((a, b) => a.day_number - b.day_number);
-
+  const unitDays: UnitDayLite[] = (planDays ?? []).slice().sort((a, b) => a.day_number - b.day_number);
   /* 🎯 حالة الـ CTA من الحالة الفعلية فقط:
      مكتمل → راجع · متُرك بدون إكمال وفيه أيام أبعد فُتحت → تابع · غير ده → ابدأ */
   const ctaState: "start" | "continue" | "review" = dayRow.is_completed
@@ -1086,434 +222,75 @@ export default function LessonDetailPage() {
       ? "continue"
       : "start";
 
+  const lesson: LessonStudioLesson = {
+    dayId,
+    topic: dayRow.topic,
+    title: dayRow.title,
+    description: dayRow.description,
+    subject: config?.subject ?? "",
+    category: config?.category ?? "",
+    learningStyle: dayRow.learning_style,
+    xpReward: dayRow.xp_reward,
+    isCompleted: dayRow.is_completed,
+    dayNumber: dayRow.day_number,
+  };
+
+  const specToolsCtx: SpecializationContext = {
+    lesson: {
+      dayId,
+      topic: dayRow.topic,
+      description: dayRow.description,
+      subject: config?.subject || dayRow.topic || "",
+      learningStyle: dayRow.learning_style,
+    },
+    profile: {
+      stage: eduVideoCtx.stage,
+      grade: eduVideoCtx.grade,
+      track: eduVideoCtx.track,
+      faculty: eduVideoCtx.faculty,
+      field: userProfileField,
+    },
+    planProgress,
+    supabase,
+  };
+
   return (
     <LessonShell>
-    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans text-[var(--text)]" dir="rtl">
-      <div className="max-w-3xl mx-auto space-y-5">
-        {/* ─── فاتحة الصفحة: مسار التنقل (المادة + عنوان الدرس الحقيقي) ─── */}
-        <Reveal index={0}>
-          <LessonBreadcrumb subject={config?.subject} title={dayRow.topic} />
-        </Reveal>
-
-        {/* ─── تقدّم الوحدة المجزّأ: نقاط حقيقية من أيام نفس الخطة ─── */}
-        {unitDays.length > 0 && (
-          <Reveal index={1}>
-            <LessonUnitProgress days={unitDays} currentDayNumber={dayRow.day_number} />
-          </Reveal>
-        )}
-
-        {/* ─── هيرو الدرس: العنوان والوصف وXP الحقيقيين + CTA ديناميكي ─── */}
-        <Reveal index={2}>
-          <LessonHero
-            subject={config?.subject}
-            title={dayRow.topic}
-            description={dayRow.description}
-            xpReward={dayRow.xp_reward}
-            state={ctaState}
-            onStart={() => smartViewerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            isSaved={isSaved}
-            onToggleSave={() => setIsSaved((v) => !v)}
-            isFavorite={isBookmarked}
-            onToggleFavorite={() => setIsBookmarked((v) => !v)}
-            onShare={handleShareLesson}
-            examHref={`/exams?gen=1${config?.subject ? `&subject=${encodeURIComponent(config.subject)}` : ""}&dayId=${encodeURIComponent(dayId)}`}
-          />
-        </Reveal>
-
-        {/* Study Tutor Widget — lesson integration (preserved, embedded in unified system) */}
-        <Reveal index={3}>
-          <StudyTutorWidget
-            userRole="student"
-            field={typeof config!=="undefined" ? config?.subject : "study"}
-            subject={typeof config!=="undefined" ? config?.subject : "unknown"}
-            studentLevel="unknown"
-            currentLesson={dayRow?.topic ?? "current lesson"}
-            progress="current"
-            language="ar"
-          />
-        </Reveal>
-
-        {/* Unified AI — single interface (upload + chat) on lesson page — مربوط بمحتوى الدرس الحقيقي */}
-        <Reveal index={4}>
-          <section aria-label="مساعد Magic الموحد" className="max-w-3xl mx-auto px-4 py-5 mt-4">
-            <UnifiedChat
-              initialContext={{ language: "ar", preferences: { language: "ar", field: config?.subject ?? "study" } }}
-              lesson={{
-                title: dayRow.topic,
-                subject: config?.subject ?? "",
-                content: dayRow.description,
-                description: dayRow.description,
-              }}
-            />
-          </section>
-        </Reveal>
-
-        {/* Phase 1.4 — Smart Video Player inside Lesson Page (independent load) */}
-        <Reveal delay={0.05}>
-          <LessonVideoPlayer
-            candidates={videoCandidates}
-            loading={videoLoading}
-            context={{ subject: config?.subject || dayRow?.topic || "", lesson: dayRow?.topic || "", grade: dayRow?.learning_style || "" }}
-          />
-        </Reveal>
-
-        {/* Wave 1 — Lesson Specialization Tools Extension Slot */}
-        <SpecializationTools
-          ctx={{
-            lesson: {
-              dayId,
-              topic: dayRow.topic,
-              description: dayRow.description,
-              subject: config?.subject || dayRow.topic || "",
-              learningStyle: dayRow.learning_style,
-            },
-            profile: {
-              stage: eduVideoCtx.stage,
-              grade: eduVideoCtx.grade,
-              track: eduVideoCtx.track,
-              faculty: eduVideoCtx.faculty,
-              field: userProfileField,
-            },
-            planProgress,
-            supabase,
-          }}
+      <LessonStudioProvider lesson={lesson} edu={eduVideoCtx}>
+        <StudioShell
+          subject={config?.subject}
+          title={dayRow.topic}
+          description={dayRow.description}
+          xpReward={dayRow.xp_reward}
+          dayNumber={dayRow.day_number}
+          isCompleted={dayRow.is_completed}
+          ctaState={ctaState}
+          isSaved={isSaved}
+          onToggleSave={() => setIsSaved((v) => !v)}
+          isFavorite={isBookmarked}
+          onToggleFavorite={() => setIsBookmarked((v) => !v)}
+          onShare={handleShareLesson}
+          examHref={`/exams?gen=1${config?.subject ? `&subject=${encodeURIComponent(config.subject)}` : ""}&dayId=${encodeURIComponent(dayId)}`}
+          unitDays={unitDays}
+          planProgress={planProgress}
+          dayId={dayId}
+          topic={dayRow.topic}
+          quizSubject={config?.subject || ""}
+          quizDescription={dayRow.description}
+          nextDayId={nextDayId}
+          onComplete={() =>
+            setPlanProgress((prev) => (prev ? { ...prev, completed: Math.min(prev.completed + 1, prev.total) } : prev))
+          }
+          onCelebrationToggle={setCelebrationOpen}
+          edu={eduVideoCtx}
+          learningStyle={dayRow.learning_style}
+          onLearningStyleChange={(style) => void changeLearningStyle(style)}
+          resourceLinks={dayRow.resource_links}
+          onResourceLinksChange={(links) => setDayRow((prev) => (prev ? { ...prev, resource_links: links } : prev))}
+          specToolsCtx={specToolsCtx}
+          feedback={<FeedbackWidget page="lesson" featureLabel="صفحة الدرس" enabled={!celebrationOpen} />}
         />
-
-        {/* ─── التبويبات الموحّدة: نفس learning_style الموجود ─── */}
-        <div className="flex justify-center sm:justify-start">
-          <Reveal index={3}>
-            <LessonModeTabs
-              modes={[
-                { id: "academic", label: "أكاديمي" },
-                { id: "visual", label: "بصري" },
-                { id: "practical", label: "تطبيقي" },
-              ]}
-              active={dayRow.learning_style as "academic" | "visual" | "practical"}
-              onChange={(id) => void changeLearningStyle(id)}
-            />
-          </Reveal>
-        </div>
-
-        {/* ─── الشرح + لوحة التقدّم: عمودان على الشاشات الواسعة، متراكبان على الموبايل ─── */}
-        <div className="grid gap-5 lg:grid-cols-[1fr_280px] lg:items-start">
-          {/* العارض الذكي */}
-          <Reveal delay={0.1} className="min-w-0">
-            <div ref={smartViewerRef} className="sheet-card p-5 sm:p-6 space-y-4 scroll-mt-6">
-              <div>
-                <p className="eyebrow eyebrow-flush mb-1.5">الشرح</p>
-                <h2 className="h3">اقرا الدرس بالطريقة اللي تعجبك</h2>
-              </div>
-              <SmartContentViewer topic={dayRow.topic} subject={config?.subject || ""} edu={eduVideoCtx} dayId={dayId} />
-            </div>
-          </Reveal>
-
-          {/* لوحة التقدّم: نسبة الخطة الحقيقية + أقسام الدرس + XP الحقيقي */}
-          <Reveal delay={0.14}>
-            <LessonProgressPanel
-              percent={overallPercent}
-              xpReward={dayRow.xp_reward}
-              sections={[
-                { label: "الشرح", state: "current" },
-                { label: "محادثة الدرس", state: "todo" },
-                { label: "موارد الدرس", state: "todo" },
-                {
-                  label: dayRow.is_completed ? "الاختبار — مكتمل ✓" : "الاختبار القصير",
-                  state: dayRow.is_completed ? "done" : "todo",
-                },
-              ]}
-            />
-          </Reveal>
-        </div>
-
-        {/* الموارد: ليستة روابط في ورقة، مش كروت أيقونات */}
-        <Reveal delay={0.14}>
-          <div className="sheet-card p-5 sm:p-6 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="eyebrow eyebrow-flush mb-1.5">مراجع</p>
-                <h2 className="h3">موارد الدرس</h2>
-              </div>
-              <button
-                onClick={() => setShowAddResourceForm((v) => !v)}
-                aria-expanded={showAddResourceForm}
-                className="btn btn-quiet text-xs px-3.5 py-2 shrink-0"
-              >
-                {showAddResourceForm ? "إلغاء" : "أضف رابط"}
-              </button>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-              {suggestedResources.map((res, i) => (
-                <a
-                  key={`suggested-${i}`}
-                  href={res.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-paper border border-rule hover:border-rule-strong rounded-[var(--r-sm)] px-3.5 py-3 flex flex-col gap-1 transition"
-                >
-                  <span className="tag">مقترح</span>
-                  <span className="text-[11.5px] font-bold text-ink truncate">{res.title}</span>
-                </a>
-              ))}
-
-              {dayRow.resource_links.map((link, i) => (
-                <div
-                  key={`user-${i}`}
-                  className="relative bg-paper border border-rule hover:border-rule-strong rounded-[var(--r-sm)] px-3.5 py-3 transition"
-                >
-                  <button
-                    onClick={() => handleRemoveLink(i)}
-                    aria-label={`شيل ${link.title}`}
-                    className="mono absolute top-2 left-2 text-ink-soft hover:text-redpen w-5 h-5 flex items-center justify-center rounded-[6px] hover:bg-paper-3 transition"
-                  >
-                    ✕
-                  </button>
-                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex flex-col gap-1">
-                    <span className="tag">بتاعك</span>
-                    <span className="text-[11.5px] font-bold text-ink truncate pe-6">{link.title}</span>
-                  </a>
-                </div>
-              ))}
-            </div>
-
-            <AnimatePresence>
-              {showAddResourceForm && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                    <input
-                      type="text"
-                      value={newLinkTitle}
-                      onChange={(e) => setNewLinkTitle(e.target.value)}
-                      placeholder="اسم الرابط (مثال: GitHub Repo)"
-                      className="field flex-1 py-2.5 text-xs"
-                    />
-                    <input
-                      type="text"
-                      value={newLinkUrl}
-                      onChange={(e) => setNewLinkUrl(e.target.value)}
-                      placeholder="الرابط"
-                      className="field flex-1 py-2.5 text-xs"
-                    />
-                    <button
-                      onClick={handleAddLink}
-                      disabled={savingLink || !newLinkTitle.trim() || !newLinkUrl.trim()}
-                      className="btn btn-marker text-xs px-4 py-2.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {savingLink ? "بيضيف" : "إضافة"}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </Reveal>
-
-        {/* الاختبار: ورقة أسئلة — الاختيار بيتعلّم بالحبر، والتصحيح بأخضر/أحمر بعد التسليم */}
-        <Reveal delay={0.16}>
-          <div className="sheet-card p-5 sm:p-6 space-y-4">
-            {!quizStarted && !justCompleted && !dayRow.is_completed && (
-              <div className="space-y-4">
-                <div>
-                  <p className="eyebrow eyebrow-flush mb-1.5">اختبار</p>
-                  <h2 className="h3">جرّب نفسك في الدرس</h2>
-                </div>
-                <p className="text-xs text-ink-soft leading-relaxed">
-                  أسئلة سريعة على «{dayRow.topic}». لازم تعدّيها عشان الدرس يتحسب مكتمل.
-                </p>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="tag tag-quiet">
-                    <span className="ltr-num tnum">5</span> دقايق
-                  </span>
-                  <span className="tag tag-quiet">
-                    <span className="ltr-num tnum">+{dayRow.xp_reward}</span> XP
-                  </span>
-                </div>
-                <button
-                  onClick={handleStartQuiz}
-                  disabled={quizLoading}
-                  className="btn bg-ink text-paper-2 border-ink hover:opacity-90 text-sm w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {quizLoading ? "بيجهّز الأسئلة" : "ابدأ الاختبار"}
-                </button>
-              </div>
-            )}
-
-            {(dayRow.is_completed || justCompleted) && !showCelebration && (
-              <div className="flex items-center gap-4">
-                <div className="stamp bg-emerald-500 text-onmarker" aria-hidden>
-                  <span className="font-display font-extrabold text-xl leading-none">✓</span>
-                </div>
-                <div>
-                  <p className="eyebrow eyebrow-flush mb-1">مخلّص</p>
-                  <p className="text-sm font-bold text-ink">الدرس ده مكتمل ومتسجّل.</p>
-                </div>
-              </div>
-            )}
-
-            {quizStarted && !dayRow.is_completed && !justCompleted && (
-              <div className="space-y-4">
-                <div>
-                  <p className="eyebrow eyebrow-flush mb-1.5">اختبار</p>
-                  <h2 className="h3">
-                    <span className="ltr-num tnum">{quizQuestions.length}</span> أسئلة
-                  </h2>
-                </div>
-
-                {quizQuestions.map((q, qIndex) => (
-                  <div key={qIndex} className="bg-paper border border-rule rounded-[var(--r-sm)] p-4 space-y-2.5">
-                    <p className="text-xs font-bold text-ink leading-relaxed">
-                      <span className="ltr-num tnum text-ink-soft me-1.5">{qIndex + 1}.</span>
-                      {q.question}
-                    </p>
-                    <div className="grid gap-1.5">
-                      {q.options.map((opt, optIndex) => {
-                        const isSelected = selectedAnswers[qIndex] === optIndex;
-                        const isCorrectOpt = optIndex === q.correctIndex;
-                        let style = "bg-paper-2 border-rule text-ink hover:bg-paper-3";
-                        if (quizSubmitted) {
-                          if (isCorrectOpt) style = "bg-emerald-950 border-emerald-500 text-ink";
-                          else if (isSelected && !isCorrectOpt) style = "bg-red-950 border-red-500 text-ink";
-                        } else if (isSelected) {
-                          style = "bg-ink border-ink text-paper-2";
-                        }
-                        return (
-                          <button
-                            key={optIndex}
-                            onClick={() => handleSelectAnswer(qIndex, optIndex)}
-                            disabled={quizSubmitted}
-                            aria-pressed={isSelected}
-                            className={`text-right px-3 py-2.5 rounded-[var(--r-sm)] text-[11.5px] font-semibold border transition ${style}`}
-                          >
-                            {opt}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-
-                {!quizSubmitted ? (
-                  <button
-                    onClick={handleSubmitQuiz}
-                    disabled={selectedAnswers.includes(-1)}
-                    className="btn bg-ink text-paper-2 border-ink hover:opacity-90 btn-block text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    سلّم الإجابات
-                  </button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className={`notice ${quizPassed ? "notice-ok" : "notice-error"}`}>
-                      <p className="m-0 leading-relaxed">
-                        نتيجتك{" "}
-                        <span className="ltr-num tnum font-bold">
-                          {quizScore} / {quizQuestions.length}
-                        </span>{" "}
-                        — {quizPassed ? "عدّيت الاختبار." : "محتاج مراجعة تانية."}
-                      </p>
-                    </div>
-
-                    {quizPassed ? (
-                      <button
-                        onClick={handleCompleteLesson}
-                        disabled={completing}
-                        className="btn btn-marker btn-block text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {completing ? "بيحفظ" : `خلّص الدرس واستلم ${dayRow.xp_reward} XP`}
-                      </button>
-                    ) : (
-                      <button onClick={handleStartQuiz} className="btn btn-quiet btn-block text-sm">
-                        جرّب تاني بأسئلة جديدة
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </Reveal>
-      </div>
-
-      {/* مودال الاحتفال: ختم "تم" على الورقة — نفس ختم الداشبورد */}
-      <AnimatePresence>
-        {showCelebration && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/45 backdrop-blur-sm p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 24, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.94, opacity: 0 }}
-              transition={{ type: "spring", damping: 18, stiffness: 240 }}
-              className="sheet-card sheet-card-live card-lift p-6 w-full max-w-sm space-y-5 text-center"
-              dir="rtl"
-            >
-              <motion.div
-                initial={{ scale: 0, rotate: -14 }}
-                animate={{ scale: 1, rotate: -2.5 }}
-                transition={{ delay: 0.12, type: "spring", stiffness: 300 }}
-                className="stamp w-20 h-20 mx-auto bg-marker text-onmarker"
-                aria-hidden
-              >
-                <span className="font-display font-extrabold text-2xl leading-none">تم</span>
-                <span className="mono ltr-num text-[9px] opacity-75">+{dayRow.xp_reward} XP</span>
-              </motion.div>
-
-              <div>
-                <p className="eyebrow eyebrow-flush justify-center mb-1.5">مخلّص</p>
-                <h3 className="h3">
-                  خلّصت الدرس <span className="ltr-num tnum">{dayRow.day_number}</span>
-                </h3>
-                <p className="text-xs text-ink-soft mt-1.5">السلسلة مستمرة. متقطعهاش بكرة.</p>
-
-                {/* الكوينز لما تنزل بس. صفر معناها السقف اليومي خلص (أو المتجر
-                    لسه مش متسطّب) — والسكوت أحسن من «+0 كوين». */}
-                {coinsWon > 0 && (
-                  <motion.p
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.28 }}
-                    className="tag tag-quiet mt-3"
-                  >
-                    🪙 <span className="ltr-num tnum">+{coinsWon}</span> كوين للمتجر
-                  </motion.p>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                {nextDayId ? (
-                  <button
-                    onClick={() => router.push(`/lesson/${nextDayId}`)}
-                    className="btn btn-marker btn-block text-sm"
-                  >
-                    الدرس اللي بعده
-                  </button>
-                ) : (
-                  <button onClick={() => router.push("/dashboard")} className="btn btn-marker btn-block text-sm">
-                    خلصت الخطة — ارجع للداشبورد
-                  </button>
-                )}
-                <button onClick={() => setShowCelebration(false)} className="btn btn-quiet btn-block text-sm">
-                  فضّل هنا شوية
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ⚠️ متعطّل وقت الاحتفال: الودجت بيقعد في نفس رُكن الشاشة اللي
-          المودال بيغطّيه، فلو ظهر ورا الطبقة السودة المستخدم يشوف
-          نُص إيموجي مقصوص ومايقدرش يضغطه. */}
-      <FeedbackWidget page="lesson" featureLabel="صفحة الدرس" enabled={!showCelebration} />
-    </div>
+      </LessonStudioProvider>
     </LessonShell>
   );
 }
