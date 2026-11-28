@@ -80,6 +80,8 @@ export default function NotesAssistant({
   onInsertToPage,
   /** 🎨 إدراج رسمة/مخطط AI على الصفحة — من المحرر. */
   onInsertImage,
+  /** ✅ فتح Magic Write — اشرح واكتب على الصفحة بلوكات منظّمة. */
+  onOpenMagicWrite,
 }: {
   /** Current page context (title + typed texts). Called when sending. */
   getEditorContext: () => string;
@@ -93,6 +95,8 @@ export default function NotesAssistant({
   onInsertToPage?: (text: string) => void;
   /** 🎨 إدراج رسمة AI على الصفحة. */
   onInsertImage?: (dataUrl: string) => void;
+  /** ✅ فتح Magic Write. */
+  onOpenMagicWrite?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -217,7 +221,7 @@ export default function NotesAssistant({
 
       const context = autoContext ? getEditorContext() : "";
       const composed = context
-        ? `${text}\n\n[سياق من الدفتر]\n${context}`
+        ? `${text}\n\n[سياق من النوتة]\n${context}`
         : text;
 
       // 🔑 التاريخ بيمر صراحةً للطلبات المُصفّرة — من غير ref.
@@ -240,12 +244,12 @@ export default function NotesAssistant({
               content: message.content,
             })),
             systemInstruction:
-              "انت مساعد مذاكرة شخصي جوه دفتر الطالب في Magicly. اشرح كأنك مدرس خصوصي شاطر بيفهم الطالب، مش ردود عابرة أو مختصرة زيادة عن اللزوم. \n" +
+              "انت مساعد مذاكرة شخصي جوه نوتة الطالب في Magicly. اشرح كأنك مدرس خصوصي شاطر بيفهم الطالب، مش ردود عابرة أو مختصرة زيادة عن اللزوم. \n" +
               "قواعد الرد:\n" +
               "• رد كامل ومفيد: غطي السؤال بالتفصيل المهم، مش سطر واحد.\n" +
               "• نظّم الرد: عنوان قصير لو الموضوع كبير، وبعدين نقاط قصيرة (•) أو خطوات مرقمة، وكل نقطة جملة واضحة.\n" +
               "• بالعربي المصري البسيط، والمصطلح العلمي بالإنجليزي بين قوسين أول مرة.\n" +
-              "• اربط الإجابة بسياق الدفتر المرفق لو موجود، ولو الطالب سأل سؤال غامض خمن قصده من السياق وجاوب من غير ما تحرجله.\n" +
+              "• اربط الإجابة بسياق النوتة المرفق لو موجود، ولو الطالب سأل سؤال غامض خمن قصده من السياق وجاوب من غير ما تحرجله.\n" +
               "• في الآخر لو فيه حاجة تستاهل، قول سؤال مراجعة صغير يساعده يثبت المعلومة.",
           }),
         });
@@ -344,7 +348,7 @@ ${text}`);
       form.append(
         "question",
         question ||
-          "دي صفحة من دفتر طالب بذاكر. اشرح اللي مكتوب فيها بالتفصيل بالعربي، ولو فيها أخطاء صححها.",
+          "دي صفحة من نوتة طالب بذاكر. اشرح اللي مكتوب فيها بالتفصيل بالعربي، ولو فيها أخطاء صححها.",
       );
       const res = await fetch("/api/ai/image-analysis", {
         method: "POST",
@@ -466,6 +470,18 @@ ${text}`);
                 title="آخر رد من الـ AI يتكتب على الصفحة كبلوكات قابلة للتعديل"
               >
                 ✍️ اكتبها على النوته
+              </button>
+            ) : null}
+            {onOpenMagicWrite ? (
+              <button
+                type="button"
+                className="notes-btn notes-btn-sm"
+                data-tone="primary"
+                disabled={busy}
+                onClick={onOpenMagicWrite}
+                title="Magic يشرح ويكتب على الصفحة بمعاينة قبل الإدراج"
+              >
+                ✅ اشرح واكتب
               </button>
             ) : null}
             {onInsertImage ? (

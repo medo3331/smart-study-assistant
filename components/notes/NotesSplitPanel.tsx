@@ -153,7 +153,7 @@ export function StudyFeedbackDialog({
 export default function NotesSplitToggle({
   label = "🖥️ نوت جانبية",
   className,
-  title = "افتح دفتر الملاحظات جنب الشرح — تقسيم شاشة فوري",
+  title = "افتح النوتة جنب الشرح — تقسيم شاشة فوري",
 }: {
   label?: string;
   className?: string;
@@ -237,7 +237,7 @@ function NotesSplitPanel({
   return (
     <div className="notes-split-panel" dir="rtl">
       <div className="notes-split-header">
-        <span className="notes-split-title">📝 دفتر الملاحظات</span>
+        <span className="notes-split-title">📝 النوتة</span>
         <span className="notes-split-actions">
           <button
             type="button"
@@ -268,7 +268,7 @@ function NotesSplitPanel({
       {/* نفس الأوريجن — IndexedDB والكوتة بيتقاسموا مع الرئيسية طبيعي */}
       <iframe
         src="/notes?beside=1"
-        title="دفتر الملاحظات — وضع جانبي"
+        title="النوتة — وضع جانبي"
         className="notes-split-frame"
       />
     </div>

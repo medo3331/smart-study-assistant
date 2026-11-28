@@ -207,7 +207,7 @@ export function FileManager() {
           </p>
         </div>
         <Link href="/notes" className="fm-nav-notes">
-          ✏️ دفتر الملاحظات
+          ✏️ النوتة
         </Link>
       </header>
 

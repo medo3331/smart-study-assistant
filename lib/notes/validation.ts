@@ -5,12 +5,16 @@
 
 import type {
   NotesTemplate,
+  PageFormat,
   StorageNotebook,
   StoragePage,
   StorageBackup,
   StorageMeta,
   ValidationResult,
 } from "./types";
+
+/** Every page size the storage layer accepts. */
+export const VALID_PAGE_FORMATS: readonly PageFormat[] = ["a4", "wide", "slide"];
 
 /** Every template value the storage layer accepts. */
 export const VALID_TEMPLATES: readonly NotesTemplate[] = [
@@ -52,7 +56,7 @@ export function validateNotebook(record: unknown): ValidationResult {
   else if (!r.pageIds.every((id: unknown) => typeof id === "string")) {
     errors.push("pageIds must contain only strings");
   }
-  // pageNames اختياري (دفاتر قديمة مالوش) — لو موجود لازم خريطة نصوص.
+  // pageNames اختياري (نوتات قديمة مالوش) — لو موجود لازم خريطة نصوص.
   if (r.pageNames !== undefined && !isPlainObject(r.pageNames)) {
     errors.push("pageNames must be a plain object when present");
   } else if (isPlainObject(r.pageNames)) {
@@ -60,6 +64,10 @@ export function validateNotebook(record: unknown): ValidationResult {
     if (!Object.values(names).every((value) => typeof value === "string")) {
       errors.push("pageNames values must be strings");
     }
+  }
+  // pageFormat اختياري (نوتات قديمة مالوش) — لو موجود لازم يكون مقاس معروف.
+  if (r.pageFormat !== undefined && !VALID_PAGE_FORMATS.includes(r.pageFormat as PageFormat)) {
+    errors.push(`pageFormat must be one of: ${VALID_PAGE_FORMATS.join(", ")}`);
   }
   if (!isValidDate(r.createdAt)) errors.push("createdAt must be a valid ISO date");
   if (!isValidDate(r.updatedAt)) errors.push("updatedAt must be a valid ISO date");

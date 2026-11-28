@@ -81,7 +81,7 @@ describe("global-search", () => {
     expect(results[0].hits[0]).toMatchObject({ pageId: "p1", kind: "name" });
   });
 
-  it("بيطابق عنوان الدفتر لو مفيش hits", () => {
+  it("بيطابق عنوان النوتة لو مفيش hits", () => {
     const results = searchIndex(index, "رياضيات");
     expect(results).toHaveLength(1);
     expect(results[0].notebookId).toBe("nb1");

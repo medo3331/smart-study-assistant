@@ -16,7 +16,7 @@ export default function OpenNotesBeside({
   label = "📝 نوت جانبية",
   notebookId,
   className,
-  title = "افتح دفتر الملاحظات في نافذة جانبية بجانب الدرس",
+  title = "افتح النوتة في نافذة جانبية بجانب الدرس",
 }: {
   label?: string;
   notebookId?: string | null;
