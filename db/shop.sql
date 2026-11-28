@@ -1,3 +1,4 @@
+-- ⚠️ DEPRECATED بعد db/113 + db/114 (ECONOMY TRUTH — 2026-11-28): النسخ الوحيدة الصالحة من award_coins / _award_coins_variable / add_coins_grant في db/113-economy-truth.sql، وتحويلات الكتابات في db/114-economy-route-writers.sql. **ماتشغّلش الملف ده تاني بعد 113/114** — آخر تعريف بيكتب على النسخة الموحّدة والحارس هيوقف كتاباته المباشرة.
 -- ============================================================================
 -- المتجر والكوينز — جداول Supabase
 -- التاريخ: ٧ أغسطس ٢٠٢٦
@@ -1610,15 +1611,31 @@ grant execute on function public.spin_wheel() to authenticated;
 
 -- قواعد مصادر الكسب — من COIN_SOURCES في lib/shop/economy.ts
 insert into public.coin_source_rules (id, amount, daily_cap, is_live) values
+  ('signup_bonus', 20, 1, true),
+  ('daily_login', 10, 1, true),
   ('day_done', 25, 3, true),
   ('goal_done', 10, 5, true),
-  ('daily_login', 5, 1, true),
   ('streak_day', 8, 1, true),
   ('badge', 40, 3, true),
   ('perfect_week', 120, 1, true),
-  ('escape_room', 60, 1, false),
-  ('wheel', 30, 1, false),
-  ('league_promo', 200, 1, false)
+  ('streak_tier_3', 15, 1, true),
+  ('streak_tier_30', 250, 1, true),
+  ('break_riddle', 15, 1, true),
+  ('break_riddle_fast', 20, 1, true),
+  ('break_game', 5, 2, true),
+  ('escape_room', 25, 1, true),
+  ('daily_mission', 5, 4, true),
+  ('weekly_mission', 150, 1, true),
+  ('wheel', 30, 1, true),
+  ('achievement', 100, 1, true),
+  ('box_refund', 100, null, true),
+  ('lesson_quiz_passed', 5, 1, false),
+  ('review_done', 10, 1, false),
+  ('exam_passed', 20, 1, false),
+  ('league_promo', 200, 1, false),
+  ('worship_prayer', 3, 5, true),
+  ('worship_quran', 5, 1, true),
+  ('worship_adhkar', 3, 3, true)
 on conflict (id) do update set
   amount = excluded.amount, daily_cap = excluded.daily_cap, is_live = excluded.is_live;
 
@@ -1632,7 +1649,7 @@ insert into public.shop_leagues (id, min_xp, rank) values
   ('legend', 12000, 5)
 on conflict (id) do update set min_xp = excluded.min_xp, rank = excluded.rank;
 
--- الكتالوج — من CATALOG في lib/shop/catalog.ts (90 عنصر)
+-- الكتالوج — من CATALOG في lib/shop/catalog.ts (93 عنصر)
 insert into public.shop_catalog (id, slot, price, unlock, rarity) values
   ('theme.notebook', 'theme', 0, null, 'common'),
   ('theme.dark-library', 'theme', 900, null, 'epic'),
@@ -1723,7 +1740,10 @@ insert into public.shop_catalog (id, slot, price, unlock, rarity) values
   ('title.chosen', 'title', 6000, '{"kind":"daily"}'::jsonb, 'mythic'),
   ('title.wanderer', 'title', 1800, '{"kind":"daily"}'::jsonb, 'legendary'),
   ('companion.fox', 'companion', 2200, '{"kind":"daily"}'::jsonb, 'legendary'),
-  ('companion.moth', 'companion', 6000, '{"kind":"daily"}'::jsonb, 'mythic')
+  ('companion.moth', 'companion', 6000, '{"kind":"daily"}'::jsonb, 'mythic'),
+  ('useful.study-booster', null, 2200, null, 'legendary'),
+  ('useful.ai-starter-pack', null, 650, null, 'rare'),
+  ('useful.ai-power-pack', null, 2400, null, 'legendary')
 on conflict (id) do update set
   slot = excluded.slot, price = excluded.price, unlock = excluded.unlock,
   rarity = excluded.rarity;
@@ -1772,7 +1792,7 @@ delete from public.shop_wheel_prizes where id not in (
 
 -- عناصر اتشالت من الكتالوج — بتتشال من الجدول كمان
 delete from public.shop_catalog where id not in (
-  'theme.notebook', 'theme.dark-library', 'theme.midnight', 'theme.retro', 'theme.cyberpunk', 'theme.matrix', 'theme.galaxy', 'theme.ocean-blue', 'theme.forest', 'theme.coffee-shop', 'theme.sunset', 'theme.golden', 'theme.minimal', 'theme.purple-neon', 'theme.ice-world', 'theme.aurora', 'avatar.owl', 'avatar.cat', 'avatar.fox', 'avatar.bee', 'avatar.turtle', 'avatar.dolphin', 'avatar.panda', 'avatar.wolf', 'avatar.octopus', 'avatar.lion', 'avatar.unicorn', 'avatar.dragon', 'avatar.phoenix', 'avatar.galaxy-brain', 'avatar.crown', 'frame.thin', 'frame.dashed', 'frame.double', 'frame.corners', 'frame.notebook', 'frame.tape', 'frame.stitch', 'frame.glow', 'frame.marker', 'frame.circuit', 'frame.laurel', 'frame.prism', 'title.beginner', 'title.curious', 'title.regular', 'title.night-owl', 'title.early-bird', 'title.marathoner', 'title.unbroken', 'title.problem-solver', 'title.mentor', 'title.knowledge-king', 'title.legend', 'title.the-one', 'companion.egg', 'companion.cactus', 'companion.slime', 'companion.robot', 'companion.cat', 'companion.bird', 'companion.ghost', 'companion.star', 'companion.dragon', 'companion.void', 'sound.lofi', 'sound.rain', 'sound.waves', 'sound.forest', 'sound.piano', 'sound.white_noise', 'sound.brown', 'sound.binaural', 'sound.singing-bowl', 'sound.deep-space', 'effect.pulse', 'effect.check', 'effect.confetti', 'effect.stamp', 'effect.highlight', 'effect.stars', 'effect.fireworks', 'effect.page-turn', 'effect.supernova', 'avatar.eclipse', 'avatar.comet', 'title.chosen', 'title.wanderer', 'companion.fox', 'companion.moth'
+  'theme.notebook', 'theme.dark-library', 'theme.midnight', 'theme.retro', 'theme.cyberpunk', 'theme.matrix', 'theme.galaxy', 'theme.ocean-blue', 'theme.forest', 'theme.coffee-shop', 'theme.sunset', 'theme.golden', 'theme.minimal', 'theme.purple-neon', 'theme.ice-world', 'theme.aurora', 'avatar.owl', 'avatar.cat', 'avatar.fox', 'avatar.bee', 'avatar.turtle', 'avatar.dolphin', 'avatar.panda', 'avatar.wolf', 'avatar.octopus', 'avatar.lion', 'avatar.unicorn', 'avatar.dragon', 'avatar.phoenix', 'avatar.galaxy-brain', 'avatar.crown', 'frame.thin', 'frame.dashed', 'frame.double', 'frame.corners', 'frame.notebook', 'frame.tape', 'frame.stitch', 'frame.glow', 'frame.marker', 'frame.circuit', 'frame.laurel', 'frame.prism', 'title.beginner', 'title.curious', 'title.regular', 'title.night-owl', 'title.early-bird', 'title.marathoner', 'title.unbroken', 'title.problem-solver', 'title.mentor', 'title.knowledge-king', 'title.legend', 'title.the-one', 'companion.egg', 'companion.cactus', 'companion.slime', 'companion.robot', 'companion.cat', 'companion.bird', 'companion.ghost', 'companion.star', 'companion.dragon', 'companion.void', 'sound.lofi', 'sound.rain', 'sound.waves', 'sound.forest', 'sound.piano', 'sound.white_noise', 'sound.brown', 'sound.binaural', 'sound.singing-bowl', 'sound.deep-space', 'effect.pulse', 'effect.check', 'effect.confetti', 'effect.stamp', 'effect.highlight', 'effect.stars', 'effect.fireworks', 'effect.page-turn', 'effect.supernova', 'avatar.eclipse', 'avatar.comet', 'title.chosen', 'title.wanderer', 'companion.fox', 'companion.moth', 'useful.study-booster', 'useful.ai-starter-pack', 'useful.ai-power-pack'
 );
 
 -- SEED:END
