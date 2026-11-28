@@ -75,3 +75,4 @@
 | 2026-11-28 | DEV-M3 جزء ٩: Chess UX بنمط chess.com — مربعات ثابتة وتلوين كامل + إصلاح توقف الكمبيوتر عند الكش + ٥ مستويات + ماجِك المدرب 🧙 |
 | 2026-11-28 | Magic Chess Master Specification — مواصفة منصة الشطرنج الكاملة (Audit للموجود + معمارية Stockfish WASM/محركنا للتحقق سيرفرًا + Rating + حماية + 6 Phases) — معتمدة من المالك: `magic-chess-master-spec.md` |
 | 2026-11-28 | DEV-M3 جزء ١٠: Magic Chess Phase 1 (Core Polish) — AI بـ ٨ مستويات (تعميق تدريجي بميزانية وقت) + ٥ شخصيات لعب + ٨ رقع + ٣ أطقم قطع + أصوات Web Audio + إعدادات محفوظة + قلب الرقعة + صفحة «مبارياتي» (`phases/dev-m3-part10-chess-platform-p1.md`) |
+| 2026-11-28 | DEV-M3 جزء ١١: Magic Chess Phase 2 (Online) — db/125 على الإنتاج (chess_ratings/Games/Queue + matchmaking + Elo K=32 لكل فئة) + تحقق سيرفري من النقلات والساعات في /api/chess/move + صفحة /games/chess/online بـ ٤ فئات وقت (`phases/dev-m3-part11-chess-online-p2.md`) |

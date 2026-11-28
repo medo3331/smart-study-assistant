@@ -263,6 +263,7 @@ export default function ChessPage() {
       lede="٨ مستويات + ٥ شخصيات لعب، رقع وقطع تختارها — كل فوز بيكسبك XP وأول فوز في اليوم بيكسب 5 Coins."
       action={
         <>
+          <Link className="btn btn-marker text-sm" href="/games/chess/online">🌍 العب أونلاين</Link>
           <Link className="btn btn-quiet text-sm" href="/games/chess/history">📋 مبارياتي</Link>
           <button className="btn btn-quiet text-sm" onClick={takeback} disabled={finished || past.length === 0}>↩️ تراجع</button>
           <button className="btn btn-quiet text-sm" onClick={restart}>مباراة جديدة</button>
