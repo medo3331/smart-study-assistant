@@ -130,6 +130,22 @@ describe("validateMagicAction", () => {
     expect(validateMagicAction({ tool: "add_task" })).toBeNull();
     expect(validateMagicAction({ tool: "list_tasks" })).toEqual({ tool: "list_tasks" });
   });
+
+  it("complete_task بالمعرّف أو العنوان — والاتنين مع بعض يتم", () => {
+    expect(validateMagicAction({ tool: "complete_task", taskId: "abc-123" })).toEqual({
+      tool: "complete_task",
+      taskId: "abc-123",
+    });
+    expect(validateMagicAction({ tool: "complete_task", title: "راجع OSI" })).toEqual({
+      tool: "complete_task",
+      title: "راجع OSI",
+    });
+  });
+
+  it("complete_task بدون معرّف ولا عنوان يُرفض", () => {
+    expect(validateMagicAction({ tool: "complete_task" })).toBeNull();
+    expect(validateMagicAction({ tool: "complete_task", title: "" })).toBeNull();
+  });
 });
 
 describe("extractAgentActions", () => {

@@ -99,6 +99,7 @@ import {
 } from "@/lib/agent/actions";
 import { runAgentActions, type AgentArtifact, type AgentTasksPort } from "@/lib/agent/action-runner";
 import { fetchGoals, insertGoal } from "@/lib/pages-data";
+import { awardCoins } from "@/lib/shop/shop-data";
 
 // 🎨 أساليب الشرح — chips الواجهة تحقن تعليمات تعليمية في الـ system
 // (المفتاح هنا تعليم تعليمي مش نص حر — منع الحقن بأي شيء حر من الكلاينت).
@@ -188,6 +189,51 @@ function makeAgentTasksPort(
         .sort((a, b) => (b.priority - a.priority) || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"))
         .slice(0, 8)
         .map((g) => ({ id: g.id, title: g.title, dueDate: g.dueDate, priority: g.priority }));
+    },
+    async completeTask({ taskId, title }) {
+      // ١) نجيب المهمة — بالمعرّف أو بأول تطابق عنوان بين المفتوحة.
+      let goal: { id: string; title: string } | null = null;
+      if (taskId) {
+        const { data } = await supabase
+          .from("planner_goals")
+          .select("id, title, is_done")
+          .eq("user_id", userId)
+          .eq("id", taskId)
+          .maybeSingle();
+        if (!data) return { ok: false, error: "مالقتش المهمة دي في مخططك." };
+        if (data.is_done) return { ok: false, title: data.title, error: "المهمة دي منجزة خلاص ✅" };
+        goal = { id: data.id, title: data.title };
+      } else if (title) {
+        const res = await fetchGoals(supabase, userId);
+        const match = (res.data ?? []).find((g) => !g.isDone && g.title.trim() === title.trim())
+          ?? (res.data ?? []).find((g) => !g.isDone && g.title.includes(title.trim()));
+        if (!match) {
+          const anyDone = (res.data ?? []).some((g) => g.isDone && g.title.includes(title.trim()));
+          return {
+            ok: false,
+            error: anyDone ? "المهمة دي منجزة خلاص ✅" : "مالقتش مهمة مفتوحة بالعنوان ده — اعرض المهام الأول بأداة list_tasks.",
+          };
+        }
+        goal = { id: match.id, title: match.title };
+      } else {
+        return { ok: false, error: "لازم معرّف المهمة أو عنوانها." };
+      }
+
+      // ٢) إنهاء + مكافأة goal_done (نفس مسار صفحة المخطط — ١٠ كوين بحد يومي).
+      const { error: updateError } = await supabase
+        .from("planner_goals")
+        .update({ is_done: true, done_at: new Date().toISOString() })
+        .eq("id", goal.id)
+        .eq("user_id", userId);
+      if (updateError) return { ok: false, title: goal.title, error: updateError.message };
+      const award = await awardCoins(supabase, "goal_done", goal.id);
+      return {
+        ok: true,
+        title: goal.title,
+        coins: award.data?.awarded ?? 0,
+        balance: award.data?.balance,
+        capped: award.data?.capped ?? false,
+      };
     },
   };
 }

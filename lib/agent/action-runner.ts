@@ -18,6 +18,7 @@ import {
   MAGIC_ACTION_LIMITS,
   type AddTaskAction,
   type AgentArtifact,
+  type CompleteTaskAction,
   type DiagramAction,
   type FileAction,
   type ImageAction,
@@ -36,6 +37,15 @@ export type { AgentArtifact } from "./actions";
 export interface AgentTasksPort {
   addTask(input: { title: string; dueDate?: string; priority?: number }): Promise<{ ok: boolean; id?: string; error?: string }>;
   listTasks(): Promise<{ id: string; title: string; dueDate: string | null; priority: number }[]>;
+  /** إنهاء مهمة بالمعرّف أو بأول تطابق عنوان بين المهام المفتوحة + منح مكافأة goal_done. */
+  completeTask(input: { taskId?: string; title?: string }): Promise<{
+    ok: boolean;
+    title?: string;
+    coins?: number;
+    balance?: number;
+    capped?: boolean;
+    error?: string;
+  }>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -174,6 +184,27 @@ async function runListTasks(_action: ListTasksAction, ctx: AgentActionRunnerCont
   }
 }
 
+async function runCompleteTask(action: CompleteTaskAction, ctx: AgentActionRunnerContext): Promise<AgentArtifact> {
+  const fallbackTitle = action.title || "المهمة";
+  const base = { kind: "task_completed" as const, title: fallbackTitle, coins: 0 };
+  if (!ctx.tasks) {
+    return { ...base, error: "المهام الشخصية متاحة للطالب المسجّل بس." };
+  }
+  try {
+    const result = await ctx.tasks.completeTask({ taskId: action.taskId, title: action.title });
+    if (!result.ok) return { ...base, title: result.title || fallbackTitle, error: result.error || "فشل إنهاء المهمة." };
+    return {
+      kind: "task_completed",
+      title: result.title || fallbackTitle,
+      coins: result.coins ?? 0,
+      ...(typeof result.balance === "number" ? { balance: result.balance } : {}),
+      ...(result.capped ? { capped: true } : {}),
+    };
+  } catch (e) {
+    return { ...base, error: (e as Error).message || "فشل إنهاء المهمة." };
+  }
+}
+
 /**
  * تنفيذ كل الأدوات المطلوبة — كل أداة في try/catch مستقل، وفشلها ما يوقفش الباقي.
  */
@@ -191,6 +222,7 @@ export async function runAgentActions(
       else if (action.tool === "quiz") artifacts.push(runQuiz(action));
       else if (action.tool === "add_task") artifacts.push(await runAddTask(action, ctx));
       else if (action.tool === "list_tasks") artifacts.push(await runListTasks(action, ctx));
+      else if (action.tool === "complete_task") artifacts.push(await runCompleteTask(action, ctx));
     } catch (e) {
       console.warn("[agent-actions] tool execution failed:", action.tool, e);
     }

@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MermaidViewer } from "@/components/ui/MermaidViewer";
 import { importArtifactToNotes } from "@/lib/notes/agent-import";
-import type { AgentArtifact, FileArtifact, QuizArtifact, TaskListArtifact, TaskSavedArtifact } from "@/lib/agent/actions";
+import type { AgentArtifact, FileArtifact, QuizArtifact, TaskCompletedArtifact, TaskListArtifact, TaskSavedArtifact } from "@/lib/agent/actions";
 
 const FORMAT_LABELS: Record<string, string> = {
   md: "Markdown",
@@ -345,6 +345,29 @@ function TaskListCard({ artifact }: { artifact: TaskListArtifact }) {
   );
 }
 
+function TaskCompletedCard({ artifact }: { artifact: TaskCompletedArtifact }) {
+  if (artifact.error) {
+    return <p className="text-xs text-amber-700">ℹ️ {artifact.error}</p>;
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm font-bold text-emerald-700">🎉 برافو! خلّصت المهمة</p>
+      <p className="text-xs text-ink leading-relaxed">✅ {artifact.title}</p>
+      {artifact.capped || artifact.coins === 0 ? (
+        <p className="text-[11px] text-ink-soft">
+          {artifact.capped
+            ? "وصلت الحد اليومي لمكافأة المهام — المهمة محسوبة وكوينز بكرة 🪙"
+            : "المهمة اتعلّمت منجزة."}
+        </p>
+      ) : (
+        <p className="text-[11px] font-bold text-amber-700">
+          🪙 كسبت {artifact.coins} كوين{typeof artifact.balance === "number" ? ` — رصيدك دلوقتي ${artifact.balance}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* العرض الرئيسي                                                               */
 /* -------------------------------------------------------------------------- */
@@ -415,6 +438,13 @@ export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
           return (
             <Card key={i} title="مهامك المفتوحة" accent="linear-gradient(90deg, #D97706, #7C3AED)">
               <TaskListCard artifact={a} />
+            </Card>
+          );
+        }
+        if (a.kind === "task_completed") {
+          return (
+            <Card key={i} title="مهمة خلصت 🎉" accent="linear-gradient(90deg, #059669, #D97706)">
+              <TaskCompletedCard artifact={a} />
             </Card>
           );
         }

@@ -15,6 +15,7 @@ import type { User } from "@supabase/supabase-js";
 import { PERSONA_NAME } from "@/lib/persona";
 import { MagicAvatar } from "@/components/MagicAvatar";
 import { MagicWelcome } from "@/components/magic/MagicWelcome";
+import { MagicWeeklyReport } from "@/components/magic/MagicWeeklyReport";
 import { awardCoins } from "@/lib/shop/shop-data";
 import { levelFromXp, XP_PER_LEVEL, STUDY_DAY_XP_REWARD } from "@/lib/shop/economy";
 
@@ -1666,6 +1667,7 @@ export default function DashboardPage() {
         <div className="space-y-10 dashboard-entrance" style={{ animationDelay: "40ms" }}>
           <DashboardSection id="missions" title="مهام اليوم" defaultOpen>
             <TodayMissionsCard streak={streak} />
+            <MagicWeeklyReport />
             <DailyMicroChallenge />
             <ContextualNotification />
             <MotivationNudge streak={streak} />

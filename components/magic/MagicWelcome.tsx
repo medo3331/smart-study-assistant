@@ -138,6 +138,25 @@ export function MagicWelcome() {
             </div>
           </div>
         )}
+        {/* 🏅 شارات المذاكرة — المكتسبة تلمع، واللي جاية بتقول محتاج إيه */}
+        {g.badges.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {g.badges.map((b) => (
+              <span
+                key={b.id}
+                title={b.earned ? `${b.label} — مكتسبة 🎉` : `${b.label} — ${b.hint ?? ""}`}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                  b.earned
+                    ? "border-amber-300 bg-amber-500/15 text-amber-800"
+                    : "border-rule bg-paper text-ink-soft opacity-70"
+                }`}
+              >
+                <span aria-hidden>{b.emoji}</span> {b.label}
+                {!b.earned && b.hint && <span className="font-medium">· {b.hint}</span>}
+              </span>
+            ))}
+          </div>
+        )}
         {/* 📉 ملاحظة الغياب — بلطف مش لوم */}
         {g.nudge && (
           <p className="mt-2 rounded-xl border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-800 leading-relaxed">

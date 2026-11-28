@@ -140,6 +140,20 @@ describe("buildMagicGreeting — نمط Duolingo (المستوى والسلسل�
     expect(g.suggestions[0].label).toContain("راجع محاضرة الخلية");
     expect(g.suggestions[0].href).toBe("/dashboard/planner");
   });
+
+  it("شارات المذاكرة بترجع دايمًا — والمكتسبة تبع الأرقام الحقيقية", () => {
+    const g = buildMagicGreeting({ ...base, economy, tasksDoneTotal: 12 });
+    expect(g.badges.length).toBeGreaterThan(0);
+    expect(g.badges.find((b) => b.id === "tasks_10")?.earned).toBe(true);
+    expect(g.badges.find((b) => b.id === "tasks_50")?.earned).toBe(false);
+    expect(g.badges.find((b) => b.id === "streak_3")?.earned).toBe(true); // streak 4
+  });
+
+  it("بدون بيانات — الشارات كلها مقفولة بس موجودة", () => {
+    const g = buildMagicGreeting({ ...base });
+    expect(g.badges.length).toBeGreaterThan(0);
+    expect(g.badges.every((b) => !b.earned)).toBe(true);
+  });
 });
 
 describe("daysSinceStudy", () => {

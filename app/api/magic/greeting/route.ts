@@ -22,7 +22,7 @@ export async function GET() {
       workspaceFiles: 0,
     });
 
-    const [planResult, materialsCount, lecturesCount, profileResult, goalsResult] = await Promise.all([
+    const [planResult, materialsCount, lecturesCount, profileResult, goalsResult, tasksDoneCount] = await Promise.all([
       fetchActiveExamPlan(supabase, user.id).catch(() => ({ data: null, error: { kind: "GENERIC" as const, message: "" } })),
       supabase
         .from("materials")
@@ -43,6 +43,13 @@ export async function GET() {
         .maybeSingle()
         .catch(() => null),
       fetchGoals(supabase, user.id).catch(() => ({ data: null, error: { kind: "GENERIC" as const, message: "" } })),
+      supabase
+        .from("planner_goals")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("is_done", true)
+        .then((r: { count: number | null }) => r.count ?? 0)
+        .catch(() => 0),
     ]);
 
     const plan = planResult.data;
@@ -88,6 +95,7 @@ export async function GET() {
           }
         : null,
       tasks: openTasks,
+      tasksDoneTotal: tasksDoneCount ?? 0,
     });
 
     return NextResponse.json({ success: true, greeting, fallback });

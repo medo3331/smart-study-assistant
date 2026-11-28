@@ -9,6 +9,7 @@
 //    planner_goals المفتوحة، ويلاحظ غياب المذاكرة بلطف (مش لوم).
 
 import { levelFromXp, XP_PER_LEVEL } from "@/lib/shop/economy";
+import { computeStudyBadges, type StudyBadge } from "@/lib/magic/badges";
 
 export interface MagicSuggestion {
   id: string;
@@ -45,6 +46,8 @@ export interface MagicGreetingInput {
   economy?: MagicEconomyStats | null;
   /** 📋 عناوين مهام planner_goals المفتوحة (المهمّة الأول). */
   tasks?: string[];
+  /** عدد المهام المنجزة كلها — لحساب شارات Magic (اختياري). */
+  tasksDoneTotal?: number;
 }
 
 export interface MagicGreetingStats {
@@ -68,6 +71,8 @@ export interface MagicGreeting {
   nudge: string | null;
   /** 📋 مهام مفتوحة من المخطط. */
   tasks: string[];
+  /** 🏅 شارات المذاكرة — المكتسبة واللي على بعد خطوة. */
+  badges: StudyBadge[];
 }
 
 function timeGreeting(hour: number): string {
@@ -192,7 +197,15 @@ export function buildMagicGreeting(input: MagicGreetingInput): MagicGreeting {
   const nudge = input.economy ? buildAbsenceNudge(input.economy) : null;
   const stats = input.economy ? buildStats(input.economy) : null;
 
-  return { greeting, sub, suggestions: suggestions.slice(0, 3), stats, nudge, tasks };
+  // 🏅 شارات المذاكرة — من الأرقام الحقيقية (لو economy مش متاحة، الأرقام صفر
+  //    يعني مفيش شارة مكتسبة ومفيش ضرر).
+  const badges = computeStudyBadges({
+    xp: input.economy?.xp ?? 0,
+    streak: input.economy?.streak ?? 0,
+    tasksDone: input.tasksDoneTotal ?? 0,
+  });
+
+  return { greeting, sub, suggestions: suggestions.slice(0, 3), stats, nudge, tasks, badges };
 }
 
 /** رسالة الترحيب داخل الشات الموحد — نفس الهوية بدون تكرار كلام مزعج. */

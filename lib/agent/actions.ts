@@ -16,7 +16,7 @@
 /* الأنواع                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export type MagicActionTool = "web_search" | "diagram" | "image" | "file" | "quiz" | "add_task" | "list_tasks";
+export type MagicActionTool = "web_search" | "diagram" | "image" | "file" | "quiz" | "add_task" | "list_tasks" | "complete_task";
 
 export const MAGIC_ACTION_TOOLS: readonly MagicActionTool[] = [
   "web_search",
@@ -26,6 +26,7 @@ export const MAGIC_ACTION_TOOLS: readonly MagicActionTool[] = [
   "quiz",
   "add_task",
   "list_tasks",
+  "complete_task",
 ];
 
 export interface WebSearchAction {
@@ -112,6 +113,13 @@ export interface ListTasksAction {
   tool: "list_tasks";
 }
 
+/** إنهاء مهمة من الشات — بمعرّفها أو بعنوانها (أول تطابق بين المهام المفتوحة). */
+export interface CompleteTaskAction {
+  tool: "complete_task";
+  taskId?: string;
+  title?: string;
+}
+
 export type MagicAction =
   | WebSearchAction
   | DiagramAction
@@ -119,7 +127,8 @@ export type MagicAction =
   | FileAction
   | QuizAction
   | AddTaskAction
-  | ListTasksAction;
+  | ListTasksAction
+  | CompleteTaskAction;
 
 /* -------------------------------------------------------------------------- */
 /* حدود الأمان                                                                 */
@@ -251,6 +260,13 @@ export function validateMagicAction(raw: unknown): MagicAction | null {
     return { tool: "list_tasks" };
   }
 
+  if (tool === "complete_task") {
+    const taskId = clampStr(data.taskId, 64) || undefined;
+    const title = clampStr(data.title, MAGIC_ACTION_LIMITS.maxTitle) || undefined;
+    if (!taskId && !title) return null;
+    return { tool, taskId, title };
+  }
+
   return null;
 }
 
@@ -361,6 +377,18 @@ export interface TaskListArtifact {
   tasks: TaskListItem[];
 }
 
+export interface TaskCompletedArtifact {
+  kind: "task_completed";
+  title: string;
+  /** الكوينز المكتسبة فعليًا (صفر لو السقف اليومي اتقفل). */
+  coins: number;
+  /** رصيد الكوينز بعد الإضافة. */
+  balance?: number;
+  /** السقف اليومي للمصدر اتقفل — المهمة خلصت بس من غير كوينز. */
+  capped?: boolean;
+  error?: string;
+}
+
 export type AgentArtifact =
   | WebResultsArtifact
   | DiagramArtifact
@@ -368,7 +396,8 @@ export type AgentArtifact =
   | FileArtifact
   | QuizArtifact
   | TaskSavedArtifact
-  | TaskListArtifact;
+  | TaskListArtifact
+  | TaskCompletedArtifact;
 
 /* -------------------------------------------------------------------------- */
 /* تعليمات الأدوات — تُحقن في system prompt                                    */
@@ -390,6 +419,7 @@ export const AGENT_ACTION_INSTRUCTIONS = [
   "- اختبار تفاعلي: {\"tool\":\"quiz\",\"title\":\"عنوان\",\"subject\":\"المادة\",\"questions\":[{\"question\":\"السؤال\",\"options\":[\"أ\",\"ب\",\"ج\",\"د\"],\"answerIndex\":0,\"explanation\":\"ليه\"}]} — اختبر الطالب داخل الشات فورًا. نوّع بين اختيار من متعدد وصح/غلط (options: [\"صح\",\"غلط\"]) ورتّب من السهل للصعب.",
   "- 📋 تسجيل مهمة شخصية: {\"tool\":\"add_task\",\"title\":\"عنوان المهمة\",\"dueDate\":\"YYYY-MM-DD\",\"priority\":1} — بتتسجّل في مخطط الطالب ويكسب كوينز لما يخلّصها. priority: 1 عادي أو 2 مهم. استخدمه فقط لما الطالب يوافق على المهمة — اقترح الأول وناقشه («تحب نخليها مهمة النهارده؟»).",
   "- 📋 عرض مهام الطالب: {\"tool\":\"list_tasks\"} — بيجيب المهام اللي لسه ما خلصتهاش عشان تتابع معاه وتسأله عن تقدمه.",
+  "- ✅ إنهاء مهمة: {\"tool\":\"complete_task\",\"taskId\":\"...\"} أو {\"tool\":\"complete_task\",\"title\":\"عنوان المهمة\"} — بتعلّمها منجزة في مخطط الطالب والطالب بيكسب كوينز 🪙 فورًا. لا تنهي مهمة غير لما الطالب يقولك إنه خلّصها فعلًا — اسأله («خلّصت مراجعة OSI؟ لما تخلص أعلّمها وياخد كوينز»).",
   "- 🏅 أنت مدرب شخصي زي Duolingo: بناءً على مادة الطالب ومستواه وأهدافه (من السياق) اقترح عليه مهام يومية محددة وصغيرة قابلة للإنجاز («راجع ١٠ سلايدات من محاضرة الخلية واعملك اختبار عليها؟») — وناقشه ووافق قبل ما تسجّل بأداة add_task. لو عندك مهامه الحالية في السياق تابعها معاه: اسأله عن اللي فات موعده بتأثير إيجابي مش لوم.",
   "قواعد صارمة:",
   "- اكتب في ردك جملة أو جملتين تشرح اللي عملته، وبعدها الكتلة — الكتلة مش بتنعرض كنص، بتتنفّذ وتظهر للطالب كاملة.",

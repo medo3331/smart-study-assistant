@@ -14,10 +14,49 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { X, SendHorizontal, MessageCircle } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MagicAvatar from "@/components/MagicAvatar";
 import { AgentArtifacts } from "@/components/unified-ai/AgentArtifacts";
 import type { AgentArtifact } from "@/lib/agent/actions";
+
+/* 🏅 شريط إحصائيات مصغّر — بيتجاب مرة واحدة أول ما الفقاعة تفتح
+   من نفس API ترحيب الداشبورد (stats/tasks/nudge) — بدون AI. */
+interface QuickStats {
+  streak: number;
+  level: number;
+  openTasks: number;
+  nudge: string | null;
+}
+
+function useQuickStats(enabled: boolean): QuickStats | null {
+  const [stats, setStats] = useState<QuickStats | null>(null);
+  useEffect(() => {
+    if (!enabled || stats) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/magic/greeting");
+        const data = await res.json();
+        const g = data?.greeting;
+        if (alive && g?.stats) {
+          setStats({
+            streak: g.stats.streak ?? 0,
+            level: g.stats.level ?? 1,
+            openTasks: Array.isArray(g.tasks) ? g.tasks.length : 0,
+            nudge: typeof g.nudge === "string" ? g.nudge : null,
+          });
+        }
+      } catch {
+        // بدون إحصائيات — الفقاعة تشتغل عادي
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
+  return stats;
+}
 
 const pageHint = (pathname: string): string => {
   if (pathname.startsWith("/lesson/")) return "في نقطة مش واضحة في الدرس؟";
@@ -45,6 +84,7 @@ export function FloatingAssistant() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<QuickMsg[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+  const quickStats = useQuickStats(open);
 
   if (pathname === "/chat") return null;
 
@@ -106,11 +146,34 @@ export function FloatingAssistant() {
             </button>
           </div>
 
+          {/* 🏅 شريط الإحصائيات — Magic شايف تقدمك في أي صفحة */}
+          {quickStats && (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-rule bg-paper-2 px-3 py-1.5">
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-black text-amber-900"
+                style={{ background: "linear-gradient(90deg, #FDE68A, #FBBF24)" }}
+              >
+                🔥 <span className="tnum">{quickStats.streak.toLocaleString("ar-EG")}</span>
+              </span>
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-black text-violet-50"
+                style={{ background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+              >
+                ⭐ م<span className="tnum">{quickStats.level.toLocaleString("ar-EG")}</span>
+              </span>
+              <span className="inline-flex items-center gap-0.5 rounded-full border border-rule bg-paper px-2 py-0.5 text-[10px] font-black text-ink">
+                📋 <span className="tnum">{quickStats.openTasks.toLocaleString("ar-EG")}</span> مهمة مفتوحة
+              </span>
+            </div>
+          )}
+
           {/* الرسايل */}
           <div ref={listRef} className="max-h-[280px] min-h-[90px] space-y-2 overflow-y-auto px-3 py-3">
             {messages.length === 0 && (
               <p className="text-xs leading-relaxed text-ink-soft">
-                أهلاً! أنا Magic — اسألني أي حاجة من هنا على السريع: إزاي تستخدم الموقع، تنظّم وقتك، أو تفهم حاجة في مذاكرتك ⚡
+                {quickStats?.nudge
+                  ? quickStats.nudge
+                  : "أهلاً! أنا Magic — اسألني أي حاجة من هنا على السريع: إزاي تستخدم الموقع، تنظّم وقتك، أو تفهم حاجة في مذاكرتك ⚡"}
               </p>
             )}
             {messages.map((msg, i) => (
