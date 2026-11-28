@@ -342,7 +342,7 @@ alter table public.lesson_content
 |---|---|
 | **الآلية** | `NotebookPanel` بيلفّ `/notes` في iframe same-origin (نفس نمط `NotesSplitPanel` الموجود — التخزين IndexedDB والقفل والكوتة شغالين زي أي تبويب). |
 | **الإضافة** | أي «أضف للنوتة» (من الشرح/الفيديو/الملخص) ⇒ `queueNotebookDraft({ title, body, source })` ⇒ الـ Panel بيعرض **Preview** (النص اللي هيضاف + المصدر) ⇒ موافقة ⇒ `postMessage` للـ iframe بإجراء `magicly:append-note` ⇒ **Undo** (زر بيرجّع آخر إضافة — بيتخزن آخر draft في الـ provider لحد إغلاق الـ panel). |
-| **⚠️ طرف جديد واحد** | الـ `NotebookEditor` محتاج listener واحد للـ postMessage (إضافة ~20 سطر في `components/notes/NotebookEditor.tsx`). لو عايزين **صفر لمسة** في ملفات الـ notes في P1: البديل هو فتح النوتة في popup (`OpenNotesBeside` الموجود) والمحتوى يتنسخ للحافظة بدل الحقن المباشر — أقل سلاسة بس أضمن نطاقًا. **التوصية:** postMessage، وهو قرار مفتوح (§7-2). |
+| **اللمسة المعتمدة في `NotebookEditor.tsx`** | ✅ قرار المستخدم (§7.1-2): listener واحد (~20 سطر) في `components/notes/NotebookEditor.tsx` — يسمع `magicly:append-note` **من نفس الأوريجين فقط** (فحص `event.origin === window.location.origin`) ويتجاهل أي رسالة تانية (حدث غير معروف / payload أكبر من الحد). دي **اللمسة الوحيدة المسموحة** في ملفات الـ notes في P1. |
 | **النوتة المرتبطة بالدرس** | P1: آخر نوتة اتفتحت من الدرس (localStorage بـ key `lesson-notes:<dayId>`). الربط الدائم بجدول notes مربوطة بالدرس = P4. |
 
 ### 4.4 Practice — الاختبار + الكاش + Flashcards
@@ -433,12 +433,13 @@ alter table public.lesson_content
 - **معيار القبول:** الصفحة تفتح **بدون أي نداء** لـ `/api/lesson/video`. فتح الفيديو ⇒ شغّال جوه الصفحة. التنقل بين التابات والفيديو شغّال ⇒ Mini Player يظهر. قفل الفيديو ⇒ يختفي. مفيش أي CSP جديد.
 - **المخاطر:** منخفضة. واضح: تأجيل البحث بيبطئ أول فتح للتاب (قابل للقبول — skeleton موجود في LessonVideoPlayer). MiniPlayer بـ iframe تاني ⇒ تحميل مزدوج لنفس الفيديو لو اتنين ظاهروا — الحل: واحد بس ظاهر في المرة (الشل يبدّل بينهم).
 
-### P1-6 — Notebook Panel (قراءة + إضافة يدوية)
+### P1-6 — Notebook Panel + الحقن بالـ postMessage (قرار مقفول §7.1-2)
 
-- **الملفات:** جديد `studio/tools/{NotebookPanel,AddToNotebookMenu}.tsx`.
+- **الملفات:** جديد `studio/tools/{NotebookPanel,AddToNotebookMenu}.tsx` · **لمسة معتمدة:** `components/notes/NotebookEditor.tsx` (listener الـ postMessage — ~20 سطر).
 - **الشغل:** panel iframe لـ `/notes` (نفس نمط NotesSplitPanel) + قائمة «حوّل لـ» فوق النص المحدد/الشرح: Note (شغّال في P1 — queueDraft + Preview + Undo) · Flashcard / MCQ / Mind Map (**disabled بالتسمية «جاي قريبًا»** — stubs لـ P4/P5).
-- **معيار القبول:** فتح النوتة جوه الصفحة، إضافة نص من الشرح بـ Preview ثم إضافة، Undo بيرجّع. (لو اتخذ قرار postMessage — §7-2 — الحقن الفعلي جوه النوتة شغال. لو لا: النص بيتنسخ للحافظة ورسالة واضحة).
-- **المخاطر:** متوسطة — مرتبطة بقرار postMessage. النطاق الآمن: panel + copy-to-clipboard بدون أي تعديل في `components/notes/`.
+- **الحقن:** بعد موافقة الـ Preview، الـ Panel يبعت `postMessage(iframe.contentWindow, { type: "magicly:append-note", payload }, same-origin)` — والـ listener في `NotebookEditor.tsx` بيفحص `event.origin` (نفس الأوريجين فقط) + نوع الحدث + حدود الـ payload، ويتجاهل أي حاجة تانية.
+- **معيار القبول:** فتح النوتة جوه الصفحة، إضافة نص من الشرح بـ Preview ثم إضافة ⇒ النص بيظهر جوه النوتة فعلًا، Undo بيرجّع. رسالة postMessage من origin تاني أو نوع تاني ⇒ **متجاهلة** (بيتأكد منها بالتجربة اليدوية).
+- **المخاطر:** منخفضة (بعد القفل) — اللمسة معزولة ومحدودة بفحص origin. ممنوع أي تعديل تاني في `NotebookEditor.tsx` غير الـ listener.
 
 ### P1-7 — Tutor Panel المصغّر + سياق القسم
 
@@ -454,9 +455,9 @@ alter table public.lesson_content
 - **معيار القبول:** أول طلب يولّد ويكتب؛ الطلب التاني بنفس المعاملات بيرجع من الكاش بلا نداء AI (بيبان في `ai_operations` ما فيش صف جديد). تغيير `count` ⇒ مفتاح مختلف ⇒ توليد جديد.
 - **المخاطر:** منخفضة — الجدول موجود بـ RLS وunique index جاهزين. تحفظ: الأسئلة المولّدة قديمة لو الدرس اتعدل — مقبول (الوصف شبه ثابت) و`force` بيتعالج بطلب بدون كاش لاحقًا لو احتجناه.
 
-### P1-9 — تنظيف ما بعد النقل + تنظيف شات ميت إضافي
+### P1-9 — تنظيف ما بعد النقل + حذف StudyTutorWidget (قرار مقفول §7.1-5)
 
-- **الملفات:** `page.tsx` (يبقى <300 سطر) · حذف `StudyTutorWidget` من الصفحة (وظيفته موجودة في Tutor) · تأكيد عدم وجود dead imports.
+- **الملفات:** `page.tsx` (يبقى <300 سطر) · **حذف `StudyTutorWidget` من الصفحة** (✅ قرار معتمد — وظيفته موجودة في Tutor الموحد؛ الملف نفسه يفضل موجود) · تأكيد عدم وجود dead imports.
 - **معيار القبول:** `npm run typecheck` + `npm run lint` نضاف. الصفحة بتشتغل من الرابط المباشر والاحتفال والإكمال شغالين.
 - **المخاطر:** منخفضة.
 
@@ -480,20 +481,27 @@ P1-9 (Cleanup) في الآخر
 4. محادثة الدرس بتذكر اسم الدرس و subject (G4) — اختبار regression.
 5. الاختبار بياخد طريق الكاش في الطلب التاني (G7) — اختبار API.
 6. مفيش أي تغيير في `next.config.ts`.
+7. `NotebookEditor.tsx` ماسمهوش غير لمسة واحدة: listener الـ postMessage (نفس الأوريجين بس) — أي diff تاني في ملفات `components/notes/` يترفض.
+8. `StudyTutorWidget` مش موجود في صفحة الدرس (قرار §7.1-5).
 
 ---
 
 ## 7. قرارات مفتوحة ومخاطر
 
-### 7.1 قرارات محتاجة موافقة المستخدم
+### 7.1 قرارات المستخدم (مقفولة ✅)
 
-| # | القرار | الخيارات | **التوصية** |
-|---|---|---|---|
-| **1** | **CSP `script-src` + `enablejsapi=1`** لليوتيوب (شرط أي checkpoints تلقائية أو seek داخل الصفحة) | (أ) نسمح بتوسيع `script-src` بـ `https://www.youtube-nocookie.com` في `next.config.ts` (سطر 60) — سطح هجوم جديد. (ب) نفضل بدون JS API: checkpoints وروابط الأقسام بتفتح `&t=` في يوتيوب. | **(ب) في P1 وP2** — صفر تغيير أمني، والـ checkpoints بتحصل قيمتها من الـ transcript (T2). مراجعة قرار (أ) لوحدة مستقلة مع P3 لو الـ UX طلّب seek داخلي فعلًا. |
-| **2** | **آلية كتابة الـ AI في النوتة**: postMessage جوه iframe النوت (محتاج listener صغير في `NotebookEditor.tsx`) ولا copy-to-clipboard بس | postMessage = سلاسة كاملة + لمسة في ملف الـ notes. clipboard = صفر لمسة + خطوة يدوية. | **postMessage** — اللمسة صغيرة ومعزولة (listener واحد بيتجاهل أي origin تاني)، والـ Preview + Undo بيحموا من الكتابة الغلط. لو المستخدم رفض، P1 يشتغل بـ clipboard ومايلمشش NotebookEditor خالص. |
-| **3** | **مستويات الشرح الخمسة**: نضيف `deep_dive` و`exam_focus` كمفاتيح جديدة في `explanation` (P2) مع إبقاء القديمة؟ ولا نستبدل؟ | إضافة = توافق رجعي كامل مع المحتوى المخزّن. استبدال = migration على ٩٨٢ صف ونضام مخزّن. | **إضافة مع مطابقة قراءة** — المفاتيح القديمة (`simple/academic/visual/practical`) تفضل صالحة وتتعرض، والجديدة تتولّد عند الطلب. |
-| **4** | **الفيديو المختار يتحفظ في `lesson_content.video`** (عمود jsonb جديد، P2/P3) ولا يفضل بحث كل جلسة؟ | حفظ = استقرار + كلفة أقل + توقيتات محفوظة. بحث = البحث في الكاش in-memory (٣٠ دقيقة) بيفضل فاشل بعد رستارت السيرفر. | **حفظ** — عمود واحد، نفس عقود الراوت الموجودة (`action: "set_video"`). |
-| **5** | **StudyTutorWidget يتنشال من صفحة الدرس** | هو عنصر خامس مبعثر ووظيفته مستبدلة بالـ Tutor الموحد. | **حذف من الصفحة** (الملف نفسه يفضل موجود — بيتستخدم في صفحات تانية لو وجدت). |
+| # | القرار | **القرار النهائي (معتمد من المستخدم)** |
+|---|---|---|
+| **1** | **CSP `script-src` + `enablejsapi=1`** لليوتيوب (شرط أي checkpoints تلقائية أو seek داخل الصفحة) | ✅ **مقبول — مرفوض التوسيع في P1 وP2.** الفيديو يفضل بدون JS API (`next.config.ts` مايتلمسش)، والـ checkpoints وروابط التوقيت بتشتغل عبر `&t=` + الـ transcript (مسار T2) بس. أي إعادة فتح للموضوع = قرار مستقل بعدين. |
+| **2** | **آلية كتابة الـ AI في النوتة** | ✅ **مقبول — postMessage مباشر.** P1-6 بيشمل listener معزول في `NotebookEditor.tsx` (~20 سطر): يسمع حدث `magicly:append-note` **من نفس الأوريجين فقط** ويتجاهل أي رسالة تانية (origin/حرف حدث/حجم payload). بديل الـ clipboard اتشال من الخيارات نهائيًا. |
+| **5** | **StudyTutorWidget يتنشال من صفحة الدرس** | ✅ **مقبول — حذف من الصفحة في P1-9** (الملف نفسه يفضل موجود — بيتستخدم في صفحات تانية لو وجدت). |
+
+### 7.1-b قرارات مؤجلة لـ P2/P3 (لسه مفتوحة — محتاجة موافقة وقت أطوارها)
+
+| # | القرار | **التوصية** |
+|---|---|---|
+| **3** | **مستويات الشرح الخمسة**: نضيف `deep_dive` و`exam_focus` كمفاتيح جديدة في `explanation` (P2) مع إبقاء القديمة؟ ولا نستبدل؟ | **إضافة مع مطابقة قراءة** — المفاتيح القديمة (`simple/academic/visual/practical`) تفضل صالحة وتتعرض، والجديدة تتولّد عند الطلب. |
+| **4** | **الفيديو المختار يتحفظ في `lesson_content.video`** (عمود jsonb جديد، P2/P3) ولا يفضل بحث كل جلسة؟ | **حفظ** — عمود واحد، نفس عقود الراوت الموجودة (`action: "set_video"`). |
 
 ### 7.2 مخاطر معمارية (غير قرارات)
 
@@ -510,7 +518,7 @@ P1-9 (Cleanup) في الآخر
 ## 8. الأطوار التالية (Next — سطر لكل واحد)
 
 - **P2 — AI Teaching Engine:** مستويات الشرح الخمسة فعلًا (deep_dive/exam_focus) + checkpoints لكل قسم من `outline` + مستوى فهم محسوب + resume في الداتابيز (`lesson_content.resume` + `outline` migration `db/48`).
-- **P3 — YouTube Intelligence:** حفظ الفيديو المختار + محاذاة topics بتوقيت الفيديو من `transcript` (T2) + navigation «من القسم للفيديو والعكس» + مراجعة قرار enablejsapi لو لسه مطلوب.
+- **P3 — YouTube Intelligence:** حفظ الفيديو المختار + محاذاة topics بتوقيت الفيديو من `transcript` (T2) + navigation «من القسم للفيديو والعكس» (الفيدباك وروابط `&t=` — بدون enablejsapi حسب القرار المقفول §7.1-1).
 - **P4 — Summaries & Notebook:** ملخصات بأشكالها (`summaries` jsonb) + ربط النوتة دائمًا بالدرس (جدول وليس localStorage) + «حوّل لـ Note» كامل.
 - **P5 — Practice & Assessment:** flashcards من الشرح المخزّن + تحويل أي جزء لـ Flashcard/MCQ/Mind Map + تحليل نتايج الاختبار (`lesson_quiz_attempts`).
 - **P6 — Subject Labs:** مسارات مخصصة لكل مرحلة تعليمية (طب/هندسة/…) فوق نفس بنية الـ Studio — extension points جاهزة (`SpecializationTools` slot).

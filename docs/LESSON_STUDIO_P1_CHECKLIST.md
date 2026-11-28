@@ -19,7 +19,17 @@
 - [x] G4: `shortText()` بيقرا object الدرس.
 - [x] G5: شات واحد (`UnifiedChat`) — شات «سؤال وجواب» الداخلي غير موجود في الصفحة.
 - [ ] G7: `lesson_quiz_cache` غير مستخدم (`app/api/lesson-quiz/route.ts` بيولّد كل مرة) → **مهمة P1-8**.
-- [ ] G8: embed بدون `enablejsapi` → **مقصود يفضل كده في P1** (قرار §7.1-1).
+- [ ] G8: embed بدون `enablejsapi` → **مقصود يفضل كده — قرار مستخدم مقفول** (§7.1-1).
+
+---
+
+## قرارات المستخدم المقفولة (ملزمة — مش قابلة للإعادة فتح في P1)
+
+| # | القرار | الحكم |
+|---|---|---|
+| 1 | CSP `script-src` + `enablejsapi` | ✅ **مقبول — مرفوض التوسيع في P1 وP2**: الفيديو بدون JS API، التوقيت عبر `&t=` + transcript فقط. |
+| 2 | كتابة الـ AI في النوتة | ✅ **postMessage مباشر**: P1-6 يشمل listener معزول (~20 سطر) في `NotebookEditor.tsx` — نفس الأوريجين فقط. بديل clipboard اتشال نهائيًا. |
+| 5 | `StudyTutorWidget` | ✅ **حذف من صفحة الدرس في P1-9.** |
 
 ---
 
@@ -92,19 +102,24 @@
   - [ ] Mini Player يظهر ويختفي صح — مفيش صوت مزدوج.
   - [ ] مفيش أي تغيير في `next.config.ts`.
 
-## P1-6 — Notebook Panel + قائمة «حوّل لـ»
+## P1-6 — Notebook Panel + الحقن بالـ postMessage (قرار مقفول #2)
 
 - **جديد:** `studio/tools/{NotebookPanel,AddToNotebookMenu}.tsx`
+- **لمسة معتمدة وحيدة:** `components/notes/NotebookEditor.tsx` — listener الـ postMessage (~20 سطر).
 - **الشغل:**
   - Panel iframe لـ `/notes` (نفس نمط `NotesSplitPanel` — نفس الأوريجين).
   - `AddToNotebookMenu`: Note (شغّال) / Flashcard / MCQ / Mind Map (**disabled — «جاي قريبًا»**).
-  - مسار الإضافة: `queueNotebookDraft({ title, body, source })` ⇒ Preview ⇒ موافقة ⇒ (حسب قرار §7.1-2) postMessage `magicly:append-note` للـ iframe، **أو** نسخ للحافظة + رسالة.
+  - مسار الإضافة: `queueNotebookDraft({ title, body, source })` ⇒ Preview ⇒ موافقة ⇒ `postMessage(iframe.contentWindow, { type: "magicly:append-note", payload }, same-origin)`.
+  - الـ listener في `NotebookEditor.tsx`: يسمع `magicly:append-note` **من نفس الأوريجين فقط** (فحص `event.origin === window.location.origin`) + نوع الحدث + حدود الـ payload — ويتجاهل أي رسالة تانية.
   - Undo: زر بيرجّع آخر إضافة (آخر draft محفوظ في الـ provider لحد إغلاق الـ panel).
   - آخر نوتة للدرس: localStorage `lesson-notes:<dayId>`.
 - **للمراجعة:**
   - [ ] فتح/قفل الـ panel مايأثرش على التابات.
   - [ ] Preview بيعرض النص والمصدر قبل الكتابة.
-  - [ ] Undo شغال (لو postMessage متبني) أو المسار البديل واضح للمستخدم.
+  - [ ] النص بيظهر جوه النوتة فعلًا بعد الموافقة (الحقن شغال).
+  - [ ] Undo شغال.
+  - [ ] رسالة postMessage من origin تاني أو نوع غير معروف ⇒ **متجاهلة** (تجربة يدوية).
+  - [ ] مفيش أي تعديل تاني في `NotebookEditor.tsx` غير الـ listener.
 
 ## P1-7 — Tutor Panel المصغّر + سياق القسم
 
@@ -132,13 +147,13 @@
   - [ ] تغيير `count` ⇒ توليد جديد.
   - [ ] فشل كتابة الكاش ما يكسر الرد.
 
-## P1-9 — تنظيف + تحقق نهائي
+## P1-9 — تنظيف + حذف StudyTutorWidget (قرار مقفول #5) + تحقق نهائي
 
-- **تعديل:** `page.tsx` (يقل < 300 سطر) · حذف `StudyTutorWidget` من الصفحة (قرار §7.1-5).
+- **تعديل:** `page.tsx` (يقل < 300 سطر) · **حذف `StudyTutorWidget` من الصفحة** (✅ قرار معتمد — الملف نفسه يفضل موجود).
 - **للمراجعة:**
   - [ ] `npm run typecheck` + `npm run lint` نضاف.
-  - [ ] grep نهائي: مفيش `enablejsapi` · مفيش `/api/chat` في صفحة الدرس · مفيش تغيير في `next.config.ts`.
-  - [ ] الدرس الكامل end-to-end: فتح → Learn → شات → فيديو → نوتة → اختبار → إكمال + XP + كوينز + احتفال → الدرس التالي.
+  - [ ] grep نهائي: مفيش `enablejsapi` · مفيش `/api/chat` في صفحة الدرس · مفيش تغيير في `next.config.ts` · `StudyTutorWidget` مش مستورد في صفحة الدرس.
+  - [ ] الدرس الكامل end-to-end: فتح → Learn → شات → فيديو → نوتة (حقن postMessage) → اختبار → إكمال + XP + كوينز + احتفال → الدرس التالي.
   - [ ] موبايل: تابات علوية + Bottom Action Bar + bottom sheets.
 
 ---
@@ -149,13 +164,15 @@
 2. التابات الخمسة + Tutor + Notebook + Navigator شغالين على Desktop وMobile.
 3. Resume بيسترجع آخر موضع من غير استعلام AI.
 4. G4 + G5 + G7 متحقق منهم باختباراتهم المذكورة فوق.
-5. صفر تغييرات في: `next.config.ts` · `/api/unified-ai` · `lib/ai/*` · `components/notes/NotebookEditor.tsx` (إلا لو اتخذ قرار postMessage — §7.1-2).
-6. مفيش migration في P1 (عمود `resume`/`outline`/`video`/`summaries`/`checkpoints` كلهم P2+).
+5. صفر تغييرات في: `next.config.ts` · `/api/unified-ai` · `lib/ai/*`.
+6. `NotebookEditor.tsx` ماسمهوش غير لمسة واحدة: listener الـ postMessage (نفس الأوريجين بس) — أي diff تاني في `components/notes/` يترفض.
+7. `StudyTutorWidget` مش موجود في صفحة الدرس (قرار مقفول #5).
+8. مفيش migration في P1 (عمود `resume`/`outline`/`video`/`summaries`/`checkpoints` كلهم P2+).
 
-## أسئلة محتاجة قرار قبل/أثناء P1 (من التصميم §7.1)
+## قرارات مقفولة من المستخدم (ملزمة)
 
-1. **CSP `script-src` + enablejsapi** — التوصية: **لا** في P1 (روابط `&t=`).
-2. **كتابة AI في النوتة** — التوصية: postMessage مع listener معزول؛ البديل clipboard بدون لمسة notes.
-3. (P2+) مستويات الشرح الخمسة كإضافة مع مطابقة قراءة — مش استبدال.
-4. (P2/P3+) حفظ الفيديو المختار في `lesson_content.video`.
-5. حذف `StudyTutorWidget` من صفحة الدرس — التوصية: نعم.
+1. **CSP/enablejsapi — مرفوض التوسيع في P1 وP2**: الفيديو بدون JS API، التوقيت عبر `&t=` + transcript فقط.
+2. **كتابة AI في النوتة — postMessage مباشر**: listener معزول في `NotebookEditor.tsx` (نفس الأوريجين فقط) — ضمن P1-6. بديل clipboard اتشال.
+3. (P2+) مستويات الشرح الخمسة كإضافة مع مطابقة قراءة — التوصية القائمة، القرار النهائي وقت P2.
+4. (P2/P3+) حفظ الفيديو المختار في `lesson_content.video` — التوصية القائمة، القرار النهائي وقت الطور.
+5. **حذف `StudyTutorWidget` من صفحة الدرس — مقبول**: ضمن P1-9.
