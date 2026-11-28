@@ -30,6 +30,17 @@ export function rememberReferralCodeFromUrl(search: string): void {
   }
 }
 
+/** حفظ كود مكتوب يدويًا (من اللاندينج أو أي صفحة) — يرجّع true لو اتحفظ. */
+export function saveReferralCode(code: unknown): boolean {
+  if (!isValidReferralCode(code)) return false;
+  try {
+    window.localStorage.setItem(REFERRAL_KEY, (code as string).trim().toUpperCase());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** بيقرا الكود المحفوظ (من غير ما يمسحه — المسح بعد التسجيل الناجح بس). */
 export function readStoredReferralCode(): string | null {
   try {

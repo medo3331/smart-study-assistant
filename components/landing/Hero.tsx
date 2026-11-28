@@ -7,6 +7,7 @@ import PreviewCard from './PreviewCard';
 import { TopControls } from '@/components/TopControls';
 import { useLanguage } from '@/lib/i18n/LanguageProvider';
 import { createClient } from '@/lib/supabase/client';
+import { readStoredReferralCode, saveReferralCode } from '@/lib/referral/client';
 import styles from './Hero.module.css';
 
 export default function Hero() {
@@ -81,6 +82,24 @@ export default function Hero() {
      زر الهامبرجر، وده بيفتح لستة تحت النافبار بنفس اللينكات. */
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+
+  /* كود الدعوة على اللاندينج: المستخدم يكتبه هنا (أو يجي منه من ?ref=)
+     وبيتحفظ فورًا لما يبقى صالح — وصفحة التسجيل بتقراه وتكمّل بيه. */
+  const [promo, setPromo] = useState('');
+  const [promoSaved, setPromoSaved] = useState(false);
+
+  useEffect(() => {
+    const stored = readStoredReferralCode();
+    if (!stored) return;
+    const id = setTimeout(() => setPromo(stored), 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  function handlePromoChange(value: string): void {
+    const up = value.toUpperCase().replace(/[^A-Z2-9-]/g, '').slice(0, 32);
+    setPromo(up);
+    setPromoSaved(saveReferralCode(up));
+  }
 
   return (
     <section dir="rtl" id="top" className={styles.hero}>
@@ -190,6 +209,25 @@ export default function Hero() {
             <Link href="/features" className={styles.btnGhost}>
               {t.hero_cta_secondary}
             </Link>
+          </div>
+          {/* حقل كود الدعوة — اللي جاي من رابط صاحبه بيلقاه متعبّي، واللي معاه
+              كود مكتوب بيكتبه، والاتنين بيتحفظوا ويُطبّقوا وقت التسجيل. */}
+          <div className={styles.referralRow}>
+            <label className={styles.referralLabel} htmlFor="landing-referral">
+              {t.landing_referral_label}
+            </label>
+            <input
+              id="landing-referral"
+              className={styles.referralInput}
+              type="text"
+              dir="ltr"
+              maxLength={32}
+              value={promo}
+              onChange={(e) => handlePromoChange(e.target.value)}
+              placeholder="MAGIC-XXXX"
+              autoComplete="off"
+            />
+            {promoSaved && <span className={styles.referralSaved}>{t.landing_referral_saved}</span>}
           </div>
           <div className={styles.trust}>
             <span><i>✓</i> {t.trust2}</span>

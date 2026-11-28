@@ -427,6 +427,8 @@ export type Dictionary = {
   register_submit: string;
   register_referral_label: string;
   register_referral_hint: string;
+  landing_referral_label: string;
+  landing_referral_saved: string;
   register_pw_weak: string;
   register_pw_medium: string;
   register_pw_strong: string;
@@ -868,6 +870,8 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     register_submit: 'إنشاء الحساب',
     register_referral_label: 'كود دعوة صاحبك (اختياري)',
     register_referral_hint: 'لو صاحبك بعتلك كود دعوة، اكتبه هنا — هياخد كريدت مكافأة بعد ما تأكّد حسابك.',
+    landing_referral_label: 'عندك كود دعوة؟',
+    landing_referral_saved: '✓ اتسجّل — هيُطبّق تلقائيًا وقت التسجيل',
     register_pw_weak: 'ضعيفة — زوّد الحروف والأرقام',
     register_pw_medium: 'متوسطة — كويسة، وتقدر تقوّيها أكتر',
     register_pw_strong: 'قوية ✓',
@@ -1305,6 +1309,8 @@ export const dictionaries: Record<'ar' | 'en', Dictionary> = {
     register_submit: 'Create account',
     register_referral_label: "Friend's invite code (optional)",
     register_referral_hint: "If a friend sent you an invite code, enter it here — they get bonus credit once you confirm your account.",
+    landing_referral_label: 'Got an invite code?',
+    landing_referral_saved: '✓ Saved — applied automatically at signup',
     register_pw_weak: 'Weak — add more letters and numbers',
     register_pw_medium: 'Medium — good, could be stronger',
     register_pw_strong: 'Strong ✓',
