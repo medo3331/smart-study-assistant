@@ -35,7 +35,7 @@ import { ALL_AGENTS } from "@/lib/ai/agents/registry";
 export const metadata: Metadata = {
   title: "الباقات والأسعار",
   description:
-    "باقات Magiclly: ما المتاح مجانًا اليوم بالحدود الفعلية، والباقتين الجايين (Pro وUltra) — بالأرقام الحقيقية مش التقريبية.",
+    "باقات Magiclly: المجانية بحدودها الفعلية، وخطط الأساسية وPro وUltra — بالأرقام الحقيقية مش التقريبية.",
 };
 
 /** أسماء عربية للوكلاء — المعرّفات من AGENT_LIMITS والوصف من registry. */
@@ -119,6 +119,22 @@ export default async function PricingPage() {
         `الزائر من غير تسجيل: ${GUEST_LIMIT} طلبات كل ${GUEST_WINDOW_HOURS} ساعة`,
       ],
       cta: { label: "ابدأ مجانًا", href: "/register" },
+    },
+    {
+      id: "basic",
+      name: "الأساسية (Basic)",
+      icon: Sparkles,
+      tagline: "خطوة خفيفة فوق المجانية — للمستخدم اللي محتاج حدود أكبر شوية.",
+      price: "99",
+      priceNote: "شهريًا",
+      available: true,
+      features: [
+        `${FREE_TEXT_LIMIT * 2} رسالة ذكية كل ${FREE_TEXT_WINDOW_HOURS} ساعات`,
+        `${FREE_VISION_LIMIT * 2} تحليلات صور وملفات كل ${FREE_VISION_WINDOW_HOURS} ساعات`,
+        "حدود أعلى للوكلاء (اختبارات، بحث، ملفات)",
+        "كل النماذج المجانية المتاحة على المنصة",
+      ],
+      cta: { label: "اشترك الآن", href: "/checkout/basic" },
     },
     {
       id: "pro",

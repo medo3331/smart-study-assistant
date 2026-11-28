@@ -52,7 +52,7 @@ export function buildPublicPlans(
     }));
 }
 
-export type UpgradeTarget = { targetKey: "pro" | "ultra"; label: string };
+export type UpgradeTarget = { targetKey: "basic" | "pro" | "ultra"; label: string };
 
 /**
  * الباقة التالية للترقية. free → pro، pro → ultra، ultra → لا شيء.
@@ -60,8 +60,9 @@ export type UpgradeTarget = { targetKey: "pro" | "ultra"; label: string };
  */
 export function nextUpgrade(plan: string | null | undefined): UpgradeTarget | null {
   const key = (plan ?? "").trim().toLowerCase();
-  if (key === "free" || key === "") return { targetKey: "pro", label: "ترقية إلى Pro" };
-  if (key === "pro" || key === "premium") return { targetKey: "ultra", label: "ترقية إلى Ultra" };
+  if (key === "free" || key === "") return { targetKey: "basic", label: "خطة أساسية Basic" };
+  if (key === "basic") return { targetKey: "pro", label: "خطة Pro" };
+  if (key === "pro" || key === "premium") return { targetKey: "ultra", label: "خطة Ultra" };
   return null;
 }
 

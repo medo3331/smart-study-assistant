@@ -6,7 +6,7 @@
  */
 
 export type CreditStatusLevel = "ok" | "low" | "critical" | "exhausted";
-export type NextPlan = "pro" | "ultra" | null;
+export type NextPlan = "basic" | "pro" | "ultra" | null;
 
 /** عتبات النسبة المئوية المتبقية. */
 export const CRITICAL_PERCENT = 10;
@@ -16,6 +16,7 @@ export const LOW_PERCENT = 20;
 const TIER_TO_PLAN: Record<string, string> = {
   free: "free",
   premium: "pro", // ميراث: premium كانت تعني الباقة المدفوعة القديمة
+  basic: "basic",
   pro: "pro",
   ultra: "ultra",
 };
@@ -26,13 +27,14 @@ export function normalizeTier(tier: string | null | undefined): string {
   return TIER_TO_PLAN[key] ?? "free";
 }
 
-/** الباقة التالية للترقية: free/premium → pro، pro → ultra، ultra → لا شيء. */
+/** الباقة التالية: free → basic، basic → pro، pro → ultra، ultra → لا شيء. */
 export function nextPlanFor(tier: string | null | undefined): NextPlan {
   const key = (tier ?? "").trim().toLowerCase();
   if (key === "ultra") return null;
   if (key === "pro") return "ultra";
+  if (key === "basic") return "pro";
   // free / premium / فارغ / أي قيمة مجهولة
-  return "pro";
+  return "basic";
 }
 
 export function checkoutUrlFor(plan: NextPlan): string | null {

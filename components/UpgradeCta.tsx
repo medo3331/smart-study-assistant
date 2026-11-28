@@ -16,8 +16,10 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
       تنقّل.
 
    ⚠️ مين يشوفه؟
-      - مستخدم **مجاني** → يشوفه (ده هدفه).
-      - مستخدم **pro / ultra** → مايشوفش (هو مشترك أصلاً).
+      - مستخدم **مجاني قرب من حدّه أو خلّصه** (low/critical/exhausted) → يشوفه
+        — اقتراح في وقت المناسبة، مش إلحاح دايم.
+      - مستخدم **مجاني لسه في استخدامه الطبيعي** (ok) → مايشوفش.
+      - مستخدم **pro / ultra / basic** → مايشوفش (هو مشترك أصلاً).
       - **زائر** (من غير جلسة) → يشوفه. الـ endpoint بيرجّع 401 للزائر،
         فمحدش يعرف باقته — والزائر مش مشترك بأي باقة، فينفع يتعرض عليه.
 
@@ -51,6 +53,10 @@ export function UpgradeCta({ className }: { className?: string }) {
   // باقة مدفوعة → الزر مش لازم (هو مشترك أصلاً).
   if (status && normalizeTier(status.tier) !== "free") return null;
 
+  // 💡 «اقتراح مش إجباري»: الزر يظهر بس لما المستخدم يقرب من الحد أو يخلصه
+  //    (low/critical/exhausted) — مش ظاهر دايمًا لمستخدم مجاني بستخدم عادي.
+  if (status && status.status === "ok") return null;
+
   return (
     <Link
       href="/pricing"
@@ -59,7 +65,7 @@ export function UpgradeCta({ className }: { className?: string }) {
         className,
       )}
     >
-      <span>{isAr ? "ترقية" : "Upgrade"}</span>
+      <span>{isAr ? "الباقات" : "Plans"}</span>
       <ArrowUpRight aria-hidden size={14} strokeWidth={2.5} />
     </Link>
   );
