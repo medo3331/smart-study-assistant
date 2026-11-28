@@ -431,13 +431,22 @@ export default function CommunityHubPage() {
             لاقي زمايلك في نفس جامعتك وتخصصك — أصدقاء، متابعة، واكتشاف طلاب بيذاكروا زيّك.
           </p>
         </div>
-        <Link
-          href="/community/competitions"
-          className="inline-flex items-center gap-2 rounded-full border border-rule bg-paper-2 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-paper/50"
-        >
-          <Trophy className="h-4 w-4" />
-          التحديات والمسابقات
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/community/groups"
+            className="inline-flex items-center gap-2 rounded-full border border-rule bg-paper-2 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-paper/50"
+          >
+            <Users className="h-4 w-4" />
+            المجموعات
+          </Link>
+          <Link
+            href="/community/competitions"
+            className="inline-flex items-center gap-2 rounded-full border border-rule bg-paper-2 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-paper/50"
+          >
+            <Trophy className="h-4 w-4" />
+            التحديات والمسابقات
+          </Link>
+        </div>
       </header>
 
       {actionError && (
