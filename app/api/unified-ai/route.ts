@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildWorkspaceSourceContext } from "@/lib/ai/workspace-source-context";
 import { getWorkspaceDigest } from "@/lib/workspace/digest";
 import { classifyChatIntent } from "@/lib/ai/chat-intent";
+import { buildPersonaDirective, selectMagicPersona, type MagicPersonaId } from "@/lib/magic/personas";
 
 import { unifiedAI } from "@/lib/unified-ai/unified-ai";
 import { getCreditCost } from "@/lib/ai/credit-pricing";
@@ -745,6 +746,9 @@ export async function POST(req: Request) {
 
     // ---- Unified brain (من /api/chat): شخصية الطالب + سياقه الدراسي — best-effort ----
     // للمسجلين فقط؛ الزوار والمجهولون يكملون بدونها ولا يتعطلون.
+    let selectedPersonaId: MagicPersonaId | null = null;
+    let personaRoutingReason: string | null = null;
+
     const ctxInput = context as unknown as MagiclyContextInput;
     const rawMode = (context as Record<string, unknown>)?.mode;
     const rawConversationId = (context as Record<string, unknown>)?.conversationId;
@@ -761,6 +765,26 @@ export async function POST(req: Request) {
       try {
         const studentContext = await getStudentContext(supabase, userId, ctxInput);
         const selectedMode = parseMode(rawMode, prompt, intentResult.intent);
+
+        // 🎭 Persona Orchestrator — اختيار الشخصية في الخلفية: اختيار صريح ← محتوى الرسالة ← سياق الصفحة ← افتراضي ماجيك.
+        const rawPersona = typeof context.persona === "string" ? context.persona : null;
+        const rawPage = typeof context.page === "string" ? context.page : null;
+        const personaSelection = selectMagicPersona({
+          prompt,
+          intent: intentResult.intent,
+          page: rawPage,
+          explicitPersona: rawPersona,
+        });
+        selectedPersonaId = personaSelection.persona;
+        personaRoutingReason = personaSelection.reason;
+        if (input.usage) {
+          input.usage.diagnostics = {
+            ...(input.usage.diagnostics ?? {}),
+            persona_id: personaSelection.persona,
+            routing_reason: personaSelection.reason,
+          };
+        }
+        console.log("[UNIFIED-AI DEBUG] persona:", personaSelection.persona, "reason:", personaSelection.reason, personaSelection.matchedKeyword ?? "");
         const toolFacts = await getStudyToolFacts(supabase, userId, ctxInput, prompt, { allowFileSearch: intentResult.intent === "WORKSPACE_SEARCH" });
         let workspaceDigest: string | null = null;
         try {
@@ -786,6 +810,16 @@ export async function POST(req: Request) {
         input.system = personaPrompt
           ? `${personaPrompt}\n\n--- السياق التعليمي الإضافي ---\n${magiclySystem}`
           : magiclySystem;
+        // 🎭 تعليمات الشخصية المختارة تُضاف فوق نظام Magic الموحد (مش بداله) — الرد يفضل واحد في نفس الشات.
+        const personaDirective = buildPersonaDirective(personaSelection.persona, {
+          subject: studentContext.subject,
+          lesson: studentContext.lesson,
+          stage: studentContext.stage,
+          grade: studentContext.grade,
+        });
+        if (personaDirective) {
+          input.system = `${input.system}\n\n--- شخصية الرد ---\n${personaDirective}`;
+        }
         // 📝 قواعد طلب الامتحان — الطلب الناقص (ناقصه العدد مثلاً) بيعدّي
         //    للموديل، والقواعد بتقولله اسأل سؤالًا واحدًا محددًا مش سلسلة.
         input.system = `${input.system}\n\n--- قواعد طلب الامتحان ---\n${EXAM_REQUEST_PROMPT_RULES}`;
@@ -1142,7 +1176,13 @@ export async function POST(req: Request) {
       sourceTitle: workspaceSourceTitle || undefined,
       agentUsed: result.agentUsed,
       extractedText: result.extractedText,
-      metadata: { ...result.metadata, modelUsed: modelToUse, resolvedVia },
+      metadata: {
+        ...result.metadata,
+        modelUsed: modelToUse,
+        resolvedVia,
+        ...(selectedPersonaId ? { persona: selectedPersonaId } : {}),
+        ...(personaRoutingReason ? { personaReason: personaRoutingReason } : {}),
+      },
       reasoning: result.reasoning,
       conversationId: savedConversationId || undefined,
     };
