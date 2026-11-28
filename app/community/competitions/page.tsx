@@ -60,7 +60,7 @@ export default function CommunityPage() {
   const [streak, setStreak] = useState(1);
   const [quizSubject, setQuizSubject] = useState("مراجعة عامة");
 
-  const [activeTab, setActiveTab] = useState<"leaderboard" | "competition">("leaderboard");
+  const [activeTab, setActiveTab] = useState<"leaderboard" | "competition" | "challenges">("leaderboard");
   const [timeLeft, setTimeLeft] = useState(getTimeUntilWeekEnd());
 
   // لوحة الصدارة الرئيسية (XP) — مستخدمين حقيقيين من profiles
@@ -74,6 +74,38 @@ export default function CommunityPage() {
   const [compLoading, setCompLoading] = useState(true);
   const [myBest, setMyBest] = useState<MyBest | null>(null);
   const [showQuiz, setShowQuiz] = useState(false);
+
+  // تحديات المجتمع (C14)
+  type Challenge = {
+    id: string;
+    slug: string;
+    title: string;
+    description: string;
+    emoji: string;
+    hashtag: string;
+    reward_coins: number;
+    ends_at: string;
+    participants: number;
+    entries: number;
+    my_entry: { status: string; post_id: string | null } | null;
+  };
+  type ChallengeBoardEntry = {
+    user_id: string;
+    display_name: string;
+    handle: string | null;
+    avatar_url: string | null;
+    post_id: string | null;
+    post_body: string | null;
+    likes: number;
+    is_winner: boolean;
+  };
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [challengesLoading, setChallengesLoading] = useState(true);
+  const [challengeBoards, setChallengeBoards] = useState<Record<string, ChallengeBoardEntry[]>>({});
+  const [boardLoadingId, setBoardLoadingId] = useState<string | null>(null);
+  const [boardOpenId, setBoardOpenId] = useState<string | null>(null);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [challengeNote, setChallengeNote] = useState<string | null>(null);
 
   // 🏆 لوحة الصدارة الرئيسية: أعلى ٢٠ بالـ XP + ترتيبك الحقيقي عبر عدّ الأعلى منك
   const loadBoard = useCallback(
@@ -135,6 +167,54 @@ export default function CommunityPage() {
     setCompLoading(false);
   }, [supabase]);
 
+  // 🔥 تحديات المجتمع — فعالية حقيقية: هاشتاج + جائزة كوينز + تتبّع تلقائي
+  const loadChallenges = useCallback(async () => {
+    setChallengesLoading(true);
+    try {
+      const res = await fetch("/api/community/challenges", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) setChallenges(data.challenges ?? []);
+    } catch { /* تجاهل */ }
+    finally { setChallengesLoading(false); }
+  }, []);
+
+  const loadChallengeBoard = useCallback(async (challengeId: string) => {
+    setBoardLoadingId(challengeId);
+    try {
+      const res = await fetch("/api/community/challenges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "leaderboard", challengeId }),
+      });
+      const data = await res.json();
+      if (data.success) setChallengeBoards((prev) => ({ ...prev, [challengeId]: data.entries ?? [] }));
+    } catch { /* تجاهل */ }
+    finally { setBoardLoadingId(null); }
+  }, []);
+
+  const joinChallenge = useCallback(async (challengeId: string) => {
+    setJoiningId(challengeId);
+    setChallengeNote(null);
+    try {
+      const res = await fetch("/api/community/challenges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "join", challengeId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChallengeNote("انضممت للتحدي ✨ انشر مشاركتك بالهاشتاج في المجتمع وهتتسجّل لوحدها.");
+        await loadChallenges();
+      } else {
+        setChallengeNote(data.error || "اترفض الانضمام.");
+      }
+    } catch {
+      setChallengeNote("مشكلة شبكة — حاول تاني.");
+    } finally {
+      setJoiningId(null);
+    }
+  }, [loadChallenges]);
+
   // 🔴 تحميل المستخدم الحالي + الاسم + المادة، وبعدين اللوحات
   useEffect(() => {
     const load = async () => {
@@ -177,7 +257,7 @@ export default function CommunityPage() {
       setStreak(curStreak);
       setLoading(false);
 
-      await Promise.all([loadBoard(uid, curXp, curStreak), loadCompetition()]);
+      await Promise.all([loadBoard(uid, curXp, curStreak), loadCompetition(), loadChallenges()]);
     };
     load();
   }, [supabase, loadBoard, loadCompetition]);
@@ -231,6 +311,7 @@ export default function CommunityPage() {
           {([
             { id: "leaderboard", label: "الصدارة" },
             { id: "competition", label: "المسابقة" },
+            { id: "challenges", label: "التحديات" },
           ] as const).map((t) => (
             <button
               key={t.id}
@@ -303,6 +384,120 @@ export default function CommunityPage() {
                   ))
                 )}
               </div>
+            </motion.div>
+          ) : activeTab === "challenges" ? (
+            <motion.div
+              key="challenges"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="space-y-4"
+            >
+              <div className="sheet-card sheet-card-live p-5">
+                <p className="eyebrow eyebrow-flush mb-1.5">تحديات المجتمع</p>
+                <p className="text-xs text-ink-soft leading-relaxed m-0">
+                  انضم للتحدي، وانشر مشاركتك في المجتمع بالهاشتاج بتاعه — المشاركة بتتسجّل
+                  لوحدها، واللي يجمع أكتر لايكات يكسب جائزة الكوينز 🪙
+                </p>
+              </div>
+
+              {challengeNote && (
+                <div className="notice">
+                  <p className="m-0 text-[11px] leading-relaxed">{challengeNote}</p>
+                </div>
+              )}
+
+              {challengesLoading ? (
+                <p className="text-xs text-ink-soft text-center py-8 animate-pulse">بيحمّل التحديات…</p>
+              ) : challenges.length === 0 ? (
+                <div className="sheet-card p-6 text-center">
+                  <p className="tag m-0">مفيش تحديات شغالة دلوقتي — استنّي التحدي الجاي 👀</p>
+                </div>
+              ) : (
+                challenges.map((ch) => {
+                  const endIn = new Date(ch.ends_at).getTime() - Date.now();
+                  const daysLeft = Math.max(0, Math.floor(endIn / 86_400_000));
+                  const hoursLeft = Math.max(0, Math.floor((endIn % 86_400_000) / 3_600_000));
+                  const myStatus = ch.my_entry?.status;
+                  return (
+                    <div key={ch.id} className="sheet-card p-5 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span className="text-2xl shrink-0" aria-hidden>{ch.emoji}</span>
+                          <div className="min-w-0">
+                            <h3 className="h3 !text-base leading-snug">{ch.title}</h3>
+                            <p className="text-xs text-ink-soft leading-relaxed mt-1">{ch.description}</p>
+                          </div>
+                        </div>
+                        <span className="tag shrink-0 whitespace-nowrap">
+                          🪙 <span className="ltr-num tnum">{ch.reward_coins}</span>
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] mono text-ink-soft">
+                        <span className="bg-paper-3 rounded-[6px] px-2 py-1 font-bold text-ink" dir="rtl">
+                          #{ch.hashtag}
+                        </span>
+                        <span>⏳ باقي <span className="ltr-num tnum">{daysLeft}</span> يوم و<span className="ltr-num tnum">{hoursLeft}</span> ساعة</span>
+                        <span>👥 <span className="ltr-num tnum">{ch.participants}</span> مشارك</span>
+                        <span>📨 <span className="ltr-num tnum">{ch.entries}</span> مشاركة</span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {!myStatus ? (
+                          <button
+                            onClick={() => void joinChallenge(ch.id)}
+                            disabled={joiningId === ch.id}
+                            className="btn btn-marker flex-1 text-sm disabled:opacity-60"
+                          >
+                            {joiningId === ch.id ? "بيحمّل…" : "انضم للتحدي"}
+                          </button>
+                        ) : (
+                          <span className="tag flex-1 justify-center bg-emerald-50 text-emerald-700 rounded-[6px] py-2">
+                            {myStatus === "winner" ? "🏆 كسبت التحدي ده!" : myStatus === "submitted" ? "✅ مشاركتك متسجّلة" : "✅ انضممت — انشر مشاركتك"}
+                          </span>
+                        )}
+                        <a href={`/community?hashtag=${encodeURIComponent(ch.hashtag)}`} className="btn btn-quiet text-sm whitespace-nowrap">
+                          انشر مشاركتك
+                        </a>
+                        <button
+                          onClick={() => {
+                            if (!challengeBoards[ch.id]) void loadChallengeBoard(ch.id);
+                            setBoardOpenId((prev) => (prev === ch.id ? null : ch.id));
+                          }}
+                          className="btn btn-quiet text-sm whitespace-nowrap"
+                        >
+                          {boardOpenId === ch.id ? "اقفل الصدارة" : "الصدارة"}
+                        </button>
+                      </div>
+
+                      {boardOpenId === ch.id && (
+                        <div className="bg-paper border border-rule rounded-[var(--r-sm)] p-3 space-y-1.5">
+                          {boardLoadingId === ch.id ? (
+                            <p className="text-xs text-ink-soft text-center py-4">بيحمّل…</p>
+                          ) : (challengeBoards[ch.id] ?? []).length === 0 ? (
+                            <p className="text-xs text-ink-soft text-center py-4 m-0">
+                              لسه مفيش مشاركات — كن أول واحد!
+                            </p>
+                          ) : (
+                            (challengeBoards[ch.id] ?? []).map((e, i) => (
+                              <div key={e.user_id} className="flex items-center justify-between gap-2 p-2 rounded-[var(--r-sm)] bg-paper-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="w-6 text-center mono text-xs font-bold shrink-0">{rankBadge(i)}</span>
+                                  <span className="text-xs font-bold text-ink truncate">
+                                    {e.is_winner && "🏆 "}{e.display_name}
+                                  </span>
+                                </div>
+                                <span className="mono text-xs tnum ltr-num shrink-0">❤️ {e.likes}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </motion.div>
           ) : (
             <motion.div
