@@ -61,7 +61,8 @@ export async function searchUsers(
   statusFilter: string = "all",
   codeFilter: string = "all",
   createdAfter: string | null = null,
-  createdBefore: string | null = null
+  createdBefore: string | null = null,
+  opts?: { page?: number; pageSize?: number; totalRef?: { value: number | null } }
 ): Promise<UserSearchResult[]> {
   // ⚠️ أمان (P0، 2026-11): كانت بتشتغل بـ service_role بدون أي فحص — أي حد
   // يقدر يسحب كل المستخدمين وإيميلاتهم (من auth.users كمان).
@@ -76,9 +77,17 @@ export async function searchUsers(
     const privileged = createServiceClient();
     const q = (query || "").trim();
 
+    // ترقيم الصفحات: بلا opts → السلوك القديم (أول 50). مع page/totalRef → نطاق + العدد الكلي.
+    const pageSize = Math.min(Math.max(opts?.pageSize ?? 50, 1), 500);
+    const pageNum = Math.max(opts?.page ?? 1, 1);
+    const usePaging = !!opts && (!!opts.totalRef || !!opts.page);
+
     let baseQuery = privileged
       .from("profiles")
-      .select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at");
+      .select(
+        "id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at",
+        usePaging ? ({ count: "exact" } as const) : undefined
+      );
 
     let codeMatchUserId: string | null = null;
     if (isUuid(q)) {
@@ -111,7 +120,10 @@ export async function searchUsers(
 
     baseQuery = baseQuery.order("created_at", { ascending: false, nullsFirst: false });
 
-    const { data, error } = await baseQuery.limit(50);
+    const { data, error, count: totalCount } = await (usePaging
+      ? baseQuery.range((pageNum - 1) * pageSize, pageNum * pageSize - 1)
+      : baseQuery.limit(50));
+    if (usePaging && opts?.totalRef) opts.totalRef.value = totalCount ?? null;
     let searchRows = data ?? [];
     if (!error && codeMatchUserId && !searchRows.some((row: any) => row.id === codeMatchUserId)) {
       const { data: codeProfile } = await privileged.from("profiles").select("id, display_name, email, persona, role, public_user_code, is_banned, banned_at, ban_reason, created_at").eq("id", codeMatchUserId).maybeSingle();
@@ -263,6 +275,35 @@ export async function searchUsers(
     console.error("[admin users-search] failed:", e?.message || e);
     throw new Error(e?.message || "searchUsers failed");
   }
+}
+
+export type PagedUsers = {
+  rows: UserSearchResult[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * بحث المستخدمين بترقيم صفحات كامل — يعرض كل المسجلين صفحة صفحة (لا حد 50 صلب).
+ * total = عدد profiles المطابق للفلاتر (count exact من الداتابيز).
+ */
+export async function searchUsersPaged(
+  query: string,
+  planFilter: string = "all",
+  statusFilter: string = "all",
+  codeFilter: string = "all",
+  createdAfter: string | null = null,
+  createdBefore: string | null = null,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<PagedUsers> {
+  const totalRef: { value: number | null } = { value: null };
+  const rows = await searchUsers(
+    query, planFilter, statusFilter, codeFilter, createdAfter, createdBefore,
+    { page, pageSize, totalRef }
+  );
+  return { rows, total: totalRef.value ?? rows.length, page, pageSize };
 }
 
 type UserOperationalData = Pick<UserSearchResult,

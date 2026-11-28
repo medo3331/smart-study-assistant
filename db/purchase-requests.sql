@@ -73,6 +73,8 @@ create table if not exists public.purchase_requests (
   admin_note text,
   reviewed_by uuid,
   reviewed_at timestamptz,
+  -- الطلبات المُرسلة عبر رسايل الدعم: تذكرة المحادثة المرتبطة
+  ticket_id uuid references public.support_tickets(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   -- طلب كريدت لازم يحجز الحزمة، وطلب باقة لازم يحجز المفتاح
@@ -84,6 +86,8 @@ create index if not exists idx_purchase_requests_user
   on public.purchase_requests (user_id, created_at desc);
 create index if not exists idx_purchase_requests_status
   on public.purchase_requests (status, created_at desc);
+create index if not exists idx_purchase_requests_ticket
+  on public.purchase_requests (ticket_id);
 
 alter table public.purchase_requests enable row level security;
 

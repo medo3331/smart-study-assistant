@@ -217,6 +217,14 @@ export default function StoreClient({
                           </button>
                         </>
                       )}
+                      {r.ticket_id && (
+                        <a
+                          href={`/inbox?category=support&ticket=${encodeURIComponent(r.ticket_id)}`}
+                          className="text-xs text-violet-300 underline"
+                        >
+                          محادثة الدعم ↗
+                        </a>
+                      )}
                       <span className="text-xs text-[#5A6180]">
                         {new Date(r.created_at).toLocaleDateString("ar-EG")}
                       </span>
