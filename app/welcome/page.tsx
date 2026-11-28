@@ -139,7 +139,7 @@ export default function WelcomePage() {
                 const next = currentNext();
                 // مفيش next محدد؟ المعنى إن الدخول ده من بره أي تدفق —
                 // الوجهة الطبيعية بعد التسجيل هي الأونبوردنج نفسه.
-                router.push(`/register?next=${encodeURIComponent(next === "/dashboard" ? "/assessment" : next)}`);
+                router.push(`/register?next=${encodeURIComponent(next === "/dashboard" ? "/onboarding" : next)}`);
               }}
             >
               {t.welcome_cta_start}
