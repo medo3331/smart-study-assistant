@@ -1,8 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
-
-type ServiceUsage = { id: string; label: string; limit: number; used: number; remaining: number };
-type QuotaData = { tier: string; credits: number; messages: { used: number; limit: number }; services: ServiceUsage[] };
+import { usePlanQuota } from "@/lib/upsell/use-plan-quota";
 
 const TIER_META: Record<string, { label: string; color: string; badge: string }> = {
   free: { label: "Free", color: "from-slate-500 to-slate-700", badge: "🌱" },
@@ -11,15 +8,8 @@ const TIER_META: Record<string, { label: string; color: string; badge: string }>
 };
 
 export function PlanQuotaCard() {
-  const [data, setData] = useState<QuotaData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/me/plan-quota")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setData(d))
-      .finally(() => setLoading(false));
-  }, []);
+  // يعيد الجلب تلقائيًا عند الرجوع للتاب وحدث ai-credits-changed — الرصيد لا يبقى قديمًا
+  const { data, loading } = usePlanQuota();
 
   if (loading) {
     return (

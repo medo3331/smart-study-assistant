@@ -1,32 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Coins, CreditCard, Wallet } from "lucide-react";
+import { Coins, CreditCard, RefreshCw, Wallet } from "lucide-react";
 import { PageShell, DataNotice, LoadingSheets } from "@/app/dashboard/components/PageShell";
+import { usePlanQuota } from "@/lib/upsell/use-plan-quota";
 
 /* ==========================================================================
    الرصيد والباقة
 
    البند اللي في القايمة الجانبية («الرصيد») كان بيوصل لصفحة مش موجودة.
-   الصفحة دي بتقرا نفس مسار `/api/me/plan-quota` اللي صفحة البروفايل
-   بتقرا منه، فالأرقام متطابقة — مفيش حساب تاني ولا مصدر بيانات جديد.
+   الصفحة بتقرا من /api/me/plan-quota عبر usePlanQuota — يعيد الجلب
+   تلقائيًا عند الرجوع للتاب وبعد كل استهلاك كريدت (حدث ai-credits-changed)،
+   فالرقم مش بيفضل قديم بعد استخدام الذكاء الاصطناعي.
    ========================================================================== */
-
-interface QuotaService {
-  id: string;
-  label: string;
-  limit: number;
-  used: number;
-  remaining: number;
-}
-
-interface Quota {
-  tier?: string;
-  credits?: number;
-  messages?: { used: number; limit: number };
-  services?: QuotaService[];
-}
 
 const TIER_LABEL: Record<string, string> = {
   free: "المجانية",
@@ -35,31 +21,14 @@ const TIER_LABEL: Record<string, string> = {
 };
 
 export default function BalancePage() {
-  const [quota, setQuota] = useState<Quota | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // جلب + إعادة جلب تلقائية (focus / visibility / ai-credits-changed)
+  const { data: quota, loading, error: fetchError, refresh } = usePlanQuota();
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await fetch("/api/me/plan-quota", { credentials: "include" });
-        if (res.status === 401) {
-          if (!cancelled) setError("سجّل الدخول الأول عشان تشوف رصيدك.");
-          return;
-        }
-        if (!res.ok) throw new Error("request failed");
-        const data: Quota = await res.json();
-        if (!cancelled) setQuota(data);
-      } catch {
-        if (!cancelled) setError("مش قادرين نجيب رصيدك دلوقتي. جرّب تحدّث الصفحة.");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const error = fetchError
+    ? fetchError.includes("401")
+      ? "سجّل الدخول الأول عشان تشوف رصيدك."
+      : "مش قادرين نجيب رصيدك دلوقتي. جرّب تحدّث الصفحة."
+    : null;
 
   const credits = quota?.credits;
   const tier = quota?.tier ?? "free";
@@ -71,9 +40,24 @@ export default function BalancePage() {
       title="الرصيد والباقة"
       lede="كل أرقامك المالية في مكان واحد: رصيد الكريدت، باقتك الحالية، واستهلاكك اليومي من الخدمات."
     >
+      <div className="flex justify-end mb-2">
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading}
+          className="btn btn-quiet text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+          aria-label="تحديث الرصيد"
+        >
+          <RefreshCw size={13} aria-hidden className={loading ? "animate-spin" : ""} />
+          تحديث
+        </button>
+      </div>
+
       {error && <DataNotice message={error} />}
 
-      {!error && !quota && <LoadingSheets count={3} />}
+      {!error && !quota && loading && <LoadingSheets count={3} />}
+
+      {!error && !quota && !loading && <DataNotice message="مفيش بيانات رصيد متاحة حاليًا." />}
 
       {!error && quota && (
         <>

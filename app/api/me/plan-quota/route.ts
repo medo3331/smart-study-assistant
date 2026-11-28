@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { resolveServiceTier, SERVICE_REGISTRY, peekServiceQuota } from "@/lib/ai/service-registry";
+import { resolveServiceTier, SERVICE_REGISTRY, peekServiceQuota, type AiServiceId } from "@/lib/ai/service-registry";
+
+// الرصيد بيتغير مع كل طلب AI — الاستجابة لا تُكاش أبدًا (نفس عقد /api/me/credit-status).
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const supabase = await createClient();
@@ -19,7 +22,7 @@ export async function GET() {
   const usage = await Promise.all(
     services.map(async (id) => {
       const limit = SERVICE_REGISTRY[id].dailyLimits[tier];
-      const q = await peekServiceQuota(supabase, user.id, id as any);
+      const q = await peekServiceQuota(supabase, user.id, id as AiServiceId);
       return { id, label: SERVICE_REGISTRY[id].labelAr, limit, used: q.used, remaining: Math.max(0, limit - q.used) };
     })
   );
@@ -32,18 +35,21 @@ export async function GET() {
       .select("messages_24h")
       .eq("user_id", user.id)
       .maybeSingle();
-    messagesUsed = (quotaRow as any)?.messages_24h ?? 0;
+    messagesUsed = (quotaRow as { messages_24h?: number } | null)?.messages_24h ?? 0;
 
     const { data: planRow } = await supabase
       .from("subscription_plans")
       .select("messages_per_2h")
       .eq("plan_key", tier === "pro" ? "pro" : tier === "ultra" ? "ultra" : "free")
       .maybeSingle();
-    const per2h = (planRow as any)?.messages_per_2h ?? 0;
+    const per2h = (planRow as { messages_per_2h?: number } | null)?.messages_per_2h ?? 0;
     messagesLimit = per2h * 12;
   } catch {
     // fail-open
   }
 
-  return NextResponse.json({ tier, credits, messages: { used: messagesUsed, limit: messagesLimit }, services: usage });
+  return NextResponse.json(
+    { tier, credits, messages: { used: messagesUsed, limit: messagesLimit }, services: usage },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
