@@ -6,8 +6,9 @@ import { NextResponse } from "next/server";
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ) {
+  const params = await paramsPromise;
   try {
     const serverClient = await (await import("@/lib/supabase/server")).createClient();
     const { data: { user }, error: authError } = await serverClient.auth.getUser();

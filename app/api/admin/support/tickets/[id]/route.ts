@@ -30,7 +30,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
   const {data:updated,error}=await service.from("support_tickets").update({status,updated_at:new Date().toISOString()}).eq("id",id).select("*").single();
   if(error||!updated){console.error("[admin support PATCH]",error?.message);return NextResponse.json({success:false,error:"Failed to update."},{status:500});}
   try {
-   await service.from("notifications").insert({recipient_id:ticket.user_id,type:"support_status",title:"تحديث حالة التذكرة",body:`تم تغيير حالة تذكرتك إلى ${status}.`,link_url:`/dashboard/support?ticket=${id}`});
+   await service.from("notifications").insert({recipient_id:ticket.user_id,type:"support_status",title:"تحديث حالة التذكرة",body:`تم تغيير حالة تذكرتك إلى ${status}.`,link_url:`/inbox?category=support&ticket=${id}`});
   } catch (notificationError) {
    console.error("[admin status notification]", notificationError instanceof Error ? notificationError.message : notificationError);
   }
