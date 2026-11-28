@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") === "all" ? null : (url.searchParams.get("status") ?? "pending");
 
-  const [reports, actions, appeals, audit, blockedWords, moderators] = await Promise.all([
+  const [reports, actions, appeals, audit, blockedWords, moderators, bannedProfiles] = await Promise.all([
     g.service.rpc("mod_list_reports", { p_status: status ?? "pending", p_limit: 100 }),
     g.service.rpc("mod_list_actions", { p_active_only: false, p_limit: 100 }),
     g.service.rpc("mod_list_appeals", { p_status: status ?? "pending", p_limit: 100 }),
@@ -47,6 +47,13 @@ export async function GET(req: Request) {
     (g.role === "owner" || g.role === "admin")
       ? g.service.from("site_admins").select("user_id, role, permissions").eq("role", "moderator").order("user_id").limit(100)
       : Promise.resolve({ data: [], error: null }),
+    // سجلات الحظر: كل حساب محظور أو مقيّد حاليًا — حتى الحظر اليدوي بغير عقوبة مسجلة
+    g.service
+      .from("profiles")
+      .select("id, display_name, email, public_user_code, is_banned, banned_at, ban_reason, restriction_until, warning_count")
+      .or("is_banned.eq.true,restriction_until.gt.now()")
+      .order("banned_at", { ascending: false, nullsFirst: false })
+      .limit(200),
   ]);
 
   // أسماء المشرفين للعرض
@@ -79,6 +86,7 @@ export async function GET(req: Request) {
     audit: pick(audit).entries ?? [],
     blockedWords: (blockedWords.data ?? []) as unknown[],
     moderators: moderatorProfiles,
+    bannedProfiles: (bannedProfiles.data ?? []) as unknown[],
     canManageTeam: g.role === "owner" || g.role === "admin",
   });}
 
@@ -237,6 +245,102 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
       }
       return NextResponse.json({ success: true });
+    }
+    case "lift_direct_ban": {
+      // رفع حظر/تقييد مباشر (من غير صف عقوبة في moderation_actions — حظر يدوي قديم)
+      if (typeof body.userId !== "string" || !UUID_RE.test(body.userId)) {
+        return NextResponse.json({ success: false, error: "Invalid userId." }, { status: 400 });
+      }
+      const { error: upErr } = await g.service
+        .from("profiles")
+        .update({ is_banned: false, banned_at: null, ban_reason: null, restriction_until: null })
+        .eq("id", body.userId);
+      if (upErr) {
+        console.error("[admin/moderation] lift_direct_ban error:", upErr);
+        return NextResponse.json({ success: false, error: "Action failed." }, { status: 500 });
+      }
+      const { socialNotify } = await import("@/lib/community/handlers");
+      void socialNotify(g.service, body.userId, "تم رفع الإجراء الإشرافي", "تمت مراجعة حالتك ورُفع الإجراء — أهلًا بيك تاني في مجتمع Magicly.", "/community");
+      return NextResponse.json({ success: true });
+    }
+    case "ai_review": {
+      // 🤖 Magic AI: تحليل تقرير واقتراح قرار — اقتراح فقط، القرار النهائي للمشرف
+      if (typeof body.reportId !== "string" || !UUID_RE.test(body.reportId)) {
+        return NextResponse.json({ success: false, error: "Invalid reportId." }, { status: 400 });
+      }
+      // جلب التقرير + المحتوى المُبلَّغ عنه مباشرة (service client يتجاوز RLS)
+      const { data: reportData } = await g.service
+        .from("content_reports")
+        .select("id, reason, details, target_type, target_id")
+        .eq("id", body.reportId)
+        .maybeSingle();
+      if (!reportData) {
+        return NextResponse.json({ success: false, error: "Report not found." }, { status: 404 });
+      }
+      let targetPreview: string | null = null;
+      if (reportData.target_type === "post") {
+        const { data } = await g.service.from("community_posts").select("body").eq("id", reportData.target_id).maybeSingle();
+        targetPreview = (data?.body as string | null)?.slice(0, 500) ?? null;
+      } else if (reportData.target_type === "comment") {
+        const { data } = await g.service.from("community_comments").select("body").eq("id", reportData.target_id).maybeSingle();
+        targetPreview = (data?.body as string | null)?.slice(0, 500) ?? null;
+      }
+      const report = {
+        reason: reportData.reason as string,
+        details: reportData.details as string | null,
+        target_type: reportData.target_type as string,
+        target_preview: targetPreview,
+      };
+      const { completeChatWithProviderFallback } = await import("@/lib/ai/routing");
+      const aiResponse = await Promise.race([
+        completeChatWithProviderFallback({
+          messages: [
+            {
+              role: "system",
+              content: [
+                "أنت مساعد إشراف لمجتمع Magicly الطلابي. بيوصلك تقرير عن محتوى مخالف محتمل.",
+                "قيّم الخطورة واقترح قرارًا واحدًا: dismiss (بدون مخالفة) أو warning أو restrict أو suspend.",
+                "المبادئ: السخرية الخفيفة والآراء والنقد العادي = dismiss. التنمر/الإهانة = warning أو restrict.",
+                "التحرش أو التهديد أو خطاب الكراهية = restrict أو suspend. السبام = warning.",
+                "أجب بـ JSON فقط بدون أي شرح:",
+                '{"recommended_action": "dismiss|warning|restrict|suspend", "explanation_ar": "سبب مختصر بالعامية المصرية في سطر أو سطرين"}',
+              ].join("\n"),
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                reason: report.reason,
+                details: report.details,
+                content_preview: report.target_preview,
+                target_type: report.target_type,
+              }),
+            },
+          ],
+          temperature: 0,
+          maxTokens: 200,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("ai_review_timeout")), 12_000),
+        ),
+      ]);
+      const cleaned = (aiResponse.content ?? "").replace(/```(?:json)?/g, "").trim();
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start === -1 || end <= start) {
+        return NextResponse.json({ success: false, error: "AI returned no suggestion." }, { status: 502 });
+      }
+      const parsed = JSON.parse(cleaned.slice(start, end + 1)) as { recommended_action?: string; explanation_ar?: string };
+      const allowed = ["dismiss", "warning", "restrict", "suspend"];
+      if (!parsed.recommended_action || !allowed.includes(parsed.recommended_action)) {
+        return NextResponse.json({ success: false, error: "AI returned no suggestion." }, { status: 502 });
+      }
+      return NextResponse.json({
+        success: true,
+        suggestion: {
+          recommended_action: parsed.recommended_action,
+          explanation_ar: parsed.explanation_ar || "",
+        },
+      });
     }
     default:
       return NextResponse.json({ success: false, error: "Unknown action." }, { status: 400 });

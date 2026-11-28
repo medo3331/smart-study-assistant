@@ -85,6 +85,15 @@ export async function insertSupportAutoReply(
       author_role: "admin",
       body,
     });
+
+    // إشعار الطالب بالرد — بدون الدخول للصفحة
+    await service.from("notifications").insert({
+      recipient_id: userId,
+      type: "support_reply",
+      title: "رد جديد من الدعم",
+      body: body.slice(0, 200),
+      link_url: "/inbox?category=support",
+    });
   } catch (e) {
     // الرد التلقائي ليس حرجًا — لا نعطل إنشاء التذكرة بسبب فشله
     console.error("[support/auto-reply]", e instanceof Error ? e.message : e);

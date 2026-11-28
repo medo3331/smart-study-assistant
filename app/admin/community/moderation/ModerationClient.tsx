@@ -6,7 +6,7 @@
 // ===========================================================================
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X, Users, UserPlus, Trash2 } from "lucide-react";
+import { Loader2, ShieldAlert, Gavel, MessageSquareWarning, ScrollText, Ban, Plus, X, Users, UserPlus, Trash2, Sparkles } from "lucide-react";
 import { AdminCard, AdminNotice, AdminPageHeader, AdminTableWrap } from "@/components/admin/ui";
 
 type Report = {
@@ -32,6 +32,16 @@ type AuditEntry = {
   action: string; target_type: string | null; target_id: string | null;
   details: unknown; created_at: string;
 };
+type BannedProfile = {
+  id: string; display_name: string | null; email: string | null;
+  public_user_code: string | null; is_banned: boolean;
+  banned_at: string | null; ban_reason: string | null;
+  restriction_until: string | null; warning_count: number;
+};
+type AiSuggestion = {
+  recommended_action: "dismiss" | "warning" | "restrict" | "suspend";
+  explanation_ar: string;
+};
 
 const REASON_AR: Record<string, string> = {
   harassment: "تحرّش", hate: "كراهية", bullying: "تنمّر", spam: "سبام",
@@ -41,6 +51,9 @@ const REASON_AR: Record<string, string> = {
 const ACTION_TYPE_AR: Record<string, string> = {
   warning: "تحذير", restrict: "تقييد مؤقت", suspend: "إيقاف", lift: "رفع إجراء",
 };
+const AI_ACTION_AR: Record<string, string> = {
+  dismiss: "بدون مخالفة", warning: "تحذير", restrict: "تقييد مؤقت", suspend: "إيقاف",
+};
 
 function dt(iso: string | null): string {
   if (!iso) return "-";
@@ -48,7 +61,7 @@ function dt(iso: string | null): string {
 }
 
 export default function AdminModerationClient() {
-  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit" | "words" | "team">("reports");
+  const [tab, setTab] = useState<"reports" | "actions" | "appeals" | "audit" | "words" | "team" | "bans">("reports");
   const [reports, setReports] = useState<Report[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
@@ -58,6 +71,8 @@ export default function AdminModerationClient() {
   const [moderators, setModerators] = useState<{ user_id: string; display_name: string | null; email: string | null }[]>([]);
   const [canManageTeam, setCanManageTeam] = useState(false);
   const [moderatorInput, setModeratorInput] = useState("");
+  const [bannedProfiles, setBannedProfiles] = useState<BannedProfile[]>([]);
+  const [aiSuggestion, setAiSuggestion] = useState<Record<string, AiSuggestion | "loading" | "error">>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +100,7 @@ export default function AdminModerationClient() {
         setAudit(d.audit ?? []);
         setBlockedWords(d.blockedWords ?? []);
         setModerators(d.moderators ?? []);
+        setBannedProfiles(d.bannedProfiles ?? []);
         setCanManageTeam(d.canManageTeam === true);
       } else {
         setError(d.error || "فشل تحميل البيانات.");
@@ -152,10 +168,31 @@ export default function AdminModerationClient() {
     { id: "reports" as const, label: `التقارير (${reports.length})`, icon: MessageSquareWarning },
     { id: "appeals" as const, label: `الاعتراضات (${appeals.length})`, icon: Gavel },
     { id: "actions" as const, label: "العقوبات", icon: ShieldAlert },
+    { id: "bans" as const, label: `سجلات الحظر (${bannedProfiles.length})`, icon: Ban },
     { id: "words" as const, label: `الكلمات الممنوعة (${blockedWords.length})`, icon: Ban },
     { id: "team" as const, label: `فريق الإشراف (${moderators.length})`, icon: Users },
     { id: "audit" as const, label: "سجل التدقيق", icon: ScrollText },
   ];
+
+  // 🤖 Magic AI: اقتراح قرار على تقرير
+  const runAiReview = async (reportId: string) => {
+    setAiSuggestion((prev) => ({ ...prev, [reportId]: "loading" }));
+    try {
+      const res = await fetch("/api/admin/community/moderation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ai_review", reportId }),
+      });
+      const d = await res.json();
+      if (res.ok && d.success && d.suggestion) {
+        setAiSuggestion((prev) => ({ ...prev, [reportId]: d.suggestion as AiSuggestion }));
+      } else {
+        setAiSuggestion((prev) => ({ ...prev, [reportId]: "error" }));
+      }
+    } catch {
+      setAiSuggestion((prev) => ({ ...prev, [reportId]: "error" }));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -295,6 +332,49 @@ export default function AdminModerationClient() {
         </section>
       )}
 
+      {/* ------------------------------------------------- سجلات الحظر */}
+      {tab === "bans" && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-bold text-slate-800">سجلات الحظر والتقييد</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            كل حساب محظور أو مقيّد حاليًا — يشمل الحظر اليدوي والحظر الصادر من تقارير المجتمع. الحساب مش بيختفي من هنا.
+          </p>
+          {bannedProfiles.length === 0 && !loading ? (
+            <p className="text-sm text-slate-500">مفيش حسابات محظورة أو مقيّدة حاليًا.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {bannedProfiles.map((p) => {
+                const restricted = !p.is_banned && p.restriction_until && new Date(p.restriction_until).getTime() > Date.now();
+                return (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800">
+                        {p.display_name || "بدون اسم"}
+                        {p.public_user_code ? <span className="mr-1.5 font-mono text-[10px] text-slate-400" dir="ltr">{p.public_user_code}</span> : null}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        <span className={p.is_banned ? "font-bold text-red-600" : "font-bold text-amber-600"}>
+                          {p.is_banned ? "محظور" : `مقيّد حتى ${dt(p.restriction_until)}`}
+                        </span>
+                        {p.ban_reason ? ` — السبب: ${p.ban_reason}` : ""}
+                        {p.warning_count ? ` — تحذيرات: ${p.warning_count}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => void post({ action: "lift_direct_ban", userId: p.id }, `lift-ban-${p.id}`).then((ok) => { if (ok) void load(); })}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                    >
+                      رفع الإجراء
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
       {/* ------------------------------------------------------------ تقارير */}
       {tab === "reports" && (
         <AdminCard title="طابور تقارير المحتوى" tone="default">
@@ -335,7 +415,30 @@ export default function AdminModerationClient() {
                         >
                           {busy === `resolve-${r.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "بدون مخالفة"}
                         </button>
+                        <button
+                          onClick={() => void runAiReview(r.id)}
+                          disabled={busy !== null || aiSuggestion[r.id] === "loading"}
+                          className="inline-flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-50"
+                          title="Magic AI يحلّل التقرير ويقترح القرار"
+                        >
+                          {aiSuggestion[r.id] === "loading" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          Magic
+                        </button>
                       </div>
+                      {aiSuggestion[r.id] && aiSuggestion[r.id] !== "loading" ? (
+                        <div className={`mt-1.5 max-w-80 rounded-lg border p-2 text-xs ${aiSuggestion[r.id] === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-violet-200 bg-violet-50 text-slate-700"}`}>
+                          {aiSuggestion[r.id] === "error" ? (
+                            "المساعد مش متاح حاليًا — قرّر بنفسك."
+                          ) : (
+                            <>
+                              <p className="font-bold text-violet-700">
+                                اقتراح Magic: {AI_ACTION_AR[(aiSuggestion[r.id] as AiSuggestion).recommended_action]}
+                              </p>
+                              <p className="mt-0.5">{(aiSuggestion[r.id] as AiSuggestion).explanation_ar}</p>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

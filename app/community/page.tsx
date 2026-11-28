@@ -118,6 +118,7 @@ export default function CommunityHubPage() {
   const [profileError, setProfileError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [canModerate, setCanModerate] = useState(false);
 
   const loadRelations = useCallback(async () => {
     setRelationsLoading(true);
@@ -238,6 +239,14 @@ export default function CommunityHubPage() {
     void loadSuggestions();
     void loadProfile();
   }, [loadRelations, loadSuggestions, loadProfile]);
+
+  // هل المستخدم مشرف مجتمع؟ لإظهار رابط لوحة الإشراف داخل المجتمع
+  useEffect(() => {
+    void fetch("/api/community/can-moderate")
+      .then((r) => r.json())
+      .then((d) => setCanModerate(d.success && d.canModerate === true))
+      .catch(() => undefined);
+  }, []);
 
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -421,6 +430,21 @@ export default function CommunityHubPage() {
           </button>
         ))}
       </nav>
+
+      {/* 🛡️ C9 — رابط لوحة الإشراف للمشرفين (يظهر للمخوّلين فقط) */}
+      {canModerate && (
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+          <span className="flex items-center gap-2 text-xs font-bold text-amber-700">
+            🛡️ أنت مشرف مجتمع — عندك صلاحيات مراجعة التقارير والعقوبات
+          </span>
+          <Link
+            href="/community/moderation"
+            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-500"
+          >
+            فتح لوحة الإشراف
+          </Link>
+        </div>
+      )}
 
       {/* 🛡️ C4 — لافتة حالة الإشراف (عقوبة نشطة / اعتراض) */}
       <ModerationStatus />

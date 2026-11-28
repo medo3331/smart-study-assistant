@@ -100,3 +100,40 @@ describe("Profile link contract", () => {
     expect(userPage).toMatch(/UUID/i);
   });
 });
+
+describe("C9 — community moderation page + AI contract", () => {
+  const c9Page = read("app/community/moderation/page.tsx");
+  const canModerateRoute = read("app/api/community/can-moderate/route.ts");
+  const communityPage = read("app/community/page.tsx");
+
+  it("moderation dashboard is reachable inside /community with a server-side guard", () => {
+    expect(c9Page).toContain("actorHasPermission");
+    expect(c9Page).toContain('redirect("/community?error=الصفحة_للمشرفين_فقط")');
+    expect(c9Page).toContain("AdminModerationClient");
+  });
+
+  it("community page shows the moderation link only to moderators", () => {
+    expect(canModerateRoute).toContain('actorHasPermission(actor, "community.moderate")');
+    expect(communityPage).toContain('fetch("/api/community/can-moderate")');
+    expect(communityPage).toContain("/community/moderation");
+  });
+
+  it("banned profiles list includes manual bans and a direct lift action", () => {
+    expect(modRoute).toContain("bannedProfiles");
+    expect(modRoute).toContain("is_banned.eq.true,restriction_until.gt.now()");
+    expect(modRoute).toContain('case "lift_direct_ban"');
+    expect(modClient).toContain("سجلات الحظر والتقييد");
+  });
+
+  it("ai_review suggests a decision without executing it", () => {
+    expect(modRoute).toContain('case "ai_review"');
+    expect(modRoute).toContain("recommended_action");
+    expect(modClient).toContain("runAiReview");
+    expect(modClient).toContain("اقتراح Magic");
+  });
+
+  it("support auto-reply notifies the student", () => {
+    expect(autoReply).toContain('"support_reply"');
+    expect(autoReply).toContain("/inbox?category=support");
+  });
+});
