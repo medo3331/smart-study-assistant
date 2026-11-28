@@ -73,4 +73,5 @@
 | 2026-11-28 | DEV-M3 جزء ٧: توحيد كل الألعاب في /games (استراحة + هروب + شطرنج) — /break و/escape-room redirects + جول ولا لا؟ واقعية (كورة بتطير + شبكة + حارس بينط) |
 | 2026-11-28 | DEV-M3 جزء ٨: Magicly Run (Canvas — ٣ حارات + Power-ups + شخصية Magicly) + شطرنج أوضح (قطع ممتلئة + قوانين + إبرازات) + Memory أسهل + بنك أسئلة Quiz Rush |
 | 2026-11-28 | DEV-M3 جزء ٩: Chess UX بنمط chess.com — مربعات ثابتة وتلوين كامل + إصلاح توقف الكمبيوتر عند الكش + ٥ مستويات + ماجِك المدرب 🧙 |
-| 2026-11-28 | Magic Chess Master Specification — مواصفة منصة الشطرنج الكاملة (Audit للموجود + معمارية Stockfish WASM/محركنا للتحقق سيرفرًا + Rating + حماية + 6 Phases) — **بانتظار اعتماد المالك قبل أي تنفيذ**: `magic-chess-master-spec.md` |
+| 2026-11-28 | Magic Chess Master Specification — مواصفة منصة الشطرنج الكاملة (Audit للموجود + معمارية Stockfish WASM/محركنا للتحقق سيرفرًا + Rating + حماية + 6 Phases) — معتمدة من المالك: `magic-chess-master-spec.md` |
+| 2026-11-28 | DEV-M3 جزء ١٠: Magic Chess Phase 1 (Core Polish) — AI بـ ٨ مستويات (تعميق تدريجي بميزانية وقت) + ٥ شخصيات لعب + ٨ رقع + ٣ أطقم قطع + أصوات Web Audio + إعدادات محفوظة + قلب الرقعة + صفحة «مبارياتي» (`phases/dev-m3-part10-chess-platform-p1.md`) |
