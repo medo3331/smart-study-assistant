@@ -16,16 +16,27 @@ import { generateFile } from "@/lib/ai/file-generator";
 import { webSearch } from "@/lib/ai/web-search";
 import {
   MAGIC_ACTION_LIMITS,
+  type AddTaskAction,
   type AgentArtifact,
   type DiagramAction,
   type FileAction,
   type ImageAction,
+  type ListTasksAction,
   type MagicAction,
   type QuizAction,
   type WebSearchAction,
 } from "./actions";
 
 export type { AgentArtifact } from "./actions";
+
+/* -------------------------------------------------------------------------- */
+/* منفذ المهام الشخصية — بيتنفّذ ضد planner_goals من السيرفر (route.ts)          */
+/* -------------------------------------------------------------------------- */
+
+export interface AgentTasksPort {
+  addTask(input: { title: string; dueDate?: string; priority?: number }): Promise<{ ok: boolean; id?: string; error?: string }>;
+  listTasks(): Promise<{ id: string; title: string; dueDate: string | null; priority: number }[]>;
+}
 
 /* -------------------------------------------------------------------------- */
 /* التنفيذ                                                                     */
@@ -36,6 +47,8 @@ export interface AgentActionRunnerContext {
   stage?: string | null;
   /** نداء موديل واحد لمولّد المخططات (Mermaid). */
   aiComplete: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+  /** منفذ المهام الشخصية — موجود للطالب المسجّل بس، وبدونه أدوات المهام ترجّع خطأ لطيف. */
+  tasks?: AgentTasksPort;
 }
 
 async function runWebSearch(action: WebSearchAction): Promise<AgentArtifact> {
@@ -134,6 +147,33 @@ function runQuiz(action: QuizAction): AgentArtifact {
   };
 }
 
+async function runAddTask(action: AddTaskAction, ctx: AgentActionRunnerContext): Promise<AgentArtifact> {
+  const base = { kind: "task_saved" as const, title: action.title, dueDate: action.dueDate, priority: action.priority };
+  if (!ctx.tasks) {
+    return { ...base, error: "المهام الشخصية متاحة للطالب المسجّل بس." };
+  }
+  try {
+    const result = await ctx.tasks.addTask({ title: action.title, dueDate: action.dueDate, priority: action.priority });
+    if (!result.ok) return { ...base, error: result.error || "فشل تسجيل المهمة." };
+    return base;
+  } catch (e) {
+    return { ...base, error: (e as Error).message || "فشل تسجيل المهمة." };
+  }
+}
+
+async function runListTasks(_action: ListTasksAction, ctx: AgentActionRunnerContext): Promise<AgentArtifact> {
+  if (!ctx.tasks) {
+    return { kind: "task_list", tasks: [] };
+  }
+  try {
+    const tasks = await ctx.tasks.listTasks();
+    return { kind: "task_list", tasks };
+  } catch (e) {
+    console.warn("[agent-actions] list_tasks failed:", e);
+    return { kind: "task_list", tasks: [] };
+  }
+}
+
 /**
  * تنفيذ كل الأدوات المطلوبة — كل أداة في try/catch مستقل، وفشلها ما يوقفش الباقي.
  */
@@ -149,6 +189,8 @@ export async function runAgentActions(
       else if (action.tool === "image") artifacts.push(await runImage(action));
       else if (action.tool === "file") artifacts.push(await runFile(action));
       else if (action.tool === "quiz") artifacts.push(runQuiz(action));
+      else if (action.tool === "add_task") artifacts.push(await runAddTask(action, ctx));
+      else if (action.tool === "list_tasks") artifacts.push(await runListTasks(action, ctx));
     } catch (e) {
       console.warn("[agent-actions] tool execution failed:", action.tool, e);
     }

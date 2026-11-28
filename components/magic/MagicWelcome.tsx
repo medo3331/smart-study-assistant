@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MagicAvatar } from "@/components/MagicAvatar";
 import { buildMagicGreeting, type MagicGreeting, type MagicSuggestion } from "@/lib/magic/greeting";
+import { XP_PER_LEVEL } from "@/lib/shop/economy";
+
+const ar = (n: number) => n.toLocaleString("ar-EG");
 
 /* كارت Magic في الداشبورد — ماسكوت بيتكلم مع الطالب في فقاعة حوار
    + ردود سريعة تبدأ حوار فعلي في الشات الموحد. بدون AI/خصم. */
@@ -97,6 +100,50 @@ export function MagicWelcome() {
           <p className="text-sm font-bold text-ink leading-6">{g.greeting}</p>
           <p className="mt-0.5 text-xs text-ink-soft leading-relaxed">{g.sub}</p>
         </div>
+        {/* 🏅 شريط المستوى والسلسلة — نمط Duolingo: التقدم دايمًا في العين */}
+        {g.stats && (
+          <div className="mt-2 flex items-center gap-3 rounded-xl border border-rule bg-paper px-3 py-2">
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-black text-amber-900"
+              style={{ background: "linear-gradient(90deg, #FDE68A, #FBBF24)" }}
+              title="سلسلة المذاكرة"
+            >
+              🔥 <span className="tnum">{ar(g.stats.streak)}</span>
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-black text-violet-50"
+              style={{ background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+              title="مستواك الحالي"
+            >
+              ⭐ مستوى <span className="tnum">{ar(g.stats.level)}</span>
+            </span>
+            <div className="min-w-0 flex-1">
+              <div
+                className="h-2 rounded-full bg-paper-3 overflow-hidden"
+                role="progressbar"
+                aria-valuenow={g.stats.progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="تقدم نقاط الخبرة للمستوى الجاي"
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${g.stats.progressPercent}%`, background: "linear-gradient(90deg, #7C3AED, #4F46E5)" }}
+                />
+              </div>
+              <p className="mt-0.5 text-[10px] text-ink-soft">
+                <span className="tnum">{ar(g.stats.xpInLevel)}</span> / <span className="tnum">{ar(XP_PER_LEVEL)}</span> XP — فاضل{" "}
+                <span className="tnum">{ar(g.stats.xpToNext)}</span> للمستوى الجاي
+              </p>
+            </div>
+          </div>
+        )}
+        {/* 📉 ملاحظة الغياب — بلطف مش لوم */}
+        {g.nudge && (
+          <p className="mt-2 rounded-xl border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-800 leading-relaxed">
+            {g.nudge}
+          </p>
+        )}
         {/* ردود سريعة تبدأ حوار فعلي */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold text-ink-soft">كلّمني:</span>

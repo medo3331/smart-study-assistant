@@ -11,9 +11,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { MermaidViewer } from "@/components/ui/MermaidViewer";
 import { importArtifactToNotes } from "@/lib/notes/agent-import";
-import type { AgentArtifact, FileArtifact, QuizArtifact } from "@/lib/agent/actions";
+import type { AgentArtifact, FileArtifact, QuizArtifact, TaskListArtifact, TaskSavedArtifact } from "@/lib/agent/actions";
 
 const FORMAT_LABELS: Record<string, string> = {
   md: "Markdown",
@@ -285,6 +286,66 @@ function QuizCard({ artifact }: { artifact: QuizArtifact }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* 📋 المهام الشخصية — task_saved / task_list                                  */
+/* -------------------------------------------------------------------------- */
+
+function formatDueDate(iso: string): string {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (iso === todayIso) return "النهارده";
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function TaskSavedCard({ artifact }: { artifact: TaskSavedArtifact }) {
+  if (artifact.error) {
+    return <p className="text-xs text-rose-600">⚠️ {artifact.error}</p>;
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm font-bold text-emerald-700">✅ اتسجّلت المهمة في مخططك</p>
+      <p className="text-xs text-ink leading-relaxed">📌 {artifact.title}</p>
+      <p className="text-[11px] text-ink-soft">
+        {artifact.dueDate ? `🗓️ الميعاد: ${formatDueDate(artifact.dueDate)}` : "🗓️ من غير ميعاد — في أي وقت"}
+        {artifact.priority === 2 ? " · ⭐ مهمة" : ""}
+      </p>
+      <p className="text-[11px] text-ink-soft">
+        لما تخلّصها من صفحة{" "}
+        <Link href="/dashboard/planner" className="font-bold text-[var(--accent)] hover:underline">
+          المخطط
+        </Link>{" "}
+        بتكسب كوينز 🪙
+      </p>
+    </div>
+  );
+}
+
+function TaskListCard({ artifact }: { artifact: TaskListArtifact }) {
+  if (artifact.tasks.length === 0) {
+    return <p className="text-xs text-ink-soft">مفيش مهام مفتوحة — تحب نقترح مهمة لليوم؟</p>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {artifact.tasks.map((t) => (
+        <li key={t.id} className="flex items-start gap-2 text-xs text-ink leading-relaxed">
+          <span aria-hidden>{t.priority === 2 ? "⭐" : "📌"}</span>
+          <span className="min-w-0 flex-1">
+            {t.title}
+            {t.dueDate && <span className="text-ink-soft"> — {formatDueDate(t.dueDate)}</span>}
+          </span>
+        </li>
+      ))}
+      <li className="pt-1">
+        <Link href="/dashboard/planner" className="text-[11px] font-bold text-[var(--accent)] hover:underline">
+          افتح المخطط ←
+        </Link>
+      </li>
+    </ul>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* العرض الرئيسي                                                               */
 /* -------------------------------------------------------------------------- */
 
@@ -340,6 +401,20 @@ export function AgentArtifacts({ artifacts }: { artifacts: AgentArtifact[] }) {
           return (
             <Card key={i} title={`${a.title} — ${FORMAT_LABELS[a.format] || a.format}`}>
               <DownloadButton artifact={a} />
+            </Card>
+          );
+        }
+        if (a.kind === "task_saved") {
+          return (
+            <Card key={i} title="مهمة شخصية جديدة" accent="linear-gradient(90deg, #059669, #7C3AED)">
+              <TaskSavedCard artifact={a} />
+            </Card>
+          );
+        }
+        if (a.kind === "task_list") {
+          return (
+            <Card key={i} title="مهامك المفتوحة" accent="linear-gradient(90deg, #D97706, #7C3AED)">
+              <TaskListCard artifact={a} />
             </Card>
           );
         }

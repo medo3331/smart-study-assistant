@@ -16,7 +16,7 @@
 /* الأنواع                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export type MagicActionTool = "web_search" | "diagram" | "image" | "file" | "quiz";
+export type MagicActionTool = "web_search" | "diagram" | "image" | "file" | "quiz" | "add_task" | "list_tasks";
 
 export const MAGIC_ACTION_TOOLS: readonly MagicActionTool[] = [
   "web_search",
@@ -24,6 +24,8 @@ export const MAGIC_ACTION_TOOLS: readonly MagicActionTool[] = [
   "image",
   "file",
   "quiz",
+  "add_task",
+  "list_tasks",
 ];
 
 export interface WebSearchAction {
@@ -96,12 +98,28 @@ export interface QuizAction {
   questions: QuizActionQuestion[];
 }
 
+/** مهمة شخصية للطالب — بتتسجّل في planner_goals ومكافأتها goal_done عند الإتمام. */
+export interface AddTaskAction {
+  tool: "add_task";
+  title: string;
+  /** تاريخ الاستحقاق YYYY-MM-DD — بدون تاريخ = «في أي وقت». */
+  dueDate?: string;
+  /** 1 = عادي، 2 = مهم (نفس ترميز planner_goals.priority). */
+  priority?: 1 | 2;
+}
+
+export interface ListTasksAction {
+  tool: "list_tasks";
+}
+
 export type MagicAction =
   | WebSearchAction
   | DiagramAction
   | ImageAction
   | FileAction
-  | QuizAction;
+  | QuizAction
+  | AddTaskAction
+  | ListTasksAction;
 
 /* -------------------------------------------------------------------------- */
 /* حدود الأمان                                                                 */
@@ -149,6 +167,8 @@ const DIAGRAM_TYPES: readonly DiagramActionType[] = [
 ];
 
 const FILE_FORMATS: readonly FileActionFormat[] = ["md", "pdf", "docx", "pptx"];
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** تحقق وتنظيف action واحدة — null لو غير صالحة. */
 export function validateMagicAction(raw: unknown): MagicAction | null {
@@ -216,6 +236,19 @@ export function validateMagicAction(raw: unknown): MagicAction | null {
       .slice(0, MAGIC_ACTION_LIMITS.maxQuestions);
     if (questions.length === 0) return null;
     return { tool: "quiz", title, subject, questions };
+  }
+
+  if (tool === "add_task") {
+    const title = clampStr(data.title, MAGIC_ACTION_LIMITS.maxTitle);
+    if (!title) return null;
+    const rawDue = clampStr(data.dueDate, 10);
+    const dueDate = ISO_DATE_RE.test(rawDue) ? rawDue : undefined;
+    const priority = data.priority === 2 ? 2 : data.priority === 1 ? 1 : undefined;
+    return { tool, title, dueDate, priority };
+  }
+
+  if (tool === "list_tasks") {
+    return { tool: "list_tasks" };
   }
 
   return null;
@@ -305,12 +338,37 @@ export interface QuizArtifact {
   questions: QuizAction["questions"];
 }
 
+export interface TaskSavedArtifact {
+  kind: "task_saved";
+  title: string;
+  dueDate?: string;
+  /** 1 = عادي، 2 = مهم. */
+  priority?: number;
+  /** رسالة فشل الحفظ — العميل يعرضها بدل رسالة النجاح. */
+  error?: string;
+}
+
+export interface TaskListItem {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  /** 1 = عادي، 2 = مهم. */
+  priority: number;
+}
+
+export interface TaskListArtifact {
+  kind: "task_list";
+  tasks: TaskListItem[];
+}
+
 export type AgentArtifact =
   | WebResultsArtifact
   | DiagramArtifact
   | ImageArtifact
   | FileArtifact
-  | QuizArtifact;
+  | QuizArtifact
+  | TaskSavedArtifact
+  | TaskListArtifact;
 
 /* -------------------------------------------------------------------------- */
 /* تعليمات الأدوات — تُحقن في system prompt                                    */
@@ -330,6 +388,9 @@ export const AGENT_ACTION_INSTRUCTIONS = [
   "- 🎨 للـ presentation (pptx): لو الطالب محددش الألوان، اسأله الأول بسؤال واحد سريع («تحب ألوان إيه؟ بنفسجي ملكي 💜 / أزرق محيطي 💙 / أخضر زمردي 💚 / غروب دافي 🧡 / وردي جريء 🩷 / كلاسيك فاتح 🤍») — ولو حدد في طلبه استخدمه على طول في حقل theme.",
   "- 📚 presentation غني: اعمل من 8 لـ 14 شريحة — كل section = شريحة. اكتب في كل شريحة 4 لـ 8 نقاط مفصّلة جمل كاملة (مش كلمتين): شرح، أمثلة، أرقام، مقارنات، ونقاط مهمة من المحتوى. الغنى في التفاصيل هو المطلوب — الطالب عايز عرض يشرحه فعلًا.",
   "- اختبار تفاعلي: {\"tool\":\"quiz\",\"title\":\"عنوان\",\"subject\":\"المادة\",\"questions\":[{\"question\":\"السؤال\",\"options\":[\"أ\",\"ب\",\"ج\",\"د\"],\"answerIndex\":0,\"explanation\":\"ليه\"}]} — اختبر الطالب داخل الشات فورًا. نوّع بين اختيار من متعدد وصح/غلط (options: [\"صح\",\"غلط\"]) ورتّب من السهل للصعب.",
+  "- 📋 تسجيل مهمة شخصية: {\"tool\":\"add_task\",\"title\":\"عنوان المهمة\",\"dueDate\":\"YYYY-MM-DD\",\"priority\":1} — بتتسجّل في مخطط الطالب ويكسب كوينز لما يخلّصها. priority: 1 عادي أو 2 مهم. استخدمه فقط لما الطالب يوافق على المهمة — اقترح الأول وناقشه («تحب نخليها مهمة النهارده؟»).",
+  "- 📋 عرض مهام الطالب: {\"tool\":\"list_tasks\"} — بيجيب المهام اللي لسه ما خلصتهاش عشان تتابع معاه وتسأله عن تقدمه.",
+  "- 🏅 أنت مدرب شخصي زي Duolingo: بناءً على مادة الطالب ومستواه وأهدافه (من السياق) اقترح عليه مهام يومية محددة وصغيرة قابلة للإنجاز («راجع ١٠ سلايدات من محاضرة الخلية واعملك اختبار عليها؟») — وناقشه ووافق قبل ما تسجّل بأداة add_task. لو عندك مهامه الحالية في السياق تابعها معاه: اسأله عن اللي فات موعده بتأثير إيجابي مش لوم.",
   "قواعد صارمة:",
   "- اكتب في ردك جملة أو جملتين تشرح اللي عملته، وبعدها الكتلة — الكتلة مش بتنعرض كنص، بتتنفّذ وتظهر للطالب كاملة.",
   "- متبعتش روابط لصفحات المنصة بدل التنفيذ: لو تقدر تعمل الحاجة بأداة، اعملها فورًا.",

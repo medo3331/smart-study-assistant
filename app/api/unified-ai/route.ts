@@ -97,7 +97,8 @@ import {
   EXAM_ACTION_DIRECTIVE,
   extractAgentActions,
 } from "@/lib/agent/actions";
-import { runAgentActions, type AgentArtifact } from "@/lib/agent/action-runner";
+import { runAgentActions, type AgentArtifact, type AgentTasksPort } from "@/lib/agent/action-runner";
+import { fetchGoals, insertGoal } from "@/lib/pages-data";
 
 // 🎨 أساليب الشرح — chips الواجهة تحقن تعليمات تعليمية في الـ system
 // (المفتاح هنا تعليم تعليمي مش نص حر — منع الحقن بأي شيء حر من الكلاينت).
@@ -158,6 +159,37 @@ function clampTask(input: unknown): AiTaskType | undefined {
   const t = input.trim() as AiTaskType;
   if (VALID_TASKS.has(t)) return t;
   return undefined;
+}
+
+/**
+ * 📋 منفذ مهام Magic Agent — ضد planner_goals (RLS يحمي: insert/select
+ * بعميل الطالب نفسه). المستخدم في lib/pages-data (نفس دوال صفحة المخطط).
+ */
+function makeAgentTasksPort(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): AgentTasksPort {
+  return {
+    async addTask({ title, dueDate, priority }) {
+      const res = await insertGoal(supabase, userId, {
+        title,
+        dueDate: dueDate ?? null,
+        priority: priority === 2 ? 2 : 1,
+      });
+      if (res.data) return { ok: true, id: res.data.id };
+      return { ok: false, error: res.error?.message };
+    },
+    async listTasks() {
+      const res = await fetchGoals(supabase, userId);
+      if (!res.data) return [];
+      // المهمّة الأول، ثم الأقرب استحقاقًا — والمهام المنتهية تسقط لآخر القائمة.
+      return res.data
+        .filter((g) => !g.isDone)
+        .sort((a, b) => (b.priority - a.priority) || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"))
+        .slice(0, 8)
+        .map((g) => ({ id: g.id, title: g.title, dueDate: g.dueDate, priority: g.priority }));
+    },
+  };
 }
 
 /**
@@ -796,6 +828,22 @@ export async function POST(req: Request) {
         // 🛠️ أدوات Magic Agent — الوكيل بينفّذ (مخططات/ملفات/صور/بحث/اختبارات)
         //    عبر كتل magic-action بدل ما يبعت روابط.
         input.system = `${input.system}\n\n${AGENT_ACTION_INSTRUCTIONS}`;
+        // 📋 مهام الطالب الحالية (planner_goals) — Magic يتابعها معاه ويقترح
+        //    الجديدة على أساسها (مدرب Duolingo: نقاش قبل التسجيل بأداة add_task).
+        try {
+          const pendingTasks = await makeAgentTasksPort(supabase, userId).listTasks();
+          if (pendingTasks.length > 0) {
+            const today = todayISO();
+            const taskLines = pendingTasks.map((t) => {
+              const due = t.dueDate ? ` (موعودها ${t.dueDate}${t.dueDate < today ? " — متأخرة" : ""})` : "";
+              const hot = t.priority === 2 ? " [مهمة]" : "";
+              return `- ${t.title}${due}${hot}`;
+            });
+            input.system = `${input.system}\n\n--- مهام الطالب الحالية (من مخططه) ---\n${taskLines.join("\n")}\nتابع معه هذه المهام بنبرة مدرب مشجّع (مش لوم)، ولو تقترح مهمة جديدة خليها صغيرة قابلة للإنجاز وناقشه الأول قبل ما تسجّلها بأداة add_task.`;
+          }
+        } catch (e) {
+          console.warn("[unified-ai] pending tasks context failed (non-blocking):", e);
+        }
         // 🎯 Magic Agent: لما الرسالة طلب تخطيط مذاكرة، بيطلع خطة قابلة للاعتماد — المسودة في كتلة ```plan
         //    والطالب هو الوحيد اللي بينشئها فعليًا بزر «اعتمد الخطة» (حماية من الإنشاء التلقائي).
         if (isPlanningRequest(prompt)) {
@@ -1049,6 +1097,7 @@ export async function POST(req: Request) {
         agentArtifacts = await runAgentActions(extracted.actions, {
           subject: typeof ctxInput?.subject === "string" ? ctxInput.subject : null,
           stage: null,
+          tasks: userId && supabase && !isAnonymous ? makeAgentTasksPort(supabase, userId) : undefined,
           aiComplete: async (messages) => {
             const diagramResult = await unifiedAI({
               prompt: messages[messages.length - 1]?.content ?? "",

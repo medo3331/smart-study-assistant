@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-guard";
-import { fetchActiveExamPlan, todaysDay, daysUntilExam } from "@/lib/exam-plans";
+import { fetchActiveExamPlan, todaysDay, daysUntilExam, todayISO } from "@/lib/exam-plans";
+import { fetchGoals } from "@/lib/pages-data";
 import { buildMagicGreeting, type MagicGreeting } from "@/lib/magic/greeting";
 
 /* ==========================================================================
-   Magic Greeting — ترحيب الداشبورد واقتراحات اليوم.
+   Magic Greeting — ترحيب الداشبورد واقتراحات اليوم (نمط Duolingo).
    منطق pure بدون AI ⇒ بدون خصم Credits. القراءات كلها best-effort:
    أي فشل بيرجّع ترحيب عام بدل خطأ.
    ========================================================================== */
@@ -21,7 +22,7 @@ export async function GET() {
       workspaceFiles: 0,
     });
 
-    const [planResult, materialsCount, lecturesCount] = await Promise.all([
+    const [planResult, materialsCount, lecturesCount, profileResult, goalsResult] = await Promise.all([
       fetchActiveExamPlan(supabase, user.id).catch(() => ({ data: null, error: { kind: "GENERIC" as const, message: "" } })),
       supabase
         .from("materials")
@@ -35,12 +36,39 @@ export async function GET() {
         .eq("user_id", user.id)
         .then((r: { count: number | null }) => r.count ?? 0)
         .catch(() => 0),
+      supabase
+        .from("profiles")
+        .select("display_name, xp, streak, last_study_day")
+        .eq("id", user.id)
+        .maybeSingle()
+        .catch(() => null),
+      fetchGoals(supabase, user.id).catch(() => ({ data: null, error: { kind: "GENERIC" as const, message: "" } })),
     ]);
 
     const plan = planResult.data;
     const today = plan ? todaysDay(plan) : null;
+    const profile = profileResult as {
+      display_name?: string | null;
+      xp?: number | null;
+      streak?: number | null;
+      last_study_day?: string | null;
+    } | null;
+
+    // 🏅 المستوى والسلسلة + 📋 مهام المخطط المفتوحة (المهمّة الأول ثم الأقرب ميعادًا).
+    const goals = goalsResult.data ?? [];
+    const todayIso = todayISO();
+    const openTasks = goals
+      .filter((g) => !g.isDone)
+      .sort(
+        (a, b) =>
+          (b.priority - a.priority) ||
+          ((a.dueDate ?? "9999-12-31") < (b.dueDate ?? "9999-12-31") ? -1 : 1),
+      )
+      .slice(0, 5)
+      .map((g) => g.title);
+
     const greeting = buildMagicGreeting({
-      displayName: null,
+      displayName: profile?.display_name ?? null,
       hour: new Date().getHours(),
       activePlan: plan
         ? {
@@ -51,6 +79,15 @@ export async function GET() {
           }
         : null,
       workspaceFiles: (materialsCount ?? 0) + (lecturesCount ?? 0),
+      economy: profile
+        ? {
+            xp: profile.xp ?? 0,
+            streak: profile.streak ?? 1,
+            lastStudyDay: profile.last_study_day ?? null,
+            today: todayIso,
+          }
+        : null,
+      tasks: openTasks,
     });
 
     return NextResponse.json({ success: true, greeting, fallback });

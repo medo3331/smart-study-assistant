@@ -108,6 +108,28 @@ describe("validateMagicAction", () => {
     expect(validateMagicAction({ tool: "delete_database" })).toBeNull();
     expect(validateMagicAction(null)).toBeNull();
   });
+
+  it("add_task بعنوان صالح — الميعاد والأولوية اختيارية", () => {
+    expect(validateMagicAction({ tool: "add_task", title: "راجع محاضرة الخلية" })).toEqual({
+      tool: "add_task",
+      title: "راجع محاضرة الخلية",
+    });
+    expect(
+      validateMagicAction({ tool: "add_task", title: "مهمة", dueDate: "2026-07-25", priority: 2 }),
+    ).toEqual({ tool: "add_task", title: "مهمة", dueDate: "2026-07-25", priority: 2 });
+  });
+
+  it("add_task بميعاد مش YYYY-MM-DD أو أولوية غلط — بيتشالوا والحاجة التانية يتم", () => {
+    expect(validateMagicAction({ tool: "add_task", title: "مهمة", dueDate: "بكرة", priority: 99 })).toEqual({
+      tool: "add_task",
+      title: "مهمة",
+    });
+  });
+
+  it("add_task بدون عنوان يُرفض — وlist_tasks بتتنفذ من غير مدخلات", () => {
+    expect(validateMagicAction({ tool: "add_task" })).toBeNull();
+    expect(validateMagicAction({ tool: "list_tasks" })).toEqual({ tool: "list_tasks" });
+  });
 });
 
 describe("extractAgentActions", () => {
