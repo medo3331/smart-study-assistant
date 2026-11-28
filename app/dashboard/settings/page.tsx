@@ -445,6 +445,13 @@ export default function SettingsPage() {
                 </dd>
               </div>
             </dl>
+            <Link href="/dashboard/credits" className={ROW}>
+              <span className="flex-1">
+                <span className="block text-sm font-semibold text-ink">تفاصيل الكريديت والاستهلاك</span>
+                <span className="block text-[11px] text-ink-soft">الرصيد والاستهلاك الشهري وتاريخ انتهاء الباقة</span>
+              </span>
+              <span className="mono text-ink-soft shrink-0" aria-hidden>←</span>
+            </Link>
             <Link href="/dashboard/profile" className={ROW}>
               <span className="flex-1">
                 <span className="block text-sm font-semibold text-ink">صفحة الملف الشخصي الكاملة</span>
