@@ -291,3 +291,47 @@ export async function saveCloudSettings(
     return false;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* الأسئلة الدينية — لوحة الترتيب الأسبوعية (db/120)                            */
+/* -------------------------------------------------------------------------- */
+
+export interface QuizLeaderboardRow {
+  userId: string;
+  playerName: string;
+  bestScore: number;
+  sessionsCount: number;
+}
+
+interface LeaderboardRow {
+  player_name: string | null;
+  best_score: number | null;
+  sessions_count: number | null;
+}
+
+/**
+ * أفضل النتائج في آخر ٧ أيام — عبر worship_quiz_top() (SECURITY DEFINER):
+ * لوحة الترتيب العامة بتفضح الأعمدة الآمنة بس وبتتجاوز RLS owner-only.
+ * `null` لو الجدول/الـ view مش متعمول بعد — الواجهة بتتعامل مع ده بهدوء.
+ */
+export async function fetchWorshipQuizLeaderboard(
+  supabase: SupabaseClient,
+  limit = 10,
+): Promise<QuizLeaderboardRow[] | null> {
+  try {
+    const { data, error } = await supabase.rpc("worship_quiz_top", { n: limit });
+    if (error || !data) {
+      console.warn("fetchWorshipQuizLeaderboard:", error?.message ?? "no data");
+      return null;
+    }
+    return (data as LeaderboardRow[]).map((row, i) => ({
+      userId: `rank-${i}`,
+      playerName: row.player_name || "قارئ",
+      bestScore: row.best_score ?? 0,
+      sessionsCount: row.sessions_count ?? 0,
+    }));
+  } catch (err) {
+    console.warn("fetchWorshipQuizLeaderboard failed:", err);
+    return null;
+  }
+}

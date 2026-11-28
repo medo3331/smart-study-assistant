@@ -6,6 +6,7 @@ import { useTodayPrayerTimes } from "@/hooks/usePrayerTimes";
 import { todayUtc } from "@/lib/worship-data";
 import {
   getNotificationPermission,
+  insertWorshipReminderNotification,
   markFiredKey,
   pruneFiredKeys,
   readFiredKeys,
@@ -31,6 +32,8 @@ const FIRE_GRACE_MS = 3 * 60 * 1000;
  * • تذكير أذكار الصباح (بعد الفجر) والمساء (بعد العصر) والنوم
  * • تذكير ورد القرآن لو لسه متصلّحش
  * بيتخزّن المفتاح المُطلق لكل يوم في localStorage فمفيش تكرار.
+ * كل تذكير فعلي بيوصّل قناتين: إشعار متصفح (لو الإذن granted)
+ * + إشعار داخل المنصة في الجرس (للحساب الحقيقي — عبر /api/worship/reminders).
  */
 export function WorshipReminders() {
   const shared = useSharedWorshipData();
@@ -48,12 +51,14 @@ export function WorshipReminders() {
   const settingsRef = useRef(settings);
   const progressRef = useRef(progress);
   const prayerTimesRef = useRef(prayerTimes);
+  const userRef = useRef(shared?.user ?? null);
 
   // مزامنة الـ refs بعد كل رندر (مش أثناءه) — الـ tick بيقرأها خارج الرندر.
   useEffect(() => {
     settingsRef.current = settings;
     progressRef.current = progress;
     prayerTimesRef.current = prayerTimes;
+    userRef.current = shared?.user ?? null;
   });
 
   const tick = useCallback(() => {
@@ -67,19 +72,33 @@ export function WorshipReminders() {
       currentSettings.eveningAdhkarReminder ||
       currentSettings.sleepAdhkarReminder;
     if (!wantsPrayerAlerts && !wantsAdhkarAlerts) return;
-    if (getNotificationPermission() !== "granted") return;
 
     const day = todayUtc();
     const fired = readFiredKeys(day);
     const now = Date.now();
 
-    const fire = (key: string, dueAt: number, title: string, body: string) => {
+    // إذن الجهاز بيحدد إشعار المتصفح بس — إشعار المنصة (الجرس) بيوصل دايمًا.
+    const permission = getNotificationPermission();
+    // المستخدم الزائر (is_anonymous) أو اللي من غير جلسة — إشعارات المنصة مش ليه (نفس شرط مكافآت العبادة).
+    const user = userRef.current;
+    const wantsInboxNotification = !!user && !user.is_anonymous;
+
+    const fire = (
+      key: string,
+      dueAt: number,
+      title: string,
+      body: string,
+      link: string,
+    ) => {
       if (fired.has(key) || now < dueAt) return;
       if (now - dueAt > FIRE_GRACE_MS) {
         markFiredKey(day, key);
         return;
       }
-      sendWorshipNotification(title, body);
+      if (permission === "granted") sendWorshipNotification(title, body);
+      if (wantsInboxNotification) {
+        void insertWorshipReminderNotification({ title, body, link });
+      }
       markFiredKey(day, key);
     };
 
@@ -97,6 +116,7 @@ export function WorshipReminders() {
             reminderAt,
             `اقترب وقت صلاة ${arabicName} 🕐`,
             `باقي ${currentSettings.reminderMinutes} دقيقة — جهّز نفسك للصلاة.`,
+            "/worship/prayer-times",
           );
         }
 
@@ -106,6 +126,7 @@ export function WorshipReminders() {
             prayer.timestamp,
             `حان الآن أذان صلاة ${arabicName} 🕌`,
             "حيّ على الصلاة — حيّ على الفلاح.",
+            "/worship/prayer-times",
           );
         }
       }
@@ -159,6 +180,7 @@ export function WorshipReminders() {
         dueAt,
         reminder.title,
         "افتح صفحة الأذكار وأتمّ ورد اليوم — لك +3 عملات عند الإكمال.",
+        "/worship/adhkar",
       );
     }
 
@@ -170,6 +192,7 @@ export function WorshipReminders() {
         dueAtWallClock(20, 0),
         "ورد القرآن لسه مستنيك 📖",
         `قرأت ${quranRead} من ${quranTarget} آية اليوم — كمّل وردك (+5 عملات).`,
+        "/worship/quran",
       );
     }
 

@@ -402,26 +402,41 @@ function SectionHeader({
 
 const PERMISSION_LABELS: Record<
   NotificationPermissionState,
-  { label: string; description: string; action: string | null }
+  {
+    label: string;
+    description: string;
+    action: string | null;
+    /** خطوات فتح الإشعارات من إعدادات المتصفح — بتظهر بطلب في حالة denied. */
+    help?: string[];
+  }
 > = {
   granted: {
-    label: "إشعارات المتصفح مفعّلة ✅",
-    description: "هتوصلك تنبيهات الصلاة والأذان والأذكار وورد القرآن.",
+    label: "الإشعارات على جهازك مفعّلة ✅",
+    description:
+      "تنبيهات الصلاة والأذان والأذكار بتوصلك على جهازك — وبتوصل جوه المنصة كمان.",
     action: null,
   },
   default: {
-    label: "إشعارات المتصفح",
-    description: "اسمح بالإشعارات عشان توصلك تنبيهات مواقيت الصلاة والأذان والأذكار.",
-    action: "تفعيل الإشعارات",
+    label: "إشعارات الجهاز",
+    description:
+      "اضغط التفعيل ووافق على إشعار المتصفح — وإشعارات المنصة جوه التطبيق شغّالة في الحالتين.",
+    action: "فعّل إشعارات الجهاز",
   },
   denied: {
-    label: "الإشعارات متوقفة من المتصفح ❌",
-    description: "اسمح بالإشعارات لهذا الموقع من إعدادات المتصفح عشان التذكيرات تشتغل.",
+    label: "الإشعارات على الجهاز مقفولة من المتصفح 🔕",
+    description:
+      "تقدر تفتحها من إعدادات الموقع في المتصفح. إشعارات المنصة جوه التطبيق شغّالة عادي.",
     action: null,
+    help: [
+      "Chrome / Edge: أيقونة القفل 🔒 جنب العنوان → إشعارات → اسمح، أو من الإعدادات → الخصوصية → إعدادات المواقع → الإشعارات.",
+      "Safari (آيفون/ماك): إعدادات (Safari) → المواقع → الإشعارات → اختار الموقع → اسمح.",
+      "Firefox: أيقونة القفل 🔒 جنب العنوان → امسح حظر الإشعارات وحمّل الصفحة من جديد.",
+    ],
   },
   unsupported: {
-    label: "المتصفح مش بيدعم الإشعارات",
-    description: "جرّب متصفح تاني (زي Chrome) عشان تفعّل تنبيهات العبادات.",
+    label: "المتصفح مش بيدعم إشعارات الجهاز",
+    description:
+      "جرّب متصفح تاني (زي Chrome) لو حابب تنبيهات على الجهاز — وإشعارات المنصة جوه التطبيق شغّالة عادي.",
     action: null,
   },
 };
@@ -429,6 +444,7 @@ const PERMISSION_LABELS: Record<
 function NotificationPermissionRow() {
   const [permission, setPermission] = useState<NotificationPermissionState>("default");
   const [requesting, setRequesting] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     const id = window.setTimeout(
@@ -441,27 +457,50 @@ function NotificationPermissionRow() {
   const state = PERMISSION_LABELS[permission];
 
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4">
-      <div className="flex flex-1 items-center gap-3">
-        <BellRing size={20} className="flex-shrink-0 text-[#10B981]" aria-hidden />
-        <div className="flex-1">
-          <p className="font-medium text-white">{state.label}</p>
-          <p className="mt-0.5 text-sm text-[#9AA0C0]">{state.description}</p>
+    <div className="rounded-2xl border border-white/[0.04] bg-white/[0.02] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-3">
+          <BellRing size={20} className="flex-shrink-0 text-[#10B981]" aria-hidden />
+          <div className="flex-1">
+            <p className="font-medium text-white">{state.label}</p>
+            <p className="mt-0.5 text-sm text-[#9AA0C0]">{state.description}</p>
+          </div>
         </div>
+        {state.action && (
+          <button
+            type="button"
+            disabled={requesting}
+            onClick={async () => {
+              setRequesting(true);
+              setPermission(await requestNotificationPermission());
+              setRequesting(false);
+            }}
+            className="flex-shrink-0 rounded-xl bg-[#10B981] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#059669] disabled:opacity-60"
+          >
+            {requesting ? "جاري التفعيل…" : state.action}
+          </button>
+        )}
       </div>
-      {state.action && (
-        <button
-          type="button"
-          disabled={requesting}
-          onClick={async () => {
-            setRequesting(true);
-            setPermission(await requestNotificationPermission());
-            setRequesting(false);
-          }}
-          className="flex-shrink-0 rounded-xl bg-[#10B981] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#059669] disabled:opacity-60"
-        >
-          {requesting ? "جاري التفعيل…" : state.action}
-        </button>
+
+      {/* حالة المنع: المتصفح هو اللي قفل الإشعارات — نعرض خطوات فتحها بدل زرار ميت. */}
+      {state.help && (
+        <div className="mt-3 border-t border-white/[0.06] pt-3">
+          <button
+            type="button"
+            onClick={() => setShowHelp((v) => !v)}
+            aria-expanded={showHelp}
+            className="text-sm font-medium text-[#6EE7B7] transition-colors hover:text-[#10B981]"
+          >
+            {showHelp ? "إخفاء الخطوات" : "إزاي أفتح الإشعارات من المتصفح؟"}
+          </button>
+          {showHelp && (
+            <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm text-[#9AA0C0]">
+              {state.help.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );

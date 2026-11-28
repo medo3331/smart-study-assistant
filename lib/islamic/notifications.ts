@@ -1,7 +1,9 @@
 /* ==========================================================================
-   إشعارات المتصفح لمركز العبادات (تذكير الصلاة + الأذان + الأذكار + الورد)
+   إشعارات مركز العبادات (تذكير الصلاة + الأذان + الأذكار + الورد)
    طبقة رقيقة فوق Notification API مع تخزين المفتاح المُطلق لكل يوم
-   عشان التكرار متحصلش. الإشعارات شغّالة طوال فتح الموقع (صفحة مفتوحة) —
+   عشان التكرار متحصلش. التذكير الواحد بيوصّل قناتين:
+   • إشعار المتصفح على الجهاز — لو الإذن granted (شغال طوال فتح الموقع).
+   • إشعار داخل المنصة (الجرس + /notifications) — دايمًا للحساب الحقيقي.
    Web Push في الخلفية محتاج service worker + VAPID وموضوع منفصل.
    ========================================================================== */
 
@@ -44,6 +46,36 @@ export function sendWorshipNotification(title: string, body: string): void {
     };
   } catch {
     /* بعض المتصفحات بتمنع new Notification خارج SW — تجاهل بهدوء */
+  }
+}
+
+/** بيانات إشعار المنصة المصاحب للتذكير — نفس العنوان والنص + لينك الصفحة. */
+export interface WorshipReminderInboxPayload {
+  title: string;
+  body: string;
+  link: string;
+}
+
+/**
+ * إدراج التذكير في صندوق إشعارات المنصة (جدول notifications) — بجانب
+ * إشعار المتصفح مش بداله. الإدراج بيحصل سيرفريًا عبر /api/worship/reminders
+ * (جدول notifications مفيش عليه سياسة INSERT للعملاء — كل الكتابة في
+ * المشروع سيرفرية عبر service client)، والنداء fire-and-forget وصامت:
+ * أي فشل (جلسة منتهية/سكيما ناقصة/شبكة) مبيأثرش على إشعار المتصفح.
+ */
+export async function insertWorshipReminderNotification(
+  payload: WorshipReminderInboxPayload,
+): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    await fetch("/api/worship/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+  } catch {
+    /* صامت — إشعار المتصفح هو الخط الأساسي */
   }
 }
 

@@ -19,6 +19,7 @@ import {
   Landmark,
   Clock,
   Settings,
+  Brain,
 } from "lucide-react";
 
 /* ==========================================================================
@@ -36,6 +37,7 @@ export const WORSHIP_NAV_ITEMS: NavItem[] = [
   { label: "عباداتي", href: "/worship", icon: Landmark },
   { label: "القرآن", href: "/worship/quran", icon: BookOpen },
   { label: "الأذكار", href: "/worship/adhkar", icon: BookOpen },
+  { label: "الأسئلة", href: "/worship/quiz", icon: Brain },
   { label: "مواقيت الصلاة", href: "/worship/prayer-times", icon: Clock },
   { label: "الإعدادات", href: "/worship/settings", icon: Settings },
 ];
